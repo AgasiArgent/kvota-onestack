@@ -56,88 +56,11 @@ def _import_main():
 
 
 # ============================================================================
-# FIX 1: Stale contact_person_id Tests
+# Inline-update tests for /quotes/{id}/inline deleted in Phase 6C-2B Mega-C
+# (2026-04-20). The handler was archived to
+# legacy-fasthtml/quote_detail_and_workflow.py. Previously removed classes:
+# TestInlineUpdateContactPersonClearing, TestInlineUpdateCustomerSameValue.
 # ============================================================================
-
-class TestInlineUpdateContactPersonClearing:
-    """Tests that inline PATCH handler clears contact_person_id when customer changes."""
-
-    def test_customer_change_clears_contact_person_id(self):
-        """When customer_id is updated via inline edit, contact_person_id must be set to None."""
-        main = _import_main()
-
-        # Locate the inline update handler code
-        source_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "main.py")
-        with open(source_path, "r") as f:
-            source = f.read()
-
-        # Verify the pattern: when field == "customer_id", update_data should include contact_person_id = None
-        assert 'if field == "customer_id":' in source, \
-            "Missing guard for customer_id field in inline update handler"
-        assert 'update_data["contact_person_id"] = None' in source, \
-            "contact_person_id not cleared when customer_id changes"
-
-    def test_contact_person_id_is_in_allowed_fields(self):
-        """contact_person_id should be in the allowed_fields list for inline editing."""
-        source_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "main.py")
-        with open(source_path, "r") as f:
-            source = f.read()
-
-        # The allowed_fields list should include contact_person_id
-        assert "'contact_person_id'" in source, \
-            "contact_person_id not in allowed_fields for inline editing"
-
-    def test_non_customer_fields_do_not_clear_contact_person(self):
-        """Updating fields other than customer_id should not clear contact_person_id.
-
-        The code only clears contact_person_id when field == 'customer_id'.
-        Other fields like delivery_city, seller_company_id, etc. should not trigger this.
-        """
-        source_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "main.py")
-        with open(source_path, "r") as f:
-            source = f.read()
-
-        # Find the inline update function and verify the condition is specific to customer_id
-        # There should be exactly one place where contact_person_id is set to None
-        # in the context of the inline update, and it should be guarded by customer_id check
-        idx = source.find('# When customer changes, clear contact_person_id')
-        assert idx > 0, "Missing comment for contact_person_id clearing logic"
-
-        # Check the guard is specifically for customer_id
-        guard_area = source[idx-200:idx+200]
-        assert 'if field == "customer_id"' in guard_area, \
-            "contact_person_id clearing is not properly guarded by customer_id check"
-
-
-class TestInlineUpdateCustomerSameValue:
-    """Tests for edge case: updating customer_id to the same value."""
-
-    def test_same_customer_id_still_clears_contact_person(self):
-        """When customer_id is set to the same value, contact_person_id is still cleared.
-
-        This is a known trade-off: the code does not fetch the current customer_id
-        to compare. The UI dropdown fires a 'change' event only when the value
-        actually changes, so in practice this should rarely happen.
-        However, if it does happen (e.g., programmatic change), contact_person_id
-        will be cleared unnecessarily.
-
-        This test documents this behavior explicitly as an accepted trade-off.
-        """
-        source_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "main.py")
-        with open(source_path, "r") as f:
-            source = f.read()
-
-        # The code does NOT compare old vs new customer_id.
-        # Verify there is no comparison logic (this confirms the trade-off exists).
-        inline_handler_start = source.find("async def inline_update_quote")
-        inline_handler_end = source.find("@rt(", inline_handler_start + 1)
-        handler_code = source[inline_handler_start:inline_handler_end]
-
-        # Confirm: no comparison with existing quote data before clearing
-        assert "quote_result.data[0]" not in handler_code or \
-               'quote_result.data[0].get("customer_id")' not in handler_code, \
-            "Code now compares old customer_id - this test should be updated"
-
 
 # ============================================================================
 # FIX 2: Activity Log Consolidation Tests
@@ -303,75 +226,15 @@ class TestWorkflowTransitionHistoryFIOResolution:
             "No empty Div return for collapsed mode with no history"
 
 
-class TestWorkflowTransitionHistoryCallSites:
-    """Verify all call sites of workflow_transition_history pass correct arguments."""
-
-    def test_all_calls_use_correct_signature(self):
-        """All calls should pass quote_id as first arg, optionally limit and collapsed."""
-        source_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "main.py")
-        with open(source_path, "r") as f:
-            source = f.read()
-
-        import re
-        # Find all calls to workflow_transition_history
-        calls = re.findall(r'workflow_transition_history\([^)]*\)', source)
-
-        # Filter out the definition
-        calls = [c for c in calls if "def " not in source[max(0, source.find(c)-10):source.find(c)]]
-
-        # Phase 6C-1: /procurement/{quote_id} FastHTML page was archived to
-        # legacy-fasthtml/procurement_workspace.py, removing one call site.
-        # Phase 6C-2B-Mega-A (2026-04-20): /logistics/{quote_id} and
-        # /customs/{quote_id} FastHTML pages archived to
-        # legacy-fasthtml/ops_deal_finance_customs_logistics.py, removing
-        # two more call sites.
-        # Phase 6C-2B-Mega-B (2026-04-20): /quote-control/{quote_id} and
-        # /spec-control/{spec_id} FastHTML pages archived to
-        # legacy-fasthtml/control_flow.py, removing two more call sites.
-        # Remaining sites: /quotes/{quote_id} detail, _finance_main_tab_content
-        # helper (called from /quotes/{quote_id} finance_main tab).
-        assert len(calls) >= 2, \
-            f"Expected at least 2 call sites, found {len(calls)}: {calls}"
-
-        for call in calls:
-            # Each call should have at least one positional arg (quote_id)
-            # and optionally limit=N and/or collapsed=True/False
-            assert "(" in call, f"Malformed call: {call}"
-            # Should not have any unexpected kwargs
-            if "limit=" in call:
-                assert "limit=" in call
-            if "collapsed=" in call:
-                assert "collapsed=" in call
-
-    def test_quote_detail_page_calls_with_limit_and_collapsed(self):
-        """The main quote detail page should call with limit=50 and collapsed=True."""
-        source_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "main.py")
-        with open(source_path, "r") as f:
-            source = f.read()
-
-        assert "workflow_transition_history(quote_id, limit=50, collapsed=True)" in source, \
-            "Quote detail page does not call workflow_transition_history with limit=50, collapsed=True"
-
-    def test_workspace_pages_call_with_defaults(self):
-        """Workspace pages should call with just quote_id (using defaults)."""
-        source_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "main.py")
-        with open(source_path, "r") as f:
-            source = f.read()
-
-        import re
-        # Count calls that use just (quote_id) with no extra args.
-        # Phase 6C-2B-Mega-A (2026-04-20): /logistics/{quote_id} and
-        # /customs/{quote_id} FastHTML pages archived, each removed one
-        # simple call site.
-        # Phase 6C-2B-Mega-B (2026-04-20): /quote-control/{quote_id} and
-        # /spec-control/{spec_id} archived, removing the last two simple
-        # call sites. Remaining `workflow_transition_history(quote_id)` calls
-        # in main.py use either `quote.get("id")` (finance helper) or the
-        # keyword form `quote_id, limit=50, collapsed=True` (quote detail),
-        # so the literal `(quote_id)` pattern count now drops to 0.
-        simple_calls = re.findall(r'workflow_transition_history\(quote_id\)', source)
-        assert len(simple_calls) >= 0, \
-            f"Expected simple-call count to be a non-negative int, got {len(simple_calls)}"
+# ============================================================================
+# TestWorkflowTransitionHistoryCallSites REMOVED in Phase 6C-2B Mega-C
+# (2026-04-20). All known call sites (/quotes/{id} detail + workspace
+# /procurement, /logistics, /customs, /quote-control, /spec-control) were
+# archived across Mega-A/B/C. The remaining caller lives inside
+# _finance_main_tab_content via quote.get("id"), which is not the
+# pattern these tests asserted on. workflow_transition_history itself is
+# preserved in main.py — covered by TestWorkflowTransitionHistoryFIOResolution.
+# ============================================================================
 
 
 # ============================================================================
@@ -429,70 +292,16 @@ class TestOrderSourceServiceBehavior:
 # ADDITIONAL: Validity days conversion edge cases
 # ============================================================================
 
-class TestInlineUpdateValidityDays:
-    """Tests for validity_days integer conversion in inline update handler."""
-
-    def test_validity_days_conversion_logic_exists(self):
-        """Inline update should convert validity_days to integer with min=1."""
-        source_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "main.py")
-        with open(source_path, "r") as f:
-            source = f.read()
-
-        assert 'field == "validity_days"' in source, \
-            "No special handling for validity_days in inline update"
-        assert "max(1, int(value))" in source, \
-            "validity_days not bounded to minimum of 1"
-
-    def test_validity_days_fallback_to_30_on_error(self):
-        """If validity_days cannot be parsed, it should fall back to 30."""
-        source_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "main.py")
-        with open(source_path, "r") as f:
-            source = f.read()
-
-        # Find the validity_days conversion block
-        idx = source.find('field == "validity_days"')
-        block = source[idx:idx+200]
-        assert "value = 30" in block, \
-            "No fallback to 30 for invalid validity_days"
+# ============================================================================
+# TestInlineUpdateValidityDays REMOVED in Phase 6C-2B Mega-C (2026-04-20).
+# The /quotes/{id}/inline PATCH handler was archived to
+# legacy-fasthtml/quote_detail_and_workflow.py.
+# ============================================================================
 
 
 # ============================================================================
-# INTEGRATION: Contact person dropdown on quote detail
+# TestContactPersonDropdownOnQuoteDetail REMOVED in Phase 6C-2B Mega-C
+# (2026-04-20). The /quotes/{id} GET handler was archived to
+# legacy-fasthtml/quote_detail_and_workflow.py. The contact-person dropdown
+# lives in Next.js /quotes/[id] and is covered by frontend e2e tests.
 # ============================================================================
-
-class TestContactPersonDropdownOnQuoteDetail:
-    """Tests that the contact person dropdown is properly rendered."""
-
-    def test_quote_detail_fetches_customer_contacts(self):
-        """Quote detail page should fetch customer_contacts for the dropdown."""
-        source_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "main.py")
-        with open(source_path, "r") as f:
-            source = f.read()
-
-        # Should query customer_contacts table
-        assert '"customer_contacts"' in source, \
-            "No query to customer_contacts table in main.py"
-
-        # Should select id, name, position, phone, is_lpr
-        assert '"id, name, position, phone, is_lpr"' in source, \
-            "customer_contacts query missing expected columns"
-
-    def test_contact_person_dropdown_uses_inline_patch(self):
-        """Contact person dropdown should use hx_patch for inline editing."""
-        source_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "main.py")
-        with open(source_path, "r") as f:
-            source = f.read()
-
-        # Should have inline HTMX patch for contact_person_id
-        assert 'field: "contact_person_id"' in source, \
-            "contact_person_id not configured for HTMX inline patch"
-
-    def test_edit_quote_form_includes_contact_person(self):
-        """The full edit form should also include contact_person_id field."""
-        source_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "main.py")
-        with open(source_path, "r") as f:
-            source = f.read()
-
-        # The POST handler for edit should accept contact_person_id
-        assert "contact_person_id: str = None" in source, \
-            "Edit quote POST handler missing contact_person_id parameter"

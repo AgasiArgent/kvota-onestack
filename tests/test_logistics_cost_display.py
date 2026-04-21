@@ -296,91 +296,12 @@ class TestCalculateLogisticsTotalFromInvoices:
 # fetching and calculating logistics costs in the quote detail handler.
 # ==============================================================================
 
-class TestMainPyLogisticsCostIntegration:
-    """Verify main.py source code has the logistics cost calculation
-    in the quote detail GET handler (around line 8007+)."""
-
-    def test_quote_detail_queries_invoices_for_logistics(self):
-        """The quote detail handler should query invoices table for logistics costs."""
-        source = _read_main_source()
-
-        # Find the quote detail handler section (starts with @rt("/quotes/{quote_id}"))
-        # and look for invoices query with logistics columns
-        pattern = r'@rt\("/quotes/\{quote_id\}"\).*?def get\('
-        match = re.search(pattern, source, re.DOTALL)
-        assert match, "Quote detail GET handler not found"
-
-        # Get the handler body (up to next @rt decorator)
-        handler_start = match.start()
-        next_rt = source.find("@rt(", handler_start + 10)
-        handler_body = source[handler_start:next_rt] if next_rt > 0 else source[handler_start:]
-
-        # Check that invoices are queried with logistics columns within this handler
-        assert "invoices" in handler_body, \
-            "Quote detail handler should query invoices table"
-        assert "logistics_supplier_to_hub" in handler_body, \
-            "Quote detail handler should select logistics_supplier_to_hub from invoices"
-        assert "logistics_hub_to_customs" in handler_body, \
-            "Quote detail handler should select logistics_hub_to_customs from invoices"
-        assert "logistics_customs_to_customer" in handler_body, \
-            "Quote detail handler should select logistics_customs_to_customer from invoices"
-
-    def test_itogo_block_uses_calculated_logistics_total(self):
-        """The Itogo block should use a calculated logistics_total variable,
-        NOT quote.get('logistics_total')."""
-        source = _read_main_source()
-
-        # Find the line that displays Логистика in the Itого block
-        lines = source.split('\n')
-        for i, line in enumerate(lines):
-            if 'Td("Логистика:")' in line or "Td('Логистика:')" in line:
-                # This line should NOT contain quote.get("logistics_total")
-                assert 'quote.get("logistics_total")' not in line, \
-                    f"Line {i+1}: Itogo block still uses quote.get('logistics_total'). " \
-                    "It should use a calculated variable from invoices."
-                # Positive check: should reference logistics_total variable directly
-                assert re.search(r'format_money\(\s*total_logistics\b', line), \
-                    f"Line {i+1}: Expected format_money(total_logistics, ...) but got: {line.strip()}"
-                return
-
-        pytest.fail("Could not find Td('Логистика:') display line in main.py")
-
-    def test_logistics_total_calculated_before_itogo_block(self):
-        """logistics_total variable should be calculated (from invoices)
-        before the Itogo display block."""
-        source = _read_main_source()
-
-        # Find the quote detail handler
-        pattern = r'@rt\("/quotes/\{quote_id\}"\).*?def get\('
-        match = re.search(pattern, source, re.DOTALL)
-        assert match, "Quote detail GET handler not found"
-
-        handler_start = match.start()
-        next_rt = source.find("@rt(", handler_start + 10)
-        handler_body = source[handler_start:next_rt] if next_rt > 0 else source[handler_start:]
-
-        # Look for logistics_total calculation (assignment)
-        calc_pattern = r'logistics_total\s*[=+]'
-        calc_match = re.search(calc_pattern, handler_body)
-        assert calc_match, \
-            "No logistics_total calculation found in quote detail handler. " \
-            "Expected variable assignment from invoice aggregation."
-
-    def test_currency_conversion_used_for_logistics(self):
-        """The logistics calculation should use convert_amount for currency conversion."""
-        source = _read_main_source()
-
-        # Find the quote detail handler
-        pattern = r'@rt\("/quotes/\{quote_id\}"\).*?def get\('
-        match = re.search(pattern, source, re.DOTALL)
-        assert match
-
-        handler_start = match.start()
-        next_rt = source.find("@rt(", handler_start + 10)
-        handler_body = source[handler_start:next_rt] if next_rt > 0 else source[handler_start:]
-
-        assert "convert_amount" in handler_body, \
-            "Quote detail handler should use convert_amount for currency conversion of logistics costs"
+# TestMainPyLogisticsCostIntegration REMOVED in Phase 6C-2B Mega-C
+# (2026-04-20) — /quotes/{id} GET handler archived to
+# legacy-fasthtml/quote_detail_and_workflow.py. The Next.js /quotes/[id]
+# page reads logistics totals via the finance tab API endpoints; behavior
+# is covered by tests/test_api_finance.py and the preserved
+# TestCalculateLogisticsTotalFromInvoices pure-logic tests in this file.
 
 
 # ==============================================================================
@@ -483,45 +404,6 @@ class TestInvoiceDataQualityEdgeCases:
 # These tests check the full data flow: query + calculation + display.
 # ==============================================================================
 
-class TestQuoteDetailLogisticsDataFlow:
-    """Verify the complete data flow from DB query to HTML display."""
-
-    def test_source_has_no_logistics_total_from_quote_dict(self):
-        """Confirm the Логистика display line does NOT read logistics_total
-        from the quote dict. It must come from invoices calculation."""
-        source = _read_main_source()
-
-        # Find the specific line that displays Логистика in the Itogo block
-        lines = source.split('\n')
-        found = False
-        for i, line in enumerate(lines):
-            if 'Td("Логистика:")' in line:
-                found = True
-                # This line should NOT contain quote.get("logistics_total")
-                assert 'quote.get("logistics_total")' not in line, \
-                    f"Line {i+1}: Logistics display still reads from quote dict. " \
-                    "It should use a calculated variable from invoices."
-                break
-
-        assert found, "Could not find Td('Логистика:') display line in main.py"
-
-    def test_logistics_total_variable_used_in_display(self):
-        """The Itogo block should reference a logistics_total variable
-        (not quote.get) for the Логистика row."""
-        source = _read_main_source()
-
-        # Find the line with "Логистика:" in the Itogo section
-        lines = source.split('\n')
-        for i, line in enumerate(lines):
-            if 'Td("Логистика:")' in line or "Td('Логистика:')" in line:
-                # Check the same line or next line for the value source
-                context = '\n'.join(lines[max(0, i):min(len(lines), i+3)])
-                # Should use format_money(logistics_total, ...) not format_money(quote.get(...), ...)
-                assert 'quote.get("logistics_total")' not in context, \
-                    f"Line {i+1}: Still using quote.get('logistics_total'). Expected calculated variable."
-                # Verify it uses a variable (not a dict access on quote)
-                assert re.search(r'format_money\(\s*total_logistics', context), \
-                    f"Line {i+1}: Expected format_money(total_logistics, ...) but got: {context.strip()}"
-                return
-
-        pytest.fail("Could not find Td('Логистика:') in the Itogo block")
+# TestQuoteDetailLogisticsDataFlow REMOVED in Phase 6C-2B Mega-C
+# (2026-04-20) — /quotes/{id} GET Итого block archived. Same replacement
+# coverage as TestMainPyLogisticsCostIntegration above.

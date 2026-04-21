@@ -225,21 +225,11 @@ class TestTotalAmountUsdSavedInCalculation:
     to the quotes table. This is the data source that the fixed view will use.
     """
 
-    def test_total_amount_usd_saved_to_quotes_table(self):
-        """
-        main.py must include code that saves total_amount_usd to the quotes table
-        via a Supabase update call.
-        """
-        source = _read_main_source()
-        # The save logic should update quotes with total_amount_usd
-        has_save = (
-            '"total_amount_usd"' in source
-            and ".update(" in source
-        )
-        assert has_save, (
-            "main.py must save total_amount_usd to the quotes table "
-            "in the calculation save logic"
-        )
+    # test_total_amount_usd_saved_to_quotes_table removed Phase 6C-2B Mega-C
+    # (2026-04-20) — the POST /quotes/{id}/calculate handler that performed
+    # the save was archived to legacy-fasthtml/quote_detail_and_workflow.py.
+    # Equivalent save logic lives in api/quotes.py (FastAPI calculate handler)
+    # and is covered by tests/test_api_quotes_calculate.py.
 
     def test_total_amount_usd_column_in_migration_139(self):
         """

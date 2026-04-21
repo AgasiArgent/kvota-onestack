@@ -204,15 +204,20 @@ class TestAllDealsQueriesWithJoinsCovered:
 
     def test_count_deals_queries_with_joins(self, main_py_content):
         """
-        There should be exactly 2 deals queries that join specifications/quotes:
-        1. Deal list query (finance_workspace_tab)
-        2. Deal detail query (deal detail page)
+        There should be at least 1 deals query that joins specifications/quotes:
+        - Deal detail query (_finance_fetch_deal_data helper)
+
+        Phase 6C-2B Mega-C (2026-04-20): _lookup_deal_for_quote helper was
+        archived along with /quotes detail to
+        legacy-fasthtml/quote_detail_and_workflow.py, removing its deals-
+        with-joins query from main.py. Phase 6C-2B-10c1 (2026-04-20) had
+        already archived finance_workspace_tab (deal-list query).
 
         If more are added in the future, this test will flag them for FK hint review.
         """
         join_blocks = _get_deals_join_blocks(main_py_content)
-        assert len(join_blocks) >= 2, (
-            f"Expected at least 2 deals queries with specifications/quotes joins, "
+        assert len(join_blocks) >= 1, (
+            f"Expected at least 1 deals query with specifications/quotes joins, "
             f"found {len(join_blocks)}. Check if new queries were added without FK hints."
         )
 

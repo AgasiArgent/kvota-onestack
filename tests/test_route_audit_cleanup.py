@@ -87,24 +87,6 @@ class TestRemovedRoutesAreGone:
         assert "api/locations/search/json" not in source, \
             "Found dangling reference to /api/locations/search/json"
 
-    def test_quotes_items_patch_still_exists(self):
-        """PATCH /quotes/{quote_id}/items/{item_id} should still exist (not removed)."""
-        source = _read_main_source()
-        decorators = _find_route_decorators(
-            source, r'@rt\("/quotes/\{quote_id\}/items/\{item_id\}".*PATCH'
-        )
-        assert len(decorators) >= 1, \
-            "PATCH /quotes/{quote_id}/items/{item_id} is missing - should not have been removed"
-
-    def test_quotes_items_bulk_still_exists(self):
-        """POST /quotes/{quote_id}/items/bulk should still exist (not removed)."""
-        source = _read_main_source()
-        decorators = _find_route_decorators(
-            source, r'@rt\("/quotes/\{quote_id\}/items/bulk"'
-        )
-        assert len(decorators) >= 1, \
-            "POST /quotes/{quote_id}/items/bulk is missing - should not have been removed"
-
 
 # ============================================================================
 # TEST 3: Kept routes still exist
