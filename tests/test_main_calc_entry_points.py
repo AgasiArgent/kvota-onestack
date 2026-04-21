@@ -53,10 +53,13 @@ API_QUOTES_PATH = os.path.join(
     "quotes.py",
 )
 
-# Call sites after Phase 6B-6a: 2 in main.py (preview + full-calc) and 1
-# in api/quotes.py (the JSON API handler that used to live in main.py).
-# Total across the codebase is unchanged at 3.
-EXPECTED_CALL_SITES = 2
+# Call sites after Phase 6C-2B Mega-C (2026-04-20): 0 in main.py
+# (preview + full-calc handlers archived to
+# legacy-fasthtml/quote_detail_and_workflow.py) and 1 in api/quotes.py
+# (the JSON API handler). build_calculation_inputs itself stays in
+# main.py because api/quotes.py imports it directly. Total across the
+# codebase is now 1 call site.
+EXPECTED_CALL_SITES = 0
 EXPECTED_API_QUOTES_CALL_SITES = 1
 
 
@@ -64,9 +67,14 @@ EXPECTED_API_QUOTES_CALL_SITES = 1
 # (1) Static check: all 3 call sites use get_composed_items
 # ============================================================================
 
-def test_main_imports_get_composed_items():
-    """main.py imports get_composed_items from services.composition_service."""
-    with open(MAIN_PATH, "r") as f:
+def test_api_quotes_imports_get_composed_items():
+    """After Phase 6C-2B Mega-C (2026-04-20) the main.py /quotes/{id}/calculate
+    and /quotes/{id}/preview handlers were archived to
+    legacy-fasthtml/quote_detail_and_workflow.py, removing both
+    get_composed_items call sites from main.py. The remaining caller is
+    the FastAPI handler in api/quotes.py, which this test now verifies.
+    """
+    with open(API_QUOTES_PATH, "r") as f:
         source = f.read()
 
     tree = ast.parse(source)
@@ -79,7 +87,7 @@ def test_main_imports_get_composed_items():
                     found = True
                     break
     assert found, (
-        "main.py must import get_composed_items from "
+        "api/quotes.py must import get_composed_items from "
         "services.composition_service"
     )
 

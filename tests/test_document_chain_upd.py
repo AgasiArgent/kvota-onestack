@@ -199,130 +199,14 @@ class TestUPDMigration:
 # P2.10 Part 2: _build_document_chain Helper
 # ==============================================================================
 
-class TestBuildDocumentChain:
-    """
-    The _build_document_chain(quote_id) helper function must:
-    - Group documents from get_all_documents_for_quote() by stage
-    - Return a dict with keys: quote, specification, supplier_invoice, upd, customs_declaration
-    - Each key maps to a list of documents for that stage
-    """
-
-    def test_build_document_chain_function_exists(self):
-        """_build_document_chain must be defined in main.py."""
-        source = _read_main_source()
-
-        assert "def _build_document_chain(" in source, (
-            "_build_document_chain function must exist in main.py"
-        )
-
-    def test_build_document_chain_has_correct_stages(self):
-        """
-        _build_document_chain must reference all 5 chain stages:
-        quote, specification, supplier_invoice, upd, customs_declaration
-        """
-        source = _read_main_source()
-        func_source = _read_function_source(source, "_build_document_chain")
-
-        assert func_source is not None, "_build_document_chain function not found"
-
-        # Must reference all chain stage keys
-        required_stages = ["quote", "specification", "supplier_invoice", "upd", "customs_declaration"]
-        for stage in required_stages:
-            assert f'"{stage}"' in func_source or f"'{stage}'" in func_source, (
-                f"_build_document_chain must include stage key '{stage}'"
-            )
-
-    def test_build_document_chain_uses_get_all_documents_for_quote(self):
-        """
-        _build_document_chain must call get_all_documents_for_quote()
-        to fetch all documents hierarchically via parent_quote_id.
-        """
-        source = _read_main_source()
-        func_source = _read_function_source(source, "_build_document_chain")
-
-        assert func_source is not None, "_build_document_chain function not found"
-        assert "get_all_documents_for_quote" in func_source, (
-            "_build_document_chain must use get_all_documents_for_quote() to fetch documents"
-        )
-
-    def test_build_document_chain_returns_dict_structure(self):
-        """
-        _build_document_chain must return a dict (not a list or tuple).
-        Check that the function has return statement with dict-like structure.
-        """
-        source = _read_main_source()
-        func_source = _read_function_source(source, "_build_document_chain")
-
-        assert func_source is not None, "_build_document_chain function not found"
-
-        # Should have a return with dict construction
-        has_dict_return = (
-            "return {" in func_source
-            or "return chain" in func_source
-            or "return result" in func_source
-            or "return stages" in func_source
-        )
-        assert has_dict_return, (
-            "_build_document_chain must return a dict mapping stages to document lists"
-        )
-
-    def test_build_document_chain_groups_upd_documents(self):
-        """
-        Documents with document_type='upd' must be grouped under the 'upd' stage.
-        The function must check document_type for upd classification.
-        """
-        source = _read_main_source()
-        func_source = _read_function_source(source, "_build_document_chain")
-
-        assert func_source is not None, "_build_document_chain function not found"
-
-        # Must reference 'upd' for grouping
-        assert '"upd"' in func_source or "'upd'" in func_source, (
-            "_build_document_chain must handle 'upd' document type for chain grouping"
-        )
-
-
 # ==============================================================================
-# P2.10 Part 2: Document Chain Route
+# TestBuildDocumentChain + TestDocumentChainRoute REMOVED in Phase 6C-2B
+# Mega-C (2026-04-20). _build_document_chain and _render_document_chain_section
+# helpers + /quotes/{id}/documents route archived to
+# legacy-fasthtml/quote_detail_and_workflow.py. Document chain rendering
+# lives in Next.js /quotes/[id]/documents and consumes
+# services/document_service.py directly.
 # ==============================================================================
-
-class TestDocumentChainRoute:
-    """
-    Document chain content is now merged into the Documents tab.
-    These tests verify the merged behavior.
-    """
-
-    def test_document_chain_rendered_in_documents_route(self):
-        """
-        The documents route must include document chain rendering.
-        """
-        source = _read_main_source()
-
-        assert "_render_document_chain_section" in source or "_build_document_chain" in source, (
-            "Documents route must render document chain content"
-        )
-
-    def test_document_chain_stages_exist_in_codebase(self):
-        """
-        The document chain must render all 5 chain stages: КП, Спецификация, Инвойс, УПД, ГТД
-        """
-        source = _read_main_source()
-
-        stage_labels = ["КП", "Спецификация", "Инвойс", "УПД", "ГТД"]
-        for label in stage_labels:
-            assert label in source, (
-                f"Document chain must display stage label '{label}'"
-            )
-
-    def test_no_separate_document_chain_route(self):
-        """
-        The standalone /document-chain route should NOT exist (merged into documents tab).
-        """
-        source = _read_main_source()
-
-        assert '@rt("/quotes/{quote_id}/document-chain")' not in source, (
-            "Standalone /document-chain route should be removed (merged into documents tab)"
-        )
 
 
 # ==============================================================================
@@ -428,34 +312,9 @@ class TestDocumentChainEdgeCases:
             "Existing 'specification_signed_scan' type must not be removed when adding 'upd'"
         )
 
-    def test_build_document_chain_handles_empty_documents(self):
-        """
-        _build_document_chain must handle a quote with zero documents
-        by returning a dict with empty lists for all stages.
-        """
-        source = _read_main_source()
-        func_source = _read_function_source(source, "_build_document_chain")
-
-        assert func_source is not None, (
-            "_build_document_chain function must exist to handle empty documents case"
-        )
-
-        # The function must initialize all stage keys (even if empty)
-        # This is verified by checking that default/initial values are set
-        # Look for patterns like: {"quote": [], "specification": [], ...}
-        # or chain = {"quote": [], ...} or stage initialization
-        has_initialization = (
-            '": []' in func_source
-            or "= []" in func_source
-            or "defaultdict" in func_source
-            or ".get(" in func_source
-            or ".setdefault(" in func_source
-        )
-        assert has_initialization, (
-            "_build_document_chain must initialize all stage keys with empty lists "
-            "to handle quotes with no documents"
-        )
-
+    # test_build_document_chain_handles_empty_documents removed Phase 6C-2B
+    # Mega-C (2026-04-20) — _build_document_chain helper archived to
+    # legacy-fasthtml/quote_detail_and_workflow.py.
     # test_document_chain_supplier_invoice_column_includes_count removed
     # Phase 6C-2B-10b — targeted the archived /supplier-invoices registry
     # handler (moved to legacy-fasthtml/supplier_invoices.py).
