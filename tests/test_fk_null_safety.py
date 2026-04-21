@@ -142,9 +142,16 @@ class TestSafeAccessPattern:
 class TestSentryCrashLine20610:
     """Regression test for the Sentry crash:
     customer_name = (quote.get("customers") or {}).get("name", "---")
-    at main.py line 20610.
+    formerly at main.py line 20610 (cost-analysis handler).
 
-    This specific line has already been fixed. These tests verify the fix holds.
+    The handler was archived to legacy-fasthtml/cost_analysis.py during
+    Phase 6C-2B Mega-F (2026-04-20). The safe pattern is preserved in the
+    archive. These unit tests still verify the defensive pattern itself,
+    which documents the correct approach for future FK-join code.
+
+    The previous source-scan assertion (`test_fixed_line_20610_exists_in_source`)
+    was removed alongside the archive — main.py no longer contains the
+    vulnerable call site to regress against.
     """
 
     def test_fixed_line_20610_with_null_customer(self):
@@ -165,15 +172,6 @@ class TestSentryCrashLine20610:
         quote = {"id": "abc", "customers": {"name": "Acme"}, "total_amount": 1000}
         customer_name = (quote.get("customers") or {}).get("name", "---")
         assert customer_name == "Acme"
-
-    def test_fixed_line_20610_exists_in_source(self):
-        """Verify the fix is actually present in main.py at line ~20610."""
-        source = _read_source(MAIN_PY)
-        # The SAFE pattern must exist
-        assert '(quote.get("customers") or {}).get("name"' in source, (
-            "REGRESSION: The safe pattern for customers FK at line 20610 "
-            "has been removed or reverted."
-        )
 
 
 # ============================================================================
