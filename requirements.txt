@@ -1,5 +1,8 @@
 fastapi>=0.110.0
 uvicorn[standard]>=0.27.0
+# itsdangerous is required by starlette's SessionMiddleware — it was previously
+# pulled in transitively by python-fasthtml, so pin it explicitly now.
+itsdangerous>=2.0.0
 python-dotenv>=1.0.0
 supabase>=2.0.0
 pandas>=2.0.0
