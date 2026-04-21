@@ -53,9 +53,8 @@ def _render_error_html(message: str, hint: str | None = None) -> HTMLResponse:
     the DOM shape returned here mirrors the original @rt handler so no
     frontend code needs to change.
     """
-    # Late import to avoid circular dependency with main.py.
     from fasthtml.common import Div, P
-    from main import btn  # noqa: WPS433 — project-wide btn helper lives in main
+    from api.ui_helpers import btn
 
     if hint is None:
         return HTMLResponse(str(Div(message, cls="text-error mt-2")))
@@ -82,7 +81,7 @@ def _render_error_html(message: str, hint: str | None = None) -> HTMLResponse:
 def _render_success_html(short_id: str) -> HTMLResponse:
     """Render the legacy FastHTML success response for form submissions."""
     from fasthtml.common import Div, P
-    from main import btn  # noqa: WPS433
+    from api.ui_helpers import btn
 
     return HTMLResponse(
         str(

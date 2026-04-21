@@ -16,7 +16,8 @@ the calculation pipeline. The UI will be rebuilt via Next.js + /api/customs
 post-cutover.
 
 IMPORTANT: We must NOT modify calculation_engine.py, calculation_models.py,
-or calculation_mapper.py. Only the data preparation in main.py is changed.
+or calculation_mapper.py. Only the data preparation in
+services/calculation_helpers.py is changed.
 """
 
 import pytest
@@ -27,7 +28,7 @@ import subprocess
 
 # Path constants (relative to project root)
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
-MAIN_PY = os.path.join(_PROJECT_ROOT, "main.py")
+CALC_HELPERS_PY = os.path.join(_PROJECT_ROOT, "services", "calculation_helpers.py")
 
 # Calculation engine files that must NOT be modified
 CALC_ENGINE_FILES = [
@@ -38,8 +39,13 @@ CALC_ENGINE_FILES = [
 
 
 def _read_main_source():
-    """Read main.py source code (no import needed, avoids sentry_sdk dep)."""
-    with open(MAIN_PY) as f:
+    """Read the calc-helpers source (no import — avoids sentry_sdk dep).
+
+    Historically these tests parsed main.py; after Phase 6C-3 the function lives
+    in services/calculation_helpers.py. The function name is preserved to keep
+    test references terse.
+    """
+    with open(CALC_HELPERS_PY) as f:
         return f.read()
 
 
@@ -63,15 +69,17 @@ class TestCalcEngineLicenseIntegration:
     """
 
     def _get_build_calc_inputs_source(self):
-        """Extract build_calculation_inputs function source from main.py."""
+        """Extract build_calculation_inputs source from services/calculation_helpers.py."""
         source = _read_main_source()
         match = re.search(
             r'(def build_calculation_inputs\(.*?\)\s*->.*?:\s*\n.*?)'
-            r'(?=\ndef \w+\()',
+            r'(?=\ndef \w+\(|\Z)',
             source,
             re.DOTALL,
         )
-        assert match, "build_calculation_inputs function not found in main.py"
+        assert match, (
+            "build_calculation_inputs function not found in services/calculation_helpers.py"
+        )
         return match.group(1)
 
     def test_build_calc_inputs_references_license_costs(self):
@@ -403,7 +411,7 @@ class TestConsistencyChecks:
         """The build_calculation_inputs function must still exist."""
         source = _read_main_source()
         assert "def build_calculation_inputs(" in source, (
-            "build_calculation_inputs function missing from main.py"
+            "build_calculation_inputs function missing from services/calculation_helpers.py"
         )
 
 

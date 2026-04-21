@@ -423,9 +423,12 @@ def test_build_calculation_inputs_accepts_composed_item_shape(
         "exchange_rate": Decimal("1.0"),
     }
 
-    from main import build_calculation_inputs
+    from services.calculation_helpers import build_calculation_inputs
 
-    # Stub convert_amount since test env has no currency service
+    # Stub convert_amount since test env has no currency service.
+    # ``calculation_helpers`` does ``from services.currency_service import
+    # convert_amount`` lazily inside the function, so patching the source
+    # module is sufficient.
     with patch("services.currency_service.convert_amount", return_value=Decimal("1")):
         calc_inputs = build_calculation_inputs(items, variables)
 

@@ -22,13 +22,14 @@ MAIN_PY = os.path.join(_PROJECT_ROOT, "main.py")
 
 
 def _import_from_main(name):
+    """Historic name — after Phase 6C-3 the helpers live in services.calculation_helpers."""
     os.environ.setdefault("TESTING", "true")
     os.environ.setdefault("SUPABASE_URL", "https://test.supabase.co")
     os.environ.setdefault("SUPABASE_KEY", "test-key")
     os.environ.setdefault("APP_SECRET", "test-secret")
     import importlib
-    main_mod = importlib.import_module("main")
-    return getattr(main_mod, name)
+    helpers_mod = importlib.import_module("services.calculation_helpers")
+    return getattr(helpers_mod, name)
 
 
 # ============================================================================

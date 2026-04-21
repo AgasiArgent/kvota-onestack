@@ -18,13 +18,13 @@ from starlette.testclient import TestClient
 # Ensure project root importable for `api` and `services` modules.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from api.app import api_app  # noqa: E402
+from api.app import api_sub_app  # noqa: E402
 
 
 @pytest.fixture
 def subapp_client() -> TestClient:
     """TestClient wired directly to the FastAPI sub-app (no /api prefix)."""
-    return TestClient(api_app)
+    return TestClient(api_sub_app)
 
 
 class TestGeoRoutesRegistered:
