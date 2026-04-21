@@ -60,7 +60,7 @@ def outer_app_client() -> TestClient:
     try:
         with patch("services.database.get_supabase") as mock_get_sb:
             mock_get_sb.return_value = MagicMock()
-            from main import app as outer_app
+            from api.app import api_app as outer_app
     except Exception as exc:  # pragma: no cover — diagnostic only
         pytest.skip(f"Cannot import outer app: {exc}")
 

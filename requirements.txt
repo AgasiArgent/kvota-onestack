@@ -1,7 +1,12 @@
-python-fasthtml>=0.12.0
-fastcore==1.12.19
 fastapi>=0.110.0
 uvicorn[standard]>=0.27.0
+# Starlette's SessionMiddleware signs cookies via itsdangerous.
+# Previously pulled in transitively by python-fasthtml — pin explicitly now.
+itsdangerous>=2.0.0
+# starlette request.form() uses python-multipart to parse multipart/form-data.
+# api/quotes.py calls request.form() in 3 POST handlers. Same story: the
+# dep was transitively installed by fasthtml; pin explicitly.
+python-multipart>=0.0.9
 python-dotenv>=1.0.0
 supabase>=2.0.0
 pandas>=2.0.0

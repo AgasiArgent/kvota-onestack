@@ -66,3 +66,11 @@ Thumbs.db
 tmp/
 temp/
 *.tmp
+
+# Archived FastHTML code — retained in repo for reference only, never imported at runtime.
+# Phase 6C-2B moved all @rt handlers here; Phase 6C-3 retired the FastHTML shell entirely.
+legacy-fasthtml/
+
+# Frontend source — built separately in its own container. Keeping src + node_modules
+# out of the Python image shrinks it and avoids accidentally baking stale build state.
+frontend/

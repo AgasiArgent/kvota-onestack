@@ -16,7 +16,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from starlette.datastructures import FormData
-from starlette.responses import HTMLResponse
 from starlette.testclient import TestClient
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -133,17 +132,6 @@ class TestFeedbackHandler:
         assert body["success"] is False
         assert body["error"]["code"] == "UNAUTHORIZED"
 
-    def test_no_auth_form_returns_html(self):
-        """No JWT + no session + form → HTML error snippet."""
-        req = _make_request(
-            api_user_id=None,
-            content_type="application/x-www-form-urlencoded",
-        )
-        resp = _run(submit_feedback(req))
-        assert isinstance(resp, HTMLResponse)
-        html = resp.body.decode()
-        assert "Требуется авторизация" in html
-
     @patch("api.feedback.send_admin_bug_report_with_photo", new_callable=AsyncMock)
     @patch("api.feedback.create_clickup_bug_task", new_callable=AsyncMock)
     @patch("api.feedback.get_supabase")
@@ -189,38 +177,6 @@ class TestFeedbackHandler:
         assert mock_telegram.await_count == 1
         assert mock_clickup.await_args.kwargs["short_id"] == short_id
         assert mock_telegram.await_args.kwargs["short_id"] == short_id
-
-    @patch("api.feedback.send_admin_bug_report_with_photo", new_callable=AsyncMock)
-    @patch("api.feedback.create_clickup_bug_task", new_callable=AsyncMock)
-    @patch("api.feedback.get_supabase")
-    def test_happy_path_form_returns_html_snippet(
-        self, mock_get_sb, mock_clickup, mock_telegram
-    ):
-        """Valid JWT + form body → HTML success snippet for FastHTML modal."""
-        sb = _make_supabase_mock()
-        mock_get_sb.return_value = sb
-        mock_clickup.return_value = None  # ClickUp disabled path
-
-        req = _make_request(
-            content_type="application/x-www-form-urlencoded",
-            body={
-                "feedback_type": "bug",
-                "description": "Form bug",
-                "page_url": "https://kvotaflow.ru/quotes/1",
-                "page_title": "Quote 1",
-            },
-            user_metadata={"org_id": "org-1"},
-        )
-
-        resp = _run(submit_feedback(req))
-
-        assert isinstance(resp, HTMLResponse)
-        html = resp.body.decode()
-        assert "feedback-success-marker" in html
-        assert "Спасибо за обратную связь" in html
-        assert "FB-" in html  # short_id rendered
-        # Insert was still invoked
-        assert sb.table("user_feedback").insert.called
 
     @patch("api.feedback.get_supabase")
     def test_empty_description_json_returns_400(self, mock_get_sb):

@@ -256,7 +256,7 @@ def app_client():
         # We'll need to mock Supabase before importing the app
         with patch('services.database.get_supabase') as mock_get_sb:
             mock_get_sb.return_value = MockSupabaseClient()
-            from main import app
+            from api.app import api_app as app
             return TestClient(app)
     except Exception as e:
         pytest.skip(f"Cannot create app client: {e}")
