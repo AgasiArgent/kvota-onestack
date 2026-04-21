@@ -13,6 +13,19 @@ These tests verify the source code contains correct FK hint syntax.
 Tests MUST FAIL before the fix is applied (TDD).
 """
 
+# Phase 6C-3 (2026-04-21): FastHTML shell retired; main.py is now a 22-line stub.
+# These tests parse main.py source or access removed attributes to validate
+# archived FastHTML code. Skipping keeps the suite green while a follow-up PR
+# decides whether to delete, rewrite against legacy-fasthtml/, or port to
+# Next.js E2E tests.
+import pytest
+pytest.skip(
+    "Tests validate archived FastHTML code in main.py (Phase 6C-3). "
+    "Follow-up: delete or retarget to legacy-fasthtml/.",
+    allow_module_level=True,
+)
+
+
 import os
 import re
 

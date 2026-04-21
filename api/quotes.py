@@ -84,12 +84,7 @@ async def calculate_quote(
            tables — this handler only checks auth + org membership).
     """
 
-    # ``build_calculation_inputs`` lives in main.py (alongside two other
-    # calc-entry handlers still using it). Imported lazily to avoid the
-    # circular import: main.py → api.app → api.routers.quotes →
-    # api.quotes → main.py. By the time this function runs, main.py's
-    # module body is fully loaded.
-    from main import build_calculation_inputs
+    from services.calculation_helpers import build_calculation_inputs
 
     # Dual auth: JWT (Next.js) first, then legacy session (FastHTML).
     # Starlette exposes the session via request.session when SessionMiddleware
