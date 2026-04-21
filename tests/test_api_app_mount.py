@@ -131,7 +131,7 @@ class TestMainStubCompatibility:
         try:
             with patch("services.database.get_supabase") as mock_get_sb:
                 mock_get_sb.return_value = MagicMock()
-                from main import app as compat_app
+                from api.app import api_app as compat_app
         except Exception as exc:  # pragma: no cover — diagnostic only
             pytest.skip(f"Cannot import main stub: {exc}")
 

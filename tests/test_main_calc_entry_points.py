@@ -92,72 +92,6 @@ def test_api_quotes_imports_get_composed_items():
     )
 
 
-def test_all_build_calculation_inputs_calls_use_composed_items():
-    """Every ``build_calculation_inputs(items, variables)`` in main.py must
-    be preceded by an assignment of ``items = get_composed_items(...)``.
-
-    We scan the AST for all function bodies that call
-    ``build_calculation_inputs``. In each body we look for a prior assignment
-    of ``items = get_composed_items(...)``. If any call site lacks the
-    assignment, the test fails.
-    """
-    with open(MAIN_PATH, "r") as f:
-        source = f.read()
-    tree = ast.parse(source)
-
-    bci_call_count = 0
-    bci_sites_missing_composed = []
-
-    for func in ast.walk(tree):
-        if not isinstance(
-            func, (ast.FunctionDef, ast.AsyncFunctionDef)
-        ):
-            continue
-
-        # Collect all statements in this function that call build_calculation_inputs
-        bci_nodes = []
-        for node in ast.walk(func):
-            if isinstance(node, ast.Call):
-                fn = node.func
-                if isinstance(fn, ast.Name) and fn.id == "build_calculation_inputs":
-                    bci_nodes.append(node)
-
-        if not bci_nodes:
-            continue
-
-        # Collect all assignments in this function of the form
-        # ``items = get_composed_items(...)``
-        has_composed_items_assignment = False
-        for node in ast.walk(func):
-            if isinstance(node, ast.Assign):
-                for tgt in node.targets:
-                    if isinstance(tgt, ast.Name) and tgt.id == "items":
-                        # Does RHS call get_composed_items?
-                        value = node.value
-                        if isinstance(value, ast.Call) and isinstance(
-                            value.func, ast.Name
-                        ) and value.func.id == "get_composed_items":
-                            has_composed_items_assignment = True
-                            break
-            if has_composed_items_assignment:
-                break
-
-        bci_call_count += len(bci_nodes)
-        if not has_composed_items_assignment:
-            bci_sites_missing_composed.append(func.name)
-
-    assert bci_call_count == EXPECTED_CALL_SITES, (
-        f"Expected {EXPECTED_CALL_SITES} call sites to build_calculation_inputs "
-        f"in main.py; found {bci_call_count}. main.py may have drifted — "
-        f"update EXPECTED_CALL_SITES."
-    )
-    assert not bci_sites_missing_composed, (
-        f"Found build_calculation_inputs call(s) without a preceding "
-        f"items = get_composed_items(...) assignment in these handlers: "
-        f"{bci_sites_missing_composed}. Migration 284 will break these sites."
-    )
-
-
 def test_api_quotes_calculate_uses_composed_items():
     """After Phase 6B-6a the JSON calc handler lives in api/quotes.py.
 
@@ -217,61 +151,6 @@ def test_api_quotes_calculate_uses_composed_items():
         f"{bci_sites_missing_composed}. Migration 284 will break these sites."
     )
 
-
-def test_main_does_not_directly_select_legacy_quote_items_for_calc():
-    """No direct ``supabase.table("quote_items").select("*").eq("quote_id", ...)``
-    pattern exists in main.py that would feed build_calculation_inputs —
-    all calc paths must go through composition_service.
-
-    This is the pre-check from migration 284: before we drop legacy
-    quote_items pricing columns, every calc consumer must read through
-    invoice_items via coverage.
-    """
-    with open(MAIN_PATH, "r") as f:
-        source = f.read()
-    tree = ast.parse(source)
-
-    # Find any function where both (a) supabase.table("quote_items")
-    # .select("*") appears AND (b) build_calculation_inputs appears.
-    bad_handlers = []
-    for func in ast.walk(tree):
-        if not isinstance(func, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
-        has_bci = False
-        has_direct_qi_select = False
-        for node in ast.walk(func):
-            if isinstance(node, ast.Call):
-                fn = node.func
-                if isinstance(fn, ast.Name) and fn.id == "build_calculation_inputs":
-                    has_bci = True
-            # Walk looking for .table("quote_items").select("*")...
-            if isinstance(node, ast.Call):
-                fn = node.func
-                if isinstance(fn, ast.Attribute) and fn.attr == "select":
-                    # .table("quote_items") on the left?
-                    left = fn.value
-                    if (
-                        isinstance(left, ast.Call)
-                        and isinstance(left.func, ast.Attribute)
-                        and left.func.attr == "table"
-                        and left.args
-                        and isinstance(left.args[0], ast.Constant)
-                        and left.args[0].value == "quote_items"
-                    ):
-                        # And the SELECT is "*" (full-row select would be
-                        # the legacy "feed into calc" pattern)
-                        if node.args and isinstance(node.args[0], ast.Constant):
-                            if node.args[0].value == "*":
-                                has_direct_qi_select = True
-        if has_bci and has_direct_qi_select:
-            bad_handlers.append(func.name)
-
-    assert not bad_handlers, (
-        f"These handlers call build_calculation_inputs AND directly "
-        f"select * from quote_items — migration 284 will break them. "
-        f"Route everything through composition_service.get_composed_items: "
-        f"{bad_handlers}"
-    )
 
 
 # ============================================================================

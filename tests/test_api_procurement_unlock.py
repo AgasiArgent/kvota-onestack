@@ -166,14 +166,14 @@ class TestRoutePathsRenamed:
         """/api/invoices/{id}/procurement-unlock-request must be reachable.
 
         Phase 6B-3: migrated from @rt in main.py to FastAPI sub-app router
-        (api/routers/invoices.py). Route is no longer in main.app.routes
+        (api/routers/invoices.py). Route is no longer in api_app.routes
         directly; it resolves via the /api mount. Reachability check via
         TestClient confirms the route is wired end-to-end.
         """
         from starlette.testclient import TestClient
-        import main
+        from api.app import api_app
 
-        client = TestClient(main.app)
+        client = TestClient(api_app)
         response = client.post(
             "/api/invoices/11111111-1111-1111-1111-111111111111"
             "/procurement-unlock-request",
@@ -190,14 +190,14 @@ class TestRoutePathsRenamed:
         """/api/invoices/{id}/procurement-unlock-approval/{id}/approve must be reachable.
 
         Phase 6B-4: migrated from @rt in main.py to FastAPI sub-app router
-        (api/routers/invoices.py). Route is no longer in main.app.routes
+        (api/routers/invoices.py). Route is no longer in api_app.routes
         directly; it resolves via the /api mount. Reachability check via
         TestClient confirms the route is wired end-to-end.
         """
         from starlette.testclient import TestClient
-        import main
+        from api.app import api_app
 
-        client = TestClient(main.app)
+        client = TestClient(api_app)
         response = client.post(
             "/api/invoices/11111111-1111-1111-1111-111111111111"
             "/procurement-unlock-approval/22222222-2222-2222-2222-222222222222/approve",
@@ -215,9 +215,9 @@ class TestRoutePathsRenamed:
         Reachability check via TestClient mirrors the ``approve`` test above.
         """
         from starlette.testclient import TestClient
-        import main
+        from api.app import api_app
 
-        client = TestClient(main.app)
+        client = TestClient(api_app)
         response = client.post(
             "/api/invoices/11111111-1111-1111-1111-111111111111"
             "/procurement-unlock-approval/22222222-2222-2222-2222-222222222222/reject",
@@ -230,24 +230,24 @@ class TestRoutePathsRenamed:
 
     def test_old_edit_request_approval_route_removed(self):
         """The Phase 4a /edit-request-approval path must not be routed anymore."""
-        import main
+        from api.app import api_app
 
-        app = main.app
+        app = api_app
         paths = {getattr(r, "path", None) for r in app.routes}
         assert "/api/invoices/{invoice_id}/edit-request-approval" not in paths
 
     def test_old_edit_request_route_removed(self):
         """The Phase 5b /edit-request path must not be routed anymore."""
-        import main
+        from api.app import api_app
 
-        app = main.app
+        app = api_app
         paths = {getattr(r, "path", None) for r in app.routes}
         assert "/api/invoices/{invoice_id}/edit-request" not in paths
 
     def test_old_edit_approval_approve_route_removed(self):
-        import main
+        from api.app import api_app
 
-        app = main.app
+        app = api_app
         paths = {getattr(r, "path", None) for r in app.routes}
         assert (
             "/api/invoices/{invoice_id}/edit-approval/{approval_id}/approve"
@@ -255,9 +255,9 @@ class TestRoutePathsRenamed:
         )
 
     def test_old_edit_approval_reject_route_removed(self):
-        import main
+        from api.app import api_app
 
-        app = main.app
+        app = api_app
         paths = {getattr(r, "path", None) for r in app.routes}
         assert (
             "/api/invoices/{invoice_id}/edit-approval/{approval_id}/reject"

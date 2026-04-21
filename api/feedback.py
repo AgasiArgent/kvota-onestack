@@ -2,14 +2,11 @@
 
 Handler module (not router). Registered via thin wrappers in
 api/routers/feedback.py (public submit) and api/routers/integrations.py
-(internal status updater). Moved verbatim from main.py
-@rt("/api/feedback") in Phase 6B-7 and
-@rt("/api/internal/feedback/{short_id}/status") in Phase 6B-8.
+(internal status updater).
 
-Supports dual body shapes on submit:
-    - JSON (Next.js): application/json body → JSON response.
-    - Form (legacy FastHTML): application/x-www-form-urlencoded → HTML response
-      (the HTMX-triggered modal expects a ``Div(...)`` snippet).
+Body: JSON only. The legacy FastHTML form-encoded + HTMX response path was
+dropped in the Phase 6C-4 cleanup (2026-04-21) — the only live caller is
+Next.js, which sends JSON.
 
 Side effects (all best-effort, swallowed on failure):
     - Persist row in kvota.user_feedback.
@@ -26,7 +23,7 @@ import uuid
 from datetime import datetime
 
 from starlette.requests import Request
-from starlette.responses import HTMLResponse, JSONResponse
+from starlette.responses import JSONResponse
 
 from services.clickup_service import create_clickup_bug_task
 from services.database import get_supabase
@@ -46,70 +43,14 @@ def _generate_short_id() -> str:
     return f"FB-{now.strftime('%y%m%d')}-{now.strftime('%H%M%S')}-{suffix}"
 
 
-def _render_error_html(message: str, hint: str | None = None) -> HTMLResponse:
-    """Render a legacy FastHTML error response for form submissions.
-
-    The feedback modal uses HTMX to swap the response into ``#feedback-result``;
-    the DOM shape returned here mirrors the original @rt handler so no
-    frontend code needs to change.
-    """
-    from fasthtml.common import Div, P
-    from api.ui_helpers import btn
-
-    if hint is None:
-        return HTMLResponse(str(Div(message, cls="text-error mt-2")))
-
-    return HTMLResponse(
-        str(
-            Div(
-                Div(message, cls="text-error font-medium"),
-                P(hint, cls="text-sm text-gray-500 mt-1"),
-                btn(
-                    "Попробовать снова",
-                    variant="secondary",
-                    size="sm",
-                    onclick="document.getElementById('feedback-result').innerHTML=''",
-                    type="button",
-                    cls="mt-2",
-                ),
-                cls="mt-2",
-            )
-        )
-    )
-
-
-def _render_success_html(short_id: str) -> HTMLResponse:
-    """Render the legacy FastHTML success response for form submissions."""
-    from fasthtml.common import Div, P
-    from api.ui_helpers import btn
-
-    return HTMLResponse(
-        str(
-            Div(
-                Div(id="feedback-success-marker", style="display:none"),
-                Div("Спасибо за обратную связь!", cls="text-success font-medium"),
-                P(
-                    f"Номер обращения: {short_id}",
-                    cls="text-sm text-gray-500 mt-1 font-mono",
-                ),
-                btn(
-                    "Закрыть",
-                    variant="secondary",
-                    size="sm",
-                    onclick="closeFeedbackModal()",
-                    type="button",
-                ),
-            )
-        )
-    )
-
-
-async def submit_feedback(request: Request) -> JSONResponse | HTMLResponse:
+async def submit_feedback(request: Request) -> JSONResponse:
     """Accept user feedback and fan out to ClickUp + Telegram admins.
 
     Path: POST /api/feedback
-    Auth: dual — JWT (Next.js) first, then legacy session (FastHTML).
-    Body: JSON (Next.js) OR form-encoded (FastHTML). Shared fields:
+    Auth: JWT (Next.js). Session fallback retained for future internal tools
+        that may call this endpoint from a browser with SessionMiddleware in
+        scope; no such caller exists today.
+    Body: JSON with fields:
         feedback_type: str (default "bug")
         description: str (required, non-empty)
         page_url, page_title: str — originating page
@@ -118,16 +59,13 @@ async def submit_feedback(request: Request) -> JSONResponse | HTMLResponse:
         screenshot_url: str — Supabase Storage URL (validated against
             SUPABASE_URL / PUBLIC_SUPABASE_URL prefixes to reject injection)
     Returns:
-        JSON path → {success, data: {short_id}} or error envelope.
-        Form path → an HTML fragment swapped into the feedback modal.
+        {success, data: {short_id}} on success, standard error envelope otherwise.
     Side Effects:
         - INSERT kvota.user_feedback (retries on short_id collision)
         - Optional ClickUp bug task creation + clickup_task_id backfill
         - Optional Telegram admin notification (best-effort, logged on fail)
-    Roles: authenticated (JWT or session). Anonymous requests are rejected
-        with 401 (JSON) or an HTML error snippet (form).
+    Roles: authenticated. Anonymous requests are rejected with 401.
     """
-    # Dual auth: JWT (Next.js) or session (FastHTML)
     api_user = getattr(request.state, "api_user", None)
     if api_user:
         user_meta = api_user.user_metadata or {}
@@ -162,30 +100,19 @@ async def submit_feedback(request: Request) -> JSONResponse | HTMLResponse:
             session = None
         user = (session or {}).get("user", {}) if session else {}
 
-    # Reject unauthenticated requests (neither JWT nor session)
     if not user or not user.get("id"):
-        content_type = request.headers.get("content-type", "")
-        if "application/json" in content_type:
-            return JSONResponse(
-                {
-                    "success": False,
-                    "error": {
-                        "code": "UNAUTHORIZED",
-                        "message": "Authentication required",
-                    },
+        return JSONResponse(
+            {
+                "success": False,
+                "error": {
+                    "code": "UNAUTHORIZED",
+                    "message": "Authentication required",
                 },
-                status_code=401,
-            )
-        return _render_error_html("Требуется авторизация")
+            },
+            status_code=401,
+        )
 
-    # Dual input: JSON (Next.js) or form (FastHTML)
-    content_type = request.headers.get("content-type", "")
-    is_json = "application/json" in content_type
-    if is_json:
-        body = await request.json()
-    else:
-        form = await request.form()
-        body = dict(form)
+    body = await request.json()
 
     feedback_type = body.get("feedback_type", "bug")
     description = body.get("description", "").strip()
@@ -211,18 +138,16 @@ async def submit_feedback(request: Request) -> JSONResponse | HTMLResponse:
         screenshot_url = screenshot_url_raw
 
     if not description:
-        if is_json:
-            return JSONResponse(
-                {
-                    "success": False,
-                    "error": {
-                        "code": "VALIDATION_ERROR",
-                        "message": "Description required",
-                    },
+        return JSONResponse(
+            {
+                "success": False,
+                "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "Description required",
                 },
-                status_code=400,
-            )
-        return _render_error_html("Пожалуйста, опишите проблему")
+            },
+            status_code=400,
+        )
 
     try:
         debug_context = (
@@ -339,29 +264,21 @@ async def submit_feedback(request: Request) -> JSONResponse | HTMLResponse:
         except Exception as e:
             logger.warning(f"Telegram notification failed for {short_id}: {e}")
 
-        # Dual response: JSON (Next.js) or HTML (FastHTML)
-        if is_json:
-            return JSONResponse(
-                {"success": True, "data": {"short_id": short_id}}
-            )
-        return _render_success_html(short_id)
+        return JSONResponse(
+            {"success": True, "data": {"short_id": short_id}}
+        )
 
     except Exception as e:
         logger.error(f"Error saving feedback: {e}")
-        if is_json:
-            return JSONResponse(
-                {
-                    "success": False,
-                    "error": {
-                        "code": "INTERNAL_ERROR",
-                        "message": "Failed to save feedback",
-                    },
+        return JSONResponse(
+            {
+                "success": False,
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": "Failed to save feedback",
                 },
-                status_code=500,
-            )
-        return _render_error_html(
-            "Ошибка при отправке",
-            hint="Попробуйте ещё раз через несколько секунд",
+            },
+            status_code=500,
         )
 
 

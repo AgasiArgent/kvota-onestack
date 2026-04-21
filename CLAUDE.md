@@ -1,7 +1,9 @@
 # OneStack (Kvota Quotation Management System)
 
-**Stack:** FastHTML + HTMX | **DB:** Supabase PostgreSQL (schema: `kvota`) | **Deploy:** Docker on beget-kvota
-**Domain:** kvotaflow.ru | **Container:** kvota-onestack | **Latest migration:** 279
+**Stack:** FastAPI (uvicorn) + Next.js 15 | **DB:** Supabase PostgreSQL (schema: `kvota`) | **Deploy:** Docker on beget-kvota
+**Domain:** kvotaflow.ru → app.kvotaflow.ru | **Containers:** kvota-onestack (Python), kvota-frontend (Next.js) | **Latest migration:** 283
+
+> Phase 6C retired FastHTML entirely (2026-04-21). The Python service is now pure FastAPI served via `uvicorn api.app:api_app`. All UI lives in `frontend/` (Next.js App Router). Archived FastHTML handlers remain in `legacy-fasthtml/` for reference only — never imported at runtime.
 
 ---
 
