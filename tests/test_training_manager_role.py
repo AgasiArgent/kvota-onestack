@@ -294,62 +294,12 @@ class TestSidebarHidesAdminSectionForTrainingManager:
 
 
 # =============================================================================
-# TEST 5: /admin/impersonate route allows training_manager
+# TEST 5 (deleted) — covered /admin/impersonate route guard training_manager
+# access; route archived to legacy-fasthtml/admin_cluster.py in Phase 6C-2B
+# Mega-E (2026-04-20). The training_manager role itself remains alive; this
+# test section probed the now-archived @rt("/admin/impersonate") source and
+# is no longer applicable.
 # =============================================================================
-
-class TestImpersonationRouteAllowsTrainingManager:
-    """/admin/impersonate GET must allow training_manager, not just admin."""
-
-    def test_impersonation_route_guard_includes_training_manager(self):
-        """The /admin/impersonate route guard should check for training_manager
-        in addition to admin."""
-        source = _read_main_py()
-
-        # Find the /admin/impersonate route handler
-        impersonate_match = re.search(
-            r'@rt\("/admin/impersonate"\)\s*\ndef get\(.*?\):\s*\n'
-            r'\s*""".*?"""\s*\n'
-            r'(.*?)(?=\n@rt|\ndef |\nclass )',
-            source,
-            re.DOTALL
-        )
-        assert impersonate_match, "Could not find /admin/impersonate route"
-        route_body = impersonate_match.group(1)
-
-        # The route guard should now allow training_manager
-        # Currently: `"admin" not in user.get("roles", [])`
-        # After fix: should check for training_manager too
-        assert "training_manager" in route_body, (
-            "/admin/impersonate route guard does not check for training_manager -- "
-            "only admin can use impersonation"
-        )
-
-    def test_impersonation_route_guard_not_admin_only(self):
-        """The guard should not be a simple 'admin not in roles' check."""
-        source = _read_main_py()
-
-        impersonate_match = re.search(
-            r'@rt\("/admin/impersonate"\)\s*\ndef get\(.*?\):\s*\n'
-            r'\s*""".*?"""\s*\n'
-            r'(.*?)(?=\n@rt|\ndef |\nclass )',
-            source,
-            re.DOTALL
-        )
-        assert impersonate_match, "Could not find /admin/impersonate route"
-        route_body = impersonate_match.group(1)
-
-        # Should not have the old pattern: "admin" not in user.get("roles", [])
-        # as the sole guard. Should also check for training_manager.
-        old_pattern = re.search(
-            r'"admin"\s+not\s+in\s+user\.get\("roles"',
-            route_body
-        )
-        if old_pattern:
-            # If old pattern exists, training_manager must also be referenced
-            assert "training_manager" in route_body, (
-                "Impersonation route still uses admin-only guard. "
-                "training_manager should also be allowed."
-            )
 
 
 # =============================================================================
@@ -435,21 +385,10 @@ class TestUserHasAnyRoleWithTrainingManager:
 class TestTrainingManagerEdgeCases:
     """Edge cases for training_manager role."""
 
-    def test_admin_badge_colors_include_training_manager(self):
-        """The admin badge_class dict should have a color entry for training_manager."""
-        source = _read_main_py()
-
-        # Find badge_class dict in admin users table rendering
-        badge_match = re.search(
-            r'badge_class\s*=\s*\{(.*?)\}',
-            source,
-            re.DOTALL
-        )
-        if badge_match:
-            badge_dict_text = badge_match.group(1)
-            assert "training_manager" in badge_dict_text, (
-                "badge_class dict missing 'training_manager' entry for admin users table"
-            )
+    # test_admin_badge_colors_include_training_manager (deleted) — tested the
+    # badge_class dict in the /admin users-table rendering, which was archived
+    # to legacy-fasthtml/admin_cluster.py in Phase 6C-2B Mega-E (2026-04-20).
+    # No live surface renders training_manager badges in the Python app.
 
     def test_impersonation_dropdown_label_for_training_manager(self):
         """The impersonation dropdown default label should differ for training_manager
@@ -492,41 +431,9 @@ class TestTrainingManagerEdgeCases:
 
 
 # =============================================================================
-# TEST 9: SECURITY -- admin must NOT be in VALID_IMPERSONATION_ROLES
+# TEST 9 (deleted) — covered VALID_IMPERSONATION_ROLES privilege-escalation
+# invariants; constant moved alongside /admin/impersonate route to
+# legacy-fasthtml/admin_cluster.py in Phase 6C-2B Mega-E (2026-04-20).
+# The security invariant is preserved in the archive (admin + training_manager
+# not in the frozenset); no live Python surface consumes it anymore.
 # =============================================================================
-
-class TestAdminNotInValidImpersonationRoles:
-    """CRITICAL SECURITY: 'admin' must never be in VALID_IMPERSONATION_ROLES.
-
-    If 'admin' is in the set, a training_manager (or any role with impersonation
-    access) can navigate to /admin/impersonate?role=admin and gain full admin
-    write privileges. Real admins never need to impersonate themselves.
-    """
-
-    def test_admin_not_in_valid_impersonation_roles(self):
-        """'admin' must NOT be in VALID_IMPERSONATION_ROLES to prevent
-        privilege escalation via manual URL access."""
-        import main
-        assert "admin" not in main.VALID_IMPERSONATION_ROLES, (
-            "SECURITY BUG: 'admin' is in VALID_IMPERSONATION_ROLES. "
-            "This allows privilege escalation via /admin/impersonate?role=admin"
-        )
-
-    def test_training_manager_not_in_valid_impersonation_roles(self):
-        """'training_manager' should also NOT be in VALID_IMPERSONATION_ROLES --
-        there is no reason to impersonate a training_manager."""
-        import main
-        assert "training_manager" not in main.VALID_IMPERSONATION_ROLES, (
-            "'training_manager' should not be in VALID_IMPERSONATION_ROLES"
-        )
-
-    def test_valid_impersonation_roles_contains_only_operational_roles(self):
-        """VALID_IMPERSONATION_ROLES should only contain operational roles,
-        not privileged or meta roles like admin/training_manager."""
-        import main
-        privileged_roles = {"admin", "training_manager", "superadmin"}
-        overlap = privileged_roles & main.VALID_IMPERSONATION_ROLES
-        assert not overlap, (
-            f"VALID_IMPERSONATION_ROLES contains privileged role(s): {overlap}. "
-            "Only operational roles should be impersonatable."
-        )
