@@ -8,6 +8,7 @@ their path decorators — the mount in main.py provides it.
 from api.routers import (  # re-export
     admin,
     chat,
+    cost_analysis,
     cron,
     customs,
     deals,
@@ -24,6 +25,7 @@ from api.routers import (  # re-export
 __all__ = [
     "admin",
     "chat",
+    "cost_analysis",
     "cron",
     "customs",
     "deals",
