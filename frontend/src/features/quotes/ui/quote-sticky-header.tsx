@@ -20,7 +20,10 @@ import { cn } from "@/lib/utils";
 import { cancelQuote } from "@/entities/quote/mutations";
 import type { QuoteDetailRow } from "@/entities/quote/queries";
 import type { QuoteStep } from "@/entities/quote/types";
-import { STATUS_LABELS, STATUS_BADGE_STYLES } from "@/entities/quote";
+// Direct import from the source module, NOT the barrel — the barrel re-exports
+// queries.ts which transitively pulls `next/headers` from supabase/server.ts.
+// Pulling that into a Client Component (this file) breaks the Turbopack build.
+import { STATUS_LABELS, STATUS_BADGE_STYLES } from "@/entities/quote/status-labels";
 import { DeleteMenu } from "./delete-menu/delete-menu";
 
 const PLAN_FACT_ROLES = ["finance", "admin", "top_manager"];
