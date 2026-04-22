@@ -16,6 +16,8 @@ import {
   type InvoiceTabItem,
   type InvoiceTabStatus,
 } from "@/features/quotes/ui/invoice-tabs";
+import { EntityNotesPanel } from "@/entities/entity-note";
+import type { EntityNoteCardData } from "@/entities/entity-note/ui/entity-note-card";
 
 /**
  * LogisticsStep — thin wrapper around the RouteConstructor per invoice.
@@ -35,6 +37,9 @@ import {
 interface LogisticsStepProps {
   quote: QuoteDetailRow;
   invoices: QuoteInvoiceRow[];
+  userId?: string;
+  userRoles?: string[];
+  quoteNotes?: EntityNoteCardData[];
 }
 
 // Narrow shape returned by the `logistics_route_segments` query below.
@@ -105,7 +110,13 @@ function toNumber(v: number | string | null | undefined): number {
   return typeof v === "number" ? v : Number(v) || 0;
 }
 
-export function LogisticsStep({ quote, invoices }: LogisticsStepProps) {
+export function LogisticsStep({
+  quote,
+  invoices,
+  userId,
+  userRoles,
+  quoteNotes = [],
+}: LogisticsStepProps) {
   const [activeInvoiceId, setActiveInvoiceId] = useState<string | null>(
     invoices[0]?.id ?? null,
   );
@@ -394,6 +405,17 @@ export function LogisticsStep({ quote, invoices }: LogisticsStepProps) {
           revalidatePath={`/quotes/${quote.id}`}
         />
       ) : null}
+
+      {userId && (
+        <EntityNotesPanel
+          entityType="quote"
+          entityId={quote.id}
+          initialNotes={quoteNotes}
+          currentUser={{ id: userId, roles: userRoles ?? [] }}
+          title="Заметки логистов по КП"
+          defaultVisibleTo={["logistics", "head_of_logistics", "sales", "procurement"]}
+        />
+      )}
     </div>
   );
 }

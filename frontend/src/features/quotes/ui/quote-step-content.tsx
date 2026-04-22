@@ -6,6 +6,7 @@ import type {
   QuoteInvoiceRow,
 } from "@/entities/quote/queries";
 import type { QuoteStep } from "@/entities/quote/types";
+import type { EntityNoteCardData } from "@/entities/entity-note/ui/entity-note-card";
 import { SalesStep } from "./sales-step/sales-step";
 import { ProcurementStep } from "./procurement-step/procurement-step";
 import { LogisticsStep } from "./logistics-step/logistics-step";
@@ -26,6 +27,7 @@ interface QuoteStepContentProps {
   calcVariables?: Record<string, unknown> | null;
   dealId?: string | null;
   isReadOnly?: boolean;
+  quoteNotes?: EntityNoteCardData[];
 }
 
 function ReadOnlyOverlay({ children }: { children: React.ReactNode }) {
@@ -51,6 +53,7 @@ export function QuoteStepContent({
   calcVariables,
   dealId,
   isReadOnly = false,
+  quoteNotes = [],
 }: QuoteStepContentProps) {
   function wrapReadOnly(content: React.ReactNode) {
     if (!isReadOnly) return content;
@@ -81,7 +84,13 @@ export function QuoteStepContent({
       );
     case "logistics":
       return wrapReadOnly(
-        <LogisticsStep quote={quote} invoices={invoices} />
+        <LogisticsStep
+          quote={quote}
+          invoices={invoices}
+          userId={userId}
+          userRoles={userRoles}
+          quoteNotes={quoteNotes}
+        />
       );
     case "customs":
       return wrapReadOnly(
@@ -90,6 +99,8 @@ export function QuoteStepContent({
           items={items}
           invoices={invoices}
           userRoles={userRoles}
+          userId={userId}
+          quoteNotes={quoteNotes}
         />
       );
     case "control":

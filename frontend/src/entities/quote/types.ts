@@ -323,6 +323,7 @@ export const ROLE_ALLOWED_STEPS: Record<string, QuoteStep[]> = {
   logistics: ["logistics", "documents"],
   head_of_logistics: ["logistics", "documents"],
   customs: ["customs", "documents"],
+  head_of_customs: ["customs", "documents"],
   quote_controller: ["control", "cost-analysis", "documents"],
   spec_controller: ["specification", "control", "cost-analysis", "documents"],
   finance: ["cost-analysis", "documents", "plan-fact"],
