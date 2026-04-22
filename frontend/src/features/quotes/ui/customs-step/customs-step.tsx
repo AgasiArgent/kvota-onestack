@@ -18,6 +18,8 @@ import { CustomsActionBar } from "./customs-action-bar";
 import { CustomsItemsEditor } from "./customs-items-editor";
 import { CustomsExpenses } from "./customs-expenses";
 import { CustomsNotes } from "./customs-notes";
+import { EntityNotesPanel } from "@/entities/entity-note";
+import type { EntityNoteCardData } from "@/entities/entity-note/ui/entity-note-card";
 import { CustomsInfoBlock } from "./customs-info-block";
 import { QuoteCustomsExpenses } from "./quote-customs-expenses";
 import { ItemCustomsExpenses } from "./item-customs-expenses";
@@ -117,6 +119,8 @@ interface CustomsStepProps {
   items: QuoteItemRow[];
   invoices: QuoteInvoiceRow[];
   userRoles: string[];
+  userId?: string;
+  quoteNotes?: EntityNoteCardData[];
 }
 
 export function CustomsStep({
@@ -124,6 +128,8 @@ export function CustomsStep({
   items,
   invoices,
   userRoles,
+  userId,
+  quoteNotes = [],
 }: CustomsStepProps) {
   const router = useRouter();
   const [completing, setCompleting] = useState(false);
@@ -330,6 +336,17 @@ export function CustomsStep({
         <CustomsExpenses quoteId={quote.id} />
 
         <CustomsNotes quoteId={quote.id} initialNotes={customsNotes} />
+
+        {userId && (
+          <EntityNotesPanel
+            entityType="quote"
+            entityId={quote.id}
+            initialNotes={quoteNotes}
+            currentUser={{ id: userId, roles: userRoles }}
+            title="Заметки таможни по КП"
+            defaultVisibleTo={["customs", "head_of_customs", "sales", "procurement"]}
+          />
+        )}
 
         <CustomsInfoBlock quoteId={quote.id} orgId={quote.organization_id} />
       </div>

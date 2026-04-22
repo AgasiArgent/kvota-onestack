@@ -23,6 +23,7 @@ import { UseCollapsedSidebar } from "@/features/quotes/ui/use-collapsed-sidebar"
 import { fetchOrgMembers } from "@/features/messages/queries";
 import { fetchDocumentCount } from "@/features/quotes/ui/documents-step/queries";
 import { fetchQuoteContextData } from "@/features/quotes/ui/context-panel/queries";
+import { fetchEntityNotes } from "@/entities/entity-note/queries";
 
 function getDefaultStep(roles: string[]): QuoteStep {
   for (const role of roles) {
@@ -66,6 +67,7 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
     dealId,
     hasAccess,
     contextData,
+    quoteNotes,
   ] = await Promise.all([
     fetchQuoteDetail(id),
     fetchQuoteItems(id),
@@ -77,6 +79,7 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
     fetchDealIdForQuote(id),
     canAccessQuote(id, accessUser),
     fetchQuoteContextData(id),
+    fetchEntityNotes("quote", id),
   ]);
 
   if (!quote || !hasAccess) notFound();
@@ -135,6 +138,7 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
             calcVariables={calcVariables}
             dealId={dealId}
             isReadOnly={isReadOnly}
+            quoteNotes={quoteNotes}
           />
         }
         chat={
