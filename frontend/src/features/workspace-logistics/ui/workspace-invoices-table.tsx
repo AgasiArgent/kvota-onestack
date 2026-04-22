@@ -9,8 +9,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { LocationChip, type LocationChipLocation } from "@/entities/location";
-import { UserAvatarChip, type UserAvatarChipUser } from "@/entities/user";
+// Direct imports (not barrel) — barrel exports server-only queries that break "use client" bundling.
+import { LocationChip, type LocationChipLocation } from "@/entities/location/ui/location-chip";
+import { UserAvatarChip, type UserAvatarChipUser } from "@/entities/user/ui/user-avatar-chip";
 import { SlaTimerBadge } from "@/shared/ui";
 import { cn } from "@/lib/utils";
 
