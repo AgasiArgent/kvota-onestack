@@ -21,7 +21,6 @@ export interface LocationOption {
 interface LocationRow {
   id: string;
   country: string;
-  country_iso2: string | null;
   city: string | null;
   location_type: string | null;
 }
@@ -42,7 +41,6 @@ function mapRow(r: LocationRow): LocationOption {
   return {
     id: r.id,
     country: r.country,
-    iso2: r.country_iso2 ?? undefined,
     city: r.city ?? undefined,
     type: normaliseType(r.location_type),
   };
@@ -56,7 +54,7 @@ export async function fetchLocations(orgId: string): Promise<LocationOption[]> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("locations")
-    .select("id, country, country_iso2, city, location_type")
+    .select("id, country, city, location_type")
     .eq("organization_id", orgId)
     .order("country", { ascending: true })
     .order("city", { ascending: true, nullsFirst: true });
@@ -82,7 +80,7 @@ export async function fetchLocationsByTypes(
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("locations")
-    .select("id, country, country_iso2, city, location_type")
+    .select("id, country, city, location_type")
     .eq("organization_id", orgId)
     .in("location_type", types)
     .order("country", { ascending: true })

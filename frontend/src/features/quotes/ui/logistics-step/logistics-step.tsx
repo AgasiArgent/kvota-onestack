@@ -55,7 +55,6 @@ interface SegmentRowShape {
 interface LocationRowShape {
   id: string;
   country: string;
-  country_iso2: string | null;
   city: string | null;
   location_type: string | null;
 }
@@ -159,7 +158,7 @@ export function LogisticsStep({ quote, invoices }: LogisticsStepProps) {
         // Locations — all types, org-scoped
         supabase
           .from("locations")
-          .select("id, country, country_iso2, city, location_type")
+          .select("id, country, city, location_type")
           .eq("organization_id", orgId)
           .order("country", { ascending: true })
           .order("city", { ascending: true, nullsFirst: true }),
@@ -203,7 +202,6 @@ export function LogisticsStep({ quote, invoices }: LogisticsStepProps) {
       ).map((l) => ({
         id: l.id,
         country: l.country,
-        iso2: l.country_iso2 ?? undefined,
         city: l.city ?? undefined,
         type: coerceType(l.location_type),
       }));
