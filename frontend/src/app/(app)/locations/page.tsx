@@ -37,6 +37,11 @@ export default async function LocationsRoute({ searchParams }: Props) {
     fetchLocationCountries(user.orgId),
   ]);
 
+  const canEditType = user.roles.some(
+    (r) =>
+      r === "admin" || r === "head_of_logistics" || r === "head_of_customs",
+  );
+
   return (
     <div>
       <h1 className="text-2xl font-bold mb-6">Локации</h1>
@@ -48,6 +53,7 @@ export default async function LocationsRoute({ searchParams }: Props) {
         initialCountry={country}
         initialStatus={status}
         initialType={type}
+        canEditType={canEditType}
       />
     </div>
   );

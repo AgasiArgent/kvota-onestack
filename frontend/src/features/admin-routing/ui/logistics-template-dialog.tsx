@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus, Trash2, ArrowRight } from "lucide-react";
 import {
   Dialog,
@@ -41,6 +41,12 @@ interface Props {
     segments: TemplateSegmentForm[];
   }) => void;
   busy: boolean;
+  /** Prefill values when editing an existing template. */
+  initial?: {
+    name: string;
+    description: string;
+    segments: TemplateSegmentForm[];
+  };
 }
 
 const LOCATION_TYPES: Array<{ value: LocationType; label: string }> = [
@@ -66,12 +72,24 @@ export function LogisticsTemplateDialog({
   onOpenChange,
   onSubmit,
   busy,
+  initial,
 }: Props) {
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [segments, setSegments] = useState<TemplateSegmentForm[]>([
-    emptySegment(1),
-  ]);
+  const isEdit = Boolean(initial);
+  const [name, setName] = useState(initial?.name ?? "");
+  const [description, setDescription] = useState(initial?.description ?? "");
+  const [segments, setSegments] = useState<TemplateSegmentForm[]>(
+    initial?.segments ?? [emptySegment(1)],
+  );
+
+  // Reset state whenever the dialog reopens with a (possibly different)
+  // `initial` payload — sibling rows may open the same dialog in turn.
+  useEffect(() => {
+    if (open) {
+      setName(initial?.name ?? "");
+      setDescription(initial?.description ?? "");
+      setSegments(initial?.segments ?? [emptySegment(1)]);
+    }
+  }, [open, initial]);
 
   const reset = () => {
     setName("");
@@ -129,7 +147,9 @@ export function LogisticsTemplateDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="!max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Новый шаблон маршрута</DialogTitle>
+          <DialogTitle>
+            {isEdit ? "Редактирование шаблона" : "Новый шаблон маршрута"}
+          </DialogTitle>
           <DialogDescription>
             Опишите типовую цепочку перемещений. Логист применит шаблон к
             инвойсу и подставит конкретные локации.
@@ -281,7 +301,13 @@ export function LogisticsTemplateDialog({
             onClick={handleSubmit}
             disabled={!canSubmit}
           >
-            {busy ? "Создание..." : "Создать шаблон"}
+            {busy
+              ? isEdit
+                ? "Сохранение..."
+                : "Создание..."
+              : isEdit
+                ? "Сохранить"
+                : "Создать шаблон"}
           </Button>
         </DialogFooter>
       </DialogContent>

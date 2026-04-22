@@ -47,6 +47,33 @@ export async function createLogisticsTemplate(input: {
   return res.data!;
 }
 
+export async function updateLogisticsTemplate(input: {
+  template_id: string;
+  name: string;
+  description?: string;
+  segments: TemplateSegmentDraft[];
+  revalidate_path: string;
+}): Promise<void> {
+  const user = await getSessionUser();
+  if (!user) throw new Error("Unauthorized");
+
+  const res = await apiServerClient(
+    `/logistics/templates/${input.template_id}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        name: input.name,
+        description: input.description,
+        segments: input.segments,
+      }),
+    },
+  );
+  if (!res.success) {
+    throw new Error(res.error?.message ?? "Не удалось обновить шаблон");
+  }
+  revalidatePath(input.revalidate_path);
+}
+
 export async function deleteLogisticsTemplate(input: {
   template_id: string;
   revalidate_path: string;

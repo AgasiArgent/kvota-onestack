@@ -21,6 +21,7 @@ interface Props {
   initialCountry?: string;
   initialStatus?: string;
   initialType?: string;
+  canEditType?: boolean;
 }
 
 const STATUS_OPTIONS = [
@@ -46,6 +47,7 @@ export function LocationsPage({
   initialCountry = "",
   initialStatus = "",
   initialType = "",
+  canEditType = false,
 }: Props) {
   const getStatusLabel = (v: string) =>
     STATUS_OPTIONS.find((o) => o.value === v)?.label ?? "Все статусы";
@@ -163,7 +165,7 @@ export function LocationsPage({
         <span>Активные: {stats.active}</span>
       </div>
 
-      <LocationsTable locations={locations} />
+      <LocationsTable locations={locations} canEditType={canEditType} />
     </div>
   );
 }
