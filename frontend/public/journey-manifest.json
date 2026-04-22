@@ -1,0 +1,702 @@
+{
+  "version": 1,
+  "generated_at": "2026-04-22T19:52:59.000Z",
+  "commit": "58c16f3865ac7c7c7422b75501ff4f8d36f2d016",
+  "nodes": [
+    {
+      "node_id": "app:/",
+      "route": "/",
+      "title": "Home",
+      "cluster": "root",
+      "source_files": [
+        "frontend/src/app/page.tsx"
+      ],
+      "roles": [],
+      "stories": [],
+      "parent_node_id": null,
+      "children": []
+    },
+    {
+      "node_id": "app:/admin/feedback",
+      "route": "/admin/feedback",
+      "title": "Обращения пользователей",
+      "cluster": "admin",
+      "source_files": [
+        "frontend/src/app/(app)/admin/feedback/page.tsx"
+      ],
+      "roles": [],
+      "stories": [],
+      "parent_node_id": null,
+      "children": [
+        "app:/admin/feedback/[id]"
+      ]
+    },
+    {
+      "node_id": "app:/admin/feedback/[id]",
+      "route": "/admin/feedback/[id]",
+      "title": "Feedback",
+      "cluster": "admin",
+      "source_files": [
+        "frontend/src/app/(app)/admin/feedback/[id]/page.tsx"
+      ],
+      "roles": [],
+      "stories": [],
+      "parent_node_id": "app:/admin/feedback",
+      "children": []
+    },
+    {
+      "node_id": "app:/admin/routing",
+      "route": "/admin/routing",
+      "title": "Маршруты закупок",
+      "cluster": "admin",
+      "source_files": [
+        "frontend/src/app/(app)/admin/routing/page.tsx"
+      ],
+      "roles": [],
+      "stories": [],
+      "parent_node_id": null,
+      "children": []
+    },
+    {
+      "node_id": "app:/admin/users",
+      "route": "/admin/users",
+      "title": "Пользователи",
+      "cluster": "admin",
+      "source_files": [
+        "frontend/src/app/(app)/admin/users/page.tsx"
+      ],
+      "roles": [],
+      "stories": [],
+      "parent_node_id": null,
+      "children": []
+    },
+    {
+      "node_id": "app:/admin/vat-rates",
+      "route": "/admin/vat-rates",
+      "title": "Ставки НДС по странам",
+      "cluster": "admin",
+      "source_files": [
+        "frontend/src/app/(app)/admin/vat-rates/page.tsx"
+      ],
+      "roles": [],
+      "stories": [],
+      "parent_node_id": null,
+      "children": []
+    },
+    {
+      "node_id": "app:/approvals",
+      "route": "/approvals",
+      "title": "Approvals",
+      "cluster": "approvals",
+      "source_files": [
+        "frontend/src/app/(app)/approvals/page.tsx"
+      ],
+      "roles": [],
+      "stories": [],
+      "parent_node_id": null,
+      "children": []
+    },
+    {
+      "node_id": "app:/changelog",
+      "route": "/changelog",
+      "title": "Обновления",
+      "cluster": "changelog",
+      "source_files": [
+        "frontend/src/app/(app)/changelog/page.tsx"
+      ],
+      "roles": [],
+      "stories": [],
+      "parent_node_id": null,
+      "children": []
+    },
+    {
+      "node_id": "app:/companies",
+      "route": "/companies",
+      "title": "Юрлица",
+      "cluster": "companies",
+      "source_files": [
+        "frontend/src/app/(app)/companies/page.tsx"
+      ],
+      "roles": [],
+      "stories": [],
+      "parent_node_id": null,
+      "children": []
+    },
+    {
+      "node_id": "app:/currency-invoices",
+      "route": "/currency-invoices",
+      "title": "Валютные инвойсы",
+      "cluster": "currency_invoices",
+      "source_files": [
+        "frontend/src/app/(app)/currency-invoices/page.tsx"
+      ],
+      "roles": [],
+      "stories": [],
+      "parent_node_id": null,
+      "children": [
+        "app:/currency-invoices/[id]"
+      ]
+    },
+    {
+      "node_id": "app:/currency-invoices/[id]",
+      "route": "/currency-invoices/[id]",
+      "title": "Currency Invoices",
+      "cluster": "currency_invoices",
+      "source_files": [
+        "frontend/src/app/(app)/currency-invoices/[id]/page.tsx"
+      ],
+      "roles": [],
+      "stories": [],
+      "parent_node_id": "app:/currency-invoices",
+      "children": []
+    },
+    {
+      "node_id": "app:/customers",
+      "route": "/customers",
+      "title": "Клиенты",
+      "cluster": "customers",
+      "source_files": [
+        "frontend/src/app/(app)/customers/page.tsx"
+      ],
+      "roles": [
+        "admin",
+        "finance",
+        "head_of_logistics",
+        "head_of_sales",
+        "quote_controller",
+        "sales",
+        "spec_controller",
+        "top_manager"
+      ],
+      "stories": [],
+      "parent_node_id": null,
+      "children": [
+        "app:/customers/[id]"
+      ]
+    },
+    {
+      "node_id": "app:/customers/[id]",
+      "route": "/customers/[id]",
+      "title": "Customers",
+      "cluster": "customers",
+      "source_files": [
+        "frontend/src/app/(app)/customers/[id]/page.tsx"
+      ],
+      "roles": [
+        "admin",
+        "finance",
+        "head_of_logistics",
+        "head_of_sales",
+        "quote_controller",
+        "sales",
+        "spec_controller",
+        "top_manager"
+      ],
+      "stories": [],
+      "parent_node_id": "app:/customers",
+      "children": []
+    },
+    {
+      "node_id": "app:/customs/declarations",
+      "route": "/customs/declarations",
+      "title": "Declarations",
+      "cluster": "customs",
+      "source_files": [
+        "frontend/src/app/(app)/customs/declarations/page.tsx"
+      ],
+      "roles": [],
+      "stories": [],
+      "parent_node_id": null,
+      "children": []
+    },
+    {
+      "node_id": "app:/dashboard",
+      "route": "/dashboard",
+      "title": "Дашборд",
+      "cluster": "dashboard",
+      "source_files": [
+        "frontend/src/app/(app)/dashboard/page.tsx"
+      ],
+      "roles": [],
+      "stories": [],
+      "parent_node_id": null,
+      "children": []
+    },
+    {
+      "node_id": "app:/finance",
+      "route": "/finance",
+      "title": "Финансы",
+      "cluster": "finance",
+      "source_files": [
+        "frontend/src/app/(app)/finance/page.tsx"
+      ],
+      "roles": [],
+      "stories": [],
+      "parent_node_id": null,
+      "children": []
+    },
+    {
+      "node_id": "app:/locations",
+      "route": "/locations",
+      "title": "Локации",
+      "cluster": "locations",
+      "source_files": [
+        "frontend/src/app/(app)/locations/page.tsx"
+      ],
+      "roles": [],
+      "stories": [],
+      "parent_node_id": null,
+      "children": []
+    },
+    {
+      "node_id": "app:/login",
+      "route": "/login",
+      "title": "Login",
+      "cluster": "login",
+      "source_files": [
+        "frontend/src/app/login/page.tsx"
+      ],
+      "roles": [],
+      "stories": [],
+      "parent_node_id": null,
+      "children": []
+    },
+    {
+      "node_id": "app:/messages",
+      "route": "/messages",
+      "title": "Сообщения",
+      "cluster": "messages",
+      "source_files": [
+        "frontend/src/app/(app)/messages/page.tsx"
+      ],
+      "roles": [],
+      "stories": [],
+      "parent_node_id": null,
+      "children": []
+    },
+    {
+      "node_id": "app:/payments/calendar",
+      "route": "/payments/calendar",
+      "title": "Calendar",
+      "cluster": "payments",
+      "source_files": [
+        "frontend/src/app/(app)/payments/calendar/page.tsx"
+      ],
+      "roles": [],
+      "stories": [],
+      "parent_node_id": null,
+      "children": []
+    },
+    {
+      "node_id": "app:/positions",
+      "route": "/positions",
+      "title": "Реестр позиций",
+      "cluster": "positions",
+      "source_files": [
+        "frontend/src/app/(app)/positions/page.tsx"
+      ],
+      "roles": [],
+      "stories": [],
+      "parent_node_id": null,
+      "children": []
+    },
+    {
+      "node_id": "app:/procurement/distribution",
+      "route": "/procurement/distribution",
+      "title": "Distribution",
+      "cluster": "procurement",
+      "source_files": [
+        "frontend/src/app/(app)/procurement/distribution/page.tsx"
+      ],
+      "roles": [],
+      "stories": [],
+      "parent_node_id": null,
+      "children": []
+    },
+    {
+      "node_id": "app:/procurement/kanban",
+      "route": "/procurement/kanban",
+      "title": "Kanban",
+      "cluster": "procurement",
+      "source_files": [
+        "frontend/src/app/(app)/procurement/kanban/page.tsx"
+      ],
+      "roles": [],
+      "stories": [],
+      "parent_node_id": null,
+      "children": []
+    },
+    {
+      "node_id": "app:/profile",
+      "route": "/profile",
+      "title": "Профиль",
+      "cluster": "profile",
+      "source_files": [
+        "frontend/src/app/(app)/profile/page.tsx"
+      ],
+      "roles": [],
+      "stories": [],
+      "parent_node_id": null,
+      "children": []
+    },
+    {
+      "node_id": "app:/quotes",
+      "route": "/quotes",
+      "title": "Коммерческие предложения",
+      "cluster": "quotes",
+      "source_files": [
+        "frontend/src/app/(app)/quotes/page.tsx"
+      ],
+      "roles": [
+        "admin",
+        "customs",
+        "finance",
+        "head_of_logistics",
+        "head_of_procurement",
+        "head_of_sales",
+        "logistics",
+        "procurement",
+        "procurement_senior",
+        "quote_controller",
+        "sales",
+        "spec_controller",
+        "top_manager"
+      ],
+      "stories": [],
+      "parent_node_id": null,
+      "children": [
+        "app:/quotes/[id]",
+        "app:/quotes/trash"
+      ]
+    },
+    {
+      "node_id": "app:/quotes/[id]",
+      "route": "/quotes/[id]",
+      "title": "Quotes",
+      "cluster": "quotes",
+      "source_files": [
+        "frontend/src/app/(app)/quotes/[id]/page.tsx"
+      ],
+      "roles": [
+        "admin",
+        "customs",
+        "finance",
+        "head_of_logistics",
+        "head_of_procurement",
+        "head_of_sales",
+        "logistics",
+        "procurement",
+        "procurement_senior",
+        "quote_controller",
+        "sales",
+        "spec_controller",
+        "top_manager"
+      ],
+      "stories": [],
+      "parent_node_id": "app:/quotes",
+      "children": [
+        "app:/quotes/[id]/cost-analysis"
+      ]
+    },
+    {
+      "node_id": "app:/quotes/[id]/cost-analysis",
+      "route": "/quotes/[id]/cost-analysis",
+      "title": "Cost Analysis",
+      "cluster": "quotes",
+      "source_files": [
+        "frontend/src/app/(app)/quotes/[id]/cost-analysis/page.tsx"
+      ],
+      "roles": [
+        "admin",
+        "customs",
+        "finance",
+        "head_of_logistics",
+        "head_of_procurement",
+        "head_of_sales",
+        "logistics",
+        "procurement",
+        "procurement_senior",
+        "quote_controller",
+        "sales",
+        "spec_controller",
+        "top_manager"
+      ],
+      "stories": [],
+      "parent_node_id": "app:/quotes/[id]",
+      "children": []
+    },
+    {
+      "node_id": "app:/quotes/trash",
+      "route": "/quotes/trash",
+      "title": "Нет доступа",
+      "cluster": "quotes",
+      "source_files": [
+        "frontend/src/app/(app)/quotes/trash/page.tsx"
+      ],
+      "roles": [
+        "admin",
+        "customs",
+        "finance",
+        "head_of_logistics",
+        "head_of_procurement",
+        "head_of_sales",
+        "logistics",
+        "procurement",
+        "procurement_senior",
+        "quote_controller",
+        "sales",
+        "spec_controller",
+        "top_manager"
+      ],
+      "stories": [],
+      "parent_node_id": "app:/quotes",
+      "children": []
+    },
+    {
+      "node_id": "app:/register",
+      "route": "/register",
+      "title": "Register",
+      "cluster": "register",
+      "source_files": [
+        "frontend/src/app/register/page.tsx"
+      ],
+      "roles": [],
+      "stories": [],
+      "parent_node_id": null,
+      "children": []
+    },
+    {
+      "node_id": "app:/settings",
+      "route": "/settings",
+      "title": "Settings",
+      "cluster": "settings",
+      "source_files": [
+        "frontend/src/app/(app)/settings/page.tsx"
+      ],
+      "roles": [],
+      "stories": [],
+      "parent_node_id": null,
+      "children": []
+    },
+    {
+      "node_id": "app:/suppliers",
+      "route": "/suppliers",
+      "title": "Поставщики",
+      "cluster": "suppliers",
+      "source_files": [
+        "frontend/src/app/(app)/suppliers/page.tsx"
+      ],
+      "roles": [
+        "admin",
+        "head_of_procurement",
+        "procurement",
+        "procurement_senior",
+        "top_manager"
+      ],
+      "stories": [],
+      "parent_node_id": null,
+      "children": [
+        "app:/suppliers/[id]"
+      ]
+    },
+    {
+      "node_id": "app:/suppliers/[id]",
+      "route": "/suppliers/[id]",
+      "title": "Suppliers",
+      "cluster": "suppliers",
+      "source_files": [
+        "frontend/src/app/(app)/suppliers/[id]/page.tsx"
+      ],
+      "roles": [
+        "admin",
+        "head_of_procurement",
+        "procurement",
+        "procurement_senior",
+        "top_manager"
+      ],
+      "stories": [],
+      "parent_node_id": "app:/suppliers",
+      "children": []
+    },
+    {
+      "node_id": "app:/telegram",
+      "route": "/telegram",
+      "title": "Telegram",
+      "cluster": "telegram",
+      "source_files": [
+        "frontend/src/app/(app)/telegram/page.tsx"
+      ],
+      "roles": [],
+      "stories": [],
+      "parent_node_id": null,
+      "children": []
+    },
+    {
+      "node_id": "app:/training",
+      "route": "/training",
+      "title": "Training",
+      "cluster": "training",
+      "source_files": [
+        "frontend/src/app/(app)/training/page.tsx"
+      ],
+      "roles": [],
+      "stories": [],
+      "parent_node_id": null,
+      "children": []
+    }
+  ],
+  "edges": [
+    {
+      "from": "app:/admin/feedback",
+      "to": "app:/admin/feedback/[id]",
+      "kind": "drill"
+    },
+    {
+      "from": "app:/currency-invoices",
+      "to": "app:/currency-invoices/[id]",
+      "kind": "drill"
+    },
+    {
+      "from": "app:/customers",
+      "to": "app:/customers/[id]",
+      "kind": "drill"
+    },
+    {
+      "from": "app:/quotes",
+      "to": "app:/quotes/[id]",
+      "kind": "drill"
+    },
+    {
+      "from": "app:/quotes",
+      "to": "app:/quotes/trash",
+      "kind": "drill"
+    },
+    {
+      "from": "app:/quotes/[id]",
+      "to": "app:/quotes/[id]/cost-analysis",
+      "kind": "drill"
+    },
+    {
+      "from": "app:/suppliers",
+      "to": "app:/suppliers/[id]",
+      "kind": "drill"
+    }
+  ],
+  "clusters": [
+    {
+      "id": "admin",
+      "label": "Admin",
+      "colour": "#64748B"
+    },
+    {
+      "id": "approvals",
+      "label": "Approvals",
+      "colour": "#5B8DEF"
+    },
+    {
+      "id": "changelog",
+      "label": "Changelog",
+      "colour": "#8B5CF6"
+    },
+    {
+      "id": "companies",
+      "label": "Companies",
+      "colour": "#EF4444"
+    },
+    {
+      "id": "currency_invoices",
+      "label": "Currency Invoices",
+      "colour": "#8B5CF6"
+    },
+    {
+      "id": "customers",
+      "label": "Customers",
+      "colour": "#EC4899"
+    },
+    {
+      "id": "customs",
+      "label": "Customs",
+      "colour": "#10B981"
+    },
+    {
+      "id": "dashboard",
+      "label": "Dashboard",
+      "colour": "#8B5CF6"
+    },
+    {
+      "id": "finance",
+      "label": "Finance",
+      "colour": "#10B981"
+    },
+    {
+      "id": "locations",
+      "label": "Locations",
+      "colour": "#14B8A6"
+    },
+    {
+      "id": "login",
+      "label": "Login",
+      "colour": "#F59E0B"
+    },
+    {
+      "id": "messages",
+      "label": "Messages",
+      "colour": "#8B5CF6"
+    },
+    {
+      "id": "payments",
+      "label": "Payments",
+      "colour": "#EC4899"
+    },
+    {
+      "id": "positions",
+      "label": "Positions",
+      "colour": "#10B981"
+    },
+    {
+      "id": "procurement",
+      "label": "Procurement",
+      "colour": "#5B8DEF"
+    },
+    {
+      "id": "profile",
+      "label": "Profile",
+      "colour": "#F59E0B"
+    },
+    {
+      "id": "quotes",
+      "label": "Quotes",
+      "colour": "#64748B"
+    },
+    {
+      "id": "register",
+      "label": "Register",
+      "colour": "#EF4444"
+    },
+    {
+      "id": "root",
+      "label": "Root",
+      "colour": "#10B981"
+    },
+    {
+      "id": "settings",
+      "label": "Settings",
+      "colour": "#EF4444"
+    },
+    {
+      "id": "suppliers",
+      "label": "Suppliers",
+      "colour": "#64748B"
+    },
+    {
+      "id": "telegram",
+      "label": "Telegram",
+      "colour": "#F59E0B"
+    },
+    {
+      "id": "training",
+      "label": "Training",
+      "colour": "#10B981"
+    }
+  ]
+}

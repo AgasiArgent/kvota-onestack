@@ -61,6 +61,17 @@ jobs:
         working-directory: frontend
         run: npm test -- --run
 
+      - name: Regenerate journey manifest
+        working-directory: frontend
+        run: npm run journey:build
+
+      - name: Assert journey manifest is not stale
+        # Req 1.3 — committed manifest must match what the build produces.
+        # If this fails, run `cd frontend && npm run journey:build` locally and
+        # commit the regenerated `frontend/public/journey-manifest.json`.
+        working-directory: frontend
+        run: git diff --exit-code public/journey-manifest.json
+
       - name: Next.js production build (Turbopack)
         working-directory: frontend
         env:
