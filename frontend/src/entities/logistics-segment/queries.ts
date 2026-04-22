@@ -36,7 +36,6 @@ interface SegmentRow {
     | {
         id: string;
         country: string;
-        country_iso2: string | null;
         city: string | null;
         location_type: string | null;
       }
@@ -45,7 +44,6 @@ interface SegmentRow {
     | {
         id: string;
         country: string;
-        country_iso2: string | null;
         city: string | null;
         location_type: string | null;
       }
@@ -75,7 +73,6 @@ function mapLocation(
   return {
     id: l.id,
     country: l.country,
-    iso2: l.country_iso2 ?? undefined,
     city: l.city ?? undefined,
     type: coerceType(l.location_type),
   };
@@ -120,10 +117,10 @@ export async function fetchSegmentsForInvoice(
       from_location_id, to_location_id,
       label, transit_days, main_cost_rub, carrier, notes,
       from_location:locations!logistics_route_segments_from_location_id_fkey (
-        id, country, country_iso2, city, location_type
+        id, country, city, location_type
       ),
       to_location:locations!logistics_route_segments_to_location_id_fkey (
-        id, country, country_iso2, city, location_type
+        id, country, city, location_type
       ),
       expenses:logistics_segment_expenses (
         id, label, cost_rub, days, notes
