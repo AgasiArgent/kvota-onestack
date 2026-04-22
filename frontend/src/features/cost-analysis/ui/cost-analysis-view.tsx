@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { getStatusLabel } from "@/entities/quote";
+import { getStatusLabel } from "@/entities/quote/status-labels";
 import { SummaryCards } from "./summary-cards";
 import { WaterfallTable } from "./waterfall-table";
 import { NotCalculated } from "./not-calculated";
