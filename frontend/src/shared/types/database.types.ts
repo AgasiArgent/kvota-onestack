@@ -1392,6 +1392,15 @@ export type Database = {
           pickup_country_code: string | null
           supplier_incoterms: string | null
           sent_at: string | null
+          assigned_customs_user: string | null
+          logistics_assigned_at: string | null
+          logistics_deadline_at: string | null
+          logistics_sla_hours: number | null
+          customs_assigned_at: string | null
+          customs_deadline_at: string | null
+          customs_sla_hours: number | null
+          logistics_needs_review_since: string | null
+          customs_needs_review_since: string | null
         }
         Insert: {
           id?: string
@@ -1434,6 +1443,15 @@ export type Database = {
           pickup_country_code?: string | null
           supplier_incoterms?: string | null
           sent_at?: string | null
+          assigned_customs_user?: string | null
+          logistics_assigned_at?: string | null
+          logistics_deadline_at?: string | null
+          logistics_sla_hours?: number | null
+          customs_assigned_at?: string | null
+          customs_deadline_at?: string | null
+          customs_sla_hours?: number | null
+          logistics_needs_review_since?: string | null
+          customs_needs_review_since?: string | null
         }
         Update: {
           id?: string
@@ -1476,6 +1494,15 @@ export type Database = {
           pickup_country_code?: string | null
           supplier_incoterms?: string | null
           sent_at?: string | null
+          assigned_customs_user?: string | null
+          logistics_assigned_at?: string | null
+          logistics_deadline_at?: string | null
+          logistics_sla_hours?: number | null
+          customs_assigned_at?: string | null
+          customs_deadline_at?: string | null
+          customs_sla_hours?: number | null
+          logistics_needs_review_since?: string | null
+          customs_needs_review_since?: string | null
         }
         Relationships: []
       }
