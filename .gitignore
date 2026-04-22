@@ -22,3 +22,4 @@ tmp/
 # (Individual PNG at repo root is almost always a session screenshot, not a tracked asset)
 /*.png
 .superpowers/
+.tmp/

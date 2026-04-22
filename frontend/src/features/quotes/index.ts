@@ -11,3 +11,8 @@ export { ChatFab } from "./ui/chat-panel/chat-fab";
 export { ChatMessage } from "./ui/chat-panel/chat-message";
 export { ChatInput } from "./ui/chat-panel/chat-input";
 export { TrashRestoreButton } from "./ui/trash-restore-button";
+export {
+  InvoiceTabs,
+  type InvoiceTabItem,
+  type InvoiceTabStatus,
+} from "./ui/invoice-tabs";
