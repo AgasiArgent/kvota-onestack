@@ -88,7 +88,22 @@ Two ТЗ сошлись в одну точку:
 
 **Обоснование:** 1-2 таможенника сейчас в команде — полноценный routing с patterns избыточен. Least-loaded самоадаптивен (если один в отпуске и не закрывает заявки, система им не подсовывает новые).
 
-**Отброшено:** round-robin counter (плох при разной скорости работы), mirror `route_customs_assignments` (overkill для двух человек).
+**Concurrency control (fix из validate-design):** базовый `SELECT … GROUP BY … ORDER BY COUNT ASC LIMIT 1` под READ COMMITTED уязвим к race condition — две параллельные workflow-transitions могут выбрать одного и того же user'а (оба прочитают "Олег имеет 2 открытых" прежде чем первая вставит ему третий). Обязательное обрамление advisory lock per-org:
+
+```python
+def assign_customs_to_invoices(quote_id: str):
+    sb = get_supabase()
+    org_id = _get_org_id(quote_id)
+    # Per-org advisory lock — serializes customs-assignment внутри org,
+    # не блокирует другие операции, auto-release на commit.
+    sb.rpc('pg_advisory_xact_lock', {
+        'key': hashtext(f'customs_assign:{org_id}')
+    }).execute()
+    # Теперь safe: SELECT least-loaded + UPDATE assigned_customs_user
+    ...
+```
+
+**Отброшено:** round-robin counter (плох при разной скорости работы), mirror `route_customs_assignments` (overkill для двух человек), SERIALIZABLE isolation (слишком broad — влияет на другие txns в connection), SELECT FOR UPDATE на user row (race всё равно возможна на aggregate query).
 
 ### 3.5 Workspace — assigned-based, без pull
 
@@ -456,7 +471,9 @@ WHERE NOT EXISTS (
 
 ### 5.3 Triggers
 
-#### `invoice_items_change_trigger` — smart delta
+#### `trg_zz_invoice_items_smart_delta` — smart delta trigger
+
+Название с `zz_`-prefix'ом гарантирует alphabetical ordering — этот trigger fires **после** любых procurement-branch triggers на той же таблице (например `trg_aa_invoice_items_pickup_country_validate`). Обосновано в §10 coord-section.
 
 Полный SQL в §3.8 обоснование. Ключевая логика:
 - AFTER INSERT/UPDATE/DELETE on `invoice_items`
@@ -468,46 +485,117 @@ WHERE NOT EXISTS (
 
 #### `v_logistics_plan_fact_items` — calc engine адаптер
 
+**Category mapping** (резолвит `(from_location_type, to_location_type)` → `plan_fact_categories.code`):
+
+| from_location_type | to_location_type | category code |
+|--------------------|------------------|---------------|
+| `supplier` | `hub` | `logistics_first_mile` |
+| `hub` | `hub` | `logistics_hub_hub` |
+| `hub` | `customs` | `logistics_transit` |
+| `hub` | `own_warehouse` | `logistics_transit` |
+| `customs` | `own_warehouse` | `logistics_post_transit` |
+| `customs` | `client` | `logistics_last_mile` |
+| `own_warehouse` | `client` | `logistics_last_mile` |
+| (любая другая пара) | | `logistics_transit` (fallback — catch-all) |
+
+Категории `logistics_first_mile/hub/hub_hub/transit/post_transit/last_mile` существуют (миграция 165). Для `segment_expenses` используем **category parent сегмента** — все доп.расходы сегмента "first_mile" → `logistics_first_mile`. Не добавляем отдельной категории `logistics_additional_expense` — расходы неотделимы от своего сегмента, так же как в реальном учёте.
+
+**Full SQL view:**
+
 ```sql
 CREATE OR REPLACE VIEW kvota.v_logistics_plan_fact_items AS
+-- Helper CTE: resolve category code from segment location types
+WITH segment_with_category AS (
+    SELECT
+        rs.id AS segment_id,
+        rs.invoice_id,
+        rs.label,
+        rs.sequence_order,
+        rs.main_cost_rub,
+        rs.transit_days,
+        rs.created_by,
+        rs.created_at,
+        -- Category code via from→to location types
+        (
+            SELECT pfc.id
+            FROM kvota.plan_fact_categories pfc
+            WHERE pfc.code = CASE
+                WHEN from_loc.location_type = 'supplier' AND to_loc.location_type = 'hub' THEN 'logistics_first_mile'
+                WHEN from_loc.location_type = 'hub' AND to_loc.location_type = 'hub' THEN 'logistics_hub_hub'
+                WHEN from_loc.location_type = 'hub' AND to_loc.location_type IN ('customs', 'own_warehouse') THEN 'logistics_transit'
+                WHEN from_loc.location_type = 'customs' AND to_loc.location_type = 'own_warehouse' THEN 'logistics_post_transit'
+                WHEN from_loc.location_type IN ('customs', 'own_warehouse') AND to_loc.location_type = 'client' THEN 'logistics_last_mile'
+                ELSE 'logistics_transit'  -- catch-all для edge cases
+            END
+            LIMIT 1
+        ) AS category_id
+    FROM kvota.logistics_route_segments rs
+    JOIN kvota.locations from_loc ON from_loc.id = rs.from_location_id
+    JOIN kvota.locations to_loc ON to_loc.id = rs.to_location_id
+)
+-- Main cost row per segment
 SELECT
-    gen_random_uuid() AS id,
+    ('v_seg_' || swc.segment_id::text)::uuid AS id,  -- deterministic, not random
     d.id AS deal_id,
-    pfc.id AS category_id,
-    COALESCE(rs.label, rs.sequence_order::text) AS description,
-    rs.main_cost_rub AS planned_amount,
-    'RUB' AS planned_currency,
+    swc.category_id,
+    COALESCE(swc.label, 'Сегмент ' || swc.sequence_order::text) AS description,
+    swc.main_cost_rub AS planned_amount,
+    'RUB'::varchar AS planned_currency,
     NULL::timestamptz AS planned_date,
-    rs.created_by,
-    'v_logistics'::text AS source
-FROM kvota.logistics_route_segments rs
-JOIN kvota.invoices i ON i.id = rs.invoice_id
-JOIN kvota.deals d ON d.id = i.deal_id  -- via spec
-JOIN kvota.plan_fact_categories pfc
-     ON pfc.code = 'logistics_segment'
-     -- Simplified: exact UNION/JOIN logic deferred to sub-project H implementation.
-     -- Will map segment (from_location_type, to_location_type) → plan_fact_category code
-     -- based on final category taxonomy decided during H PR review.
+    NULL::numeric AS actual_amount,
+    NULL::varchar AS actual_currency,
+    NULL::timestamptz AS actual_date,
+    NULL::uuid AS logistics_stage_id,  -- deprecated, new model
+    swc.segment_id AS logistics_segment_id,  -- NEW FK to segments
+    NULL::uuid AS segment_expense_id,
+    swc.created_by,
+    swc.created_at,
+    'v_logistics_segment'::text AS source
+FROM segment_with_category swc
+JOIN kvota.invoices i ON i.id = swc.invoice_id
+JOIN kvota.specifications s ON s.id = i.spec_id  -- adjust if FK name differs
+JOIN kvota.deals d ON d.specification_id = s.id
+WHERE swc.main_cost_rub > 0
+
 UNION ALL
+
+-- Expenses row per segment_expense
 SELECT
-    gen_random_uuid() AS id,
+    ('v_exp_' || se.id::text)::uuid AS id,
     d.id AS deal_id,
-    pfc.id AS category_id,
+    swc.category_id,  -- inherit parent segment's category
     se.label AS description,
     se.cost_rub AS planned_amount,
-    'RUB' AS planned_currency,
+    'RUB'::varchar AS planned_currency,
     NULL::timestamptz AS planned_date,
-    NULL AS created_by,
-    'v_logistics_expense'::text AS source
+    NULL::numeric AS actual_amount,
+    NULL::varchar AS actual_currency,
+    NULL::timestamptz AS actual_date,
+    NULL::uuid AS logistics_stage_id,
+    swc.segment_id AS logistics_segment_id,
+    se.id AS segment_expense_id,
+    NULL::uuid AS created_by,
+    se.created_at,
+    'v_logistics_segment_expense'::text AS source
 FROM kvota.logistics_segment_expenses se
-JOIN kvota.logistics_route_segments rs ON rs.id = se.segment_id
-JOIN kvota.invoices i ON i.id = rs.invoice_id
-JOIN kvota.deals d ON d.id = i.deal_id
-JOIN kvota.plan_fact_categories pfc
-     ON pfc.code = 'logistics_additional_expense';
+JOIN segment_with_category swc ON swc.segment_id = se.segment_id
+JOIN kvota.invoices i ON i.id = swc.invoice_id
+JOIN kvota.specifications s ON s.id = i.spec_id
+JOIN kvota.deals d ON d.specification_id = s.id
+WHERE se.cost_rub > 0;
 ```
 
-**Read-only view.** Calc engine reads from `plan_fact_items` + this view merged (through adapter query). Adapter location: `services/calc_engine_logistics_adapter.py` (new file). Calc engine itself unchanged.
+**Read-only view.** Calc engine reads from merge of `plan_fact_items` (existing, keeps legacy rows) + this view. Adapter: `services/calc_engine_logistics_adapter.py` (new file) exposes a function `fetch_logistics_plan_fact_for_deal(deal_id)` that UNION-merges.
+
+**Edge cases handled:**
+- Segments без main_cost (<=0) — skipped (не создают zero-cost line в calc)
+- Expenses без cost (<=0) — skipped
+- Segments с null created_by для expenses — preserve null
+- Location type отсутствует в mapping — fallback `logistics_transit` (catch-all)
+
+**Test acceptance (первый test case для sub-project H):**
+- Для 3 sample deals с known logistics_stages + plan_fact_items данными: создать эквивалентные `logistics_route_segments`, построить view, сравнить row-by-row (category_id + planned_amount + deal_id) с legacy — **bit-identical** для same-shape deals.
+- Дополнительно: тест что VIEW readonly (INSERT/UPDATE INTO view fails).
 
 ---
 
@@ -775,9 +863,11 @@ Three sub-projects require explicit coord to avoid merge conflicts:
 
 | ID | Area of conflict | Resolution |
 |----|------------------|------------|
-| **E** | `invoice_items` trigger | Decide trigger ownership. Likely lives in this branch (domain = logistics/customs reaction), procurement branch adds `pickup_country` validation at write-site. |
+| **E** | `invoice_items` trigger | Trigger **owned by this branch**. Naming: `trg_zz_invoice_items_smart_delta` (z-prefix гарантирует alphabetical last → fires **after** любых procurement-веточных triggers в одной transaction). Procurement pickup_country validation — отдельный trigger `trg_aa_invoice_items_pickup_country_validate` (a-prefix = fires first). Oба триггера AFTER INSERT/UPDATE/DELETE, независимые, без cross-fire. Explicit test: integration test `test_triggers_order.py` подтверждает что review-flag set'ится после pickup_country validation (если первый fails — review-flag не raised, потому что txn rolled back). |
 | **G** | Suppliers entity | **Move to procurement branch entirely.** They add `supplier_contacts (supplier_id, name, email, role)` table. We don't touch supplier schema. |
 | **M** | Admin routing UI | Existing procurement routing page must not be broken. We only **add** tabs, not restructure. Shared component: tab host. |
+
+**Sync protocol:** перед каждым merge в main — diff shared files (`invoice_items` triggers, `admin/routing/page.tsx`, `suppliers` schema) в обеих ветках, rebase plan с документированным conflict-resolution. Ответственный — tech lead при merge.
 
 Sync cadence: before each merge to main on either side, both branches diff shared files (`invoice_items`, `admin/routing/page.tsx`, `suppliers` schema) with rebase plan.
 
