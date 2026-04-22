@@ -375,7 +375,7 @@ export function SpecificationStep({
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Создана: {spec.created_at ? new Date(spec.created_at).toLocaleDateString("ru-RU") : "—"}
+                  Создана: {spec.created_at ? new Date(spec.created_at).toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow" }) : "—"}
                 </p>
               </div>
             </div>
@@ -600,7 +600,7 @@ export function SpecificationStep({
               </div>
               <div>
                 <span className="text-xs text-muted-foreground">Дата подписания</span>
-                <p>{spec.sign_date ? new Date(spec.sign_date).toLocaleDateString("ru-RU") : "—"}</p>
+                <p>{spec.sign_date ? new Date(spec.sign_date).toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow" }) : "—"}</p>
               </div>
               <div>
                 <span className="text-xs text-muted-foreground">Статус</span>

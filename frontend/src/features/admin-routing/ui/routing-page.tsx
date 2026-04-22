@@ -1,6 +1,6 @@
 "use client";
 
-import { Toaster } from "sonner";
+import { AppToaster } from "@/shared/ui/app-toaster";
 import { RoutingTabs } from "./routing-tabs";
 import { BrandsTab } from "./brands-tab";
 import { GroupsTab } from "./groups-tab";
@@ -46,7 +46,7 @@ export function RoutingPage({
           <UnassignedTab items={unassignedData.items} orgId={orgId} />
         )}
       </RoutingTabs>
-      <Toaster position="top-right" richColors />
+      <AppToaster />
     </>
   );
 }

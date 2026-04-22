@@ -66,7 +66,8 @@ function formatRelativeTime(dateStr: string): string {
   return date.toLocaleDateString("ru-RU", {
     day: "numeric",
     month: "short",
-  });
+    timeZone: "Europe/Moscow",
+    });
 }
 
 interface ChatMessageProps {

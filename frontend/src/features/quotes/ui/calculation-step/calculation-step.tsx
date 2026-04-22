@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { Toaster } from "sonner";
+import { AppToaster } from "@/shared/ui/app-toaster";
 import type { QuoteDetailRow, QuoteItemRow } from "@/entities/quote/queries";
 import { CalculationForm } from "./calculation-form";
 import {
@@ -131,7 +131,7 @@ export function CalculationStep({
         <CompositionPicker quoteId={quote.id} />
         <CalculationResults quote={quote} items={resultsItems} />
       </div>
-      <Toaster position="top-right" richColors />
+      <AppToaster />
     </div>
   );
 }
