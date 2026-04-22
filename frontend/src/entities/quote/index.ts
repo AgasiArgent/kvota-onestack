@@ -56,3 +56,8 @@ export type {
   StatusHistoryEntry,
 } from "./mutations";
 export { assignBrandGroup } from "./server-actions";
+export {
+  STATUS_LABELS,
+  STATUS_BADGE_STYLES,
+  getStatusLabel,
+} from "./status-labels";

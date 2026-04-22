@@ -176,7 +176,7 @@ export function UsersPageClient({
                       );
                     })
                   ) : (
-                    <span className="text-sm text-muted-foreground">\u2014</span>
+                    <span className="text-sm text-muted-foreground">{"\u2014"}</span>
                   )}
                 </div>
               </TableCell>
@@ -197,7 +197,7 @@ export function UsersPageClient({
                     &#x2713; @{member.telegram_username}
                   </span>
                 ) : (
-                  <span className="text-muted-foreground">\u2014</span>
+                  <span className="text-muted-foreground">{"\u2014"}</span>
                 )}
               </TableCell>
               <TableCell className="text-muted-foreground tabular-nums">

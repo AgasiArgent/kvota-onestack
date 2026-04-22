@@ -74,14 +74,18 @@ const DEFAULT_PAGE_SIZE = 50;
 function formatDate(dateStr: string): string {
   if (!dateStr) return "\u2014";
   const d = new Date(dateStr);
+  // Pin timezone: otherwise SSR (UTC) and CSR (user's tz) can disagree on
+  // the rendered day/hour, triggering React hydration error #418.
   const date = d.toLocaleDateString("ru-RU", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
+    timeZone: "Europe/Moscow",
   });
   const time = d.toLocaleTimeString("ru-RU", {
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: "Europe/Moscow",
   });
   return `${date} ${time}`;
 }
