@@ -1,16 +1,31 @@
 import { createAdminClient } from "@/shared/lib/supabase/server";
 import type { LocationListItem, LocationStats, LocationFilters } from "../model/types";
+import type { LocationType } from "@/entities/location/ui/location-chip";
+
+const ALLOWED_TYPES: readonly LocationType[] = [
+  "supplier",
+  "hub",
+  "customs",
+  "own_warehouse",
+  "client",
+];
+
+function normaliseType(raw: unknown): LocationType {
+  return ALLOWED_TYPES.includes(raw as LocationType)
+    ? (raw as LocationType)
+    : "hub";
+}
 
 export async function fetchLocations(
   orgId: string,
   filters: LocationFilters
 ): Promise<LocationListItem[]> {
   const supabase = createAdminClient();
-  const { search = "", country = "", status = "" } = filters;
+  const { search = "", country = "", status = "", type = "" } = filters;
 
   let query = supabase
     .from("locations")
-    .select("id, country, city, code, is_active")
+    .select("id, country, city, code, is_active, location_type")
     .eq("organization_id", orgId)
     .order("country")
     .order("city")
@@ -29,6 +44,9 @@ export async function fetchLocations(
   } else if (status === "inactive") {
     query = query.eq("is_active", false);
   }
+  if (type && ALLOWED_TYPES.includes(type as LocationType)) {
+    query = query.eq("location_type", type);
+  }
 
   const { data, error } = await query;
   if (error) throw error;
@@ -39,6 +57,7 @@ export async function fetchLocations(
     city: row.city,
     code: row.code,
     is_active: row.is_active !== false,
+    location_type: normaliseType((row as { location_type?: unknown }).location_type),
   }));
 }
 

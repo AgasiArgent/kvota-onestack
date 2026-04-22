@@ -20,12 +20,22 @@ interface Props {
   initialSearch?: string;
   initialCountry?: string;
   initialStatus?: string;
+  initialType?: string;
 }
 
 const STATUS_OPTIONS = [
   { value: "all", label: "Все статусы" },
   { value: "active", label: "Активные" },
   { value: "inactive", label: "Неактивные" },
+] as const;
+
+const TYPE_OPTIONS = [
+  { value: "all", label: "Все типы" },
+  { value: "supplier", label: "Поставщик" },
+  { value: "hub", label: "Хаб" },
+  { value: "customs", label: "Таможня" },
+  { value: "own_warehouse", label: "Склад" },
+  { value: "client", label: "Клиент" },
 ] as const;
 
 export function LocationsPage({
@@ -35,11 +45,15 @@ export function LocationsPage({
   initialSearch = "",
   initialCountry = "",
   initialStatus = "",
+  initialType = "",
 }: Props) {
   const getStatusLabel = (v: string) =>
     STATUS_OPTIONS.find((o) => o.value === v)?.label ?? "Все статусы";
+  const getTypeLabel = (v: string) =>
+    TYPE_OPTIONS.find((o) => o.value === v)?.label ?? "Все типы";
 
   const [statusLabel, setStatusLabel] = useState(getStatusLabel(initialStatus || "all"));
+  const [typeLabel, setTypeLabel] = useState(getTypeLabel(initialType || "all"));
   const [searchValue, setSearchValue] = useState(initialSearch);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const { navigate } = useFilterNavigation();
@@ -74,6 +88,12 @@ export function LocationsPage({
     navigate({ status: v });
   }
 
+  function handleTypeChange(value: string | null) {
+    const v = value ?? "all";
+    setTypeLabel(getTypeLabel(v));
+    navigate({ type: v });
+  }
+
   return (
     <div className="space-y-4">
       {/* Search + Filter bar */}
@@ -97,6 +117,22 @@ export function LocationsPage({
           </SelectTrigger>
           <SelectContent>
             {countryOptions.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select
+          defaultValue={initialType || "all"}
+          onValueChange={handleTypeChange}
+        >
+          <SelectTrigger className="w-[160px]">
+            <span className="flex flex-1 text-left">{typeLabel}</span>
+          </SelectTrigger>
+          <SelectContent>
+            {TYPE_OPTIONS.map((opt) => (
               <SelectItem key={opt.value} value={opt.value}>
                 {opt.label}
               </SelectItem>

@@ -12,6 +12,7 @@ interface Props {
     q?: string;
     country?: string;
     status?: string;
+    type?: string;
   }>;
 }
 
@@ -28,9 +29,10 @@ export default async function LocationsRoute({ searchParams }: Props) {
   const search = params.q ?? "";
   const country = params.country ?? "";
   const status = params.status ?? "";
+  const type = params.type ?? "";
 
   const [locations, stats, countries] = await Promise.all([
-    fetchLocations(user.orgId, { search, country, status }),
+    fetchLocations(user.orgId, { search, country, status, type }),
     fetchLocationStats(user.orgId),
     fetchLocationCountries(user.orgId),
   ]);
@@ -45,6 +47,7 @@ export default async function LocationsRoute({ searchParams }: Props) {
         initialSearch={search}
         initialCountry={country}
         initialStatus={status}
+        initialType={type}
       />
     </div>
   );
