@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Route Timeline — OneStack</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --background: oklch(0.98 0.005 80);
+  --card: oklch(1 0 0);
+  --sidebar: oklch(0.94 0.008 60);
+  --primary: oklch(0.41 0.01 55);
+  --primary-light: oklch(0.52 0.01 55);
+  --accent: oklch(0.50 0.16 35);
+  --accent-hover: oklch(0.42 0.14 35);
+  --accent-subtle: oklch(0.98 0.01 70);
+  --text: oklch(0.15 0.01 55);
+  --text-muted: oklch(0.52 0.01 55);
+  --text-subtle: oklch(0.68 0.01 55);
+  --border: oklch(0.85 0.008 60);
+  --border-light: oklch(0.91 0.006 60);
+  --success: #059669;
+  --success-bg: #DCFCE7;
+  --warning: #D97706;
+  --warning-bg: #FEF3C7;
+  --error: #DC2626;
+  --error-bg: #FEE2E2;
+  --info: #9A3412;
+  --info-bg: #FFF7ED;
+  --ring: rgba(194, 65, 12, 0.25);
+  --shadow-sm: 0 1px 2px rgba(28, 25, 23, 0.05);
+  --shadow-md: 0 4px 12px rgba(28, 25, 23, 0.1);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 14px; line-height: 1.5;
+  color: var(--text);
+  background: var(--background);
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3 { letter-spacing: -0.01em; }
+
+.app { display: flex; min-height: 100vh; }
+
+/* Compact sidebar */
+.sidebar {
+  width: 60px;
+  background: var(--sidebar);
+  border-right: 1px solid var(--border-light);
+  padding: 10px 8px;
+  flex-shrink: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+}
+.sidebar-logo {
+  width: 40px; height: 40px; border-radius: 8px;
+  background: var(--primary); color: white;
+  display: grid; place-items: center;
+  font-size: 13px; font-weight: 700;
+  margin-bottom: 12px;
+}
+.sidebar-item-mini {
+  width: 40px; height: 40px;
+  display: grid; place-items: center;
+  color: var(--text-muted);
+  cursor: pointer; border-radius: 8px;
+}
+.sidebar-item-mini:hover { background: rgba(87, 83, 78, 0.06); color: var(--text); }
+.sidebar-item-mini.active { background: rgba(87, 83, 78, 0.12); color: var(--text); }
+.sidebar-item-mini svg { width: 18px; height: 18px; stroke-width: 2; }
+
+.main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+/* Quote header */
+.quote-header {
+  padding: 14px 32px;
+  border-bottom: 1px solid var(--border-light);
+  background: var(--card);
+}
+.breadcrumbs {
+  display: flex; gap: 6px; align-items: center;
+  font-size: 12px; color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.breadcrumbs a { color: var(--text-muted); text-decoration: none; cursor: pointer; }
+.breadcrumbs a:hover { color: var(--accent); }
+.crumb-sep { color: var(--text-subtle); }
+.quote-meta { display: flex; gap: 14px; align-items: baseline; }
+.quote-id {
+  font-family: ui-monospace, monospace;
+  font-size: 18px; font-weight: 700;
+  color: var(--accent);
+}
+.quote-dot { color: var(--text-subtle); }
+.quote-customer { color: var(--text-muted); font-size: 13.5px; }
+
+/* Stepper */
+.stepper {
+  display: flex;
+  padding: 8px 32px 0;
+  background: var(--card);
+  border-bottom: 1px solid var(--border-light);
+}
+.step {
+  padding: 10px 14px 12px;
+  font-size: 12.5px; font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  display: inline-flex; align-items: center; gap: 7px;
+}
+.step-number {
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--sidebar); color: var(--text-muted);
+  display: grid; place-items: center;
+  font-size: 10px; font-weight: 700;
+}
+.step.done .step-number { background: var(--success); color: white; }
+.step.active .step-number { background: var(--accent); color: white; }
+.step.active { color: var(--accent); font-weight: 600; border-bottom-color: var(--accent); }
+.step.done { color: var(--text); }
+
+.content {
+  flex: 1;
+  padding: 24px 32px;
+}
+
+/* Banners & tabs above timeline */
+.review-banner {
+  display: flex; gap: 12px; align-items: center;
+  padding: 11px 14px;
+  background: var(--warning-bg);
+  border: 1px solid rgba(217, 119, 6, 0.25);
+  border-radius: 10px;
+  color: #78350F;
+  font-size: 13px;
+  margin-bottom: 14px;
+}
+.review-banner svg { width: 18px; height: 18px; stroke-width: 2; color: var(--warning); flex-shrink: 0; }
+.review-banner strong { font-weight: 700; }
+.review-banner .diff-pill {
+  background: white;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-family: ui-monospace, monospace;
+  font-size: 11.5px;
+}
+.review-banner .btn-tiny {
+  margin-left: auto;
+  padding: 5px 12px;
+  background: white;
+  color: #78350F;
+  border: 1px solid rgba(217, 119, 6, 0.35);
+  border-radius: 6px;
+  font-size: 12px; font-weight: 600;
+  cursor: pointer; font-family: inherit;
+}
+
+.top-row {
+  display: flex; gap: 12px; align-items: center;
+  margin-bottom: 18px;
+}
+.invoice-tabs {
+  display: flex; gap: 6px;
+  padding: 4px;
+  background: var(--sidebar);
+  border-radius: 9px;
+}
+.invoice-tab {
+  padding: 7px 12px;
+  border-radius: 6px;
+  font-size: 12.5px; font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 7px;
+}
+.invoice-tab.active {
+  background: var(--card);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+}
+.invoice-tab-sub { color: var(--text-subtle); font-size: 11px; }
+.invoice-tab.active .invoice-tab-sub { color: var(--text-muted); }
+.invoice-status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--warning); }
+.invoice-tab.done .invoice-status-dot { background: var(--success); }
+
+.template-select {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 7px 14px;
+  background: var(--accent-subtle);
+  border: 1px solid rgba(194, 65, 12, 0.15);
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: var(--info);
+  font-weight: 500;
+  cursor: pointer;
+}
+.template-select svg { width: 13px; height: 13px; stroke-width: 2; }
+.save-template-btn {
+  padding: 7px 12px;
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.save-template-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* === TIMELINE === */
+.timeline-card {
+  background: var(--card);
+  border: 1px solid var(--border-light);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.timeline-header {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border-light);
+  display: flex; align-items: center; gap: 12px;
+}
+.timeline-header h2 {
+  margin: 0; font-size: 15px; font-weight: 600;
+}
+.timeline-hint {
+  font-size: 11.5px;
+  color: var(--text-subtle);
+  margin-left: auto;
+  display: flex; align-items: center; gap: 6px;
+}
+.timeline-hint svg { width: 13px; height: 13px; }
+
+.timeline-scroll {
+  padding: 36px 28px 28px;
+  overflow-x: auto;
+}
+
+.timeline {
+  display: flex;
+  align-items: flex-start;
+  min-width: max-content;
+  position: relative;
+}
+
+/* Node */
+.rt-node {
+  width: 138px;
+  background: var(--card);
+  border: 1.5px solid var(--border-light);
+  border-radius: 12px;
+  padding: 14px 10px 12px;
+  text-align: center;
+  position: relative;
+  cursor: grab;
+  transition: border-color 120ms, box-shadow 120ms, transform 120ms;
+  flex-shrink: 0;
+  z-index: 2;
+}
+.rt-node:hover {
+  border-color: var(--primary-light);
+  box-shadow: var(--shadow-sm);
+}
+.rt-node.selected {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+  box-shadow: 0 0 0 4px var(--ring);
+}
+.rt-node-handle {
+  position: absolute;
+  top: 4px; left: 50%;
+  transform: translateX(-50%);
+  color: var(--text-subtle);
+  cursor: grab;
+  opacity: 0.4;
+}
+.rt-node:hover .rt-node-handle { opacity: 1; }
+.rt-node-handle svg { width: 14px; height: 14px; }
+
+.rt-node-flag {
+  font-size: 32px; line-height: 1;
+  margin-bottom: 6px;
+}
+.rt-node-name {
+  font-size: 13.5px; font-weight: 600; color: var(--text);
+  margin-bottom: 5px;
+}
+.rt-node-type {
+  display: inline-flex;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  background: var(--sidebar);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+.rt-node.type-supplier .rt-node-type { background: rgba(5, 150, 105, 0.1); color: #166534; }
+.rt-node.type-hub .rt-node-type { background: var(--accent-subtle); color: var(--info); }
+.rt-node.type-customs .rt-node-type { background: rgba(234, 88, 12, 0.12); color: #9A3412; }
+.rt-node.type-warehouse .rt-node-type { background: rgba(194, 65, 12, 0.12); color: #9A3412; }
+.rt-node.type-client .rt-node-type { background: rgba(87, 83, 78, 0.15); color: var(--text); }
+
+.rt-node-city {
+  font-size: 11px;
+  color: var(--text-subtle);
+  margin-top: 4px;
+  font-weight: 500;
+}
+
+/* Edge */
+.rt-edge {
+  flex: 1;
+  min-width: 200px;
+  align-self: stretch;
+  position: relative;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: flex-start;
+  padding-top: 22px;
+  cursor: pointer;
+}
+
+.rt-edge-line {
+  position: absolute;
+  top: 55px;
+  left: -6px;
+  right: -6px;
+  height: 3px;
+  background: var(--border-light);
+  border-radius: 2px;
+  z-index: 1;
+}
+.rt-edge-arrow {
+  position: absolute;
+  top: 46px;
+  right: -2px;
+  color: var(--text-subtle);
+  z-index: 1;
+}
+.rt-edge.selected .rt-edge-line {
+  background: var(--accent);
+}
+.rt-edge.selected .rt-edge-arrow { color: var(--accent); }
+
+.rt-edge-card {
+  position: relative;
+  z-index: 2;
+  background: var(--card);
+  border: 1.5px solid var(--border-light);
+  border-radius: 10px;
+  padding: 10px 14px;
+  text-align: center;
+  min-width: 120px;
+  transition: all 120ms;
+  margin-top: 16px;
+}
+.rt-edge:hover .rt-edge-card { border-color: var(--primary-light); box-shadow: var(--shadow-sm); }
+.rt-edge.selected .rt-edge-card {
+  border-color: var(--accent);
+  background: var(--card);
+  box-shadow: 0 0 0 4px var(--ring);
+}
+
+.rt-edge-cost {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+.rt-edge-days {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-top: 1px;
+  font-variant-numeric: tabular-nums;
+}
+
+.rt-edge-extras {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  margin-top: 8px;
+  justify-content: center;
+  width: 100%;
+  max-width: 180px;
+}
+.rt-edge-extras .pill {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 2px 7px;
+  background: var(--accent-subtle);
+  color: var(--info);
+  font-size: 10.5px;
+  font-weight: 600;
+  border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.rt-edge-extras .pill svg { width: 10px; height: 10px; }
+
+/* Insert plus button */
+.rt-insert-btn {
+  position: absolute;
+  top: 50px;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: var(--card);
+  border: 1.5px solid var(--border);
+  color: var(--text-muted);
+  display: grid; place-items: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 150ms, transform 150ms, border-color 120ms;
+}
+.rt-edge:hover .rt-insert-btn { opacity: 1; }
+.rt-insert-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: translate(-50%, -50%) scale(1.15);
+}
+.rt-insert-btn svg { width: 12px; height: 12px; stroke-width: 2.5; }
+
+/* Drop indicator between nodes */
+.rt-drop-zone {
+  width: 4px;
+  align-self: stretch;
+  background: var(--accent);
+  border-radius: 2px;
+  margin-top: 24px;
+  opacity: 0.7;
+  animation: pulse 1s infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 0.3; }
+}
+
+/* End cap — add node button */
+.rt-end {
+  align-self: flex-start;
+  margin-top: 30px;
+  margin-left: 8px;
+}
+
+.rt-add-node-btn {
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  background: var(--card);
+  border: 2px dashed var(--border);
+  color: var(--text-muted);
+  display: grid; place-items: center;
+  cursor: pointer;
+  transition: all 150ms;
+}
+.rt-add-node-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-subtle);
+}
+.rt-add-node-btn svg { width: 18px; height: 18px; stroke-width: 2; }
+
+.rt-end-label {
+  text-align: center;
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: var(--text-subtle);
+  font-weight: 500;
+}
+
+/* Timeline legend */
+.timeline-legend {
+  display: flex; gap: 16px; justify-content: center;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border-light);
+  background: var(--sidebar);
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.legend-item { display: inline-flex; align-items: center; gap: 5px; }
+.legend-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  display: inline-block;
+}
+.legend-dot.supplier { background: #059669; }
+.legend-dot.hub { background: var(--accent); }
+.legend-dot.customs { background: var(--info); }
+.legend-dot.warehouse { background: #C2410C; }
+.legend-dot.client { background: var(--primary); }
+
+/* === Details Panel (selected) === */
+.rt-details {
+  margin-top: 18px;
+  background: var(--card);
+  border: 1px solid var(--border-light);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.rt-details-header {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border-light);
+  display: flex; align-items: center; gap: 12px;
+  background: var(--accent-subtle);
+}
+.rt-details-icon {
+  width: 32px; height: 32px; border-radius: 8px;
+  background: var(--accent);
+  color: white;
+  display: grid; place-items: center;
+  flex-shrink: 0;
+}
+.rt-details-icon svg { width: 16px; height: 16px; stroke-width: 2.5; }
+.rt-details-title {
+  font-size: 14.5px; font-weight: 600;
+  color: var(--text);
+}
+.rt-details-subtitle {
+  font-size: 12px; color: var(--text-muted);
+  margin-top: 2px;
+}
+.rt-details-dismiss {
+  margin-left: auto;
+  display: grid; place-items: center;
+  width: 28px; height: 28px;
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.rt-details-dismiss:hover { background: rgba(87, 83, 78, 0.08); color: var(--text); }
+.rt-details-dismiss svg { width: 14px; height: 14px; stroke-width: 2; }
+
+.rt-details-body {
+  padding: 18px 20px;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: 95px 125px 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.field-label {
+  display: block;
+  font-size: 10.5px; font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.06em;
+  margin-bottom: 5px;
+}
+.input {
+  padding: 7px 10px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text);
+  outline: none;
+  width: 100%;
+  transition: border-color 120ms, box-shadow 120ms;
+}
+.input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+.input-number { text-align: right; font-variant-numeric: tabular-nums; font-weight: 500; }
+
+/* Expenses inside details */
+.expenses-section {
+  margin-top: 8px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--border-light);
+}
+.expenses-head {
+  display: flex; align-items: center;
+  margin-bottom: 10px;
+}
+.expenses-title {
+  font-size: 11px; font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.expense-row {
+  display: grid;
+  grid-template-columns: 1fr 80px 110px auto;
+  gap: 10px; align-items: center;
+  padding: 8px 12px;
+  background: var(--sidebar);
+  border-radius: 8px;
+  margin-bottom: 6px;
+  font-size: 12.5px;
+}
+.expense-label { color: var(--text); font-weight: 500; }
+.expense-days { color: var(--text-muted); font-size: 11.5px; text-align: center; }
+.expense-days strong { color: var(--text); font-weight: 600; }
+.expense-cost {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.expense-remove {
+  width: 22px; height: 22px;
+  display: grid; place-items: center;
+  border-radius: 4px;
+  color: var(--text-subtle);
+  cursor: pointer;
+}
+.expense-remove:hover { background: var(--error-bg); color: var(--error); }
+.expense-remove svg { width: 12px; height: 12px; stroke-width: 2; }
+
+.btn-inline {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 12px;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px dashed var(--border);
+  border-radius: 7px;
+  font-size: 12px; font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+}
+.btn-inline:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-subtle); }
+.btn-inline svg { width: 12px; height: 12px; stroke-width: 2; }
+
+.rt-details-subtotal {
+  padding: 12px 20px;
+  background: var(--sidebar);
+  border-top: 1px solid var(--border-light);
+  display: flex; justify-content: space-between;
+  font-size: 13px;
+}
+.rt-details-subtotal-label { color: var(--text-muted); }
+.rt-details-subtotal-value { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* Total strip */
+.total-strip {
+  margin-top: 16px;
+  padding: 16px 22px;
+  background: var(--card);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.total-meta { font-size: 13px; color: var(--text-muted); }
+.total-meta strong { color: var(--text); font-weight: 600; }
+.total-value {
+  font-size: 24px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+.total-breakdown {
+  font-size: 11.5px;
+  color: var(--text-subtle);
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Actions */
+.actions-bar {
+  display: flex; gap: 12px; justify-content: space-between; align-items: center;
+  padding: 16px 0 0;
+}
+.assigned-info {
+  display: flex; align-items: center; gap: 10px;
+  color: var(--text-muted); font-size: 12.5px;
+}
+.assigned-info .sla-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--success);
+}
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 9px 16px;
+  font-family: inherit;
+  font-size: 13px; font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  cursor: pointer;
+}
+.btn:hover { background: rgba(87, 83, 78, 0.04); }
+.btn-primary {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+.btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn svg { width: 14px; height: 14px; stroke-width: 2; }
+
+.actions-right { display: flex; gap: 10px; align-items: center; }
+
+/* Page notes */
+.page-note {
+  margin-top: 28px;
+  padding: 20px 24px;
+  background: var(--card);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  font-size: 13px; line-height: 1.7;
+}
+.page-note h3 {
+  font-size: 12px; font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.06em;
+  margin: 0 0 10px;
+}
+.page-note p { margin: 0 0 8px; }
+.page-note strong { color: var(--accent); }
+.page-note code {
+  background: var(--sidebar);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11.5px;
+  font-family: ui-monospace, monospace;
+}
+
+.answer-area {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 12px; margin-top: 12px;
+}
+.answer {
+  background: var(--card);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  padding: 18px 22px;
+  cursor: pointer;
+  transition: border-color 120ms, background-color 120ms;
+}
+.answer:hover { border-color: var(--accent); }
+.answer.selected { border-color: var(--accent); background: var(--accent-subtle); }
+.answer-label {
+  font-size: 11px; font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase; letter-spacing: 0.06em;
+  margin-bottom: 6px;
+}
+.answer-title { font-size: 15px; font-weight: 600; margin-bottom: 3px; }
+.answer-desc { font-size: 12.5px; color: var(--text-muted); }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar-logo">OS</div>
+    <div class="sidebar-item-mini"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3"/></svg></div>
+    <div class="sidebar-item-mini"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M9 4v4M15 4v4M3 10h18"/></svg></div>
+    <div class="sidebar-item-mini active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M1 3h15v13H1zM16 8h4l3 3v5h-7"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg></div>
+    <div class="sidebar-item-mini"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zM14 2v6h6"/></svg></div>
+    <div class="sidebar-item-mini"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg></div>
+  </aside>
+
+  <main class="main">
+    <header class="quote-header">
+      <div class="breadcrumbs">
+        <a>Workspace</a> <span class="crumb-sep">/</span>
+        <a>Мои заявки</a> <span class="crumb-sep">/</span>
+        <span style="color: var(--text);">Q-202604-0011</span>
+      </div>
+      <div class="quote-meta">
+        <span class="quote-id">Q-202604-0011</span>
+        <span class="quote-dot">·</span>
+        <span class="quote-customer">ООО «Мегапак»</span>
+        <span class="quote-dot">·</span>
+        <span class="quote-customer">Москва</span>
+      </div>
+    </header>
+
+    <div class="stepper">
+      <div class="step done"><span class="step-number"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="width:9px;height:9px"><polyline points="20 6 9 17 4 12"/></svg></span>Продажи</div>
+      <div class="step done"><span class="step-number"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="width:9px;height:9px"><polyline points="20 6 9 17 4 12"/></svg></span>Спецификация</div>
+      <div class="step done"><span class="step-number"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="width:9px;height:9px"><polyline points="20 6 9 17 4 12"/></svg></span>Закупки</div>
+      <div class="step active"><span class="step-number">4</span>Логистика</div>
+      <div class="step"><span class="step-number">5</span>Таможня</div>
+      <div class="step"><span class="step-number">6</span>Расчёт</div>
+    </div>
+
+    <div class="content">
+
+      <!-- Review banner -->
+      <div class="review-banner">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <div>
+          <strong>Закупки обновили данные</strong> сегодня в 11:42.
+          Изменилось: вес <span class="diff-pill">950 → 1 150 кг</span> · объём <span class="diff-pill">3.2 → 3.8 м³</span>
+        </div>
+        <button class="btn-tiny">Показать diff</button>
+      </div>
+
+      <!-- Invoice tabs + template -->
+      <div class="top-row">
+        <div class="invoice-tabs">
+          <div class="invoice-tab active">
+            <span class="invoice-status-dot"></span>
+            Инвойс #1
+            <span class="invoice-tab-sub">Shanghai Ind · 12 поз</span>
+          </div>
+          <div class="invoice-tab done">
+            <span class="invoice-status-dot"></span>
+            Инвойс #2
+            <span class="invoice-tab-sub">Istanbul · расценен</span>
+          </div>
+        </div>
+        <div class="template-select">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-6 9 6v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          Шаблон: Прямой (Китай → Москва)
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" style="margin-left:4px"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <button class="save-template-btn">+ Сохранить как шаблон</button>
+      </div>
+
+      <!-- TIMELINE CARD -->
+      <div class="timeline-card">
+        <div class="timeline-header">
+          <h2>Маршрут — Инвойс #1</h2>
+          <span class="timeline-hint">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9V6a2 2 0 012-2h10a2 2 0 012 2v3"/><path d="M5 15v3a2 2 0 002 2h10a2 2 0 002-2v-3"/><line x1="8" y1="12" x2="16" y2="12"/><polyline points="12 8 16 12 12 16"/></svg>
+            Перетащи узел — изменит порядок · клик на сегмент — раскроет детали
+          </span>
+        </div>
+
+        <div class="timeline-scroll">
+          <div class="timeline">
+
+            <!-- Node 1: Supplier -->
+            <div class="rt-node type-supplier">
+              <span class="rt-node-handle"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="8" cy="6" r="1.5"/><circle cx="8" cy="12" r="1.5"/><circle cx="8" cy="18" r="1.5"/><circle cx="16" cy="6" r="1.5"/><circle cx="16" cy="12" r="1.5"/><circle cx="16" cy="18" r="1.5"/></svg></span>
+              <div class="rt-node-flag">🇨🇳</div>
+              <div class="rt-node-name">Иу</div>
+              <div class="rt-node-type">Поставщик</div>
+              <div class="rt-node-city">Shanghai Ind.</div>
+            </div>
+
+            <!-- Edge 1: SELECTED -->
+            <div class="rt-edge selected">
+              <div class="rt-edge-line"></div>
+              <div class="rt-edge-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px"><polyline points="9 18 15 12 9 6"/></svg></div>
+              <div class="rt-edge-card">
+                <div class="rt-edge-cost">12 000 ₽</div>
+                <div class="rt-edge-days">5 дней</div>
+                <div class="rt-edge-extras">
+                  <span class="pill"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg> СВХ · 3 500 ₽</span>
+                </div>
+              </div>
+              <div class="rt-insert-btn" title="Вставить узел"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></div>
+            </div>
+
+            <!-- Node 2: Hub -->
+            <div class="rt-node type-hub">
+              <span class="rt-node-handle"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="8" cy="6" r="1.5"/><circle cx="8" cy="12" r="1.5"/><circle cx="8" cy="18" r="1.5"/><circle cx="16" cy="6" r="1.5"/><circle cx="16" cy="12" r="1.5"/><circle cx="16" cy="18" r="1.5"/></svg></span>
+              <div class="rt-node-flag">🇨🇳</div>
+              <div class="rt-node-name">Шанхай</div>
+              <div class="rt-node-type">Хаб</div>
+              <div class="rt-node-city">SH, порт</div>
+            </div>
+
+            <!-- Drop zone (demo — between Hub and Customs, shown as active) -->
+            <div class="rt-drop-zone" title="Перетащите сюда новый узел"></div>
+
+            <!-- Edge 2 -->
+            <div class="rt-edge">
+              <div class="rt-edge-line"></div>
+              <div class="rt-edge-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px"><polyline points="9 18 15 12 9 6"/></svg></div>
+              <div class="rt-edge-card">
+                <div class="rt-edge-cost">180 000 ₽</div>
+                <div class="rt-edge-days">25 дней</div>
+              </div>
+              <div class="rt-insert-btn" title="Вставить узел"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></div>
+            </div>
+
+            <!-- Node 3: Customs -->
+            <div class="rt-node type-customs">
+              <span class="rt-node-handle"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="8" cy="6" r="1.5"/><circle cx="8" cy="12" r="1.5"/><circle cx="8" cy="18" r="1.5"/><circle cx="16" cy="6" r="1.5"/><circle cx="16" cy="12" r="1.5"/><circle cx="16" cy="18" r="1.5"/></svg></span>
+              <div class="rt-node-flag">🇷🇺</div>
+              <div class="rt-node-name">Москва</div>
+              <div class="rt-node-type">Таможня</div>
+              <div class="rt-node-city">ЦТУ</div>
+            </div>
+
+            <!-- Edge 3 -->
+            <div class="rt-edge">
+              <div class="rt-edge-line"></div>
+              <div class="rt-edge-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px"><polyline points="9 18 15 12 9 6"/></svg></div>
+              <div class="rt-edge-card">
+                <div class="rt-edge-cost">8 000 ₽</div>
+                <div class="rt-edge-days">1 день</div>
+              </div>
+              <div class="rt-insert-btn" title="Вставить узел"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></div>
+            </div>
+
+            <!-- Node 4: Client -->
+            <div class="rt-node type-client">
+              <span class="rt-node-handle"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="8" cy="6" r="1.5"/><circle cx="8" cy="12" r="1.5"/><circle cx="8" cy="18" r="1.5"/><circle cx="16" cy="6" r="1.5"/><circle cx="16" cy="12" r="1.5"/><circle cx="16" cy="18" r="1.5"/></svg></span>
+              <div class="rt-node-flag">🇷🇺</div>
+              <div class="rt-node-name">Москва</div>
+              <div class="rt-node-type">Клиент</div>
+              <div class="rt-node-city">Мегапак</div>
+            </div>
+
+            <!-- End cap — add new node -->
+            <div class="rt-end">
+              <div class="rt-add-node-btn" title="Добавить узел в конец">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </div>
+              <div class="rt-end-label">Добавить</div>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="timeline-legend">
+          <span class="legend-item"><span class="legend-dot supplier"></span>Поставщик</span>
+          <span class="legend-item"><span class="legend-dot hub"></span>Хаб</span>
+          <span class="legend-item"><span class="legend-dot customs"></span>Таможня</span>
+          <span class="legend-item"><span class="legend-dot warehouse"></span>Наш склад</span>
+          <span class="legend-item"><span class="legend-dot client"></span>Клиент</span>
+        </div>
+      </div>
+
+      <!-- === DETAILS PANEL for selected Edge 1 === -->
+      <div class="rt-details">
+        <div class="rt-details-header">
+          <div class="rt-details-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </div>
+          <div>
+            <div class="rt-details-title">Сегмент 1 · Поставщик (🇨🇳 Иу) → Хаб (🇨🇳 Шанхай)</div>
+            <div class="rt-details-subtitle">Редактирование выбранного сегмента · нажми Esc или × чтобы закрыть</div>
+          </div>
+          <div class="rt-details-dismiss"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
+        </div>
+
+        <div class="rt-details-body">
+          <div class="field-grid">
+            <div>
+              <label class="field-label">Дней</label>
+              <input class="input input-number" value="5">
+            </div>
+            <div>
+              <label class="field-label">Стоимость ₽</label>
+              <input class="input input-number" value="12 000" style="font-weight:700">
+            </div>
+            <div>
+              <label class="field-label">Перевозчик</label>
+              <input class="input" placeholder="Опционально">
+            </div>
+            <div>
+              <label class="field-label">Комментарий логиста</label>
+              <input class="input" value="Договорились о фикс-цене, малый вес">
+            </div>
+          </div>
+
+          <div class="expenses-section">
+            <div class="expenses-head">
+              <span class="expenses-title">Доп. расходы в сегменте</span>
+            </div>
+            <div class="expense-row">
+              <span class="expense-label">СВХ Иу (хранение)</span>
+              <span class="expense-days"><strong>2</strong> дн</span>
+              <span class="expense-cost">3 500 ₽</span>
+              <span class="expense-remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>
+            </div>
+            <button class="btn-inline" style="margin-top:6px">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Добавить расход
+            </button>
+          </div>
+        </div>
+
+        <div class="rt-details-subtotal">
+          <span class="rt-details-subtotal-label">Итого по сегменту</span>
+          <span class="rt-details-subtotal-value">15 500 ₽ · 7 дней</span>
+        </div>
+      </div>
+
+      <!-- Total strip -->
+      <div class="total-strip">
+        <div class="total-meta">
+          <strong>3 сегмента</strong> · 33 дня в пути · 1 доп. расход
+        </div>
+        <div style="text-align: right;">
+          <div class="total-value">203 500 ₽</div>
+          <div class="total-breakdown">200 000 транспорт + 3 500 доп. расходы</div>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="actions-bar">
+        <div class="assigned-info">
+          <span class="sla-dot"></span>
+          <span>2д 4ч до дедлайна · Алёна (logistics) · 3 комментария</span>
+        </div>
+        <div class="actions-right">
+          <button class="btn">Сохранить черновик</button>
+          <button class="btn btn-primary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            Завершить расценку
+          </button>
+        </div>
+      </div>
+
+      <div class="page-note">
+        <h3>Что работает в этом дизайне</h3>
+        <p><strong>Timeline как single source of truth</strong> — весь маршрут видно одним взглядом: 4 узла, 3 сегмента, общая стоимость и дни. Синий drop-zone между Хабом и Таможней показывает куда прилетит перетаскиваемый узел.</p>
+        <p><strong>Типы локаций color-coded</strong> на chip'ах: зелёный поставщик, copper хаб, orange таможня / склад, серый клиент. Легенда внизу. Соответствует <code>locations.location_type</code>.</p>
+        <p><strong>Edge cards</strong> показывают компактно: сумма + дни + <em>pill'ы доп.расходов</em> (если есть). Выделенный сегмент — подсветка accent. Вся линия окрашивается.</p>
+        <p><strong>Details panel</strong> раскрывается под timeline для selected edge. Редактирование inline: дни, стоимость, перевозчик, комментарий, + вложенные expenses. Dismissable (Esc).</p>
+        <p><strong>Plus-кнопки</strong> между узлами на hover — quick insert узла. Drag-handle сверху каждого узла для reorder. Добавить узел в конец — отдельный FAB справа.</p>
+        <p><strong>Шаблон</strong> слева от timeline (copper badge). Можно сохранить текущий как новый через "+ Сохранить как шаблон".</p>
+      </div>
+
+      <div class="answer-area">
+        <div class="answer" data-choice="a" onclick="toggleSelect(this)">
+          <div class="answer-label">OK</div>
+          <div class="answer-title">Отлично, такой визуал</div>
+          <div class="answer-desc">Timeline + details — идём дальше (Customs + autofill)</div>
+        </div>
+        <div class="answer" data-choice="b" onclick="toggleSelect(this)">
+          <div class="answer-label">Нюансы</div>
+          <div class="answer-title">Нужны правки</div>
+          <div class="answer-desc">Напиши — цвета/форма узлов, layout, что убрать/добавить</div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+</body>
+</html>

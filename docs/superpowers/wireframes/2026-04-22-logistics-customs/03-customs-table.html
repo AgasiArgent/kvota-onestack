@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Customs table — OneStack</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --background: oklch(0.98 0.005 80);
+  --card: oklch(1 0 0);
+  --sidebar: oklch(0.94 0.008 60);
+  --primary: oklch(0.41 0.01 55);
+  --primary-light: oklch(0.52 0.01 55);
+  --accent: oklch(0.50 0.16 35);
+  --accent-hover: oklch(0.42 0.14 35);
+  --accent-subtle: oklch(0.98 0.01 70);
+  --text: oklch(0.15 0.01 55);
+  --text-muted: oklch(0.52 0.01 55);
+  --text-subtle: oklch(0.68 0.01 55);
+  --border: oklch(0.85 0.008 60);
+  --border-light: oklch(0.91 0.006 60);
+  --success: #059669;
+  --success-bg: #DCFCE7;
+  --warning: #D97706;
+  --warning-bg: #FEF3C7;
+  --error: #DC2626;
+  --error-bg: #FEE2E2;
+  --info: #9A3412;
+  --info-bg: #FFF7ED;
+  --autofill: #3B82F6;
+  --autofill-bg: rgba(59, 130, 246, 0.06);
+  --autofill-border: rgba(59, 130, 246, 0.18);
+  --ring: rgba(194, 65, 12, 0.25);
+  --shadow-sm: 0 1px 2px rgba(28, 25, 23, 0.05);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 14px; line-height: 1.5;
+  color: var(--text);
+  background: var(--background);
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3 { letter-spacing: -0.01em; }
+
+.app { display: flex; min-height: 100vh; }
+
+.sidebar {
+  width: 60px;
+  background: var(--sidebar);
+  border-right: 1px solid var(--border-light);
+  padding: 10px 8px;
+  flex-shrink: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+}
+.sidebar-logo {
+  width: 40px; height: 40px; border-radius: 8px;
+  background: var(--primary); color: white;
+  display: grid; place-items: center;
+  font-size: 13px; font-weight: 700;
+  margin-bottom: 12px;
+}
+.sidebar-item-mini {
+  width: 40px; height: 40px;
+  display: grid; place-items: center;
+  color: var(--text-muted);
+  cursor: pointer; border-radius: 8px;
+}
+.sidebar-item-mini:hover { background: rgba(87, 83, 78, 0.06); color: var(--text); }
+.sidebar-item-mini.active { background: rgba(87, 83, 78, 0.12); color: var(--text); }
+.sidebar-item-mini svg { width: 18px; height: 18px; stroke-width: 2; }
+
+.main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+/* Quote header */
+.quote-header {
+  padding: 14px 28px;
+  border-bottom: 1px solid var(--border-light);
+  background: var(--card);
+}
+.breadcrumbs {
+  display: flex; gap: 6px; align-items: center;
+  font-size: 12px; color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.breadcrumbs a { color: var(--text-muted); text-decoration: none; cursor: pointer; }
+.breadcrumbs a:hover { color: var(--accent); }
+.crumb-sep { color: var(--text-subtle); }
+.quote-meta { display: flex; gap: 14px; align-items: baseline; }
+.quote-id {
+  font-family: ui-monospace, monospace;
+  font-size: 18px; font-weight: 700;
+  color: var(--accent);
+}
+.quote-dot { color: var(--text-subtle); }
+.quote-customer { color: var(--text-muted); font-size: 13.5px; }
+
+/* Stepper */
+.stepper {
+  display: flex;
+  padding: 8px 28px 0;
+  background: var(--card);
+  border-bottom: 1px solid var(--border-light);
+}
+.step {
+  padding: 10px 14px 12px;
+  font-size: 12.5px; font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  display: inline-flex; align-items: center; gap: 7px;
+}
+.step-number {
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--sidebar); color: var(--text-muted);
+  display: grid; place-items: center;
+  font-size: 10px; font-weight: 700;
+}
+.step.done .step-number { background: var(--success); color: white; }
+.step.active .step-number { background: var(--accent); color: white; }
+.step.active { color: var(--accent); font-weight: 600; border-bottom-color: var(--accent); }
+.step.done { color: var(--text); }
+
+.content {
+  flex: 1;
+  padding: 20px 28px;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+/* === Autofill banner === */
+.autofill-banner {
+  display: flex; align-items: center; gap: 16px;
+  padding: 14px 20px;
+  background: linear-gradient(90deg, rgba(59, 130, 246, 0.08), rgba(59, 130, 246, 0.04));
+  border: 1px solid var(--autofill-border);
+  border-radius: 12px;
+  margin-bottom: 14px;
+}
+.autofill-icon {
+  width: 40px; height: 40px; border-radius: 10px;
+  background: var(--autofill); color: white;
+  display: grid; place-items: center;
+  flex-shrink: 0;
+}
+.autofill-icon svg { width: 20px; height: 20px; stroke-width: 2; }
+.autofill-text { flex: 1; }
+.autofill-title {
+  font-size: 14px; font-weight: 600; color: var(--text);
+  margin-bottom: 2px;
+}
+.autofill-sub {
+  font-size: 12.5px; color: var(--text-muted);
+}
+.autofill-sub strong { color: var(--text); }
+.autofill-actions {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+}
+.certif-check {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 12px; color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+.certif-check input { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
+.certif-check strong { color: var(--text); font-weight: 500; }
+.btn-accept-all {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px;
+  background: var(--accent);
+  color: white;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 13px; font-weight: 600;
+  cursor: pointer;
+}
+.btn-accept-all:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn-accept-all:disabled, .btn-accept-all.disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-accept-all svg { width: 14px; height: 14px; stroke-width: 2.5; }
+
+/* RUB disclaimer */
+.rub-disclaimer {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px;
+  background: var(--accent-subtle);
+  color: var(--info);
+  border-radius: 6px;
+  font-size: 12px; font-weight: 600;
+  border: 1px solid rgba(194, 65, 12, 0.15);
+}
+.rub-disclaimer svg { width: 13px; height: 13px; stroke-width: 2.5; }
+
+/* Toolbar */
+.toolbar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 0;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.invoice-tabs {
+  display: flex; gap: 6px;
+  padding: 4px;
+  background: var(--sidebar);
+  border-radius: 9px;
+}
+.invoice-tab {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12.5px; font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.invoice-tab.active {
+  background: var(--card);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+}
+.invoice-status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--warning); }
+.invoice-tab.done .invoice-status-dot { background: var(--success); }
+
+.view-select {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 12.5px; font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+}
+.view-select svg { width: 12px; height: 12px; }
+.view-select-label {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  margin-right: 2px;
+}
+.btn-columns {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 10px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text-muted);
+  font-size: 12px; font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+}
+.btn-columns:hover { border-color: var(--accent); color: var(--accent); }
+.btn-columns svg { width: 13px; height: 13px; }
+
+.toolbar-spacer { flex: 1; }
+.cols-hidden {
+  font-size: 11.5px;
+  color: var(--text-subtle);
+}
+
+/* === TABLE === */
+.table-card {
+  background: var(--card);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.table-scroll {
+  overflow-x: auto;
+  max-height: none;
+}
+
+table.ht {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12.5px;
+  min-width: 1350px;
+}
+.ht th {
+  text-align: left;
+  padding: 10px 12px;
+  font-size: 10.5px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--text-muted);
+  background: var(--sidebar);
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border-light);
+  white-space: nowrap;
+  position: sticky; top: 0; z-index: 2;
+}
+.ht th:last-child { border-right: none; }
+.ht th.numeric, .ht td.numeric { text-align: right; font-variant-numeric: tabular-nums; }
+.ht th.tip { cursor: help; border-bottom: 1px dotted var(--text-subtle); }
+.ht td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-light);
+  border-right: 1px solid var(--border-light);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.ht td:last-child { border-right: none; }
+.ht tr:last-child td { border-bottom: none; }
+
+.ht tr.autofill td { background: var(--autofill-bg); }
+.ht tr.autofill td.filled { background: rgba(59, 130, 246, 0.1); }
+.ht tr.banned td { background: rgba(220, 38, 38, 0.04); }
+.ht tr:hover td { background: rgba(87, 83, 78, 0.035); }
+.ht tr.autofill:hover td { background: rgba(59, 130, 246, 0.11); }
+.ht tr.banned:hover td { background: rgba(220, 38, 38, 0.08); }
+
+/* Col-No + sticky first columns */
+.ht th.col-no, .ht td.col-no { position: sticky; left: 0; z-index: 1; background: var(--sidebar); min-width: 40px; }
+.ht th.col-brand, .ht td.col-brand { position: sticky; left: 40px; z-index: 1; background: var(--sidebar); min-width: 90px; }
+.ht th.col-sku, .ht td.col-sku { position: sticky; left: 130px; z-index: 1; background: var(--sidebar); min-width: 110px; }
+.ht th.col-name, .ht td.col-name { position: sticky; left: 240px; z-index: 1; background: var(--sidebar); min-width: 240px; }
+.ht td.col-no, .ht td.col-brand, .ht td.col-sku, .ht td.col-name { background: var(--card); }
+.ht tr.autofill td.col-no, .ht tr.autofill td.col-brand, .ht tr.autofill td.col-sku, .ht tr.autofill td.col-name { background: var(--autofill-bg); }
+.ht tr.banned td.col-no, .ht tr.banned td.col-brand, .ht tr.banned td.col-sku, .ht tr.banned td.col-name { background: rgba(220, 38, 38, 0.04); }
+
+.cell-row-marker {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; color: var(--text-muted);
+  font-weight: 500;
+}
+.autofill-sparkle {
+  color: var(--autofill);
+  cursor: help;
+}
+.autofill-sparkle svg { width: 12px; height: 12px; }
+.cell-ban-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  background: var(--error-bg);
+  color: var(--error);
+  border-radius: 4px;
+  font-size: 10px; font-weight: 700;
+  margin-left: 6px;
+}
+
+.cell-input {
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 2px 6px;
+  font-family: inherit;
+  font-size: 12.5px;
+  color: var(--text);
+  width: 100%;
+  border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+}
+.cell-input:focus {
+  border-color: var(--accent);
+  background: var(--card);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+.cell-select {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text);
+  background: transparent;
+  font-family: inherit;
+  font-size: 12px;
+}
+.cell-select:hover { border-color: var(--border); background: var(--card); }
+.cell-select .chev { color: var(--text-subtle); }
+.cell-select .chev svg { width: 10px; height: 10px; }
+
+.duty-cell {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-variant-numeric: tabular-nums;
+}
+.duty-type {
+  display: inline-block;
+  padding: 1px 5px;
+  background: var(--sidebar);
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.duty-type.pct { background: rgba(194, 65, 12, 0.12); color: var(--info); }
+
+.lic-chip {
+  display: inline-block;
+  padding: 1px 6px;
+  background: var(--sidebar);
+  border-radius: 4px;
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-right: 3px;
+}
+.lic-chip.req { background: var(--warning-bg); color: #92400E; }
+
+.ht td.actions-col {
+  position: sticky; right: 0;
+  background: var(--card);
+  border-left: 1px solid var(--border-light);
+  text-align: center;
+  min-width: 70px;
+}
+.ht tr.autofill td.actions-col { background: var(--autofill-bg); }
+.ht tr.banned td.actions-col { background: rgba(220, 38, 38, 0.04); }
+
+.row-action-btn {
+  display: inline-flex;
+  width: 24px; height: 24px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text-muted);
+  align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: all 120ms;
+  margin: 0 1px;
+}
+.row-action-btn:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-subtle); }
+.row-action-btn svg { width: 11px; height: 11px; stroke-width: 2; }
+
+/* Below-table sections */
+.below-table {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 18px;
+}
+.sub-card {
+  background: var(--card);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  padding: 16px 18px;
+}
+.sub-card h3 {
+  font-size: 12px; font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0 0 12px;
+  display: flex; align-items: center; gap: 6px;
+}
+.sub-card h3 svg { width: 13px; height: 13px; }
+.expense-row {
+  display: grid;
+  grid-template-columns: 1fr 110px auto;
+  gap: 10px; align-items: center;
+  padding: 8px 10px;
+  background: var(--sidebar);
+  border-radius: 7px;
+  margin-bottom: 6px;
+  font-size: 12.5px;
+}
+.expense-label { color: var(--text); font-weight: 500; }
+.expense-cost { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+.expense-remove {
+  width: 22px; height: 22px;
+  display: grid; place-items: center;
+  border-radius: 4px;
+  color: var(--text-subtle); cursor: pointer;
+}
+.expense-remove:hover { background: var(--error-bg); color: var(--error); }
+.expense-remove svg { width: 11px; height: 11px; stroke-width: 2; }
+
+.btn-inline {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 10px;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px dashed var(--border);
+  border-radius: 7px;
+  font-size: 12px; font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  margin-top: 2px;
+}
+.btn-inline:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-subtle); }
+.btn-inline svg { width: 12px; height: 12px; stroke-width: 2; }
+
+/* Total strip */
+.total-strip {
+  margin-top: 14px;
+  padding: 14px 20px;
+  background: var(--card);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.total-meta { font-size: 13px; color: var(--text-muted); }
+.total-meta strong { color: var(--text); font-weight: 600; }
+.total-value {
+  font-size: 22px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+.total-breakdown {
+  font-size: 11.5px;
+  color: var(--text-subtle);
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.actions-bar {
+  display: flex; gap: 12px; justify-content: space-between; align-items: center;
+  padding: 16px 0 0;
+}
+.assigned-info {
+  display: flex; align-items: center; gap: 10px;
+  color: var(--text-muted); font-size: 12.5px;
+}
+.assigned-info .sla-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--success);
+}
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 9px 16px;
+  font-family: inherit;
+  font-size: 13px; font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  cursor: pointer;
+}
+.btn:hover { background: rgba(87, 83, 78, 0.04); }
+.btn-primary {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+.btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn svg { width: 14px; height: 14px; stroke-width: 2; }
+.actions-right { display: flex; gap: 10px; align-items: center; }
+
+/* Page note */
+.page-note {
+  margin-top: 28px;
+  padding: 20px 24px;
+  background: var(--card);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  font-size: 13px; line-height: 1.7;
+}
+.page-note h3 {
+  font-size: 12px; font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.06em;
+  margin: 0 0 10px;
+}
+.page-note p { margin: 0 0 8px; }
+.page-note strong { color: var(--accent); }
+.page-note code {
+  background: var(--sidebar);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11.5px;
+  font-family: ui-monospace, monospace;
+}
+
+.answer-area {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 12px; margin-top: 12px;
+}
+.answer {
+  background: var(--card);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  padding: 18px 22px;
+  cursor: pointer;
+  transition: border-color 120ms, background-color 120ms;
+}
+.answer:hover { border-color: var(--accent); }
+.answer.selected { border-color: var(--accent); background: var(--accent-subtle); }
+.answer-label {
+  font-size: 11px; font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase; letter-spacing: 0.06em;
+  margin-bottom: 6px;
+}
+.answer-title { font-size: 15px; font-weight: 600; margin-bottom: 3px; }
+.answer-desc { font-size: 12.5px; color: var(--text-muted); }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar-logo">OS</div>
+    <div class="sidebar-item-mini"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3"/></svg></div>
+    <div class="sidebar-item-mini active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M1 3h15v13H1zM16 8h4l3 3v5h-7"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg></div>
+    <div class="sidebar-item-mini"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zM14 2v6h6"/></svg></div>
+    <div class="sidebar-item-mini"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg></div>
+  </aside>
+
+  <main class="main">
+    <header class="quote-header">
+      <div class="breadcrumbs">
+        <a>Workspace</a> <span class="crumb-sep">/</span>
+        <a>Мои заявки (Таможня)</a> <span class="crumb-sep">/</span>
+        <span style="color: var(--text);">Q-202604-0011</span>
+      </div>
+      <div class="quote-meta">
+        <span class="quote-id">Q-202604-0011</span>
+        <span class="quote-dot">·</span>
+        <span class="quote-customer">ООО «Мегапак»</span>
+        <span class="quote-dot">·</span>
+        <span class="quote-customer">Москва</span>
+      </div>
+    </header>
+
+    <div class="stepper">
+      <div class="step done"><span class="step-number"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="width:9px;height:9px"><polyline points="20 6 9 17 4 12"/></svg></span>Продажи</div>
+      <div class="step done"><span class="step-number"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="width:9px;height:9px"><polyline points="20 6 9 17 4 12"/></svg></span>Спецификация</div>
+      <div class="step done"><span class="step-number"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="width:9px;height:9px"><polyline points="20 6 9 17 4 12"/></svg></span>Закупки</div>
+      <div class="step done"><span class="step-number"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="width:9px;height:9px"><polyline points="20 6 9 17 4 12"/></svg></span>Логистика</div>
+      <div class="step active"><span class="step-number">5</span>Таможня</div>
+      <div class="step"><span class="step-number">6</span>Расчёт</div>
+    </div>
+
+    <div class="content">
+
+      <!-- Autofill banner -->
+      <div class="autofill-banner">
+        <div class="autofill-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.912 5.813L20 10.725l-4.5 4.385L16.618 21 12 18.013 7.382 21l1.118-5.89L4 10.725l6.088-.912L12 3z"/></svg>
+        </div>
+        <div class="autofill-text">
+          <div class="autofill-title">10 из 12 позиций автозаполнены из истории КП</div>
+          <div class="autofill-sub">
+            Данные взяты из <strong>Q-202601-0042</strong> (15 февр), <strong>Q-202602-0018</strong> (3 март), <strong>Q-202603-0061</strong> (28 март).
+            Проверь актуальность и подтверди.
+          </div>
+        </div>
+        <div class="autofill-actions">
+          <label class="certif-check">
+            <input type="checkbox" checked>
+            <span><strong>Сертификаты ДС/СС/СГР актуальны</strong> — проверил</span>
+          </label>
+          <button class="btn-accept-all">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            Принять все предложения и завершить
+          </button>
+        </div>
+      </div>
+
+      <!-- Toolbar -->
+      <div class="toolbar">
+        <div class="invoice-tabs">
+          <div class="invoice-tab active">
+            <span class="invoice-status-dot"></span>
+            Инвойс #1
+            <span style="color:var(--text-subtle);font-size:11px;margin-left:2px">Shanghai Ind · 12 поз</span>
+          </div>
+          <div class="invoice-tab done">
+            <span class="invoice-status-dot"></span>
+            Инвойс #2
+            <span style="color:var(--text-subtle);font-size:11px;margin-left:2px">Istanbul · завершён</span>
+          </div>
+        </div>
+        <button class="view-select">
+          <span class="view-select-label">Вид</span>
+          Стандарт
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <button class="btn-columns">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          Колонки
+        </button>
+        <div class="rub-disclaimer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>
+          Все суммы в таблице — в рублях ₽
+        </div>
+        <div class="toolbar-spacer"></div>
+        <span class="cols-hidden">+ 8 скрытых колонок</span>
+      </div>
+
+      <!-- TABLE -->
+      <div class="table-card">
+        <div class="table-scroll">
+          <table class="ht">
+            <thead>
+              <tr>
+                <th class="col-no">№</th>
+                <th class="col-brand">Бренд</th>
+                <th class="col-sku">Артикул</th>
+                <th class="col-name">Наименование</th>
+                <th>Кол-во</th>
+                <th>Страна</th>
+                <th>Код ТН ВЭД</th>
+                <th class="tip" title="Процент / ₽/кг / ₽/шт">Пошлина</th>
+                <th class="numeric">Утильсбор</th>
+                <th class="numeric">Акциз</th>
+                <th class="numeric">Экосбор</th>
+                <th>Честный знак</th>
+                <th>ПСМ/ПТС</th>
+                <th>Лицензии</th>
+                <th style="position:sticky;right:0;background:var(--sidebar);">Действия</th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- Row 1 - autofilled -->
+              <tr class="autofill">
+                <td class="col-no">
+                  <span class="cell-row-marker">
+                    <span class="autofill-sparkle" title="Автозаполнено из Q-202601-0042 (15 февр)">
+                      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.912 5.813L20 9.725l-4.5 4.385L16.618 20 12 17.013 7.382 20l1.118-5.89L4 9.725l6.088-.912L12 2z"/></svg>
+                    </span>
+                    1
+                  </span>
+                </td>
+                <td class="col-brand">Xiaomi</td>
+                <td class="col-sku">MI-RB-12</td>
+                <td class="col-name">Robot vacuum cleaner S10+</td>
+                <td class="numeric">40</td>
+                <td>🇨🇳 Китай</td>
+                <td><span class="cell-select">8508.11.00<span class="chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span></span></td>
+                <td><span class="duty-cell"><span class="duty-type pct">%</span>10</span></td>
+                <td class="numeric">5 200</td>
+                <td class="numeric">—</td>
+                <td class="numeric">120</td>
+                <td>Код маркировки</td>
+                <td>—</td>
+                <td><span class="lic-chip req">ДС</span><span class="lic-chip">СС</span><span class="lic-chip">СГР</span></td>
+                <td class="actions-col">
+                  <button class="row-action-btn" title="Развернуть в модалку"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></button>
+                  <button class="row-action-btn" title="Доп.расходы"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+                </td>
+              </tr>
+
+              <!-- Row 2 - autofilled -->
+              <tr class="autofill">
+                <td class="col-no">
+                  <span class="cell-row-marker">
+                    <span class="autofill-sparkle" title="Автозаполнено из Q-202602-0018">
+                      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.912 5.813L20 9.725l-4.5 4.385L16.618 20 12 17.013 7.382 20l1.118-5.89L4 9.725l6.088-.912L12 2z"/></svg>
+                    </span>
+                    2
+                  </span>
+                </td>
+                <td class="col-brand">Xiaomi</td>
+                <td class="col-sku">MI-PWR-65</td>
+                <td class="col-name">Power bank 65W 20000mAh</td>
+                <td class="numeric">120</td>
+                <td>🇨🇳 Китай</td>
+                <td><span class="cell-select">8507.60.00<span class="chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span></span></td>
+                <td><span class="duty-cell"><span class="duty-type pct">%</span>12</span></td>
+                <td class="numeric">1 800</td>
+                <td class="numeric">—</td>
+                <td class="numeric">80</td>
+                <td>Код маркировки</td>
+                <td>—</td>
+                <td><span class="lic-chip req">ДС</span><span class="lic-chip">СГР</span></td>
+                <td class="actions-col">
+                  <button class="row-action-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></button>
+                  <button class="row-action-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+                </td>
+              </tr>
+
+              <!-- Row 3 - partially autofilled -->
+              <tr>
+                <td class="col-no">3</td>
+                <td class="col-brand">Anker</td>
+                <td class="col-sku">ANK-SP-3</td>
+                <td class="col-name">Smart plug WiFi v3</td>
+                <td class="numeric">250</td>
+                <td>🇨🇳 Китай</td>
+                <td><span class="cell-select" style="background:var(--autofill-bg)"><span class="autofill-sparkle" style="margin-right:4px"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.912 5.813L20 9.725l-4.5 4.385L16.618 20 12 17.013 7.382 20l1.118-5.89L4 9.725l6.088-.912L12 2z"/></svg></span>8536.69.00<span class="chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span></span></td>
+                <td><input class="cell-input" placeholder="—" style="width:70px;text-align:right"></td>
+                <td class="numeric"><input class="cell-input" placeholder="—" style="text-align:right"></td>
+                <td class="numeric">—</td>
+                <td class="numeric">—</td>
+                <td><input class="cell-input" placeholder="—"></td>
+                <td>—</td>
+                <td><span class="lic-chip req">ДС</span></td>
+                <td class="actions-col">
+                  <button class="row-action-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></button>
+                  <button class="row-action-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+                </td>
+              </tr>
+
+              <!-- Row 4 - autofilled, common -->
+              <tr class="autofill">
+                <td class="col-no">
+                  <span class="cell-row-marker">
+                    <span class="autofill-sparkle" title="Автозаполнено из Q-202603-0061"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.912 5.813L20 9.725l-4.5 4.385L16.618 20 12 17.013 7.382 20l1.118-5.89L4 9.725l6.088-.912L12 2z"/></svg></span>
+                    4
+                  </span>
+                </td>
+                <td class="col-brand">Anker</td>
+                <td class="col-sku">ANK-HB-7</td>
+                <td class="col-name">USB-C Hub 7-in-1 Pro</td>
+                <td class="numeric">80</td>
+                <td>🇨🇳 Китай</td>
+                <td><span class="cell-select">8471.80.00<span class="chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span></span></td>
+                <td><span class="duty-cell"><span class="duty-type pct">%</span>5</span></td>
+                <td class="numeric">2 400</td>
+                <td class="numeric">—</td>
+                <td class="numeric">60</td>
+                <td>—</td>
+                <td>—</td>
+                <td><span class="lic-chip">ДС</span></td>
+                <td class="actions-col">
+                  <button class="row-action-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></button>
+                  <button class="row-action-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+                </td>
+              </tr>
+
+              <!-- Row 5 - import_banned -->
+              <tr class="banned">
+                <td class="col-no">5</td>
+                <td class="col-brand">DJI</td>
+                <td class="col-sku">DJI-MN-3</td>
+                <td class="col-name">
+                  Drone Mini 3 Pro
+                  <span class="cell-ban-badge">Запрет ввоза</span>
+                </td>
+                <td class="numeric">10</td>
+                <td>🇨🇳 Китай</td>
+                <td>—</td>
+                <td>—</td>
+                <td class="numeric">—</td>
+                <td class="numeric">—</td>
+                <td class="numeric">—</td>
+                <td>—</td>
+                <td>—</td>
+                <td>—</td>
+                <td class="actions-col">
+                  <button class="row-action-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></button>
+                  <button class="row-action-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+                </td>
+              </tr>
+
+              <!-- Row 6 - autofilled -->
+              <tr class="autofill">
+                <td class="col-no">
+                  <span class="cell-row-marker">
+                    <span class="autofill-sparkle"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.912 5.813L20 9.725l-4.5 4.385L16.618 20 12 17.013 7.382 20l1.118-5.89L4 9.725l6.088-.912L12 2z"/></svg></span>
+                    6
+                  </span>
+                </td>
+                <td class="col-brand">Baseus</td>
+                <td class="col-sku">BAS-CAB-02</td>
+                <td class="col-name">USB-C cable 100W 2m</td>
+                <td class="numeric">500</td>
+                <td>🇨🇳 Китай</td>
+                <td><span class="cell-select">8544.42.00<span class="chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span></span></td>
+                <td><span class="duty-cell"><span class="duty-type pct">%</span>7</span></td>
+                <td class="numeric">320</td>
+                <td class="numeric">—</td>
+                <td class="numeric">15</td>
+                <td>—</td>
+                <td>—</td>
+                <td><span class="lic-chip">ДС</span></td>
+                <td class="actions-col">
+                  <button class="row-action-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></button>
+                  <button class="row-action-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+                </td>
+              </tr>
+
+              <!-- Row 7 - новая, пустая -->
+              <tr>
+                <td class="col-no">7</td>
+                <td class="col-brand">Custom</td>
+                <td class="col-sku">CUS-NEW-1</td>
+                <td class="col-name">Custom item (новая позиция)</td>
+                <td class="numeric">25</td>
+                <td>🇨🇳 Китай</td>
+                <td><input class="cell-input" placeholder="HS код" style="width:100px"></td>
+                <td><input class="cell-input" placeholder="—" style="width:70px;text-align:right"></td>
+                <td class="numeric"><input class="cell-input" placeholder="—" style="text-align:right"></td>
+                <td class="numeric"><input class="cell-input" placeholder="—" style="text-align:right"></td>
+                <td class="numeric"><input class="cell-input" placeholder="—" style="text-align:right"></td>
+                <td><input class="cell-input" placeholder="—"></td>
+                <td>—</td>
+                <td style="color: var(--text-subtle); font-style: italic;">настроить…</td>
+                <td class="actions-col">
+                  <button class="row-action-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></button>
+                  <button class="row-action-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Below table: expenses -->
+      <div class="below-table">
+        <div class="sub-card">
+          <h3>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+            Доп. расходы по позиции
+            <span style="margin-left:auto;font-size:10.5px;color:var(--text-subtle);text-transform:none;letter-spacing:normal;font-weight:500;">Позиция 1: Robot vacuum cleaner</span>
+          </h3>
+          <div class="expense-row">
+            <span class="expense-label">Тестирование образца (СИМ-лаб)</span>
+            <span class="expense-cost">4 500 ₽</span>
+            <span class="expense-remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>
+          </div>
+          <div class="expense-row">
+            <span class="expense-label">Переводы ТУ (инструкции)</span>
+            <span class="expense-cost">1 200 ₽</span>
+            <span class="expense-remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>
+          </div>
+          <button class="btn-inline">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Добавить расход для этой позиции
+          </button>
+        </div>
+
+        <div class="sub-card">
+          <h3>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            Общие расходы на КП
+          </h3>
+          <div class="expense-row">
+            <span class="expense-label">Услуги брокера</span>
+            <span class="expense-cost">25 000 ₽</span>
+            <span class="expense-remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>
+          </div>
+          <div class="expense-row">
+            <span class="expense-label">Оформление ДТ</span>
+            <span class="expense-cost">8 000 ₽</span>
+            <span class="expense-remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>
+          </div>
+          <button class="btn-inline">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Добавить общий расход
+          </button>
+        </div>
+      </div>
+
+      <!-- Total strip -->
+      <div class="total-strip">
+        <div class="total-meta">
+          <strong>7 позиций</strong> · 1 запрет ввоза · 5 доп.расходов · 10 автозаполнено
+        </div>
+        <div style="text-align: right;">
+          <div class="total-value">287 420 ₽</div>
+          <div class="total-breakdown">248 720 пошлины + 38 700 доп.расходы</div>
+        </div>
+      </div>
+
+      <div class="actions-bar">
+        <div class="assigned-info">
+          <span class="sla-dot"></span>
+          <span>1д 18ч до дедлайна · Олег С. (customs) · 2 комментария</span>
+        </div>
+        <div class="actions-right">
+          <button class="btn">Сохранить черновик</button>
+          <button class="btn btn-primary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            Завершить таможню
+          </button>
+        </div>
+      </div>
+
+      <div class="page-note">
+        <h3>Ключевые элементы</h3>
+        <p><strong>Autofill banner сверху</strong> (pastel-синий) — главная новая фича: 10 из 12 позиций автозаполнены через <code>/api/customs/autofill</code> по связке <code>(brand, product_code)</code>. Показаны источники (Q-номера + даты), есть <strong>обязательный чекбокс "Сертификаты актуальны"</strong> перед кнопкой "Принять все и завершить".</p>
+        <p><strong>Autofill highlight</strong> — строки подсвечены прозрачно-синим, в колонке № стоит ✨ sparkle-иконка (tooltip: "Из Q-202601-0042, 15 февр"). Ячейки внутри строки тоже имеют slightly-brighter синий если поле заполнилось из истории. Partially-autofilled строка (#3) — только HS код автоподставлен (отдельная ячейка с sparkle), остальные пустые.</p>
+        <p><strong>Пошлина одной колонкой</strong> — значение + chip типа (<code>%</code> / <code>₽/кг</code> / <code>₽/шт</code>). Clickable chip меняет тип для конкретной ячейки. Нет трёх параллельных колонок — одна композитная.</p>
+        <p><strong>Колонка "Лицензии"</strong> — chip'ы ДС/СС/СГР, required выделен жёлтым. Клик редактирует required+cost в модалке.</p>
+        <p><strong>Import banned row</strong> (#5) — red tint на всём ряду, badge "Запрет ввоза" рядом с названием.</p>
+        <p><strong>Action buttons справа</strong>: <code>↗</code> раскрытие в большую модалку ("развёрнутый ввод" из ТЗ) + <code>+</code> доп.расход для строки.</p>
+        <p><strong>View selector</strong>: "Вид: Стандарт ▾" + "Колонки" (⚙-настройка). "+ 8 скрытых колонок" — сигнал что показаны не все (в текущем view скрыта Нотификация, Запрет ввоза, ПСМ/ПТС и др.).</p>
+        <p><strong>Под таблицей 2 карточки</strong>: per-item расходы для выбранной строки (позиция 1) + Общие на КП. Все в ₽ (disclaimer в toolbar). Внизу total strip с детализацией.</p>
+      </div>
+
+      <div class="answer-area">
+        <div class="answer" data-choice="a" onclick="toggleSelect(this)">
+          <div class="answer-label">OK</div>
+          <div class="answer-title">Отлично, иду дальше</div>
+          <div class="answer-desc">Последний экран (admin/routing + неназначенные) — и к дизайн-документу</div>
+        </div>
+        <div class="answer" data-choice="b" onclick="toggleSelect(this)">
+          <div class="answer-label">Комментарии</div>
+          <div class="answer-title">Нужны правки</div>
+          <div class="answer-desc">Что поменять — опиши в терминале</div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Workspace logistics — OneStack</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --background: oklch(0.98 0.005 80);
+  --card: oklch(1 0 0);
+  --sidebar: oklch(0.94 0.008 60);
+  --primary: oklch(0.41 0.01 55);
+  --primary-light: oklch(0.52 0.01 55);
+  --accent: oklch(0.50 0.16 35);
+  --accent-hover: oklch(0.42 0.14 35);
+  --accent-subtle: oklch(0.98 0.01 70);
+  --text: oklch(0.15 0.01 55);
+  --text-muted: oklch(0.52 0.01 55);
+  --text-subtle: oklch(0.68 0.01 55);
+  --border: oklch(0.85 0.008 60);
+  --border-light: oklch(0.91 0.006 60);
+  --success: #059669;
+  --success-bg: #DCFCE7;
+  --warning: #D97706;
+  --warning-bg: #FEF3C7;
+  --error: #DC2626;
+  --error-bg: #FEE2E2;
+  --info: #9A3412;
+  --info-bg: #FFF7ED;
+  --ring: rgba(194, 65, 12, 0.25);
+  --shadow-sm: 0 1px 2px rgba(28, 25, 23, 0.05);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--background);
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3 { letter-spacing: -0.01em; }
+
+.app { display: flex; min-height: 100vh; }
+
+/* === Sidebar === */
+.sidebar {
+  width: 260px;
+  background: var(--sidebar);
+  border-right: 1px solid var(--border-light);
+  padding: 12px 12px;
+  flex-shrink: 0;
+}
+.brand {
+  padding: 12px 12px 24px;
+  display: flex; align-items: center; gap: 10px;
+}
+.brand-logo {
+  width: 28px; height: 28px; border-radius: 6px;
+  background: var(--primary); color: white;
+  display: grid; place-items: center;
+  font-size: 13px; font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.brand-name {
+  font-size: 16px; font-weight: 700; color: var(--primary);
+}
+.nav-section {
+  font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-muted);
+  padding: 14px 12px 6px;
+}
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px;
+  font-size: 13px; font-weight: 500;
+  color: var(--text-muted);
+  border-radius: 6px;
+  cursor: pointer;
+  margin-bottom: 1px;
+}
+.nav-item:hover { background: rgba(87, 83, 78, 0.04); color: var(--text); }
+.nav-item.active {
+  background: rgba(87, 83, 78, 0.08);
+  color: var(--text);
+  font-weight: 600;
+}
+.nav-item svg { width: 16px; height: 16px; stroke-width: 1.75; opacity: 0.7; flex-shrink: 0; }
+.nav-item.active svg { opacity: 1; stroke-width: 2; color: var(--accent); }
+
+/* === Main area === */
+.main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+/* Topbar */
+.topbar {
+  display: flex; align-items: center;
+  padding: 16px 32px;
+  border-bottom: 1px solid var(--border-light);
+  background: var(--card);
+  gap: 16px;
+}
+.topbar-title { font-size: 24px; font-weight: 700; color: var(--text); }
+.topbar-crumb { color: var(--text-subtle); font-size: 13px; font-weight: 500; }
+
+.role-switcher {
+  margin-left: auto;
+  display: inline-flex;
+  background: var(--sidebar);
+  padding: 3px;
+  border-radius: 8px;
+  gap: 2px;
+}
+.role-switcher button {
+  padding: 7px 14px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: color 120ms, background-color 120ms;
+}
+.role-switcher button.active {
+  background: var(--card);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+}
+.role-switcher button svg { width: 14px; height: 14px; stroke-width: 2; }
+
+/* Tabs */
+.tabs {
+  display: flex;
+  padding: 0 32px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border-light);
+  align-items: flex-end;
+}
+.tab {
+  padding: 14px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  display: inline-flex; align-items: center; gap: 8px;
+  transition: color 120ms, border-color 120ms;
+}
+.tab:hover { color: var(--text); }
+.tab.active {
+  color: var(--accent);
+  font-weight: 600;
+  border-bottom-color: var(--accent);
+}
+.tab-divider {
+  width: 1px; background: var(--border-light);
+  margin: 14px 10px;
+}
+.tab-group-label {
+  font-size: 11px; color: var(--text-subtle);
+  font-style: italic; align-self: center;
+  padding: 0 10px;
+}
+.tab-count {
+  font-size: 11px; font-weight: 600;
+  padding: 1px 7px; border-radius: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.tab.active .tab-count { background: var(--accent-subtle); color: var(--accent); }
+.tab:not(.active) .tab-count { background: var(--sidebar); color: var(--text-muted); }
+.tab-count.warning { background: var(--warning-bg) !important; color: var(--warning) !important; }
+
+/* Filter bar */
+.filterbar {
+  display: flex; gap: 8px;
+  padding: 14px 32px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border-light);
+  align-items: center;
+}
+.input {
+  padding: 8px 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text);
+  outline: none;
+  transition: border-color 120ms, box-shadow 120ms;
+}
+.input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+.input::placeholder { color: var(--text-subtle); }
+
+.input-search {
+  position: relative; flex: 1;
+}
+.input-search svg {
+  position: absolute;
+  left: 12px; top: 50%; transform: translateY(-50%);
+  width: 15px; height: 15px;
+  color: var(--text-subtle);
+  stroke-width: 2;
+  pointer-events: none;
+}
+.input-search .input {
+  padding-left: 36px;
+  width: 100%;
+}
+
+/* Content */
+.content {
+  padding: 24px 32px;
+  flex: 1;
+  background: var(--background);
+}
+
+/* Card */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* Table */
+table { width: 100%; border-collapse: collapse; }
+th {
+  text-align: left;
+  padding: 12px 20px;
+  font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-muted);
+  background: var(--card);
+  border-bottom: 1px solid var(--border-light);
+  white-space: nowrap;
+}
+td {
+  padding: 14px 20px;
+  font-size: 13.5px;
+  border-bottom: 1px solid var(--border-light);
+  vertical-align: top;
+  line-height: 1.45;
+}
+tbody tr:last-child td { border-bottom: none; }
+tbody tr { transition: background-color 80ms; }
+tbody tr:hover td { background: rgba(87, 83, 78, 0.025); }
+.row-warning td { background: rgba(217, 119, 6, 0.03); }
+.row-warning:hover td { background: rgba(217, 119, 6, 0.06); }
+.row-overdue td { background: rgba(220, 38, 38, 0.03); }
+.row-overdue:hover td { background: rgba(220, 38, 38, 0.06); }
+
+.idn {
+  font-family: ui-monospace, SFMono-Regular, 'JetBrains Mono', monospace;
+  font-size: 12.5px;
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+.idn:hover { text-decoration: underline; }
+
+.cust-name { font-weight: 600; color: var(--text); font-size: 13.5px; }
+.cust-city { font-size: 12px; color: var(--text-subtle); margin-top: 2px; }
+
+.route {
+  font-size: 13px; color: var(--text); line-height: 1.6;
+}
+.route .sep { color: var(--text-subtle); margin-right: 4px; }
+.flag {
+  display: inline-block;
+  margin-right: 4px;
+  font-size: 14px;
+  line-height: 1;
+  position: relative; top: 1px;
+}
+
+.cargo-primary { color: var(--text); font-weight: 500; font-size: 13.5px; }
+.cargo-sub { font-size: 12px; color: var(--text-subtle); margin-top: 2px; font-variant-numeric: tabular-nums; }
+
+.time-cell { color: var(--text-muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.sla {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.sla-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.sla-green { color: var(--text); }
+.sla-green .sla-dot { background: var(--success); }
+.sla-yellow { color: var(--warning); font-weight: 600; }
+.sla-yellow .sla-dot { background: var(--warning); }
+.sla-red { color: var(--error); font-weight: 600; }
+.sla-red .sla-dot { background: var(--error); }
+
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+.badge-success { background: var(--success-bg); color: #166534; }
+.badge-warning { background: var(--warning-bg); color: #92400e; }
+.badge-error { background: var(--error-bg); color: #991b1b; }
+.badge-info { background: var(--accent-subtle); color: var(--info); }
+.badge-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor;
+  display: inline-block;
+}
+
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 120ms, border-color 120ms, color 120ms;
+}
+.btn:hover { background: rgba(87, 83, 78, 0.04); border-color: var(--primary-light); }
+.btn-primary {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+.btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn-warning { background: var(--warning); color: white; border-color: var(--warning); }
+.btn-warning:hover { background: #B45309; border-color: #B45309; }
+.btn-error { background: var(--error); color: white; border-color: var(--error); }
+.btn-error:hover { background: #B91C1C; border-color: #B91C1C; }
+.btn-ghost { border-color: transparent; background: transparent; color: var(--text-muted); }
+.btn-ghost:hover { color: var(--text); background: rgba(87, 83, 78, 0.04); }
+.btn svg { width: 13px; height: 13px; stroke-width: 2; }
+
+.diff-new {
+  background: var(--accent-subtle);
+  color: var(--info);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.table-footer {
+  padding: 12px 20px;
+  background: var(--card);
+  color: var(--text-subtle);
+  font-size: 12px;
+  border-top: 1px solid var(--border-light);
+  display: flex; justify-content: space-between;
+}
+
+/* Page notes + answers */
+.page-note {
+  max-width: 920px;
+  margin: 28px auto 0;
+  padding: 24px 28px;
+  background: var(--card);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  font-size: 13.5px;
+  line-height: 1.75;
+  color: var(--text);
+}
+.page-note h3 {
+  font-size: 12px; font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.06em;
+  margin: 0 0 14px;
+}
+.page-note p { margin: 0 0 10px; }
+.page-note strong { color: var(--accent); font-weight: 600; }
+.page-note code {
+  background: var(--sidebar);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: ui-monospace, monospace;
+  color: var(--text);
+}
+
+.answer-area {
+  max-width: 920px;
+  margin: 20px auto 40px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.answer {
+  background: var(--card);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  padding: 20px 24px;
+  cursor: pointer;
+  transition: border-color 120ms, background-color 120ms;
+}
+.answer:hover { border-color: var(--accent); }
+.answer.selected {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+}
+.answer-label {
+  font-size: 11px; font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase; letter-spacing: 0.06em;
+  margin-bottom: 8px;
+}
+.answer-title { font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+.answer-desc { font-size: 13px; color: var(--text-muted); }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-logo">OS</div>
+      <div class="brand-name">OneStack</div>
+    </div>
+
+    <div class="nav-section">Главное</div>
+    <div class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+      Главная
+    </div>
+    <div class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M9 4v4M15 4v4M3 10h18"/></svg>
+      Задачи
+    </div>
+    <div class="nav-item active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M1 3h15v13H1zM16 8h4l3 3v5h-7"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+      Workspace
+    </div>
+
+    <div class="nav-section">Реестры</div>
+    <div class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+      КП
+    </div>
+    <div class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+      Клиенты
+    </div>
+    <div class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12"/></svg>
+      Поставщики
+    </div>
+    <div class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+      Локации
+    </div>
+
+    <div class="nav-section">Администрирование</div>
+    <div class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33h0a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51h0a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v0a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      Настройки
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div>
+        <div class="topbar-title">Workspace</div>
+      </div>
+      <div class="role-switcher">
+        <button class="active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M1 3h15v13H1zM16 8h4l3 3v5h-7"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+          Логистика
+        </button>
+        <button>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12"/></svg>
+          Таможня
+        </button>
+      </div>
+    </header>
+
+    <div class="tabs">
+      <div class="tab active">Мои заявки <span class="tab-count">4</span></div>
+      <div class="tab">Завершённые <span class="tab-count">18</span></div>
+      <div class="tab-divider"></div>
+      <div class="tab-group-label">head_of_logistics ↓</div>
+      <div class="tab">Неназначенные <span class="tab-count warning">2</span></div>
+      <div class="tab">Все заявки <span class="tab-count">24</span></div>
+      <div class="tab">Маршруты</div>
+    </div>
+
+    <div class="filterbar">
+      <div class="input-search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input class="input" placeholder="Поиск по IDN, клиенту, поставщику…">
+      </div>
+      <select class="input" style="width:180px">
+        <option>Все страны забора</option>
+        <option>Китай</option>
+        <option>Турция</option>
+        <option>Италия</option>
+      </select>
+      <select class="input" style="width:160px">
+        <option>Все статусы</option>
+        <option>В работе</option>
+        <option>Горит</option>
+        <option>Просрочено</option>
+      </select>
+      <button class="btn btn-ghost" title="Обновить">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+      </button>
+    </div>
+
+    <div class="content">
+      <div class="card">
+        <table>
+          <thead>
+            <tr>
+              <th>IDN</th>
+              <th>Клиент</th>
+              <th>Маршрут</th>
+              <th>Груз</th>
+              <th>Назначено</th>
+              <th>SLA</th>
+              <th>Статус</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><a class="idn">Q-202604-0042</a></td>
+              <td>
+                <div class="cust-name">ООО «Ромашка»</div>
+                <div class="cust-city">Москва</div>
+              </td>
+              <td class="route">
+                <span class="flag">🇨🇳</span>Шанхай<br>
+                <span class="sep">→</span><span class="flag">🇷🇺</span>Москва
+              </td>
+              <td>
+                <div class="cargo-primary">12 позиций</div>
+                <div class="cargo-sub">840 кг · 3.2 м³</div>
+              </td>
+              <td class="time-cell">21 апр, 14:23</td>
+              <td><span class="sla sla-green"><span class="sla-dot"></span>2д 4ч</span></td>
+              <td><span class="badge badge-success"><span class="badge-dot"></span>В работе</span></td>
+              <td style="text-align: right;"><button class="btn">Открыть<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button></td>
+            </tr>
+
+            <tr class="row-warning">
+              <td><a class="idn">Q-202603-0098</a></td>
+              <td>
+                <div class="cust-name">ИП Сидоров А.В.</div>
+                <div class="cust-city">Санкт-Петербург</div>
+              </td>
+              <td class="route">
+                <span class="flag">🇹🇷</span>Стамбул<br>
+                <span class="sep">→</span><span class="flag">🇷🇺</span>СПб
+              </td>
+              <td>
+                <div class="cargo-primary">3 позиции</div>
+                <div class="cargo-sub">1 200 кг · 4.8 м³</div>
+              </td>
+              <td class="time-cell">19 апр, 09:15</td>
+              <td><span class="sla sla-yellow"><span class="sla-dot"></span>8ч</span></td>
+              <td><span class="badge badge-warning"><span class="badge-dot"></span>Горит</span></td>
+              <td style="text-align: right;"><button class="btn btn-warning">Открыть<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button></td>
+            </tr>
+
+            <tr class="row-overdue">
+              <td><a class="idn">Q-202603-0076</a></td>
+              <td>
+                <div class="cust-name">ПАО «ТехноЛайн»</div>
+                <div class="cust-city">Казань</div>
+              </td>
+              <td class="route">
+                <span class="flag">🇨🇳</span>Гуанчжоу<br>
+                <span class="sep">→</span><span class="flag">🇷🇺</span>Казань
+              </td>
+              <td>
+                <div class="cargo-primary">8 позиций</div>
+                <div class="cargo-sub">560 кг · 2.1 м³</div>
+              </td>
+              <td class="time-cell">17 апр, 10:00</td>
+              <td><span class="sla sla-red"><span class="sla-dot"></span>−1д 5ч</span></td>
+              <td><span class="badge badge-error"><span class="badge-dot"></span>Просрочено</span></td>
+              <td style="text-align: right;"><button class="btn btn-error">Открыть<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button></td>
+            </tr>
+
+            <tr>
+              <td><a class="idn">Q-202604-0011</a></td>
+              <td>
+                <div class="cust-name">ООО «Мегапак»</div>
+                <div class="cust-city">Москва</div>
+              </td>
+              <td class="route">
+                <span class="flag">🇨🇳</span>Иу<br>
+                <span class="sep">→</span><span class="flag">🇷🇺</span>Москва
+              </td>
+              <td>
+                <div class="cargo-primary">15 позиций</div>
+                <div class="cargo-sub">950 → <span class="diff-new">1 150 кг</span></div>
+              </td>
+              <td class="time-cell">20 апр, 11:42</td>
+              <td style="color: var(--text-subtle);">—</td>
+              <td><span class="badge badge-info"><span class="badge-dot"></span>Требует проверки</span></td>
+              <td style="text-align: right;"><button class="btn btn-primary">Открыть<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button></td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="table-footer">
+          <span>Показано 4 из 4</span>
+          <span>Обновлено только что · Уведомления в Telegram включены</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="page-note">
+      <h3>Что показано</h3>
+      <p><strong>Переключатель Логистика / Таможня</strong> справа вверху — у кого обе роли (<code>head_of_logistics</code> + <code>head_of_customs</code>), меняет контекст без перехода. URL: <code>/workspace/logistics</code> / <code>/workspace/customs</code>.</p>
+      <p><strong>Вкладки для head</strong>: "Мои заявки" + "Завершённые" доступны всем; после разделителя head-only: "Неназначенные" (жёлтый счётчик — что-то не заматчилось routing'ом), "Все заявки", "Маршруты" (настройка <code>route_logistics_assignments</code>).</p>
+      <p><strong>SLA-индикатор</strong>: цвет точки + тонкая warm-подсветка фона строки. Зелёный &gt;24h · Жёлтый &lt;24h ("Горит") · Красный просрочено. Вся логика от <code>logistics_assigned_at + sla_hours</code>.</p>
+      <p><strong>Copper-badge "Требует проверки"</strong> — smart-delta сработал. В колонке "Груз" виден diff <code>950 → 1 150 кг</code> — что именно изменилось у закупок.</p>
+      <p><strong>Кнопка "Открыть"</strong> adopts состояние: neutral → warning → error → copper (primary accent для smart-delta — привлекает внимание).</p>
+    </div>
+
+    <div class="answer-area">
+      <div class="answer" data-choice="a" onclick="toggleSelect(this)">
+        <div class="answer-label">OK</div>
+        <div class="answer-title">Подходит, иду дальше</div>
+        <div class="answer-desc">Стиль совпадает с проектом — следующий экран (Route Constructor)</div>
+      </div>
+      <div class="answer" data-choice="b" onclick="toggleSelect(this)">
+        <div class="answer-label">Комментарии</div>
+        <div class="answer-title">Нужны правки</div>
+        <div class="answer-desc">Напиши в терминале — детали layout, колонок, тона, визуала</div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+</body>
+</html>
