@@ -60,7 +60,7 @@ The architecture is a hybrid: an **immutable `journey-manifest.json`** regenerat
 2. `kvota.journey_node_state` SHALL have `node_id` (text) as PRIMARY KEY, `impl_status` CHECK IN (`done`, `partial`, `missing`), `qa_status` CHECK IN (`verified`, `broken`, `untested`), `notes` text, `version` int NOT NULL DEFAULT 1, `last_tested_at` timestamptz, `updated_at` timestamptz, `updated_by` uuid REFERENCES auth.users(id).
 3. `kvota.journey_node_state_history` SHALL capture a before-image on every UPDATE of `journey_node_state` via AFTER UPDATE trigger. Columns: `id` uuid PK, `node_id`, `impl_status`, `qa_status`, `notes`, `version`, `changed_by` uuid, `changed_at` timestamptz DEFAULT now(). Append-only: UPDATE and DELETE denied by RLS for every role. THE drawer SHALL be able to render this history lazily via a dedicated API endpoint.
 4. `kvota.journey_ghost_nodes.node_id` SHALL be UNIQUE and MUST match the pattern `ghost:<slug>`; `status` CHECK IN (`proposed`, `approved`, `in_progress`, `shipped`).
-5. `kvota.journey_pins` SHALL have `mode` CHECK IN (`qa`, `training`) and include position-cache columns (`last_x`, `last_y`, `last_width`, `last_height`, `last_position_update`, `selector_broken`).
+5. `kvota.journey_pins` SHALL have `mode` CHECK IN (`qa`, `training`) and include position-cache columns storing **relative** coordinates (fractions of screenshot dimensions, range 0.0–1.0, `numeric(6,4)`): `last_rel_x`, `last_rel_y`, `last_rel_width`, `last_rel_height`, plus `last_position_update` and `selector_broken`. Relative coordinates survive screenshot-size changes (viewport resize, DPR differences) without repositioning.
 6. `kvota.journey_verifications` SHALL be append-only. Columns: `id`, `pin_id`, `node_id`, `result` CHECK IN (`verified`, `broken`, `skip`), `note` text, `attachment_urls` text[] (nullable; each element is a Supabase Storage object key pointing to an uploaded screenshot), `tested_by`, `tested_at`. RLS policy SHALL deny UPDATE and DELETE for every role.
 7. THE migration SHALL add `node_id` (text) column to `kvota.feedback` with an index, and SHALL populate it via backfill where `page_url` can be mapped to a known route in the initial manifest.
 8. THE migration SHALL add a helper function `kvota.user_has_role(slug text) RETURNS boolean` if one does not already exist, reused in all RLS policies for this feature.
@@ -152,7 +152,7 @@ The architecture is a hybrid: an **immutable `journey-manifest.json`** regenerat
 
 1. `admin`, `quote_controller`, and `spec_controller` SHALL create pins via Supabase direct with RLS enforcement; a pin row SHALL carry `node_id`, `selector`, `expected_behavior`, `mode` ∈ `{qa, training}`, optional `training_step_order`, optional `linked_story_ref`.
 2. WHEN `mode = 'training'`, THE pin SHALL require a non-null `training_step_order`; the UI SHALL enforce this before dispatching the request.
-3. WHEN the nightly Playwright run resolves the pin's selector on the captured page, THE action SHALL post the resulting `{x, y, width, height}` bbox and `selector_broken: false` to `POST /api/journey/playwright-webhook`.
+3. WHEN the nightly Playwright run resolves the pin's selector on the captured page, THE action SHALL compute relative coordinates by dividing the resulting `boundingBox()` `{x, y, width, height}` by the page's `viewportSize()` width/height, and SHALL post the 4-tuple `{rel_x, rel_y, rel_width, rel_height}` (all in 0.0–1.0) plus `selector_broken: false` to `POST /api/journey/playwright-webhook`.
 4. WHEN the selector does not resolve (element absent or ambiguous), THE action SHALL post `selector_broken: true` with no bbox; the UI SHALL visually flag the pin as broken.
 5. THE pin-creation UI SHALL accept the selector either (a) entered manually or (b) via a "Pick element" mode that loads the page in a devtools-like picker and captures the selector automatically (the latter is W5 work, see Requirement 10).
 6. THE pin-detail popover SHALL show: selector, expected_behavior, linked_story_ref (if present and resolvable), mode, and in QA mode the verify-buttons (see Requirement 9).
@@ -187,7 +187,7 @@ The architecture is a hybrid: an **immutable `journey-manifest.json`** regenerat
 5. WHEN a screenshot is captured, THE action SHALL upload the PNG to Supabase Storage bucket `journey-screenshots` at path `{role}/{node_id_safe}/{YYYY-MM-DD}.png`; `node_id_safe` replaces `/` with `_` and escapes brackets.
 6. THE action SHALL retain the two most recent screenshots per `(role, node_id)`; older files SHALL be deleted by the same action run to keep storage bounded.
 7. THE endpoint `POST /api/journey/playwright-webhook` SHALL require header `X-Journey-Webhook-Token` to match server-side secret `JOURNEY_WEBHOOK_TOKEN`; otherwise return 401.
-8. THE webhook body SHALL accept a batch of `{pin_id, x, y, width, height, selector_broken}` objects and SHALL update the corresponding `journey_pins` rows in a single transaction.
+8. THE webhook body SHALL accept a batch of `{pin_id, rel_x, rel_y, rel_width, rel_height, selector_broken}` objects (coordinates in 0.0–1.0) and SHALL update the corresponding `journey_pins` rows in a single transaction.
 9. IF three consecutive nightly runs fail, THEN the action SHALL open a GitHub Issue tagged `journey-ops` for manual inspection.
 
 ### Requirement 11: Feedback Integration
@@ -240,7 +240,7 @@ The architecture is a hybrid: an **immutable `journey-manifest.json`** regenerat
 1. WHEN `journey-manifest.json` fails to load (network error, 404, parse error), THE page SHALL display an error state with a retry button and a link to the operations channel; the canvas SHALL not render in partial state.
 2. WHEN the `/api/journey/nodes` endpoint returns HTTP 5xx, THE UI SHALL retry up to 3 times with exponential backoff (1s, 2s, 4s); on persistent failure, THE UI SHALL display a toast with the error code and keep prior data (if any) visible.
 3. WHEN the database is fresh and no rows exist in `journey_node_state`, THE canvas SHALL render all nodes with `impl_status='unset'` (grey dot) and `qa_status='untested'`; NO error message SHALL be shown.
-4. WHEN a pin exists in `journey_pins` but has `last_x IS NULL` (never resolved by Playwright), THE drawer SHALL render the pin in a list WITHOUT the screen overlay, with a note "Position pending next nightly run".
+4. WHEN a pin exists in `journey_pins` but has `last_rel_x IS NULL` (never resolved by Playwright), THE drawer SHALL render the pin in a list WITHOUT the screen overlay, with a note "Position pending next nightly run".
 5. WHEN a screenshot is missing for the user's primary role on a given node (not yet captured, or retention rotated it out), THE drawer SHALL display a "No screenshot available" placeholder and a button "Request capture" that triggers an on-demand workflow_dispatch of the nightly action for that single node (admin only).
 6. WHEN a verification attachment fails to load (signed URL expired, file missing), THE history row SHALL display a broken-image icon and the verification metadata SHALL still render.
 7. WHEN an optimistic status edit (Req 6) is rolled back due to a 409, 403, or 5xx, THE UI SHALL display a non-blocking toast with the reason and revert the inline control to its stored value within 300 ms.
@@ -288,6 +288,25 @@ The architecture is a hybrid: an **immutable `journey-manifest.json`** regenerat
 9. Internal demo to dev + QA teams SHALL be held and feedback captured before public announcement.
 10. `docs/superpowers/specs/2026-04-22-customer-journey-map-design.md` §6 matrix SHALL be updated to remove `top_manager` from write rows (amendment tracked in the design-phase review).
 11. Error/loading states (Requirement 14) SHALL be manually QA-tested by simulating: manifest 404, API 500, empty DB, pin with no bbox, missing screenshot, expired attachment signed URL.
+12. Requirement 18 (Journey Flows) SHALL ship with at least 4 pre-seeded flows covering P1 (sales full cycle), P2 (QA onboarding), procurement, and finance personas, as demonstrated in the Claude Design mockup.
+
+### Requirement 18: Journey Flows (Persona-Guided Walkthroughs)
+
+**Objective:** Beyond the free-form canvas exploration, onboarding-oriented users (P2 QA juniors, P3 end users) need prescribed step-by-step paths through a persona's daily work. Flows are curated sequences of existing nodes + per-step context notes, read from a new small data model and rendered as a dedicated `/journey/flows/:flow_id` view.
+
+#### Acceptance Criteria
+
+1. THE migration SHALL add one table: `kvota.journey_flows` with columns: `id` uuid PK, `slug` text UNIQUE, `title` text, `role` role-slug text, `persona` text (free-form display name and description), `description` text, `est_minutes` int, `steps` jsonb (array of `{node_id, action, note}`), `is_archived` boolean default false, `display_order` int, `created_by` uuid, `created_at` timestamptz, `updated_at` timestamptz.
+2. THE RLS policy on `journey_flows` SHALL allow SELECT for all authenticated users; INSERT/UPDATE/DELETE for `admin` only (flows are curriculum content, not user-generated).
+3. THE `/journey` page SHALL expose an entry point "Пути" (Flows) in the left sidebar with a count badge; clicking opens a panel listing all non-archived flows grouped by persona role.
+4. WHEN a user selects a flow, THE system SHALL navigate to `/journey/flows/:slug`; this view SHALL render the flow in a three-pane layout: left = step list (numbered 1–N, current step highlighted), centre = node focus area (same node card as canvas, larger, with drawer details inline), right = optional annotated screen if step's node has pins.
+5. Each step SHALL display its `action` (short imperative verb phrase) and `note` (context sentence) above the node card.
+6. Navigation between steps SHALL support keyboard (← →, Esc to exit flow back to canvas) and explicit "Next step" / "Previous step" buttons.
+7. The flows view SHALL surface overall flow progress (e.g., "Step 3 / 8") and estimated remaining time.
+8. THE seed data migration SHALL create four flows matching the Claude Design mockup personas: `sales-full` (12 min, sales), `procurement-flow` (8 min, procurement), `qa-onboarding` (15 min, spec_controller), `finance-monthly` (6 min, finance).
+9. Flow creation and editing UI SHALL be admin-only and is OUT OF SCOPE for v1.0 — admins edit flows directly by running SQL or via Supabase Studio. An in-app editor is a v1.1 item.
+10. WHEN a flow references a `node_id` that is not present in the manifest (including ghost nodes), THE step SHALL render with a warning badge "Узел недоступен" and SHALL still show action/note text; user can skip to next step.
+11. Flow views SHALL count toward the Requirement 17.8 "15-minute junior QA" release criterion — a Junior QA completing the `qa-onboarding` flow end-to-end within 15 minutes is the acceptance test.
 
 ---
 

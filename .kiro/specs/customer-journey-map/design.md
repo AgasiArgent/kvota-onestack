@@ -235,14 +235,34 @@ export interface JourneyPin {
   readonly mode: PinMode;
   readonly training_step_order: number | null;
   readonly linked_story_ref: string | null;
-  readonly last_x: number | null;
-  readonly last_y: number | null;
-  readonly last_width: number | null;
-  readonly last_height: number | null;
+  /** Relative bbox: fractions of screenshot viewport (0.0–1.0). Survives viewport-size changes. */
+  readonly last_rel_x: number | null;
+  readonly last_rel_y: number | null;
+  readonly last_rel_width: number | null;
+  readonly last_rel_height: number | null;
   readonly last_position_update: string | null;
   readonly selector_broken: boolean;
   readonly created_by: string;
   readonly created_at: string;
+}
+
+export interface JourneyFlow {
+  readonly id: string;
+  readonly slug: string;
+  readonly title: string;
+  readonly role: RoleSlug;
+  readonly persona: string;
+  readonly description: string;
+  readonly est_minutes: number;
+  readonly steps: readonly JourneyFlowStep[];
+  readonly display_order: number;
+  readonly is_archived: boolean;
+}
+
+export interface JourneyFlowStep {
+  readonly node_id: JourneyNodeId;
+  readonly action: string;
+  readonly note: string;
 }
 
 export interface JourneyVerification {
@@ -268,7 +288,7 @@ export interface JourneyNodeStateHistory {
 }
 ```
 
-Traces Requirements 2.1–2.9, 6.3, 9.1, 9.6.
+Traces Requirements 2.1–2.9, 6.3, 9.1, 9.6, 18.1, 18.8.
 
 ### 4.3 Database Migration — Sketch (tentative number 286+)
 
@@ -425,7 +445,17 @@ frontend/src/features/journey/ui/
 
 frontend/src/app/(app)/journey/
 ├── page.tsx                          # Server Component; loads manifest; hydrates canvas
+├── flows/
+│   └── [slug]/
+│       └── page.tsx                  # Flow view — step list + focus node + annotated screen
 └── layout.tsx                        # optional; inherits from (app)/layout if sufficient
+
+frontend/src/features/journey/ui/flows/
+├── flow-list.tsx                     # sidebar panel — all flows grouped by persona role
+├── flow-view.tsx                     # three-pane flow runner
+├── flow-step-list.tsx                # left pane — numbered steps, current highlighted
+├── flow-focus-node.tsx               # centre pane — node card + inline drawer content
+└── flow-navigation.tsx               # next/prev buttons + keyboard handler
 ```
 
 Traces Requirements 3, 4, 5, 7, 8, 9, 13, 14.
@@ -486,6 +516,16 @@ Traces Requirements 1.1, 1.2, 1.3, 1.5, 1.6, 1.7.
 7. API `UPDATE`s pins; marks `selector_broken` where bbox missing.
 8. Retention step deletes screenshots older than 2 most recent per `(role, node_id)`.
 
+### 5.6 Journey Flow playback
+
+1. User opens `/journey` and sees the "Пути" panel listing flows grouped by persona role.
+2. Click on a flow → navigation to `/journey/flows/:slug`; Server Component fetches the flow from `kvota.journey_flows` by `slug` and the manifest as usual.
+3. View renders three panes: step list on the left (current highlighted), focus-node in the centre (same React Flow custom node component used on the main canvas, rendered full-sized), annotated-screen on the right if step's node has pins.
+4. User advances via Next button or `→` key. The previous/next steps may focus the same node with different step context (action/note).
+5. If a step's `node_id` is missing from the manifest (e.g., ghost node not yet merged), the step still renders with "Узел недоступен" badge — user can skip.
+6. Progress counter shows "Step N / M"; estimated remaining time = `flow.est_minutes × (steps_remaining / steps_total)`.
+7. Esc returns to canvas with the last-focused node pre-selected.
+
 ### 5.5 Verification with screenshot attachment
 
 1. User clicks "broken" on a QA pin, adds note, attaches 1–3 PNGs.
@@ -544,7 +584,8 @@ Per Requirement 14.
 | 14.1–14.8 | §6 | error/loading states |
 | 15.1–15.6 | §8 | testing |
 | 16.1–16.7 | §6, §4.4 | non-functional |
-| 17.1–17.11 | §9 | release criteria |
+| 17.1–17.12 | §9 | release criteria |
+| 18.1–18.11 | §4.5 (flows), §5.6 | Journey Flows — persona walkthroughs |
 
 ---
 

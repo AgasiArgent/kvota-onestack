@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OneStack · /journey mockups</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    code, pre { font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace; }
+  </style>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+  <template id="__bundler_thumbnail" data-bg-color="#FAF9F7">
+    <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+      <rect width="1200" height="800" fill="#FAF9F7"/>
+      <!-- dotted canvas pattern -->
+      <g fill="#57534E" opacity="0.18">
+        <circle cx="240" cy="220" r="3"/><circle cx="320" cy="220" r="3"/><circle cx="400" cy="220" r="3"/>
+        <circle cx="480" cy="220" r="3"/><circle cx="560" cy="220" r="3"/><circle cx="640" cy="220" r="3"/>
+        <circle cx="720" cy="220" r="3"/><circle cx="800" cy="220" r="3"/><circle cx="880" cy="220" r="3"/>
+        <circle cx="960" cy="220" r="3"/>
+        <circle cx="240" cy="300" r="3"/><circle cx="320" cy="300" r="3"/><circle cx="960" cy="300" r="3"/>
+        <circle cx="240" cy="380" r="3"/><circle cx="960" cy="380" r="3"/>
+        <circle cx="240" cy="460" r="3"/><circle cx="320" cy="460" r="3"/><circle cx="400" cy="460" r="3"/>
+        <circle cx="480" cy="460" r="3"/><circle cx="560" cy="460" r="3"/><circle cx="640" cy="460" r="3"/>
+        <circle cx="720" cy="460" r="3"/><circle cx="800" cy="460" r="3"/><circle cx="880" cy="460" r="3"/>
+        <circle cx="960" cy="460" r="3"/>
+        <circle cx="240" cy="540" r="3"/><circle cx="960" cy="540" r="3"/>
+        <circle cx="240" cy="620" r="3"/><circle cx="960" cy="620" r="3"/>
+      </g>
+      <!-- three node cards -->
+      <g>
+        <rect x="280" y="330" width="200" height="120" rx="12" fill="#FFFFFF" stroke="#E7E5E4" stroke-width="2"/>
+        <circle cx="300" cy="352" r="5" fill="#D97757"/>
+        <rect x="314" y="347" width="120" height="8" rx="2" fill="#292524"/>
+        <rect x="296" y="378" width="168" height="50" rx="6" fill="#FAF9F7"/>
+        <rect x="296" y="436" width="60" height="6" rx="2" fill="#D6D3D1"/>
+
+        <rect x="540" y="290" width="200" height="120" rx="12" fill="#FFFFFF" stroke="#E7E5E4" stroke-width="2"/>
+        <circle cx="560" cy="312" r="5" fill="#0E7490"/>
+        <rect x="574" y="307" width="120" height="8" rx="2" fill="#292524"/>
+        <rect x="556" y="338" width="168" height="50" rx="6" fill="#FAF9F7"/>
+        <rect x="556" y="396" width="60" height="6" rx="2" fill="#D6D3D1"/>
+
+        <rect x="800" y="370" width="200" height="120" rx="12" fill="#FFFFFF" stroke="#E7E5E4" stroke-width="2" stroke-dasharray="4 4"/>
+        <circle cx="820" cy="392" r="5" fill="#A8A29E"/>
+        <rect x="834" y="387" width="120" height="8" rx="2" fill="#78716C"/>
+        <rect x="816" y="418" width="168" height="50" rx="6" fill="#F5F5F4"/>
+      </g>
+      <!-- connecting edges -->
+      <g stroke="#D97757" stroke-width="2" fill="none" opacity="0.6">
+        <path d="M 480 390 C 510 390, 510 350, 540 350"/>
+        <path d="M 740 350 C 770 350, 770 430, 800 430"/>
+      </g>
+      <!-- title glyph -->
+      <g transform="translate(600 680)">
+        <text text-anchor="middle" font-family="system-ui, sans-serif" font-size="32" font-weight="700" fill="#292524">OneStack · /journey</text>
+      </g>
+    </svg>
+  </template>
+  <div id="root"></div>
+
+  <script src="data.js"></script>
+  <script src="flows.js"></script>
+  <script type="text/babel" src="shell.jsx"></script>
+  <script type="text/babel" src="journey.jsx"></script>
+  <script type="text/babel" src="flow-view.jsx"></script>
+  <script type="text/babel" src="design-canvas.jsx"></script>
+
+  <script type="text/babel" data-presets="react">
+    // D is already global from journey.jsx
+
+    /* ─── Screen 1: full /journey page (three-pane) ───────────────── */
+    const JourneyPage = ({ drawerOpen = true }) => {
+      const [selectedId, setSelectedId] = React.useState(drawerOpen ? D.focusNodeId : null);
+      const selectedNode = D.nodes.find(n => n.id === selectedId);
+      return (
+        <div style={{ display: "flex", width: "100%", height: "100%", background: "var(--bg)", overflow: "hidden" }}>
+          <Sidebar activeHref="/journey" />
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+            <div style={{ padding: "14px 24px", borderBottom: "1px solid var(--border-light)", background: "var(--card)", display: "flex", alignItems: "center", gap: 12 }}>
+              <div>
+                <h1 className="os-h1" style={{ fontSize: 22, marginBottom: 2 }}>Карта путей</h1>
+                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>16 экранов · 112 stories · 23 шага обучения · последняя съёмка 22.04 03:14</div>
+              </div>
+              <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+                <span className="os-badge os-badge--success"><Icon name="check" size={10} /> manifest актуален · commit 8f2ac1</span>
+                <button className="btn btn--secondary btn--sm"><Icon name="book-open" size={13} /> Docs</button>
+                <button className="btn btn--secondary btn--sm"><Icon name="external-link" size={13} /> Annotated view</button>
+              </div>
+            </div>
+            <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
+              <JourneySidebar />
+              <JourneyCanvas selectedId={selectedId} onSelect={(n) => setSelectedId(n.id)} />
+              {selectedNode && <Drawer node={selectedNode} onClose={() => setSelectedId(null)} />}
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    /* ─── Node variants grid ───────────────────────────────────────── */
+    const NodeVariantGrid = () => {
+      const real = D.nodes.find(n => n.id === "app:/quotes/[id]");
+      const partial = D.nodes.find(n => n.id === "app:/quotes/[id]/cost-analysis");
+      const verified = D.nodes.find(n => n.id === "app:/customers");
+      const broken = D.nodes.find(n => n.id === "app:/customers/[id]");
+      const ghost1 = D.nodes.find(n => n.id === "ghost:revision-history");
+      const ghost2 = D.nodes.find(n => n.id === "ghost:customer-deals-dashboard");
+
+      const Block = ({ label, sub, children }) => (
+        <div>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>{label}</div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{sub}</div>
+          </div>
+          <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>{children}</div>
+        </div>
+      );
+
+      return (
+        <div style={{ padding: 40, background: "var(--bg)", minHeight: "100%", fontFamily: "inherit" }}>
+          <div style={{ maxWidth: 960, margin: "0 auto" }}>
+            <div style={{ marginBottom: 28 }}>
+              <div className="os-label" style={{ marginBottom: 6 }}>Варианты узлов</div>
+              <h2 style={{ fontSize: 24, fontWeight: 700, margin: 0, letterSpacing: "-0.01em" }}>4 варианта карточки узла</h2>
+              <p style={{ fontSize: 13, color: "var(--text-muted)", maxWidth: 620, marginTop: 6 }}>
+                Узлы адаптируются под включённые слои. Минимум — всегда виден. Ghost — дэш-бордер и штриховой фон. Богатый — при включении слоёв <strong>Screenshots</strong> + <strong>Feedback</strong> + <strong>Training</strong>.
+              </p>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 36 }}>
+              <Block label="① Minimum" sub="роли выключены · статус выключен — только идентичность">
+                <NodeMin node={real} />
+                <NodeMin node={verified} />
+                <NodeMin node={partial} />
+              </Block>
+
+              <Block label="② With Impl + QA status" sub="дефолтное представление — прогресс проверок и полоса статуса">
+                <NodeStatus node={verified} />
+                <NodeStatus node={broken} />
+                <NodeStatus node={partial} />
+                <NodeStatus node={real} />
+              </Block>
+
+              <Block label="③ Rich" sub="все слои активны: скриншот, роли, feedback, training, статусы, stories">
+                <NodeRich node={real} />
+                <NodeRich node={broken} />
+              </Block>
+
+              <Block label="④ Ghost" sub="нет в коде · gap analysis · планируется в фазе">
+                <NodeGhost node={ghost1} />
+                <NodeGhost node={ghost2} />
+                <NodeGhost node={D.nodes.find(n => n.id === "ghost:bulk-export")} />
+              </Block>
+
+              <div style={{ marginTop: 20, padding: 20, background: "var(--card)", borderRadius: 12, border: "1px solid var(--border-light)" }}>
+                <div className="os-label" style={{ marginBottom: 10 }}>Анатомия (Rich)</div>
+                <div style={{ display: "flex", gap: 40, alignItems: "flex-start" }}>
+                  <div style={{ flexShrink: 0 }}><NodeRich node={real} /></div>
+                  <ul style={{ fontSize: 12, lineHeight: 1.7, color: "var(--text-muted)", paddingLeft: 18, margin: 0 }}>
+                    <li><strong style={{ color: "var(--text)" }}>Thumbnail</strong> — последний скриншот nightly для основной роли пользователя</li>
+                    <li><strong style={{ color: "var(--text)" }}>Cluster dot + route</strong> — цвет кластера · стабильный route</li>
+                    <li><strong style={{ color: "var(--text)" }}>Title</strong> — из &lt;h1&gt;, <code>metadata.title</code> или <code>@journey-title</code></li>
+                    <li><strong style={{ color: "var(--text)" }}>Role chips</strong> — максимум 3, остальное в «+N»</li>
+                    <li><strong style={{ color: "var(--text)" }}>Impl · QA · счётчики</strong> — 4 сигнала в одной строке, как в <code>/quotes</code></li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    /* ─── Drawer preview (standalone) ──────────────────────────────── */
+    const DrawerPreview = () => {
+      const focus = D.nodes.find(n => n.id === D.focusNodeId);
+      return (
+        <div style={{ display: "flex", height: "100%", background: "var(--bg)" }}>
+          <div style={{ flex: 1, padding: 28, display: "flex", flexDirection: "column", gap: 18, overflow: "auto" }} className="scroll-slim">
+            <div>
+              <div className="os-label" style={{ marginBottom: 6 }}>Right drawer · полный детал</div>
+              <h2 style={{ fontSize: 22, fontWeight: 700, margin: 0, letterSpacing: "-0.01em" }}>Карточка предложения · <code style={{ fontSize: 16, color: "var(--text-muted)" }}>/quotes/[id]</code></h2>
+              <p style={{ fontSize: 13, color: "var(--text-muted)", maxWidth: 560, marginTop: 6 }}>
+                Выдвигается справа при клике по узлу на канвасе. Не перекрывает канвас — пользователь видит и узел, и его контекст. Все 8 секций (идут сверху вниз) — см. §7 спеки.
+              </p>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 12, color: "var(--text-muted)" }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}><span style={{ width: 20, height: 20, borderRadius: 999, background: "var(--accent-subtle)", color: "var(--accent)", fontSize: 10, fontWeight: 700, display: "grid", placeItems: "center" }}>1</span> Идентификация + быстрые действия</div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}><span style={{ width: 20, height: 20, borderRadius: 999, background: "var(--accent-subtle)", color: "var(--accent)", fontSize: 10, fontWeight: 700, display: "grid", placeItems: "center" }}>2</span> Impl / QA статусы · инлайн-редактирование с field-ACL</div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}><span style={{ width: 20, height: 20, borderRadius: 999, background: "var(--accent-subtle)", color: "var(--accent)", fontSize: 10, fontWeight: 700, display: "grid", placeItems: "center" }}>3</span> Роли (полный список)</div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}><span style={{ width: 20, height: 20, borderRadius: 999, background: "var(--accent-subtle)", color: "var(--accent)", fontSize: 10, fontWeight: 700, display: "grid", placeItems: "center" }}>4</span> User stories с spec-ref</div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}><span style={{ width: 20, height: 20, borderRadius: 999, background: "var(--accent-subtle)", color: "var(--accent)", fontSize: 10, fontWeight: 700, display: "grid", placeItems: "center" }}>5</span> Скриншот + diff toggle</div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}><span style={{ width: 20, height: 20, borderRadius: 999, background: "var(--accent-subtle)", color: "var(--accent)", fontSize: 10, fontWeight: 700, display: "grid", placeItems: "center" }}>6</span> Обращения (top-3 + ссылка на /admin/feedback)</div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}><span style={{ width: 20, height: 20, borderRadius: 999, background: "var(--accent-subtle)", color: "var(--accent)", fontSize: 10, fontWeight: 700, display: "grid", placeItems: "center" }}>7</span> Training steps (свёрнуто)</div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}><span style={{ width: 20, height: 20, borderRadius: 999, background: "var(--accent-subtle)", color: "var(--accent)", fontSize: 10, fontWeight: 700, display: "grid", placeItems: "center" }}>8</span> Пины (QA) с verify-кнопками</div>
+            </div>
+
+            <div style={{ padding: 14, background: "var(--accent-subtle)", borderRadius: 8, border: "1px solid #FDE68A", fontSize: 12, color: "#78350f", lineHeight: 1.6 }}>
+              <strong>ACL:</strong> <code>impl_status</code> пишут admin · top_manager · head_of_*. <code>qa_status</code> — admin · quote_controller · spec_controller. Попытка нарушения → <code>403 FORBIDDEN_FIELD</code>.
+            </div>
+          </div>
+          <Drawer node={focus} onClose={() => {}} />
+        </div>
+      );
+    };
+
+    /* ─── Compose into design_canvas ───────────────────────────────── */
+    const App = () => (
+      <DesignCanvas
+        title="OneStack · /journey · мокапы v1"
+        subtitle="4 артборда · посадочная страница, варианты узлов, drawer, annotated mode"
+        initialZoom={0.55}
+      >
+        <DCSection id="main" title="Main page · /journey">
+          <DCArtboard id="journey-drawer-open" label="3-pane · drawer открыт на /quotes/[id]" width={1680} height={1040}>
+            <JourneyPage drawerOpen={true} />
+          </DCArtboard>
+          <DCArtboard id="journey-canvas-only" label="Canvas без drawer · обзорный режим" width={1440} height={960}>
+            <JourneyPage drawerOpen={false} />
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="nodes" title="Варианты карточки узла">
+          <DCArtboard id="node-variants" label="4 варианта · minimum · status · rich · ghost" width={1080} height={1280}>
+            <NodeVariantGrid />
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="drawer" title="Right drawer · полный детал">
+          <DCArtboard id="drawer-full" label="Все 8 секций · инлайн-редактирование · история" width={1120} height={1400}>
+            <DrawerPreview />
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="annotated" title="Annotated-screen mode">
+          <DCArtboard id="annotated-qa" label="QA mode · скриншот с пронумерованными пинами" width={1600} height={1000}>
+            <AnnotatedScreen mode="qa" />
+          </DCArtboard>
+          <DCArtboard id="annotated-training" label="Training mode · обучающие шаги" width={1600} height={1000}>
+            <AnnotatedScreen mode="training" />
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="flows" title="Journey Flow mode · путь пользователя (amendment)">
+          <DCArtboard id="flow-sales" label="Sales: лид → одобрение КП · 8 шагов" width={1600} height={1000}>
+            <JourneyFlowView initialFlowId="sales-full" />
+          </DCArtboard>
+          <DCArtboard id="flow-qa" label="QA onboarding: 5 ключевых экранов" width={1600} height={1000}>
+            <JourneyFlowView initialFlowId="qa-onboarding" />
+          </DCArtboard>
+        </DCSection>
+      </DesignCanvas>
+    );
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
