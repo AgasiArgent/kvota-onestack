@@ -15,12 +15,12 @@
 **Goal:** Introduce the 6 Supabase tables that back every mutable annotation, plus the `kvota.user_has_role(slug)` helper function and the node-state history trigger.
 
 **RED:**
-- Add `tests/test_migrations.py::test_journey_tables_migration` verifying post-migration state: 6 tables exist in `kvota` schema with expected columns and CHECK constraints; `kvota.user_has_role` function exists and returns bool; trigger `trg_journey_node_state_history` exists; RLS is enabled on all 6 tables; `kvota.feedback.node_id` column and index exist.
+- Add `tests/test_migrations.py::test_journey_tables_migration` verifying post-migration state: 6 tables exist in `kvota` schema with expected columns and CHECK constraints; `kvota.user_has_role` function exists and returns bool; trigger `trg_journey_node_state_history` exists; RLS is enabled on all 6 tables; `kvota.user_feedback.node_id` column and index exist.
 - Add `tests/test_migrations.py::test_history_trigger_fires` — insert into journey_node_state, update it, assert a row appears in journey_node_state_history with old values.
 - Add `tests/test_migrations.py::test_user_has_role_helper` — SET auth.uid() via test fixture, call helper for known and unknown role slugs.
 
 **GREEN:**
-- Create `migrations/<next>_journey_map.sql` with: `journey_node_state`, `journey_node_state_history`, `journey_ghost_nodes`, `journey_pins`, `journey_verifications`, `journey_flows` tables per design.md §3; `ALTER TABLE kvota.feedback ADD COLUMN node_id text` + index; `kvota.user_has_role(slug text) RETURNS boolean` helper (if absent); `kvota.copy_journey_node_state_to_history()` function + `AFTER UPDATE` trigger; RLS enabled on all 6 tables (no policies yet — those are Task 3).
+- Create `migrations/<next>_journey_map.sql` with: `journey_node_state`, `journey_node_state_history`, `journey_ghost_nodes`, `journey_pins`, `journey_verifications`, `journey_flows` tables per design.md §3; `ALTER TABLE kvota.user_feedback ADD COLUMN node_id text` + index; `kvota.user_has_role(slug text) RETURNS boolean` helper (if absent); `kvota.copy_journey_node_state_to_history()` function + `AFTER UPDATE` trigger; RLS enabled on all 6 tables (no policies yet — those are Task 3).
 - Apply against staging via `scripts/apply-migrations.sh`.
 - Regenerate `frontend/src/shared/types/database.types.ts` via `npm run db:types`.
 - Commit generated types.
@@ -603,7 +603,7 @@
 
 ### Task 30 — Feedback integration (P after Task 1)
 
-**Goal:** `kvota.feedback.node_id` populated for existing rows; new feedback created from `/journey` context carries node_id.
+**Goal:** `kvota.user_feedback.node_id` populated for existing rows; new feedback created from `/journey` context carries node_id.
 
 **RED:**
 - `tests/integration/test_feedback_node_id_backfill.py` — after backfill migration, rows with known URL mapping have node_id filled; rows with unknown URL stay NULL.
@@ -672,7 +672,7 @@
 **Goal:** Detect orphan annotations when manifest changes; admin can retarget them to another node.
 
 **RED:**
-- `orphans-panel.test.tsx` — fixture where previous manifest had `app:/quotes/old` + 3 annotations, current manifest lacks it → panel shows count 3; click "Retarget to app:/quotes/new" → single transaction updates all 3 refs + feedback.node_id.
+- `orphans-panel.test.tsx` — fixture where previous manifest had `app:/quotes/old` + 3 annotations, current manifest lacks it → panel shows count 3; click "Retarget to app:/quotes/new" → single transaction updates all 3 refs + user_feedback.node_id.
 - Visibility: non-admin user sees no panel.
 
 **GREEN:**

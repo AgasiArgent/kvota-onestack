@@ -158,8 +158,8 @@ CREATE INDEX idx_journey_ghost_nodes_status ON kvota.journey_ghost_nodes(status)
 CREATE INDEX idx_journey_verifications_node_id ON kvota.journey_verifications(node_id);
 
 -- Feedback integration
-ALTER TABLE kvota.feedback ADD COLUMN IF NOT EXISTS node_id text;
-CREATE INDEX idx_feedback_node_id ON kvota.feedback(node_id);
+ALTER TABLE kvota.user_feedback ADD COLUMN IF NOT EXISTS node_id text;
+CREATE INDEX idx_user_feedback_node_id ON kvota.user_feedback(node_id);
 ```
 
 ### 3.3 Frontend type generation
@@ -256,7 +256,7 @@ Use helper function `kvota.user_has_role(slug text) RETURNS boolean` (create if 
 API returns `403 {"code": "FORBIDDEN_FIELD", "message": "Role X cannot write field Y"}` on violation.
 
 ### Feedback visibility
-Reuses existing RLS on `kvota.feedback`. Counter on node honours requester's visibility — some users see fewer.
+Reuses existing RLS on `kvota.user_feedback`. Counter on node honours requester's visibility — some users see fewer.
 
 ---
 

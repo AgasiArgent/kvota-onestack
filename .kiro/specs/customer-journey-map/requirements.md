@@ -62,7 +62,7 @@ The architecture is a hybrid: an **immutable `journey-manifest.json`** regenerat
 4. `kvota.journey_ghost_nodes.node_id` SHALL be UNIQUE and MUST match the pattern `ghost:<slug>`; `status` CHECK IN (`proposed`, `approved`, `in_progress`, `shipped`).
 5. `kvota.journey_pins` SHALL have `mode` CHECK IN (`qa`, `training`) and include position-cache columns storing **relative** coordinates (fractions of screenshot dimensions, range 0.0–1.0, `numeric(6,4)`): `last_rel_x`, `last_rel_y`, `last_rel_width`, `last_rel_height`, plus `last_position_update` and `selector_broken`. Relative coordinates survive screenshot-size changes (viewport resize, DPR differences) without repositioning.
 6. `kvota.journey_verifications` SHALL be append-only. Columns: `id`, `pin_id`, `node_id`, `result` CHECK IN (`verified`, `broken`, `skip`), `note` text, `attachment_urls` text[] (nullable; each element is a Supabase Storage object key pointing to an uploaded screenshot), `tested_by`, `tested_at`. RLS policy SHALL deny UPDATE and DELETE for every role.
-7. THE migration SHALL add `node_id` (text) column to `kvota.feedback` with an index, and SHALL populate it via backfill where `page_url` can be mapped to a known route in the initial manifest.
+7. THE migration SHALL add `node_id` (text) column to `kvota.user_feedback` with an index, and SHALL populate it via backfill where `page_url` can be mapped to a known route in the initial manifest.
 8. THE migration SHALL add a helper function `kvota.user_has_role(slug text) RETURNS boolean` if one does not already exist, reused in all RLS policies for this feature.
 9. AFTER the migration is applied to any environment, THE frontend SHALL regenerate `frontend/src/shared/types/database.types.ts` via `npm run db:types` before any frontend code referencing the new tables is deployed.
 
@@ -95,7 +95,7 @@ The architecture is a hybrid: an **immutable `journey-manifest.json`** regenerat
 3. WHEN the Stories layer is on, THE node SHALL display a `📝 N` badge where N is the count of stories attached to the node in the manifest.
 4. WHEN the Impl status layer is on, THE node SHALL display a coloured dot sourced from `journey_node_state.impl_status` (green=done, yellow=partial, red=missing, grey=unset).
 5. WHEN the QA status layer is on, THE node SHALL display a coloured dot and a `N/M` progress counter sourced from the latest `journey_verifications` row per pin.
-6. WHEN the Feedback layer is on, THE node SHALL display a `💬 N` badge where N counts `kvota.feedback` rows with this `node_id` that are visible to the requesting user under existing feedback RLS.
+6. WHEN the Feedback layer is on, THE node SHALL display a `💬 N` badge where N counts `kvota.user_feedback` rows with this `node_id` that are visible to the requesting user under existing feedback RLS.
 7. WHEN the Ghost nodes layer is off, THE canvas SHALL hide all nodes where `node_id` starts with `ghost:`.
 8. WHEN the Screenshots layer is on, THE node SHALL display a small thumbnail of the latest screenshot for the user's primary role when available; for users without a primary role or without a screenshot, the placeholder is a neutral grey box.
 9. THE layer-toggle state SHALL persist per user via localStorage keyed by user ID, AND SHALL be overridable by URL `layers=` parameter (URL takes precedence on page load per Req 3.10).
@@ -196,7 +196,7 @@ The architecture is a hybrid: an **immutable `journey-manifest.json`** regenerat
 
 #### Acceptance Criteria
 
-1. `kvota.feedback.node_id` SHALL be populated: (a) by backfill during the Phase migration for existing rows where `page_url` maps cleanly to a manifest node, (b) by new-feedback creation logic which passes the current route when invoked from within `/journey` or from any app page that already knows its route.
+1. `kvota.user_feedback.node_id` SHALL be populated: (a) by backfill during the Phase migration for existing rows where `page_url` maps cleanly to a manifest node, (b) by new-feedback creation logic which passes the current route when invoked from within `/journey` or from any app page that already knows its route.
 2. THE feedback-count badge on a `/journey` node SHALL respect the requesting user's existing feedback visibility — counts SHALL reflect only rows the user can `SELECT` under existing feedback RLS.
 3. WHEN a user opens "view all" on a node's feedback list, THE system SHALL navigate to `/admin/feedback?node_id=<node_id>` and the feedback page SHALL filter to that node.
 4. NO changes to `/admin/feedback` UI beyond accepting the `node_id` query parameter and filtering by it.
@@ -227,7 +227,7 @@ The architecture is a hybrid: an **immutable `journey-manifest.json`** regenerat
 1. WHEN the manifest regeneration produces a manifest where a previously-present `node_id` is absent, THE system SHALL identify all annotations in the five tables that reference that `node_id` as "orphaned".
 2. THE `/journey` page SHALL display an "Orphaned annotations" banner in the sidebar when any orphans exist (with count).
 3. WHEN an admin opens the orphan panel, THE UI SHALL list each orphaned `node_id` with: counts per table, preview of top annotations, and a "Retarget to..." action.
-4. WHEN an admin selects a target `node_id` for retargeting, THE system SHALL UPDATE all rows in the five tables (and `kvota.feedback.node_id`) from old to new value within a single transaction.
+4. WHEN an admin selects a target `node_id` for retargeting, THE system SHALL UPDATE all rows in the five tables (and `kvota.user_feedback.node_id`) from old to new value within a single transaction.
 5. THE system SHALL NOT automatically match orphans to new node_ids by path similarity. All retargeting SHALL be explicit admin action.
 6. Orphan counts SHALL be visible only to `admin` role.
 

@@ -533,7 +533,7 @@ Traces Requirements 1.1, 1.2, 1.3, 1.5, 1.6, 1.7.
 3. Client uploads to Supabase Storage bucket `journey-verification-attachments` at `{node_id_safe}/{client-generated-uuid}/{index}.png`.
 4. On all upload successes, client INSERTs `journey_verifications` row with `attachment_urls` containing the uploaded object keys.
 5. RLS allows INSERT for QA roles.
-6. On server trigger (optional, or client-side), create linked `kvota.feedback` row with the first attachment as the feedback's image.
+6. On server trigger (optional, or client-side), create linked `kvota.user_feedback` row with the first attachment as the feedback's image.
 7. On partial upload failure, all uploaded objects are deleted client-side before aborting the verification.
 
 ---
