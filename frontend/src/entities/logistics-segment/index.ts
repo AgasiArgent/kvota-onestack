@@ -1,9 +1,8 @@
-export {
-  fetchSegmentsForInvoice,
-  type LogisticsSegment,
-  type LogisticsSegmentExpense,
-  type LogisticsSegmentLocationRef,
-} from "./queries";
+export type {
+  LogisticsSegment,
+  LogisticsSegmentExpense,
+  LogisticsSegmentLocationRef,
+} from "./types";
 export {
   createSegment,
   updateSegment,

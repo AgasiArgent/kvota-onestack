@@ -1,8 +1,7 @@
-export {
-  fetchLogisticsTemplates,
-  type LogisticsTemplate,
-  type LogisticsTemplateSegment,
-} from "./queries";
+export type {
+  LogisticsTemplate,
+  LogisticsTemplateSegment,
+} from "./types";
 export {
   createLogisticsTemplate,
   deleteLogisticsTemplate,

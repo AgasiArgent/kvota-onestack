@@ -1,5 +1,9 @@
 import "server-only";
 import { createAdminClient } from "@/shared/lib/supabase/server";
+import type {
+  LogisticsSegment,
+  LogisticsSegmentLocationRef,
+} from "./types";
 
 /**
  * logistics-segment entity — per-invoice route segments for Route Constructor.
@@ -11,35 +15,11 @@ import { createAdminClient } from "@/shared/lib/supabase/server";
  * Mutations live in `server-actions.ts` and hit the Python API.
  */
 
-export interface LogisticsSegmentLocationRef {
-  id: string;
-  country: string;
-  iso2?: string;
-  city?: string;
-  type: "supplier" | "hub" | "customs" | "own_warehouse" | "client";
-}
-
-export interface LogisticsSegmentExpense {
-  id: string;
-  label: string;
-  costRub: number;
-  days?: number;
-  notes?: string;
-}
-
-export interface LogisticsSegment {
-  id: string;
-  invoiceId: string;
-  sequenceOrder: number;
-  fromLocation?: LogisticsSegmentLocationRef;
-  toLocation?: LogisticsSegmentLocationRef;
-  label?: string;
-  transitDays?: number;
-  mainCostRub: number;
-  carrier?: string;
-  notes?: string;
-  expenses: LogisticsSegmentExpense[];
-}
+export type {
+  LogisticsSegment,
+  LogisticsSegmentExpense,
+  LogisticsSegmentLocationRef,
+} from "./types";
 
 interface SegmentRow {
   id: string;

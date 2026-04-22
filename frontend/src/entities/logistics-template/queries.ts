@@ -1,6 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/shared/lib/supabase/server";
-import type { LocationType } from "@/entities/location";
+import type { LocationType } from "@/entities/location/ui/location-chip";
+import type { LogisticsTemplate } from "./types";
 
 /**
  * logistics-template entity — read queries for Route Constructor
@@ -12,23 +13,7 @@ import type { LocationType } from "@/entities/location";
  * Mutations go through /api/logistics/templates — see server-actions.ts.
  */
 
-export interface LogisticsTemplateSegment {
-  id: string;
-  sequenceOrder: number;
-  fromLocationType: LocationType;
-  toLocationType: LocationType;
-  defaultLabel?: string;
-  defaultDays?: number;
-}
-
-export interface LogisticsTemplate {
-  id: string;
-  name: string;
-  description?: string;
-  createdBy?: string;
-  createdAt: string;
-  segments: LogisticsTemplateSegment[];
-}
+export type { LogisticsTemplate, LogisticsTemplateSegment } from "./types";
 
 const ALLOWED_TYPES: readonly LocationType[] = [
   "supplier",
