@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { completeCustoms, skipCustoms } from "@/entities/quote/mutations";
@@ -10,11 +10,17 @@ import type {
   QuoteInvoiceRow,
 } from "@/entities/quote/queries";
 import { createClient } from "@/shared/lib/supabase/client";
+import {
+  AutofillBanner,
+  type CustomsAutofillSuggestion,
+} from "@/features/customs-autofill";
 import { CustomsActionBar } from "./customs-action-bar";
 import { CustomsItemsEditor } from "./customs-items-editor";
 import { CustomsExpenses } from "./customs-expenses";
 import { CustomsNotes } from "./customs-notes";
 import { CustomsInfoBlock } from "./customs-info-block";
+import { QuoteCustomsExpenses } from "./quote-customs-expenses";
+import { ItemCustomsExpenses } from "./item-customs-expenses";
 
 function ext<T>(row: unknown): T {
   return row as T;
@@ -122,6 +128,12 @@ export function CustomsStep({
   const router = useRouter();
   const [completing, setCompleting] = useState(false);
   const [skipping, setSkipping] = useState(false);
+  const [autofillSuggestions, setAutofillSuggestions] = useState<
+    CustomsAutofillSuggestion[]
+  >([]);
+  const [autofillDismissed, setAutofillDismissed] = useState(false);
+  const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
+  const [bulkAcceptPending, startBulkAccept] = useTransition();
 
   const isPendingCustoms = quote.workflow_status === "pending_customs";
   const canSkipCustoms =
@@ -138,13 +150,54 @@ export function CustomsStep({
     return map;
   }, [invoices]);
 
-  // Phase 5d: supplier_country + invoice_id now live on invoice_items.
-  // Project them per quote_item via invoice_item_coverage, filtered by
-  // composition_selected_invoice_id (or first covering invoice if no
-  // explicit selection has been made).
   const supplierByQuoteItemId = useSupplierByQuoteItemId(items);
 
   const customsNotes = ext<{ customs_notes?: string | null }>(quote).customs_notes ?? "";
+
+  // Load autofill suggestions once per quote change. Fires-and-forget; silent
+  // on error so customs workflow is never blocked by the suggestion endpoint.
+  useEffect(() => {
+    let cancelled = false;
+    if (!isPendingCustoms || items.length === 0) {
+      setAutofillSuggestions([]);
+      return;
+    }
+    const payload = {
+      items: items
+        .filter((it) => it.brand && it.product_code)
+        .map((it) => ({
+          id: it.id,
+          brand: it.brand,
+          product_code: it.product_code,
+        })),
+    };
+    if (payload.items.length === 0) {
+      setAutofillSuggestions([]);
+      return;
+    }
+    fetch("/api/customs/autofill", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+      .then((r) => r.json())
+      .then((json) => {
+        if (cancelled) return;
+        const list: CustomsAutofillSuggestion[] =
+          json?.data?.suggestions ?? [];
+        // Only surface suggestions for items that don't yet have hs_code.
+        const targetIds = new Set(
+          items.filter((it) => !ext<{ hs_code?: string | null }>(it).hs_code).map((it) => it.id),
+        );
+        setAutofillSuggestions(list.filter((s) => targetIds.has(s.item_id)));
+      })
+      .catch(() => {
+        if (!cancelled) setAutofillSuggestions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [items, isPendingCustoms]);
 
   async function handleCompleteCustoms() {
     setCompleting(true);
@@ -176,6 +229,62 @@ export function CustomsStep({
     }
   }
 
+  const handleBulkAccept = useCallback(
+    (suggestions: CustomsAutofillSuggestion[]) => {
+      startBulkAccept(async () => {
+        try {
+          const payload = {
+            items: suggestions.map((s) => ({
+              id: s.item_id,
+              hs_code: s.hs_code,
+              customs_duty: s.customs_duty ?? 0,
+              license_ds_required: Boolean(s.license_ds_required),
+              license_ss_required: Boolean(s.license_ss_required),
+              license_sgr_required: Boolean(s.license_sgr_required),
+              license_ds_cost: s.license_ds_cost ?? 0,
+              license_ss_cost: s.license_ss_cost ?? 0,
+              license_sgr_cost: s.license_sgr_cost ?? 0,
+            })),
+          };
+          const res = await fetch(
+            `/api/customs/${quote.id}/items/bulk`,
+            {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            },
+          );
+          const json = await res.json();
+          if (!json?.success) {
+            throw new Error(json?.error ?? "Не удалось применить");
+          }
+          toast.success(
+            `Применено ${suggestions.length} предложений из истории`,
+          );
+          setAutofillSuggestions([]);
+          router.refresh();
+        } catch (err) {
+          toast.error(
+            err instanceof Error ? err.message : "Не удалось применить",
+          );
+        }
+      });
+    },
+    [quote.id, router],
+  );
+
+  const selectedItem = useMemo(
+    () => items.find((it) => it.id === selectedRowId) ?? null,
+    [items, selectedRowId],
+  );
+  const selectedItemLabel = useMemo(() => {
+    if (!selectedItem) return "";
+    const parts: string[] = [];
+    if (selectedItem.brand) parts.push(selectedItem.brand);
+    if (selectedItem.product_code) parts.push(selectedItem.product_code);
+    return parts.join(" · ") || selectedItem.product_name || "";
+  }, [selectedItem]);
+
   return (
     <div className="flex-1 min-w-0">
       <CustomsActionBar
@@ -188,12 +297,35 @@ export function CustomsStep({
       />
 
       <div className="p-6 space-y-4">
+        {autofillSuggestions.length > 0 && !autofillDismissed && (
+          <AutofillBanner
+            totalItems={items.length}
+            suggestions={autofillSuggestions}
+            onAcceptAll={handleBulkAccept}
+            onDismiss={() => setAutofillDismissed(true)}
+            pending={bulkAcceptPending}
+          />
+        )}
+
         <CustomsItemsEditor
           items={items}
           invoiceCountryMap={invoiceCountryMap}
           supplierByQuoteItemId={supplierByQuoteItemId}
           userRoles={userRoles}
+          autofillSuggestions={autofillSuggestions}
+          onSelectRow={setSelectedRowId}
         />
+
+        {selectedItem && (
+          <ItemCustomsExpenses
+            quoteId={quote.id}
+            quoteItemId={selectedItem.id}
+            itemLabel={selectedItemLabel}
+            userRoles={userRoles}
+          />
+        )}
+
+        <QuoteCustomsExpenses quoteId={quote.id} userRoles={userRoles} />
 
         <CustomsExpenses quoteId={quote.id} />
 

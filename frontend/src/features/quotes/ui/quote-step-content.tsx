@@ -81,12 +81,7 @@ export function QuoteStepContent({
       );
     case "logistics":
       return wrapReadOnly(
-        <LogisticsStep
-          quote={quote}
-          items={items}
-          invoices={invoices}
-          userRoles={userRoles}
-        />
+        <LogisticsStep quote={quote} invoices={invoices} />
       );
     case "customs":
       return wrapReadOnly(
