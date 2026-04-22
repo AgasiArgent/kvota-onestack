@@ -89,6 +89,22 @@ export function SlaTimerBadge({
   const deadlineMs = new Date(deadlineAt).getTime();
   const [now, setNow] = useState<number>(() => Date.now());
 
+  // Guard: invalid or missing deadline — render placeholder, no timer.
+  if (!deadlineAt || Number.isNaN(deadlineMs)) {
+    return (
+      <span
+        className={cn(
+          "inline-flex items-center gap-1 rounded-sm border border-border-light px-2 py-0.5 text-xs text-text-subtle",
+          className,
+        )}
+        title="Дедлайн не установлен"
+      >
+        <Clock size={12} strokeWidth={2} aria-hidden />
+        —
+      </span>
+    );
+  }
+
   useEffect(() => {
     if (completedAt) return;
     const tick = () => setNow(Date.now());
