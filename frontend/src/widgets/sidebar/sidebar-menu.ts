@@ -216,7 +216,10 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
   }
 
   // === ADMIN ===
-  if (isAdmin || hasRole("head_of_procurement")) {
+  const canSeeRouting =
+    isAdmin ||
+    hasRole("head_of_procurement", "head_of_logistics", "logistics");
+  if (isAdmin || hasRole("head_of_procurement") || canSeeRouting) {
     const adminItems: MenuItem[] = [];
     if (isAdmin) {
       adminItems.push(
@@ -224,11 +227,16 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
         { icon: MessageSquare, label: "Обращения", href: "/admin/feedback" },
       );
     }
-    adminItems.push({
-      icon: GitBranch,
-      label: "Маршруты закупок",
-      href: "/admin/routing",
-    });
+    if (canSeeRouting) {
+      const routingHref = hasRole("head_of_logistics", "logistics") && !hasRole("admin", "head_of_procurement")
+        ? "/admin/routing?tab=logistics"
+        : "/admin/routing";
+      adminItems.push({
+        icon: GitBranch,
+        label: "Маршруты",
+        href: routingHref,
+      });
+    }
     if (isAdmin) {
       adminItems.push(
         {

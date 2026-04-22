@@ -47,4 +47,21 @@ export interface SalesGroup {
   name: string;
 }
 
-export type RoutingTab = "brands" | "groups" | "tender" | "unassigned";
+export type RoutingTab = "brands" | "groups" | "tender" | "unassigned" | "logistics";
+
+export interface LogisticsTemplateAdmin {
+  id: string;
+  name: string;
+  description: string | null;
+  created_by: string | null;
+  created_by_name: string | null;
+  created_at: string;
+  segments: Array<{
+    id: string;
+    sequence_order: number;
+    from_location_type: string;
+    to_location_type: string;
+    default_label: string | null;
+    default_days: number | null;
+  }>;
+}
