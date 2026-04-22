@@ -1,5 +1,3 @@
-// @ts-nocheck
-// TODO: remove @ts-nocheck after migrations 285-291 applied + `cd frontend && npm run db:types` regenerates Database types to include the new tables/columns.
 import "server-only";
 import { createAdminClient } from "@/shared/lib/supabase/server";
 
