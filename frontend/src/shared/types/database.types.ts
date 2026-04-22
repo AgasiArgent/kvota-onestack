@@ -951,6 +951,66 @@ export type Database = {
         }
         Relationships: []
       }
+      customs_item_expenses: {
+        Row: {
+          id: string
+          quote_item_id: string
+          label: string
+          amount_rub: number
+          notes: string | null
+          created_at: string
+          created_by: string | null
+        }
+        Insert: {
+          id?: string
+          quote_item_id: string
+          label: string
+          amount_rub?: number
+          notes?: string | null
+          created_at?: string
+          created_by?: string | null
+        }
+        Update: {
+          id?: string
+          quote_item_id?: string
+          label?: string
+          amount_rub?: number
+          notes?: string | null
+          created_at?: string
+          created_by?: string | null
+        }
+        Relationships: []
+      }
+      customs_quote_expenses: {
+        Row: {
+          id: string
+          quote_id: string
+          label: string
+          amount_rub: number
+          notes: string | null
+          created_at: string
+          created_by: string | null
+        }
+        Insert: {
+          id?: string
+          quote_id: string
+          label: string
+          amount_rub?: number
+          notes?: string | null
+          created_at?: string
+          created_by?: string | null
+        }
+        Update: {
+          id?: string
+          quote_id?: string
+          label?: string
+          amount_rub?: number
+          notes?: string | null
+          created_at?: string
+          created_by?: string | null
+        }
+        Relationships: []
+      }
       deal_logistics_expenses: {
         Row: {
           id: string
@@ -1122,6 +1182,45 @@ export type Database = {
           parent_quote_id?: string | null
           comment_id?: string | null
           status?: string
+        }
+        Relationships: []
+      }
+      entity_notes: {
+        Row: {
+          id: string
+          entity_type: string
+          entity_id: string
+          author_id: string
+          author_role: string
+          visible_to: Json
+          body: string
+          pinned: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          entity_type: string
+          entity_id: string
+          author_id: string
+          author_role: string
+          visible_to?: Json
+          body: string
+          pinned?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          entity_type?: string
+          entity_id?: string
+          author_id?: string
+          author_role?: string
+          visible_to?: Json
+          body?: string
+          pinned?: boolean
+          created_at?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -1392,6 +1491,15 @@ export type Database = {
           pickup_country_code: string | null
           supplier_incoterms: string | null
           sent_at: string | null
+          assigned_customs_user: string | null
+          logistics_assigned_at: string | null
+          logistics_deadline_at: string | null
+          logistics_sla_hours: number | null
+          customs_assigned_at: string | null
+          customs_deadline_at: string | null
+          customs_sla_hours: number | null
+          logistics_needs_review_since: string | null
+          customs_needs_review_since: string | null
         }
         Insert: {
           id?: string
@@ -1434,6 +1542,15 @@ export type Database = {
           pickup_country_code?: string | null
           supplier_incoterms?: string | null
           sent_at?: string | null
+          assigned_customs_user?: string | null
+          logistics_assigned_at?: string | null
+          logistics_deadline_at?: string | null
+          logistics_sla_hours?: number | null
+          customs_assigned_at?: string | null
+          customs_deadline_at?: string | null
+          customs_sla_hours?: number | null
+          logistics_needs_review_since?: string | null
+          customs_needs_review_since?: string | null
         }
         Update: {
           id?: string
@@ -1476,6 +1593,15 @@ export type Database = {
           pickup_country_code?: string | null
           supplier_incoterms?: string | null
           sent_at?: string | null
+          assigned_customs_user?: string | null
+          logistics_assigned_at?: string | null
+          logistics_deadline_at?: string | null
+          logistics_sla_hours?: number | null
+          customs_assigned_at?: string | null
+          customs_deadline_at?: string | null
+          customs_sla_hours?: number | null
+          logistics_needs_review_since?: string | null
+          customs_needs_review_since?: string | null
         }
         Relationships: []
       }
@@ -1533,6 +1659,7 @@ export type Database = {
           code: string | null
           is_active: boolean | null
           created_at: string | null
+          location_type: string
         }
         Insert: {
           id?: string
@@ -1542,6 +1669,7 @@ export type Database = {
           code?: string | null
           is_active?: boolean | null
           created_at?: string | null
+          location_type?: string
         }
         Update: {
           id?: string
@@ -1551,6 +1679,7 @@ export type Database = {
           code?: string | null
           is_active?: boolean | null
           created_at?: string | null
+          location_type?: string
         }
         Relationships: []
       }
@@ -1584,6 +1713,177 @@ export type Database = {
           currency?: string
           created_at?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      logistics_operational_events: {
+        Row: {
+          id: string
+          deal_id: string
+          event_type: string
+          status: string
+          event_date: string | null
+          notes: string | null
+          created_by: string | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          deal_id: string
+          event_type: string
+          status?: string
+          event_date?: string | null
+          notes?: string | null
+          created_by?: string | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          deal_id?: string
+          event_type?: string
+          status?: string
+          event_date?: string | null
+          notes?: string | null
+          created_by?: string | null
+          created_at?: string | null
+        }
+        Relationships: []
+      }
+      logistics_route_segments: {
+        Row: {
+          id: string
+          invoice_id: string
+          sequence_order: number
+          from_location_id: string
+          to_location_id: string
+          label: string | null
+          transit_days: number | null
+          main_cost_rub: number
+          carrier: string | null
+          notes: string | null
+          created_at: string | null
+          updated_at: string | null
+          created_by: string | null
+        }
+        Insert: {
+          id?: string
+          invoice_id: string
+          sequence_order: number
+          from_location_id: string
+          to_location_id: string
+          label?: string | null
+          transit_days?: number | null
+          main_cost_rub?: number
+          carrier?: string | null
+          notes?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+          created_by?: string | null
+        }
+        Update: {
+          id?: string
+          invoice_id?: string
+          sequence_order?: number
+          from_location_id?: string
+          to_location_id?: string
+          label?: string | null
+          transit_days?: number | null
+          main_cost_rub?: number
+          carrier?: string | null
+          notes?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+          created_by?: string | null
+        }
+        Relationships: []
+      }
+      logistics_route_template_segments: {
+        Row: {
+          id: string
+          template_id: string
+          sequence_order: number
+          from_location_type: string
+          to_location_type: string
+          default_label: string | null
+          default_days: number | null
+        }
+        Insert: {
+          id?: string
+          template_id: string
+          sequence_order: number
+          from_location_type: string
+          to_location_type: string
+          default_label?: string | null
+          default_days?: number | null
+        }
+        Update: {
+          id?: string
+          template_id?: string
+          sequence_order?: number
+          from_location_type?: string
+          to_location_type?: string
+          default_label?: string | null
+          default_days?: number | null
+        }
+        Relationships: []
+      }
+      logistics_route_templates: {
+        Row: {
+          id: string
+          organization_id: string
+          name: string
+          description: string | null
+          created_by: string | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          name: string
+          description?: string | null
+          created_by?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          name?: string
+          description?: string | null
+          created_by?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      logistics_segment_expenses: {
+        Row: {
+          id: string
+          segment_id: string
+          label: string
+          cost_rub: number
+          days: number | null
+          notes: string | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          segment_id: string
+          label: string
+          cost_rub?: number
+          days?: number | null
+          notes?: string | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          segment_id?: string
+          label?: string
+          cost_rub?: number
+          days?: number | null
+          notes?: string | null
+          created_at?: string | null
         }
         Relationships: []
       }
@@ -3381,13 +3681,11 @@ export type Database = {
           supplier_sku_note: string | null
           manufacturer_product_name: string | null
           vat_rate: number | null
-          customs_ds_sgr: string | null
           customs_util_fee: number | null
           customs_excise: number | null
-          customs_psn_pts: string | null
+          customs_psm_pts: string | null
           customs_notification: string | null
           customs_licenses: string | null
-          customs_marking: string | null
           customs_eco_fee: number | null
           customs_honest_mark: string | null
           customs_duty_per_kg: number | null
@@ -3455,13 +3753,11 @@ export type Database = {
           supplier_sku_note?: string | null
           manufacturer_product_name?: string | null
           vat_rate?: number | null
-          customs_ds_sgr?: string | null
           customs_util_fee?: number | null
           customs_excise?: number | null
-          customs_psn_pts?: string | null
+          customs_psm_pts?: string | null
           customs_notification?: string | null
           customs_licenses?: string | null
-          customs_marking?: string | null
           customs_eco_fee?: number | null
           customs_honest_mark?: string | null
           customs_duty_per_kg?: number | null
@@ -3529,13 +3825,11 @@ export type Database = {
           supplier_sku_note?: string | null
           manufacturer_product_name?: string | null
           vat_rate?: number | null
-          customs_ds_sgr?: string | null
           customs_util_fee?: number | null
           customs_excise?: number | null
-          customs_psn_pts?: string | null
+          customs_psm_pts?: string | null
           customs_notification?: string | null
           customs_licenses?: string | null
-          customs_marking?: string | null
           customs_eco_fee?: number | null
           customs_honest_mark?: string | null
           customs_duty_per_kg?: number | null

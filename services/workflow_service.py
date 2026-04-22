@@ -2410,6 +2410,95 @@ def assign_logistics_to_invoices(quote_id: str) -> Dict:
         )
 
 
+# ---------------------------------------------------------------------------
+# Customs auto-assignment (least-loaded + advisory lock)
+# Part of Wave 1 Task 7.2 of logistics-customs-redesign spec.
+# ---------------------------------------------------------------------------
+
+
+def _customs_assignment_result(
+    success: bool,
+    assigned_invoices: list = None,
+    unmatched_invoice_ids: list = None,
+    error_message: str = None,
+) -> Dict:
+    """Build a standardised return dict for assign_customs_to_invoices."""
+    return {
+        "success": success,
+        "assigned_invoices": assigned_invoices or [],
+        "unmatched_invoice_ids": unmatched_invoice_ids or [],
+        "error_message": error_message,
+    }
+
+
+def assign_customs_to_invoices(quote_id: str) -> Dict:
+    """Auto-assign customs users to all invoices of a quote.
+
+    Path: (internal — called by workflow transition to pending_logistics_and_customs)
+    Strategy: least-loaded customs user per-org (fewest open
+    `assigned_customs_user = user AND customs_completed_at IS NULL` invoices).
+    Concurrency: per-org advisory lock inside the RPC function prevents two
+    concurrent workflow transitions from picking the same user under
+    READ COMMITTED isolation.
+
+    Args:
+        quote_id: UUID of the quote whose invoices need customs assignment.
+
+    Returns:
+        Dict with:
+        - success: bool
+        - assigned_invoices: list of {invoice_id, user_id}
+        - unmatched_invoice_ids: list of invoice IDs that could not be
+          assigned (no customs user configured in org)
+        - error_message: str or None
+
+    Side effects:
+        - Updates `invoices.assigned_customs_user`, `customs_assigned_at`,
+          `customs_deadline_at` for matched invoices.
+        - Leaves unmatched invoices with NULL assignment → they appear in
+          head_of_customs "Неназначенные" inbox.
+
+    Roles: internal (not exposed as API directly; called by workflow).
+    """
+    supabase = get_supabase()
+
+    try:
+        result = supabase.rpc(
+            "assign_customs_invoices_for_quote",
+            {"p_quote_id": quote_id},
+        ).execute()
+
+        rows = result.data if isinstance(result.data, list) else []
+
+        assigned_invoices: list = []
+        unmatched_invoice_ids: list = []
+        for r in rows:
+            if not isinstance(r, dict):
+                continue
+            if r.get("matched"):
+                assigned_invoices.append(
+                    {"invoice_id": r.get("invoice_id"), "user_id": r.get("assigned_user_id")}
+                )
+            else:
+                unmatched_invoice_ids.append(r.get("invoice_id"))
+
+        return _customs_assignment_result(
+            success=True,
+            assigned_invoices=assigned_invoices,
+            unmatched_invoice_ids=unmatched_invoice_ids,
+        )
+    except Exception as e:
+        logger.warning(
+            "Failed to assign customs users for quote %s: %s",
+            quote_id,
+            str(e),
+        )
+        return _customs_assignment_result(
+            success=False,
+            error_message=str(e),
+        )
+
+
 def transition_to_pending_procurement(
     quote_id: str,
     actor_id: str,
@@ -2847,11 +2936,40 @@ def complete_procurement(
             quote_id, str(e)
         )
 
-    # Build an informational warning message if logistics had issues
-    # The transition itself succeeded — the warning is advisory
+    # Best-effort: auto-assign customs users to invoices (Wave 1 Task 7.3)
+    # Least-loaded strategy inside RPC with per-org advisory lock (m286).
+    customs_warning = None
+    try:
+        customs_result = assign_customs_to_invoices(quote_id)
+        if customs_result and not customs_result.get("success"):
+            customs_warning = customs_result.get("error_message") or "Не удалось назначить таможенников на инвойсы"
+            logger.warning(
+                "Customs assignment failed for quote %s: %s",
+                quote_id, customs_warning
+            )
+        elif customs_result and customs_result.get("unmatched_invoice_ids"):
+            unmatched_count = len(customs_result["unmatched_invoice_ids"])
+            customs_warning = (
+                f"Таможенники назначены не на все инвойсы: {unmatched_count} инвойс(ов) "
+                f"без назначения (нет пользователей с ролью customs в организации)"
+            )
+            logger.info(
+                "Customs assignment partial for quote %s: %d unmatched invoices",
+                quote_id, unmatched_count
+            )
+    except Exception as e:
+        customs_warning = f"Ошибка при назначении таможенников: {str(e)}"
+        logger.warning(
+            "Failed to auto-assign customs to invoices for quote %s: %s",
+            quote_id, str(e)
+        )
+
+    # Build an informational warning message if logistics or customs had issues.
+    # The transition itself succeeded — warnings are advisory.
+    warnings = [w for w in (logistics_warning, customs_warning) if w]
     result_error = None
-    if logistics_warning:
-        result_error = f"Закупки завершены, но: {logistics_warning}"
+    if warnings:
+        result_error = "Закупки завершены, но: " + "; ".join(warnings)
 
     return TransitionResult(
         success=True,

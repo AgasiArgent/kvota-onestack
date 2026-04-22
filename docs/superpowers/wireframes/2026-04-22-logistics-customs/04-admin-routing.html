@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Admin Routing — Logistics — OneStack</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --background: oklch(0.98 0.005 80);
+  --card: oklch(1 0 0);
+  --sidebar: oklch(0.94 0.008 60);
+  --primary: oklch(0.41 0.01 55);
+  --primary-light: oklch(0.52 0.01 55);
+  --accent: oklch(0.50 0.16 35);
+  --accent-hover: oklch(0.42 0.14 35);
+  --accent-subtle: oklch(0.98 0.01 70);
+  --text: oklch(0.15 0.01 55);
+  --text-muted: oklch(0.52 0.01 55);
+  --text-subtle: oklch(0.68 0.01 55);
+  --border: oklch(0.85 0.008 60);
+  --border-light: oklch(0.91 0.006 60);
+  --success: #059669;
+  --success-bg: #DCFCE7;
+  --warning: #D97706;
+  --warning-bg: #FEF3C7;
+  --error: #DC2626;
+  --error-bg: #FEE2E2;
+  --info: #9A3412;
+  --info-bg: #FFF7ED;
+  --ring: rgba(194, 65, 12, 0.25);
+  --shadow-sm: 0 1px 2px rgba(28, 25, 23, 0.05);
+  --shadow-md: 0 8px 24px rgba(28, 25, 23, 0.1);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 14px; line-height: 1.5;
+  color: var(--text);
+  background: var(--background);
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3 { letter-spacing: -0.01em; }
+
+.app { display: flex; min-height: 100vh; }
+
+.sidebar {
+  width: 60px;
+  background: var(--sidebar);
+  border-right: 1px solid var(--border-light);
+  padding: 10px 8px;
+  flex-shrink: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+}
+.sidebar-logo {
+  width: 40px; height: 40px; border-radius: 8px;
+  background: var(--primary); color: white;
+  display: grid; place-items: center;
+  font-size: 13px; font-weight: 700;
+  margin-bottom: 12px;
+}
+.sidebar-item-mini {
+  width: 40px; height: 40px;
+  display: grid; place-items: center;
+  color: var(--text-muted);
+  cursor: pointer; border-radius: 8px;
+}
+.sidebar-item-mini:hover { background: rgba(87, 83, 78, 0.06); color: var(--text); }
+.sidebar-item-mini.active { background: rgba(87, 83, 78, 0.12); color: var(--text); }
+.sidebar-item-mini svg { width: 18px; height: 18px; stroke-width: 2; }
+
+.main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+/* Page header */
+.page-header {
+  padding: 18px 32px 14px;
+  border-bottom: 1px solid var(--border-light);
+  background: var(--card);
+}
+.breadcrumbs {
+  display: flex; gap: 6px; align-items: center;
+  font-size: 12px; color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.crumb-sep { color: var(--text-subtle); }
+.page-title {
+  font-size: 22px; font-weight: 700;
+  color: var(--text);
+}
+.page-subtitle {
+  font-size: 13px; color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* Tabs */
+.tabs {
+  display: flex;
+  padding: 0 32px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border-light);
+  gap: 0;
+  align-items: flex-end;
+}
+.tab {
+  padding: 12px 14px;
+  font-size: 13px; font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  display: inline-flex; align-items: center; gap: 7px;
+  white-space: nowrap;
+}
+.tab:hover { color: var(--text); }
+.tab.active {
+  color: var(--accent);
+  font-weight: 600;
+  border-bottom-color: var(--accent);
+}
+.tab-new {
+  display: inline-flex;
+  font-size: 9.5px;
+  padding: 1px 6px;
+  background: var(--success-bg);
+  color: #166534;
+  border-radius: 3px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-left: 4px;
+}
+
+.content {
+  flex: 1;
+  padding: 22px 32px;
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 22px;
+  align-items: start;
+}
+
+/* Stats strip */
+.stats-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 4px;
+}
+.stat-card {
+  background: var(--card);
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+.stat-label {
+  font-size: 10.5px; font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 5px;
+}
+.stat-value {
+  font-size: 22px; font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+.stat-sub {
+  font-size: 11.5px;
+  color: var(--text-subtle);
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.stat-card.warn {
+  background: var(--warning-bg);
+  border-color: rgba(217, 119, 6, 0.25);
+}
+.stat-card.warn .stat-label,
+.stat-card.warn .stat-value { color: #92400E; }
+
+/* Unassigned alert card */
+.unassigned-alert {
+  margin-top: 14px;
+  background: var(--card);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.ua-header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 18px;
+  background: rgba(217, 119, 6, 0.06);
+  border-bottom: 1px solid rgba(217, 119, 6, 0.15);
+}
+.ua-icon {
+  width: 30px; height: 30px; border-radius: 8px;
+  background: var(--warning); color: white;
+  display: grid; place-items: center;
+}
+.ua-icon svg { width: 16px; height: 16px; stroke-width: 2.5; }
+.ua-title {
+  font-size: 13.5px; font-weight: 600;
+  color: var(--text);
+}
+.ua-sub {
+  font-size: 12px; color: var(--text-muted);
+  margin-top: 1px;
+}
+.ua-list {
+  padding: 8px 18px 14px;
+}
+.ua-row {
+  display: grid;
+  grid-template-columns: 120px 1fr 1fr 160px;
+  gap: 12px; align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-light);
+  font-size: 13px;
+}
+.ua-row:last-child { border-bottom: none; }
+.ua-idn {
+  font-family: ui-monospace, monospace;
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 12.5px;
+}
+.ua-meta { color: var(--text-muted); font-size: 12.5px; }
+.ua-meta strong { color: var(--text); font-weight: 500; }
+.ua-reason {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 8px;
+  background: var(--warning-bg);
+  color: #92400E;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ua-assign {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 5px 10px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-family: inherit;
+  font-size: 12px; font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+  justify-self: end;
+}
+.ua-assign:hover { border-color: var(--accent); color: var(--accent); }
+.ua-assign svg { width: 11px; height: 11px; }
+
+/* Routing patterns card */
+.routing-card {
+  margin-top: 18px;
+  background: var(--card);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.rc-header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border-light);
+}
+.rc-title {
+  font-size: 15px; font-weight: 600;
+}
+.rc-subtitle {
+  font-size: 12px; color: var(--text-muted);
+  margin-top: 1px;
+}
+.rc-actions {
+  margin-left: auto;
+  display: flex; gap: 8px; align-items: center;
+}
+.rc-search {
+  display: flex; align-items: center;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 10px;
+  width: 220px;
+}
+.rc-search svg { width: 14px; height: 14px; color: var(--text-subtle); flex-shrink: 0; }
+.rc-search input {
+  border: none;
+  outline: none;
+  padding: 7px 8px;
+  font-size: 12.5px;
+  font-family: inherit;
+  color: var(--text);
+  width: 100%;
+  background: transparent;
+}
+.btn-add {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 8px 14px;
+  background: var(--accent);
+  color: white;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 12.5px; font-weight: 600;
+  cursor: pointer;
+}
+.btn-add:hover { background: var(--accent-hover); }
+.btn-add svg { width: 13px; height: 13px; stroke-width: 2.5; }
+
+/* Patterns table */
+.patterns-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.patterns-table th {
+  text-align: left;
+  padding: 10px 20px;
+  font-size: 10.5px; font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: var(--sidebar);
+  border-bottom: 1px solid var(--border-light);
+}
+.patterns-table td {
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border-light);
+  font-size: 13px;
+  vertical-align: middle;
+}
+.patterns-table tr:last-child td { border-bottom: none; }
+.patterns-table tr:hover td { background: rgba(87, 83, 78, 0.025); }
+.patterns-table tr.edit-row td { background: var(--accent-subtle); }
+
+.pattern-cell {
+  display: flex; align-items: center; gap: 8px;
+}
+.chip-loc {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 10px;
+  background: var(--sidebar);
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.chip-loc .flag { font-size: 13px; }
+.chip-loc.wildcard {
+  background: transparent;
+  border-style: dashed;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.pattern-arrow {
+  color: var(--text-subtle);
+}
+.pattern-arrow svg { width: 14px; height: 14px; }
+
+.user-chip {
+  display: inline-flex; align-items: center; gap: 7px;
+}
+.user-avatar {
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--primary);
+  color: white;
+  display: grid; place-items: center;
+  font-size: 11px; font-weight: 600;
+}
+.user-avatar.a-alena { background: #C2410C; }
+.user-avatar.a-sergey { background: #2563EB; }
+.user-avatar.a-ming { background: #059669; }
+.user-name { font-weight: 500; font-size: 13px; }
+.user-email { font-size: 11px; color: var(--text-subtle); }
+
+.pattern-specificity {
+  display: inline-block;
+  padding: 1px 6px;
+  background: var(--accent-subtle);
+  color: var(--info);
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.pattern-specificity.low {
+  background: var(--sidebar);
+  color: var(--text-muted);
+}
+
+.patterns-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.row-actions {
+  display: flex; gap: 4px; justify-content: flex-end;
+}
+.row-action {
+  display: inline-flex;
+  width: 28px; height: 28px;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: all 120ms;
+}
+.row-action:hover { border-color: var(--border); background: var(--card); color: var(--text); }
+.row-action.danger:hover { color: var(--error); border-color: rgba(220, 38, 38, 0.25); }
+.row-action svg { width: 13px; height: 13px; stroke-width: 2; }
+
+/* === SIDE PANEL: Create new pattern === */
+.side-panel {
+  background: var(--card);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  padding: 0;
+  position: sticky;
+  top: 22px;
+  overflow: hidden;
+}
+.sp-header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 18px;
+  background: var(--accent-subtle);
+  border-bottom: 1px solid rgba(194, 65, 12, 0.15);
+}
+.sp-icon {
+  width: 32px; height: 32px; border-radius: 8px;
+  background: var(--accent);
+  color: white;
+  display: grid; place-items: center;
+}
+.sp-icon svg { width: 16px; height: 16px; stroke-width: 2.5; }
+.sp-title { font-size: 14px; font-weight: 600; }
+.sp-sub { font-size: 11.5px; color: var(--text-muted); margin-top: 1px; }
+
+.sp-body {
+  padding: 18px 20px;
+}
+
+.field-group {
+  margin-bottom: 14px;
+}
+.field-group:last-child { margin-bottom: 0; }
+
+.field-label {
+  display: block;
+  font-size: 10.5px; font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 6px;
+}
+.input-select {
+  display: flex; align-items: center;
+  padding: 8px 10px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 120ms, box-shadow 120ms;
+}
+.input-select:hover { border-color: var(--primary-light); }
+.input-select .flag { font-size: 14px; margin-right: 7px; }
+.input-select .value { flex: 1; color: var(--text); font-weight: 500; }
+.input-select .wildcard-value { color: var(--text-subtle); font-style: italic; font-weight: 400; }
+.input-select .chev { color: var(--text-subtle); }
+.input-select .chev svg { width: 14px; height: 14px; }
+
+.preview-box {
+  padding: 12px 14px;
+  background: var(--sidebar);
+  border-radius: 8px;
+  margin-top: 10px;
+}
+.preview-label {
+  font-size: 10px; font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 6px;
+}
+.preview-line {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.preview-line .sep { color: var(--text-subtle); }
+
+.sp-footer {
+  padding: 14px 20px;
+  background: var(--sidebar);
+  border-top: 1px solid var(--border-light);
+  display: flex; gap: 8px; justify-content: space-between; align-items: center;
+}
+.sp-coverage {
+  font-size: 11.5px; color: var(--text-muted);
+}
+.sp-coverage strong { color: var(--success); font-weight: 600; }
+
+.btn-cancel {
+  padding: 7px 12px;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid transparent;
+  border-radius: 7px;
+  font-family: inherit;
+  font-size: 12.5px; font-weight: 500;
+  cursor: pointer;
+}
+.btn-save {
+  padding: 7px 14px;
+  background: var(--accent);
+  color: white;
+  border: 1px solid var(--accent);
+  border-radius: 7px;
+  font-family: inherit;
+  font-size: 12.5px; font-weight: 600;
+  cursor: pointer;
+}
+.btn-save:hover { background: var(--accent-hover); }
+
+/* Coverage warnings */
+.coverage-card {
+  margin-top: 14px;
+  background: var(--card);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  padding: 16px 18px;
+}
+.coverage-title {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 10px;
+}
+.coverage-title svg { width: 13px; height: 13px; stroke-width: 2.5; color: var(--warning); }
+.coverage-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px;
+  background: var(--warning-bg);
+  border-radius: 7px;
+  margin-bottom: 5px;
+  font-size: 12.5px;
+}
+.coverage-item .country { font-weight: 600; color: #78350F; }
+.coverage-item .info { color: #78350F; opacity: 0.85; font-size: 11.5px; }
+.coverage-item .cov-action {
+  margin-left: auto;
+  padding: 4px 8px;
+  background: white;
+  border: 1px solid rgba(217, 119, 6, 0.35);
+  border-radius: 5px;
+  font-size: 11px; font-weight: 600;
+  color: #78350F;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+/* Page notes */
+.page-note {
+  grid-column: 1 / -1;
+  margin-top: 18px;
+  padding: 20px 24px;
+  background: var(--card);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  font-size: 13px; line-height: 1.7;
+}
+.page-note h3 {
+  font-size: 12px; font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.06em;
+  margin: 0 0 10px;
+}
+.page-note p { margin: 0 0 8px; }
+.page-note strong { color: var(--accent); }
+.page-note code {
+  background: var(--sidebar);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11.5px;
+  font-family: ui-monospace, monospace;
+}
+
+.answer-area {
+  grid-column: 1 / -1;
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 12px; margin-top: 12px;
+}
+.answer {
+  background: var(--card);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  padding: 18px 22px;
+  cursor: pointer;
+  transition: border-color 120ms, background-color 120ms;
+}
+.answer:hover { border-color: var(--accent); }
+.answer.selected { border-color: var(--accent); background: var(--accent-subtle); }
+.answer-label {
+  font-size: 11px; font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase; letter-spacing: 0.06em;
+  margin-bottom: 6px;
+}
+.answer-title { font-size: 15px; font-weight: 600; margin-bottom: 3px; }
+.answer-desc { font-size: 12.5px; color: var(--text-muted); }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar-logo">OS</div>
+    <div class="sidebar-item-mini"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3"/></svg></div>
+    <div class="sidebar-item-mini"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M1 3h15v13H1zM16 8h4l3 3v5h-7"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg></div>
+    <div class="sidebar-item-mini"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zM14 2v6h6"/></svg></div>
+    <div class="sidebar-item-mini active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33h0a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51h0a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v0a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></div>
+  </aside>
+
+  <main class="main">
+    <header class="page-header">
+      <div class="breadcrumbs">
+        <span>Администрирование</span> <span class="crumb-sep">/</span>
+        <span style="color:var(--text)">Маршруты</span>
+      </div>
+      <div class="page-title">Маршруты — автораспределение заявок</div>
+      <div class="page-subtitle">Настройка правил назначения ответственных по закупкам, логистике и таможне</div>
+    </header>
+
+    <div class="tabs">
+      <div class="tab">Закупки · Бренды</div>
+      <div class="tab">Закупки · Группы</div>
+      <div class="tab">Закупки · Тендер</div>
+      <div class="tab">Закупки · Неназначенные</div>
+      <div class="tab active">Логистика <span class="tab-new">NEW</span></div>
+      <div class="tab">Таможня <span class="tab-new">NEW</span></div>
+    </div>
+
+    <div class="content">
+
+      <!-- Left column: stats + unassigned + patterns -->
+      <div>
+        <!-- Stats -->
+        <div class="stats-strip">
+          <div class="stat-card">
+            <div class="stat-label">Логистов</div>
+            <div class="stat-value">5</div>
+            <div class="stat-sub">активных пользователей</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Маршрутов</div>
+            <div class="stat-value">12</div>
+            <div class="stat-sub">3 exact · 9 с wildcard</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Покрытие</div>
+            <div class="stat-value">23 / 25</div>
+            <div class="stat-sub">активных заявок заматчено</div>
+          </div>
+          <div class="stat-card warn">
+            <div class="stat-label">Неназначено</div>
+            <div class="stat-value">2</div>
+            <div class="stat-sub">требуют вашего внимания</div>
+          </div>
+        </div>
+
+        <!-- Unassigned alert -->
+        <div class="unassigned-alert">
+          <div class="ua-header">
+            <div class="ua-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            </div>
+            <div>
+              <div class="ua-title">Неназначенные заявки логистики</div>
+              <div class="ua-sub">Эти invoice не заматчились ни одним паттерном — назначь вручную или добавь паттерн</div>
+            </div>
+          </div>
+          <div class="ua-list">
+            <div class="ua-row">
+              <span class="ua-idn">Q-202604-0041</span>
+              <span class="ua-meta">🇮🇳 <strong>Индия</strong> → 🇷🇺 Москва · 6 поз · 420 кг</span>
+              <span class="ua-reason">Нет pattern'а на «Индия → *»</span>
+              <button class="ua-assign">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+                Назначить логиста
+              </button>
+            </div>
+            <div class="ua-row">
+              <span class="ua-idn">Q-202604-0038</span>
+              <span class="ua-meta">🇧🇾 <strong>Беларусь</strong> → 🇷🇺 Казань · 3 поз · 150 кг</span>
+              <span class="ua-reason">pickup_country пустой</span>
+              <button class="ua-assign">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+                Назначить логиста
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Patterns table -->
+        <div class="routing-card">
+          <div class="rc-header">
+            <div>
+              <div class="rc-title">Паттерны маршрутов</div>
+              <div class="rc-subtitle">Сортировка: точные совпадения сначала, потом по количеству wildcards</div>
+            </div>
+            <div class="rc-actions">
+              <div class="rc-search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                <input placeholder="Поиск по стране, логисту...">
+              </div>
+              <button class="btn-add">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Новый маршрут
+              </button>
+            </div>
+          </div>
+
+          <table class="patterns-table">
+            <thead>
+              <tr>
+                <th style="width:60px">Тип</th>
+                <th>Откуда</th>
+                <th style="width:40px"></th>
+                <th>Куда</th>
+                <th style="width:220px">Ответственный логист</th>
+                <th style="width:80px">Заявок</th>
+                <th style="width:100px"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="pattern-specificity">Точный</span></td>
+                <td><span class="chip-loc"><span class="flag">🇹🇷</span>Турция</span></td>
+                <td><span class="pattern-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></span></td>
+                <td><span class="chip-loc"><span class="flag">🇷🇺</span>Москва</span></td>
+                <td>
+                  <span class="user-chip">
+                    <span class="user-avatar a-sergey">СП</span>
+                    <span>
+                      <span class="user-name">Сергей Петров</span>
+                      <br><span class="user-email">sergey@kvota.ru</span>
+                    </span>
+                  </span>
+                </td>
+                <td><span class="patterns-count">4 за месяц</span></td>
+                <td>
+                  <div class="row-actions">
+                    <button class="row-action" title="Редактировать"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+                    <button class="row-action danger" title="Удалить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 01-2 2H9a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+                  </div>
+                </td>
+              </tr>
+
+              <tr>
+                <td><span class="pattern-specificity low">Wildcard</span></td>
+                <td><span class="chip-loc"><span class="flag">🇨🇳</span>Китай</span></td>
+                <td><span class="pattern-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></span></td>
+                <td><span class="chip-loc wildcard">* Любой</span></td>
+                <td>
+                  <span class="user-chip">
+                    <span class="user-avatar a-alena">АИ</span>
+                    <span>
+                      <span class="user-name">Алёна Иванова</span>
+                      <br><span class="user-email">alena@kvota.ru</span>
+                    </span>
+                  </span>
+                </td>
+                <td><span class="patterns-count">12 за месяц</span></td>
+                <td>
+                  <div class="row-actions">
+                    <button class="row-action"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+                    <button class="row-action danger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 01-2 2H9a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+                  </div>
+                </td>
+              </tr>
+
+              <tr>
+                <td><span class="pattern-specificity low">Wildcard</span></td>
+                <td><span class="chip-loc wildcard">* Любой</span></td>
+                <td><span class="pattern-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></span></td>
+                <td><span class="chip-loc"><span class="flag">🇷🇺</span>Санкт-Петербург</span></td>
+                <td>
+                  <span class="user-chip">
+                    <span class="user-avatar a-ming">МЛ</span>
+                    <span>
+                      <span class="user-name">Мин Ли</span>
+                      <br><span class="user-email">ming@kvota.ru</span>
+                    </span>
+                  </span>
+                </td>
+                <td><span class="patterns-count">3 за месяц</span></td>
+                <td>
+                  <div class="row-actions">
+                    <button class="row-action"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+                    <button class="row-action danger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 01-2 2H9a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+                  </div>
+                </td>
+              </tr>
+
+              <tr class="edit-row">
+                <td><span class="pattern-specificity">Точный</span></td>
+                <td><span class="chip-loc"><span class="flag">🇮🇹</span>Италия</span></td>
+                <td><span class="pattern-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></span></td>
+                <td><span class="chip-loc"><span class="flag">🇷🇺</span>Москва</span></td>
+                <td>
+                  <span class="user-chip">
+                    <span class="user-avatar a-alena">АИ</span>
+                    <span>
+                      <span class="user-name">Алёна Иванова</span>
+                      <br><span class="user-email" style="color:var(--accent); font-weight:500">редактируется...</span>
+                    </span>
+                  </span>
+                </td>
+                <td><span class="patterns-count">1 за месяц</span></td>
+                <td>
+                  <div class="row-actions">
+                    <button class="row-action"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+                    <button class="row-action danger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 01-2 2H9a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+                  </div>
+                </td>
+              </tr>
+
+              <tr>
+                <td><span class="pattern-specificity low">Wildcard</span></td>
+                <td><span class="chip-loc"><span class="flag">🇹🇷</span>Турция</span></td>
+                <td><span class="pattern-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></span></td>
+                <td><span class="chip-loc wildcard">* Любой</span></td>
+                <td>
+                  <span class="user-chip">
+                    <span class="user-avatar a-sergey">СП</span>
+                    <span>
+                      <span class="user-name">Сергей Петров</span>
+                      <br><span class="user-email">sergey@kvota.ru</span>
+                    </span>
+                  </span>
+                </td>
+                <td><span class="patterns-count">5 за месяц</span></td>
+                <td>
+                  <div class="row-actions">
+                    <button class="row-action"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+                    <button class="row-action danger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 01-2 2H9a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Right column: create panel + coverage warnings -->
+      <aside>
+        <div class="side-panel">
+          <div class="sp-header">
+            <div class="sp-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </div>
+            <div>
+              <div class="sp-title">Новый маршрут</div>
+              <div class="sp-sub">Pattern = origin + destination → logistics manager</div>
+            </div>
+          </div>
+          <div class="sp-body">
+            <div class="field-group">
+              <label class="field-label">Страна забора</label>
+              <div class="input-select">
+                <span class="flag">🇮🇳</span>
+                <span class="value">Индия</span>
+                <span class="chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
+              </div>
+            </div>
+            <div class="field-group">
+              <label class="field-label">Город/страна назначения</label>
+              <div class="input-select">
+                <span class="value wildcard-value">* Любой</span>
+                <span class="chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
+              </div>
+            </div>
+            <div class="field-group">
+              <label class="field-label">Ответственный логист</label>
+              <div class="input-select">
+                <span class="user-avatar a-ming" style="width:22px;height:22px;font-size:10px;margin-right:8px;">МЛ</span>
+                <span class="value">Мин Ли · ming@kvota.ru</span>
+                <span class="chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
+              </div>
+            </div>
+
+            <div class="preview-box">
+              <div class="preview-label">Итоговый pattern</div>
+              <div class="preview-line">
+                <span class="chip-loc"><span class="flag">🇮🇳</span>Индия</span>
+                <span class="sep"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></span>
+                <span class="chip-loc wildcard">* Любой</span>
+                <span class="sep">→</span>
+                <span class="user-chip"><span class="user-avatar a-ming" style="width:22px;height:22px;font-size:10px">МЛ</span><strong>Мин Ли</strong></span>
+              </div>
+            </div>
+          </div>
+          <div class="sp-footer">
+            <span class="sp-coverage">Покроет: <strong>1 неназначенную</strong></span>
+            <div>
+              <button class="btn-cancel">Отмена</button>
+              <button class="btn-save">Сохранить</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="coverage-card">
+          <div class="coverage-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            Страны без покрытия
+          </div>
+          <div class="coverage-item">
+            <span class="country">🇮🇳 Индия</span>
+            <span class="info">1 заявка</span>
+            <button class="cov-action">Добавить</button>
+          </div>
+          <div class="coverage-item">
+            <span class="country">🇧🇾 Беларусь</span>
+            <span class="info">1 заявка</span>
+            <button class="cov-action">Добавить</button>
+          </div>
+        </div>
+      </aside>
+
+      <div class="page-note">
+        <h3>Что здесь новое и важное</h3>
+        <p><strong>Вкладки "Логистика" и "Таможня"</strong> — новые, с <code>NEW</code> badge. Доступны для <code>admin</code> + <code>head_of_logistics</code> / <code>head_of_customs</code>. Backend (<code>services/route_logistics_assignment_service.py</code>) уже существует — это UI заполняет dark spot.</p>
+        <p><strong>Stats strip</strong> — 4 метрики: логистов в команде, паттернов, покрытие (<code>get_uncovered_routes()</code> из существующего сервиса), неназначенные. Warning-стиль на "Неназначено" если больше 0.</p>
+        <p><strong>Unassigned-alert</strong> — раскрытый список заявок без auto-match с reason pill'ами (<em>"Нет pattern'а на Индия"</em>, <em>"pickup_country пустой"</em>). Inline кнопка "Назначить логиста" — dropdown выбора пользователя.</p>
+        <p><strong>Patterns table</strong> — сортировка по specificity (exact first — соответствует <code>_match_route_python()</code>). Chip'ы с флагами для origin/destination, wildcard отображается как dashed "* Любой". Статистика использования ("4 за месяц") сразу рядом с правилом — head видит эффективность.</p>
+        <p><strong>Side panel "Новый маршрут"</strong> — живой preview собираемого pattern'а внизу. "Покроет: 1 неназначенную" — сразу показывает impact. Клик на страну "Индия" в coverage-warnings автоматически пре-заполняет это поле.</p>
+        <p><strong>Coverage warnings</strong> справа внизу — страны без pattern'а (derived from <code>get_uncovered_routes()</code> по текущим активным заявкам). One-click "Добавить" → открывает side panel с pre-filled страной.</p>
+      </div>
+
+      <div class="answer-area">
+        <div class="answer" data-choice="a" onclick="toggleSelect(this)">
+          <div class="answer-label">OK</div>
+          <div class="answer-title">Отлично — все 4 экрана согласованы</div>
+          <div class="answer-desc">Пишу design doc и переходим к имплементации</div>
+        </div>
+        <div class="answer" data-choice="b" onclick="toggleSelect(this)">
+          <div class="answer-label">Правки</div>
+          <div class="answer-title">Нужны правки</div>
+          <div class="answer-desc">Что поменять — опиши в терминале</div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+</body>
+</html>

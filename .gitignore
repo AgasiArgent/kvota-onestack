@@ -21,3 +21,5 @@ tmp/
 # Browser-test / UI-test screenshots — session artifacts, not long-term docs
 # (Individual PNG at repo root is almost always a session screenshot, not a tracked asset)
 /*.png
+.superpowers/
+.tmp/

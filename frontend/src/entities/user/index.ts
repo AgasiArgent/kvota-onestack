@@ -7,3 +7,4 @@ export {
   fetchUserSalesGroupId,
   fetchProcurementWorkload,
 } from "./queries";
+export { UserAvatarChip, type UserAvatarChipUser } from "./ui/user-avatar-chip";

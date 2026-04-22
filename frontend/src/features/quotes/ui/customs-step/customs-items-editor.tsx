@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import type { QuoteItemRow } from "@/entities/quote/queries";
+import type { CustomsAutofillSuggestion } from "@/features/customs-autofill";
 
 const CustomsHandsontable = dynamic(
   () =>
@@ -15,7 +16,7 @@ const CustomsHandsontable = dynamic(
         Загрузка...
       </div>
     ),
-  }
+  },
 );
 
 interface CustomsItemsEditorProps {
@@ -26,6 +27,8 @@ interface CustomsItemsEditorProps {
     { supplier_country: string | null; invoice_id: string | null }
   >;
   userRoles: string[];
+  autofillSuggestions?: CustomsAutofillSuggestion[];
+  onSelectRow?: (rowId: string | null) => void;
 }
 
 export function CustomsItemsEditor({
@@ -33,6 +36,8 @@ export function CustomsItemsEditor({
   invoiceCountryMap,
   supplierByQuoteItemId,
   userRoles,
+  autofillSuggestions,
+  onSelectRow,
 }: CustomsItemsEditorProps) {
   return (
     <CustomsHandsontable
@@ -40,6 +45,8 @@ export function CustomsItemsEditor({
       invoiceCountryMap={invoiceCountryMap}
       supplierByQuoteItemId={supplierByQuoteItemId}
       userRoles={userRoles}
+      autofillSuggestions={autofillSuggestions}
+      onSelectRow={onSelectRow}
     />
   );
 }
