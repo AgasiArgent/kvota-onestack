@@ -22,6 +22,7 @@ from api.logistics import (
     list_templates as _list_templates,
     reorder_segments as _reorder_segments,
     update_segment as _update_segment,
+    update_template as _update_template,
 )
 
 router = APIRouter(tags=["logistics"])
@@ -92,6 +93,14 @@ async def get_templates(request: Request) -> JSONResponse:
 async def post_template(request: Request) -> JSONResponse:
     """Create a reusable route template (scaffold)."""
     return await _create_template(request)
+
+
+@router.patch("/templates/{template_id}")
+async def patch_template(
+    request: Request, template_id: str
+) -> JSONResponse:
+    """Replace template name/description/segments."""
+    return await _update_template(request, template_id)
 
 
 @router.delete("/templates/{template_id}")

@@ -641,6 +641,85 @@ async def create_template(request: Request) -> JSONResponse:
     return _ok(template, status=201)
 
 
+async def update_template(request: Request, template_id: str) -> JSONResponse:
+    """PATCH /api/logistics/templates/{id} — replace template body.
+
+    Path: PATCH /api/logistics/templates/{id}
+    Body:
+        name: str (required)
+        description: str (optional)
+        segments: list (required, non-empty) — replaces all existing segments
+    Returns: { success, data: { template_id } }
+    Side effects:
+        - Updates logistics_route_templates row (name, description)
+        - DELETEs all logistics_route_template_segments for this template,
+          INSERTs the new segments (sequence_order starts at 1).
+    Roles: logistics, head_of_logistics, admin.
+    """
+    auth = _authorize(request)
+    if isinstance(auth, JSONResponse):
+        return auth
+    user, _roles = auth
+    org_id = user["org_id"]
+
+    try:
+        body = await request.json()
+    except Exception:
+        return _err("BAD_REQUEST", "Invalid JSON", 400)
+
+    name = (body.get("name") or "").strip()
+    segments = body.get("segments") or []
+    if not name:
+        return _err("VALIDATION_ERROR", "name is required", 400)
+    if not isinstance(segments, list) or not segments:
+        return _err("VALIDATION_ERROR", "segments[] must be non-empty", 400)
+
+    for seg in segments:
+        ft = seg.get("from_location_type")
+        tt = seg.get("to_location_type")
+        if ft not in _LOCATION_TYPES or tt not in _LOCATION_TYPES:
+            return _err(
+                "VALIDATION_ERROR",
+                f"Invalid location type. Allowed: {sorted(_LOCATION_TYPES)}",
+                400,
+            )
+
+    sb = get_supabase()
+    existing = (
+        sb.table("logistics_route_templates")
+        .select("id")
+        .eq("id", template_id)
+        .eq("organization_id", org_id)
+        .execute()
+    )
+    if not existing.data:
+        return _err("NOT_FOUND", "Template not found", 404)
+
+    sb.table("logistics_route_templates").update(
+        {"name": name, "description": body.get("description")}
+    ).eq("id", template_id).execute()
+
+    # Replace segments atomically-ish: delete old, insert new.
+    sb.table("logistics_route_template_segments").delete().eq(
+        "template_id", template_id
+    ).execute()
+
+    seg_rows = [
+        {
+            "template_id": template_id,
+            "sequence_order": idx,
+            "from_location_type": seg["from_location_type"],
+            "to_location_type": seg["to_location_type"],
+            "default_label": seg.get("default_label"),
+            "default_days": seg.get("default_days"),
+        }
+        for idx, seg in enumerate(segments, start=1)
+    ]
+    sb.table("logistics_route_template_segments").insert(seg_rows).execute()
+
+    return _ok({"template_id": template_id})
+
+
 async def delete_template(request: Request, template_id: str) -> JSONResponse:
     """DELETE /api/logistics/templates/{id} — remove a template.
 

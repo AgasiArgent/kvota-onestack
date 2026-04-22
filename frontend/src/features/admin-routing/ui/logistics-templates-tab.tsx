@@ -2,11 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, ArrowRight, Loader2 } from "lucide-react";
+import { Plus, Trash2, Pencil, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   createLogisticsTemplate,
+  updateLogisticsTemplate,
   deleteLogisticsTemplate,
 } from "@/entities/logistics-template";
 import type { LocationType } from "@/entities/location/ui/location-chip";
@@ -21,8 +22,7 @@ import { LogisticsTemplateDialog } from "./logistics-template-dialog";
  * from the Route Constructor to pre-populate segment shapes (actual
  * locations are chosen per-invoice).
  *
- * Scope (Wave 2 Task 15): list + create + delete. Inline edit is deferred;
- * users can delete and recreate for now.
+ * Wave 2 Task 15: list + create + edit + delete.
  */
 
 interface Props {
@@ -54,26 +54,50 @@ function formatTypeChain(
   return stops.join(" → ");
 }
 
+type TemplateSegmentForm = {
+  sequence_order: number;
+  from_location_type: LocationType;
+  to_location_type: LocationType;
+  default_label: string;
+  default_days: number | null;
+};
+
+function toDialogInitial(t: LogisticsTemplateAdmin): {
+  name: string;
+  description: string;
+  segments: TemplateSegmentForm[];
+} {
+  return {
+    name: t.name,
+    description: t.description ?? "",
+    segments: t.segments.map((s, i) => ({
+      sequence_order: i + 1,
+      from_location_type: s.from_location_type as LocationType,
+      to_location_type: s.to_location_type as LocationType,
+      default_label: s.default_label ?? "",
+      default_days: s.default_days,
+    })),
+  };
+}
+
 export function LogisticsTemplatesTab({ templates }: Props) {
   const router = useRouter();
-  const [isDialogOpen, setDialogOpen] = useState(false);
+  const [dialogMode, setDialogMode] = useState<
+    | { kind: "closed" }
+    | { kind: "create" }
+    | { kind: "edit"; template: LogisticsTemplateAdmin }
+  >({ kind: "closed" });
   const [isPending, startTransition] = useTransition();
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const handleCreate = async (input: {
+  const handleSubmit = async (input: {
     name: string;
     description: string;
-    segments: Array<{
-      sequence_order: number;
-      from_location_type: LocationType;
-      to_location_type: LocationType;
-      default_label: string;
-      default_days: number | null;
-    }>;
+    segments: TemplateSegmentForm[];
   }) => {
     startTransition(async () => {
       try {
-        await createLogisticsTemplate({
+        const payload = {
           name: input.name,
           description: input.description || undefined,
           segments: input.segments.map((s) => ({
@@ -84,13 +108,22 @@ export function LogisticsTemplatesTab({ templates }: Props) {
             default_days: s.default_days ?? undefined,
           })),
           revalidate_path: "/admin/routing?tab=logistics",
-        });
-        toast.success("Шаблон создан");
-        setDialogOpen(false);
+        };
+        if (dialogMode.kind === "edit") {
+          await updateLogisticsTemplate({
+            template_id: dialogMode.template.id,
+            ...payload,
+          });
+          toast.success("Шаблон обновлён");
+        } else {
+          await createLogisticsTemplate(payload);
+          toast.success("Шаблон создан");
+        }
+        setDialogMode({ kind: "closed" });
         router.refresh();
       } catch (err) {
         toast.error(
-          err instanceof Error ? err.message : "Не удалось создать шаблон",
+          err instanceof Error ? err.message : "Не удалось сохранить шаблон",
         );
       }
     });
@@ -131,7 +164,7 @@ export function LogisticsTemplatesTab({ templates }: Props) {
           </p>
         </div>
         <Button
-          onClick={() => setDialogOpen(true)}
+          onClick={() => setDialogMode({ kind: "create" })}
           disabled={isPending}
           className="shrink-0"
         >
@@ -184,27 +217,44 @@ export function LogisticsTemplatesTab({ templates }: Props) {
                     {t.created_by_name ?? "—"}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDelete(t.id, t.name)}
-                      disabled={isPending}
-                      aria-label={`Удалить шаблон ${t.name}`}
-                    >
-                      {deletingId === t.id ? (
-                        <Loader2
-                          size={14}
-                          className="animate-spin text-text-muted"
-                          aria-hidden
-                        />
-                      ) : (
-                        <Trash2
+                    <div className="inline-flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          setDialogMode({ kind: "edit", template: t })
+                        }
+                        disabled={isPending}
+                        aria-label={`Редактировать шаблон ${t.name}`}
+                      >
+                        <Pencil
                           size={14}
                           className="text-text-muted"
                           aria-hidden
                         />
-                      )}
-                    </Button>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDelete(t.id, t.name)}
+                        disabled={isPending}
+                        aria-label={`Удалить шаблон ${t.name}`}
+                      >
+                        {deletingId === t.id ? (
+                          <Loader2
+                            size={14}
+                            className="animate-spin text-text-muted"
+                            aria-hidden
+                          />
+                        ) : (
+                          <Trash2
+                            size={14}
+                            className="text-text-muted"
+                            aria-hidden
+                          />
+                        )}
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -214,16 +264,18 @@ export function LogisticsTemplatesTab({ templates }: Props) {
       )}
 
       <LogisticsTemplateDialog
-        open={isDialogOpen}
-        onOpenChange={setDialogOpen}
-        onSubmit={handleCreate}
+        open={dialogMode.kind !== "closed"}
+        onOpenChange={(o) => {
+          if (!o) setDialogMode({ kind: "closed" });
+        }}
+        onSubmit={handleSubmit}
         busy={isPending}
+        initial={
+          dialogMode.kind === "edit"
+            ? toDialogInitial(dialogMode.template)
+            : undefined
+        }
       />
-
-      {/* Hint for empty-segment preview */}
-      <span className="sr-only" aria-hidden={false}>
-        <ArrowRight size={0} />
-      </span>
     </div>
   );
 }
