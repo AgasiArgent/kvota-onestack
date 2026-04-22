@@ -176,7 +176,7 @@ export function DocumentGroup({
                 </span>
                 <span className="text-xs text-muted-foreground shrink-0">
                   {doc.created_at
-                    ? new Date(doc.created_at).toLocaleDateString("ru-RU")
+                    ? new Date(doc.created_at).toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow" })
                     : ""}
                 </span>
                 <Button

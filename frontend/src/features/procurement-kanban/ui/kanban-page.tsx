@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { Toaster } from "sonner";
+import { AppToaster } from "@/shared/ui/app-toaster";
 import type { ProcurementUserWorkload } from "@/shared/types/procurement-user";
 import type { KanbanResponse } from "../model/types";
 
@@ -64,7 +64,7 @@ export function KanbanPage({ data, workload, orgId }: KanbanPageProps) {
           orgId={orgId}
         />
       </div>
-      <Toaster position="top-right" richColors />
+      <AppToaster />
     </>
   );
 }

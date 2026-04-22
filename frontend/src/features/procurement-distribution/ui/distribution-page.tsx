@@ -1,7 +1,7 @@
 "use client";
 
 import { CheckCircle2 } from "lucide-react";
-import { Toaster } from "sonner";
+import { AppToaster } from "@/shared/ui/app-toaster";
 import { WorkloadCards } from "./workload-cards";
 import { QuoteBrandCard } from "./quote-brand-card";
 import type {
@@ -65,7 +65,7 @@ export function DistributionPage({ quotes, workload, orgId }: Props) {
           </div>
         )}
       </div>
-      <Toaster position="top-right" richColors />
+      <AppToaster />
     </>
   );
 }

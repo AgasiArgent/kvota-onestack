@@ -1,7 +1,7 @@
 "use client";
 
 import { Settings } from "lucide-react";
-import { Toaster } from "sonner";
+import { AppToaster } from "@/shared/ui/app-toaster";
 import type { SettingsPageData } from "@/entities/settings";
 import { CalcRatesForm } from "./calc-rates-form";
 import { StageDeadlinesForm } from "./stage-deadlines-form";
@@ -14,7 +14,7 @@ interface SettingsTabsProps {
 export function SettingsTabs({ data }: SettingsTabsProps) {
   return (
     <div className="space-y-6">
-      <Toaster position="top-right" richColors />
+      <AppToaster />
 
       {/* Header */}
       <div className="flex items-center justify-between">

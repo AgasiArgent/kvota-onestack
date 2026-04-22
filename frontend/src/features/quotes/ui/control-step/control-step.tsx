@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useEffect, useState } from "react";
-import { Toaster } from "sonner";
+import { AppToaster } from "@/shared/ui/app-toaster";
 import type {
   QuoteDetailRow,
   QuoteItemRow,
@@ -307,7 +307,7 @@ export function ControlStep({
         needsApproval={approvalTriggers.length > 0}
       />
 
-      <Toaster position="top-right" richColors />
+      <AppToaster />
     </div>
   );
 }

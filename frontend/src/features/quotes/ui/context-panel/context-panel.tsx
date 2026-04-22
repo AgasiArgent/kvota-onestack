@@ -174,7 +174,7 @@ function QuoteInfoBlock({
         <InfoRow label="Дедлайн КП">
           <span className="text-sm font-medium">
             {quote.valid_until
-              ? new Date(quote.valid_until).toLocaleDateString("ru-RU")
+              ? new Date(quote.valid_until).toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow" })
               : "\u2014"}
           </span>
         </InfoRow>
@@ -253,7 +253,8 @@ function formatParticipantDate(dateStr: string | null): string {
     month: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-  });
+    timeZone: "Europe/Moscow",
+    });
 }
 
 function InfoRow({

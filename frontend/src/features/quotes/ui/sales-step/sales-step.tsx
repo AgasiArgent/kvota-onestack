@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Toaster } from "sonner";
+import { AppToaster } from "@/shared/ui/app-toaster";
 import type { QuoteDetailRow, QuoteItemRow } from "@/entities/quote/queries";
 import { createClient } from "@/shared/lib/supabase/client";
 import { SalesActionBar } from "./sales-action-bar";
@@ -50,7 +50,7 @@ export function SalesStep({ quote, items }: SalesStepProps) {
         activeModal={activeModal}
         onClose={() => setActiveModal(null)}
       />
-      <Toaster position="top-right" richColors />
+      <AppToaster />
     </div>
   );
 }

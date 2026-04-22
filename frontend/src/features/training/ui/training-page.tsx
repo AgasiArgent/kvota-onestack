@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Video } from "lucide-react";
-import { Toaster } from "sonner";
+import { AppToaster } from "@/shared/ui/app-toaster";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { TrainingVideo } from "@/entities/training-video/types";
@@ -45,7 +45,7 @@ export function TrainingPage({
 
   return (
     <div className="space-y-6">
-      <Toaster position="top-right" richColors />
+      <AppToaster />
 
       {/* Header */}
       <div className="flex items-center justify-between">
