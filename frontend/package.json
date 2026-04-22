@@ -9,7 +9,6 @@
     "lint": "eslint",
     "db:types": "./scripts/gen-db-types.sh",
     "journey:build": "tsx scripts/journey/build-manifest.ts",
-    "prepare": "cd .. && husky && install -m 0755 scripts/git-hooks/pre-commit .husky/pre-commit",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -43,7 +42,6 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "gray-matter": "^4.0.3",
-    "husky": "^9.1.7",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
     "typescript": "^5",
