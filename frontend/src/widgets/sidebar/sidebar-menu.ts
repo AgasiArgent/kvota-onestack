@@ -21,6 +21,8 @@ import {
   SplitSquareHorizontal,
   LayoutGrid,
   Trash2,
+  Truck,
+  Anchor,
 } from "lucide-react";
 
 export interface MenuItem {
@@ -85,6 +87,7 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
       "logistics",
       "head_of_logistics",
       "customs",
+      "head_of_customs",
       "quote_controller",
       "spec_controller",
       "finance"
@@ -111,6 +114,20 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
       icon: LayoutGrid,
       label: "Канбан закупок",
       href: "/procurement/kanban",
+    });
+  }
+  if (hasRole("logistics", "head_of_logistics")) {
+    mainItems.push({
+      icon: Truck,
+      label: "Очередь логистики",
+      href: "/workspace/logistics",
+    });
+  }
+  if (hasRole("customs", "head_of_customs")) {
+    mainItems.push({
+      icon: Anchor,
+      label: "Очередь таможни",
+      href: "/workspace/customs",
     });
   }
   if (hasRole("top_manager")) {
@@ -156,14 +173,14 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
       href: "/companies",
     });
   }
-  if (hasRole("logistics", "customs", "procurement", "procurement_senior")) {
+  if (hasRole("logistics", "head_of_logistics", "customs", "head_of_customs", "procurement", "procurement_senior")) {
     registries.push({
       icon: MapPin,
       label: "Локации",
       href: "/locations",
     });
   }
-  if (hasRole("customs", "finance")) {
+  if (hasRole("customs", "head_of_customs", "finance")) {
     registries.push({
       icon: FileText,
       label: "Таможенные декларации",
