@@ -12,6 +12,13 @@ interface SubmitFeedbackParams {
   pageTitle: string;
   debugContext: DebugContext;
   screenshotDataUrl?: string;
+  /**
+   * Optional Customer Journey Map node id (`app:<route>` or `ghost:<slug>`).
+   * Populated when feedback is submitted from within `/journey` or any page
+   * that knows its manifest node. Written to `kvota.user_feedback.node_id`
+   * so the feedback is visible on that node's drawer (Req 11.1 b-half).
+   */
+  nodeId?: string;
 }
 
 interface SubmitResult {
@@ -66,6 +73,7 @@ export async function submitFeedback(
         page_title: params.pageTitle,
         debug_context: params.debugContext,
         screenshot_url: screenshotUrl,
+        ...(params.nodeId ? { node_id: params.nodeId } : {}),
       }),
     });
 

@@ -9,6 +9,7 @@ interface Props {
     search?: string;
     page?: string;
     pageSize?: string;
+    node_id?: string;
   }>;
 }
 
@@ -23,8 +24,18 @@ export default async function AdminFeedbackPage({ searchParams }: Props) {
   const search = params.search || "";
   const page = params.page ? parseInt(params.page, 10) : 1;
   const pageSize = params.pageSize ? parseInt(params.pageSize, 10) : 50;
+  // Req 11.3 — when the URL carries ?node_id=<id>, filter the list to that
+  // journey node. Drawer "View all feedback" links target this shape.
+  const nodeId = params.node_id || undefined;
 
-  const result = await fetchFeedbackList(user.orgId, status, search, page, pageSize);
+  const result = await fetchFeedbackList(
+    user.orgId,
+    status,
+    search,
+    page,
+    pageSize,
+    nodeId
+  );
 
   return (
     <div>

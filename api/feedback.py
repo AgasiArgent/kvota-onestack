@@ -118,6 +118,21 @@ async def submit_feedback(request: Request) -> JSONResponse:
     description = body.get("description", "").strip()
     page_url = body.get("page_url", "")
     page_title = body.get("page_title", "")
+    # Customer Journey Map integration (Req 11.1 b-half):
+    # when the caller knows its manifest node (submitted from /journey or
+    # any page that forwards its route), we persist the link so the
+    # feedback shows up on that node's drawer. Unknown shapes are dropped
+    # to keep `kvota.user_feedback.node_id` clean (CHECK-less column).
+    node_id_raw = body.get("node_id")
+    node_id = (
+        node_id_raw.strip()
+        if isinstance(node_id_raw, str) and node_id_raw.strip()
+        else None
+    )
+    if node_id and not (
+        node_id.startswith("app:") or node_id.startswith("ghost:")
+    ):
+        node_id = None
     debug_context_str = body.get("debug_context", "{}")
     screenshot_data = (
         body.get("screenshot", "").strip() if body.get("screenshot") else ""
@@ -202,6 +217,8 @@ async def submit_feedback(request: Request) -> JSONResponse:
             insert_payload["screenshot_data"] = screenshot_b64
         if screenshot_url:
             insert_payload["screenshot_url"] = screenshot_url
+        if node_id:
+            insert_payload["node_id"] = node_id
 
         # Retry with new short_id on UNIQUE constraint violation
         for attempt in range(3):

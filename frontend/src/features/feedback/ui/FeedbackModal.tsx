@@ -12,6 +12,12 @@ interface FeedbackModalProps {
   screenshotDataUrl?: string;
   onClearScreenshot: () => void;
   onSetScreenshot: (dataUrl: string) => void;
+  /**
+   * Optional journey node id (`app:<route>` | `ghost:<slug>`). When set, the
+   * submission is tagged with this id so it surfaces on the journey drawer
+   * for that node (Req 11.1 b-half).
+   */
+  nodeId?: string;
 }
 
 const FEEDBACK_TYPES: { value: FeedbackType; label: string }[] = [
@@ -28,6 +34,7 @@ export function FeedbackModal({
   screenshotDataUrl,
   onClearScreenshot,
   onSetScreenshot,
+  nodeId,
 }: FeedbackModalProps) {
   const [feedbackType, setFeedbackType] = useState<FeedbackType>("bug");
   const [description, setDescription] = useState("");
@@ -77,6 +84,7 @@ export function FeedbackModal({
       pageTitle: debugContext.title,
       debugContext,
       screenshotDataUrl,
+      nodeId,
     });
 
     setSubmitting(false);
@@ -87,7 +95,7 @@ export function FeedbackModal({
     } else {
       setResult(res);
     }
-  }, [feedbackType, description, screenshotDataUrl, resetAndClose]);
+  }, [feedbackType, description, screenshotDataUrl, nodeId, resetAndClose]);
 
   if (!open) return null;
 

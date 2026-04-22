@@ -200,7 +200,8 @@ export async function fetchFeedbackList(
   status?: string,
   search?: string,
   page?: number,
-  pageSize?: number
+  pageSize?: number,
+  nodeId?: string
 ): Promise<{ data: FeedbackItem[]; total: number; page: number; pageSize: number }> {
   const admin = createAdminClient();
   const currentPage = page ?? 1;
@@ -227,6 +228,12 @@ export async function fetchFeedbackList(
     query = query.or(
       `description.ilike.%${search}%,user_name.ilike.%${search}%,user_email.ilike.%${search}%,short_id.ilike.%${search}%`
     );
+  }
+
+  // Customer Journey Map filter (Req 11.3) — when a journey drawer links
+  // "View all feedback", it appends ?node_id=<id>; filter to that node only.
+  if (nodeId) {
+    query = query.eq("node_id", nodeId);
   }
 
   query = query.range(offset, offset + effectivePageSize - 1);
