@@ -4,6 +4,7 @@ import type {
   GroupAssignment,
   TenderChainStep,
   UnassignedItem,
+  LogisticsTemplateAdmin,
 } from "../model/types";
 
 async function fetchUserProfileMap(
@@ -227,4 +228,66 @@ export async function fetchUnassignedData(orgId: string): Promise<UnassignedItem
       created_at: item.created_at,
     };
   });
+}
+
+interface TemplateRowShape {
+  id: string;
+  name: string;
+  description: string | null;
+  created_by: string | null;
+  created_at: string | null;
+  segments: Array<{
+    id: string;
+    sequence_order: number;
+    from_location_type: string;
+    to_location_type: string;
+    default_label: string | null;
+    default_days: number | null;
+  }> | null;
+}
+
+export async function fetchLogisticsTemplatesForAdmin(
+  orgId: string,
+): Promise<LogisticsTemplateAdmin[]> {
+  const supabase = createAdminClient();
+
+  const { data, error } = await supabase
+    .from("logistics_route_templates")
+    .select(
+      `
+      id, name, description, created_by, created_at,
+      segments:logistics_route_template_segments (
+        id, sequence_order,
+        from_location_type, to_location_type,
+        default_label, default_days
+      )
+    `,
+    )
+    .eq("organization_id", orgId)
+    .order("name", { ascending: true });
+
+  if (error || !data) {
+    // eslint-disable-next-line no-console
+    console.error("[fetchLogisticsTemplatesForAdmin]", error);
+    return [];
+  }
+
+  const rows = data as unknown as TemplateRowShape[];
+
+  const creatorIds = Array.from(
+    new Set(rows.map((t) => t.created_by).filter((v): v is string => !!v)),
+  );
+  const nameMap = await fetchUserProfileMap(orgId, creatorIds);
+
+  return rows.map((t) => ({
+    id: t.id,
+    name: t.name,
+    description: t.description ?? null,
+    created_by: t.created_by ?? null,
+    created_by_name: t.created_by ? (nameMap.get(t.created_by) ?? null) : null,
+    created_at: t.created_at ?? new Date().toISOString(),
+    segments: [...(t.segments ?? [])].sort(
+      (a, b) => a.sequence_order - b.sequence_order,
+    ),
+  }));
 }

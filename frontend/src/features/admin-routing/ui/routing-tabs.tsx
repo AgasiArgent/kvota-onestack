@@ -14,6 +14,7 @@ const TABS = [
   { key: "groups", label: "По группам" },
   { key: "tender", label: "Тендерные" },
   { key: "unassigned", label: "Нераспределённые" },
+  { key: "logistics", label: "Шаблоны логистики" },
 ] as const;
 
 export function RoutingTabs({ activeTab, children }: Props) {

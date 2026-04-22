@@ -6,8 +6,15 @@ import { BrandsTab } from "./brands-tab";
 import { GroupsTab } from "./groups-tab";
 import { TenderTab } from "./tender-tab";
 import { UnassignedTab } from "./unassigned-tab";
-import type { RoutingTab } from "../model/types";
-import type { BrandAssignment, GroupAssignment, TenderChainStep, UnassignedItem } from "../model/types";
+import { LogisticsTemplatesTab } from "./logistics-templates-tab";
+import type {
+  RoutingTab,
+  BrandAssignment,
+  GroupAssignment,
+  TenderChainStep,
+  UnassignedItem,
+  LogisticsTemplateAdmin,
+} from "../model/types";
 
 interface Props {
   activeTab: RoutingTab;
@@ -16,6 +23,7 @@ interface Props {
   groupsData?: { assignments: GroupAssignment[] };
   tenderData?: { steps: TenderChainStep[] };
   unassignedData?: { items: UnassignedItem[] };
+  logisticsData?: { templates: LogisticsTemplateAdmin[] };
 }
 
 export function RoutingPage({
@@ -25,6 +33,7 @@ export function RoutingPage({
   groupsData,
   tenderData,
   unassignedData,
+  logisticsData,
 }: Props) {
   return (
     <>
@@ -44,6 +53,12 @@ export function RoutingPage({
         )}
         {activeTab === "unassigned" && unassignedData && (
           <UnassignedTab items={unassignedData.items} orgId={orgId} />
+        )}
+        {activeTab === "logistics" && logisticsData && (
+          <LogisticsTemplatesTab
+            templates={logisticsData.templates}
+            orgId={orgId}
+          />
         )}
       </RoutingTabs>
       <AppToaster />
