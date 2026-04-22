@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { getStatusLabel } from "@/entities/quote";
 import { SummaryCards } from "./summary-cards";
 import { WaterfallTable } from "./waterfall-table";
 import { NotCalculated } from "./not-calculated";
@@ -36,7 +37,7 @@ export function CostAnalysisView({ data }: CostAnalysisViewProps) {
           <h1 className="text-2xl font-semibold">
             Кост-анализ — {quote.idn_quote}
           </h1>
-          <Badge variant="secondary">{quote.workflow_status}</Badge>
+          <Badge variant="secondary">{getStatusLabel(quote.workflow_status)}</Badge>
         </div>
         {(quote.title || quote.customer_name) && (
           <p className="text-sm text-muted-foreground">

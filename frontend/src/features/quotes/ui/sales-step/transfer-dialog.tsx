@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -16,6 +16,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { submitToProcurementWithChecklist, patchQuote } from "@/entities/quote/mutations";
 import type { QuoteDetailRow, QuoteItemRow } from "@/entities/quote/queries";
 
@@ -118,11 +124,22 @@ export function TransferDialog({ quote, items }: TransferDialogProps) {
   );
   const [error, setError] = useState<string | null>(null);
 
+  // Precompute validation so we can disable the button instead of leaving users
+  // to wonder why a click does "nothing". Recomputed whenever quote or items
+  // change; cheap — just field lookups.
+  const validation = useMemo(
+    () => validateForTransfer(quote, items),
+    [quote, items],
+  );
+  const hasBlockers = validation.errors.length > 0;
+
   function handleOpenClick() {
-    const { errors, missingFields } = validateForTransfer(quote, items);
-    if (errors.length > 0) {
-      toast.error("Заполните обязательные поля: " + errors.join(", "));
-      highlightMissingFields(missingFields);
+    if (hasBlockers) {
+      // Defence-in-depth: tooltip + disabled already block the click, but keep
+      // the highlight-and-scroll behaviour so field outlines + scroll-to-field
+      // still fire if the button somehow gets clicked (e.g. via keyboard).
+      toast.error("Заполните обязательные поля: " + validation.errors.join(", "));
+      highlightMissingFields(validation.missingFields);
       return;
     }
     setOpen(true);
@@ -173,16 +190,41 @@ export function TransferDialog({ quote, items }: TransferDialogProps) {
 
   const canSubmit = equipmentDescription.trim().length > 0 && !submitting;
 
+  const button = (
+    <Button
+      size="sm"
+      className="bg-accent text-white hover:bg-accent-hover"
+      onClick={handleOpenClick}
+      disabled={hasBlockers}
+      aria-describedby={hasBlockers ? "transfer-blockers" : undefined}
+    >
+      <ArrowRight size={14} />
+      Передать в закупки
+    </Button>
+  );
+
   return (
     <>
-      <Button
-        size="sm"
-        className="bg-accent text-white hover:bg-accent-hover"
-        onClick={handleOpenClick}
-      >
-        <ArrowRight size={14} />
-        Передать в закупки
-      </Button>
+      {hasBlockers ? (
+        <TooltipProvider delay={150}>
+          <Tooltip>
+            {/* span wrapper is required because disabled buttons don't fire mouse events */}
+            <TooltipTrigger render={<span className="inline-block" />}>
+              {button}
+            </TooltipTrigger>
+            <TooltipContent id="transfer-blockers" className="max-w-sm">
+              <p className="font-medium">Нельзя передать в закупки, не заполнено:</p>
+              <ul className="mt-1 list-disc pl-4 text-xs">
+                {validation.errors.map((err) => (
+                  <li key={err}>{err}</li>
+                ))}
+              </ul>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      ) : (
+        button
+      )}
 
       <Dialog open={open} onOpenChange={(val) => !val && handleClose()}>
         <DialogContent className="sm:max-w-md">
