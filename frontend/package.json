@@ -9,6 +9,7 @@
     "lint": "eslint",
     "db:types": "./scripts/gen-db-types.sh",
     "journey:build": "tsx scripts/journey/build-manifest.ts",
+    "journey:backfill-routes": "tsx scripts/journey/backfill-related-routes.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },

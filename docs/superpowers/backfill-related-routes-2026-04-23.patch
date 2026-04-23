@@ -1,0 +1,193 @@
+diff --git a/.kiro/specs/admin-routing/requirements.md b/.kiro/specs/admin-routing/requirements.md
+--- a/.kiro/specs/admin-routing/requirements.md
++++ b/.kiro/specs/admin-routing/requirements.md
+@@ -1,1 +1,7 @@
++---
++related_routes:
++  - /admin/routing
++  - /quotes
++---
++
+ # Admin Routing — Requirements
+diff --git a/.kiro/specs/admin-user-management/requirements.md b/.kiro/specs/admin-user-management/requirements.md
+--- a/.kiro/specs/admin-user-management/requirements.md
++++ b/.kiro/specs/admin-user-management/requirements.md
+@@ -1,1 +1,7 @@
++---
++related_routes:
++  - /admin/users
++  - /quotes
++---
++
+ # Requirements: Управление пользователями в админке
+diff --git a/.kiro/specs/admin-users-feedback/requirements.md b/.kiro/specs/admin-users-feedback/requirements.md
+--- a/.kiro/specs/admin-users-feedback/requirements.md
++++ b/.kiro/specs/admin-users-feedback/requirements.md
+@@ -1,1 +1,6 @@
++---
++related_routes:
++  - /quotes
++---
++
+ # Requirements Document
+diff --git a/.kiro/specs/currency-invoices-migration/requirements.md b/.kiro/specs/currency-invoices-migration/requirements.md
+--- a/.kiro/specs/currency-invoices-migration/requirements.md
++++ b/.kiro/specs/currency-invoices-migration/requirements.md
+@@ -1,1 +1,7 @@
++---
++related_routes:
++  - /currency-invoices
++  - /quotes
++---
++
+ # Requirements Document
+diff --git a/.kiro/specs/customer-journey-map/requirements.md b/.kiro/specs/customer-journey-map/requirements.md
+--- a/.kiro/specs/customer-journey-map/requirements.md
++++ b/.kiro/specs/customer-journey-map/requirements.md
+@@ -1,1 +1,7 @@
++---
++related_routes:
++  - /admin/feedback
++  - /quotes/[id]
++---
++
+ # Requirements Document — Customer Journey Map (`/journey`)
+diff --git a/.kiro/specs/feedback-page-enhancements/requirements.md b/.kiro/specs/feedback-page-enhancements/requirements.md
+--- a/.kiro/specs/feedback-page-enhancements/requirements.md
++++ b/.kiro/specs/feedback-page-enhancements/requirements.md
+@@ -1,1 +1,7 @@
++---
++related_routes:
++  - /admin/feedback
++  - /admin/feedback/[id]
++---
++
+ # Requirements Document
+diff --git a/.kiro/specs/finance-migration/requirements.md b/.kiro/specs/finance-migration/requirements.md
+--- a/.kiro/specs/finance-migration/requirements.md
++++ b/.kiro/specs/finance-migration/requirements.md
+@@ -1,1 +1,7 @@
++---
++related_routes:
++  - /finance
++  - /quotes
++---
++
+ # Requirements Document
+diff --git a/.kiro/specs/kanban-inline-distribute/requirements.md b/.kiro/specs/kanban-inline-distribute/requirements.md
+--- a/.kiro/specs/kanban-inline-distribute/requirements.md
++++ b/.kiro/specs/kanban-inline-distribute/requirements.md
+@@ -1,1 +1,7 @@
++---
++related_routes:
++  - /procurement/distribution
++  - /procurement/kanban
++---
++
+ # Requirements — Kanban Inline Distribution + Drag Guard
+diff --git a/.kiro/specs/positions-registry/requirements.md b/.kiro/specs/positions-registry/requirements.md
+--- a/.kiro/specs/positions-registry/requirements.md
++++ b/.kiro/specs/positions-registry/requirements.md
+@@ -1,1 +1,7 @@
++---
++related_routes:
++  - /login
++  - /positions
++---
++
+ # Requirements Document
+diff --git a/.kiro/specs/procurement-distribution/requirements.md b/.kiro/specs/procurement-distribution/requirements.md
+--- a/.kiro/specs/procurement-distribution/requirements.md
++++ b/.kiro/specs/procurement-distribution/requirements.md
+@@ -1,1 +1,8 @@
++---
++related_routes:
++  - /admin/routing
++  - /procurement/distribution
++  - /quotes
++---
++
+ # Procurement Distribution — Requirements
+diff --git a/.kiro/specs/procurement-phase-4/requirements.md b/.kiro/specs/procurement-phase-4/requirements.md
+--- a/.kiro/specs/procurement-phase-4/requirements.md
++++ b/.kiro/specs/procurement-phase-4/requirements.md
+@@ -1,1 +1,7 @@
++---
++related_routes:
++  - /admin/vat-rates
++  - /procurement/kanban
++---
++
+ # Requirements Document
+diff --git a/.kiro/specs/procurement-users-single-source/requirements.md b/.kiro/specs/procurement-users-single-source/requirements.md
+--- a/.kiro/specs/procurement-users-single-source/requirements.md
++++ b/.kiro/specs/procurement-users-single-source/requirements.md
+@@ -1,1 +1,6 @@
++---
++related_routes:
++  - /quotes
++---
++
+ # Requirements — Procurement Users Single Source of Truth
+diff --git a/.kiro/specs/quotes-action-split/requirements.md b/.kiro/specs/quotes-action-split/requirements.md
+--- a/.kiro/specs/quotes-action-split/requirements.md
++++ b/.kiro/specs/quotes-action-split/requirements.md
+@@ -1,1 +1,6 @@
++---
++related_routes:
++  - /quotes
++---
++
+ # Requirements Document
+diff --git a/.kiro/specs/quotes-registry-migration/requirements.md b/.kiro/specs/quotes-registry-migration/requirements.md
+--- a/.kiro/specs/quotes-registry-migration/requirements.md
++++ b/.kiro/specs/quotes-registry-migration/requirements.md
+@@ -1,1 +1,7 @@
++---
++related_routes:
++  - /dashboard
++  - /quotes
++---
++
+ # Requirements Document
+diff --git a/.kiro/specs/reusable-data-table/requirements.md b/.kiro/specs/reusable-data-table/requirements.md
+--- a/.kiro/specs/reusable-data-table/requirements.md
++++ b/.kiro/specs/reusable-data-table/requirements.md
+@@ -1,1 +1,6 @@
++---
++related_routes:
++  - /quotes
++---
++
+ # Requirements Document
+diff --git a/.kiro/specs/settings-page-migration/requirements.md b/.kiro/specs/settings-page-migration/requirements.md
+--- a/.kiro/specs/settings-page-migration/requirements.md
++++ b/.kiro/specs/settings-page-migration/requirements.md
+@@ -1,1 +1,6 @@
++---
++related_routes:
++  - /settings
++---
++
+ # Requirements Document
+diff --git a/.kiro/specs/soft-delete-entity-lifecycle/requirements.md b/.kiro/specs/soft-delete-entity-lifecycle/requirements.md
+--- a/.kiro/specs/soft-delete-entity-lifecycle/requirements.md
++++ b/.kiro/specs/soft-delete-entity-lifecycle/requirements.md
+@@ -1,1 +1,7 @@
++---
++related_routes:
++  - /quotes
++  - /quotes/trash
++---
++
+ # Requirements: Cascade Soft-Delete for Quote → Spec → Deal
+diff --git a/.kiro/specs/training-migration/requirements.md b/.kiro/specs/training-migration/requirements.md
+--- a/.kiro/specs/training-migration/requirements.md
++++ b/.kiro/specs/training-migration/requirements.md
+@@ -1,1 +1,6 @@
++---
++related_routes:
++  - /training
++---
++
+ # Requirements Document
