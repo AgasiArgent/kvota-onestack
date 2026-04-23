@@ -21,6 +21,7 @@
  * shell, which passes the hydrated layers down through `state.layers`.
  */
 
+import type React from "react";
 import {
   toggleExclusion,
   toggleLayer,
@@ -45,6 +46,8 @@ interface Props {
   readonly state: JourneyFilterState;
   readonly onStateChange: (next: JourneyFilterState) => void;
   readonly userId: string | null;
+  /** Optional slot rendered above filters (e.g. admin "+ Ghost" button). */
+  readonly headerSlot?: React.ReactNode;
 }
 
 export function JourneySidebar({
@@ -52,6 +55,7 @@ export function JourneySidebar({
   state,
   onStateChange,
   userId,
+  headerSlot,
 }: Props) {
   const handleLayerToggle = (layer: LayerId) => {
     const next = toggleLayer(state.layers, layer);
@@ -93,6 +97,7 @@ export function JourneySidebar({
       data-testid="journey-sidebar-content"
       className="flex h-full flex-col gap-5 p-4"
     >
+      {headerSlot ? <section>{headerSlot}</section> : null}
       <section>
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-subtle">
           Слои

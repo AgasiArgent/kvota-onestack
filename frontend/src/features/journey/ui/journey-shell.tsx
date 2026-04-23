@@ -26,8 +26,9 @@ import type {
   JourneyManifest,
   JourneyNodeId,
   JourneyNodeAggregated,
+  RoleSlug,
 } from "@/entities/journey";
-import { useNodes } from "@/entities/journey";
+import { useNodes, canCreateGhost } from "@/entities/journey";
 import {
   useJourneyUrlState,
   DEFAULT_LAYERS,
@@ -38,21 +39,30 @@ import {
   useLayerPersistence,
   type JourneyFilterState,
 } from "../lib/use-journey-filter";
+import { AppToaster } from "@/shared/ui/app-toaster";
 import { JourneyCanvas } from "./canvas";
 import { JourneySidebar } from "./sidebar/journey-sidebar";
 import { JourneyDrawer } from "./drawer/node-drawer";
+import { GhostListManager } from "./ghost";
 
 interface JourneyShellProps {
   manifest: JourneyManifest;
   initialUrlState: JourneyUrlState;
   userId?: string | null;
+  /**
+   * Current user's held role slugs — fetched server-side and passed through
+   * so the drawer's inline-edit controls (Task 19) can gate per field ACL.
+   */
+  userRoles?: readonly RoleSlug[];
 }
 
 export function JourneyShell({
   manifest,
   initialUrlState,
   userId = null,
+  userRoles = [],
 }: JourneyShellProps) {
+  const isAdmin = canCreateGhost(userRoles);
   // `initialUrlState` is seeded into the URL by the Server Component; the
   // client hook reads back the same values from `useSearchParams`, so we
   // don't need to thread `initialUrlState` through further — it exists as
@@ -128,6 +138,9 @@ export function JourneyShell({
           state={filterState}
           onStateChange={handleFilterStateChange}
           userId={userId}
+          headerSlot={
+            isAdmin && userId ? <GhostListManager userId={userId} /> : null
+          }
         />
       </aside>
 
@@ -159,8 +172,11 @@ export function JourneyShell({
         <JourneyDrawer
           nodeId={state.node}
           onClose={() => setNode(null)}
+          userRoles={userRoles}
         />
       )}
+
+      <AppToaster />
     </div>
   );
 }
