@@ -19,3 +19,24 @@ export type {
 } from "./lib/use-journey-url-state";
 
 export { JourneyShell } from "./ui/journey-shell";
+export { JourneySidebar } from "./ui/sidebar/journey-sidebar";
+
+export {
+  applyJourneyFilters,
+  initialFilterState,
+  toggleLayer,
+  toggleExclusion,
+  readLayersFromStorage,
+  writeLayersToStorage,
+  storageKeyForUser,
+  useLayerPersistence,
+  ALL_IMPL_FILTER_VALUES,
+  ALL_QA_FILTER_VALUES,
+} from "./lib/use-journey-filter";
+
+export type {
+  JourneyFilterState,
+  ImplFilterValue,
+  QaFilterValue,
+  FilterResult,
+} from "./lib/use-journey-filter";

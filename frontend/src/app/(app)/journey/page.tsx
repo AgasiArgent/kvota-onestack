@@ -12,6 +12,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import type { JourneyManifest } from "@/entities/journey";
+import { getSessionUser } from "@/entities/user";
 import {
   JourneyShell,
   decodeFromSearchParams,
@@ -50,12 +51,19 @@ function paramsToURLSearchParams(
 
 export default async function JourneyPage({ searchParams }: JourneyPageProps) {
   const params = await searchParams;
-  const manifest = await loadManifest();
+  const [manifest, user] = await Promise.all([
+    loadManifest(),
+    getSessionUser(),
+  ]);
   const initialUrlState: JourneyUrlState = decodeFromSearchParams(
     paramsToURLSearchParams(params),
   );
 
   return (
-    <JourneyShell manifest={manifest} initialUrlState={initialUrlState} />
+    <JourneyShell
+      manifest={manifest}
+      initialUrlState={initialUrlState}
+      userId={user?.id ?? null}
+    />
   );
 }
