@@ -22,6 +22,7 @@ from api.routers import (  # re-export
     plan_fact,
     public,
     quotes,
+    workspace,
 )
 
 __all__ = [
@@ -41,4 +42,5 @@ __all__ = [
     "plan_fact",
     "public",
     "quotes",
+    "workspace",
 ]
