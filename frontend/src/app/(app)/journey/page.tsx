@@ -11,7 +11,7 @@
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import type { JourneyManifest } from "@/entities/journey";
+import type { JourneyManifest, RoleSlug } from "@/entities/journey";
 import { getSessionUser } from "@/entities/user";
 import {
   JourneyShell,
@@ -59,11 +59,32 @@ export default async function JourneyPage({ searchParams }: JourneyPageProps) {
     paramsToURLSearchParams(params),
   );
 
+  // Narrow SessionUser.roles (string[]) down to the RoleSlug union.
+  // Unknown slugs are dropped — downstream access helpers assume the union.
+  const userRoles = (user?.roles ?? []).filter((slug): slug is RoleSlug =>
+    [
+      "admin",
+      "top_manager",
+      "head_of_sales",
+      "head_of_procurement",
+      "head_of_logistics",
+      "sales",
+      "quote_controller",
+      "spec_controller",
+      "finance",
+      "procurement",
+      "procurement_senior",
+      "logistics",
+      "customs",
+    ].includes(slug),
+  );
+
   return (
     <JourneyShell
       manifest={manifest}
       initialUrlState={initialUrlState}
       userId={user?.id ?? null}
+      userRoles={userRoles}
     />
   );
 }

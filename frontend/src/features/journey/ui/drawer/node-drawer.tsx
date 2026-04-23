@@ -27,7 +27,11 @@
 
 import { useEffect } from "react";
 import { useNodeDetail } from "@/entities/journey";
-import type { JourneyNodeDetail, JourneyNodeId } from "@/entities/journey";
+import type {
+  JourneyNodeDetail,
+  JourneyNodeId,
+  RoleSlug,
+} from "@/entities/journey";
 
 import { DrawerHeader } from "./drawer-header";
 import { RolesSection } from "./roles-section";
@@ -89,9 +93,19 @@ export function makeEscapeHandler(
 export interface JourneyDrawerProps {
   readonly nodeId: JourneyNodeId | null;
   readonly onClose: () => void;
+  /**
+   * Current user's held role slugs — threaded in from the server component.
+   * Used by `StatusSection` (Task 19) to gate inline-edit controls per
+   * Req 6.4–6.5. Omitted / empty → read-only drawer.
+   */
+  readonly userRoles?: readonly RoleSlug[];
 }
 
-export function JourneyDrawer({ nodeId, onClose }: JourneyDrawerProps) {
+export function JourneyDrawer({
+  nodeId,
+  onClose,
+  userRoles = [],
+}: JourneyDrawerProps) {
   // `useNodeDetail` requires a non-empty string. We pass `""` when the drawer
   // is closed; it's fine because we early-return before touching `data`.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -137,7 +151,7 @@ export function JourneyDrawer({ nodeId, onClose }: JourneyDrawerProps) {
       )}
 
       {query.data && (
-        <DrawerBody detail={query.data} onClose={onClose} />
+        <DrawerBody detail={query.data} onClose={onClose} userRoles={userRoles} />
       )}
     </aside>
   );
@@ -150,16 +164,18 @@ export function JourneyDrawer({ nodeId, onClose }: JourneyDrawerProps) {
 function DrawerBody({
   detail,
   onClose,
+  userRoles,
 }: {
   detail: JourneyNodeDetail;
   onClose: () => void;
+  userRoles: readonly RoleSlug[];
 }) {
   return (
     <div className="flex flex-col divide-y divide-border-light">
       <DrawerHeader detail={detail} onClose={onClose} />
       <RolesSection detail={detail} />
       <StoriesSection detail={detail} />
-      <StatusSection detail={detail} />
+      <StatusSection detail={detail} userRoles={userRoles} />
       {shouldShowScreenshot(detail) && <ScreenshotSection detail={detail} />}
       <FeedbackSection detail={detail} />
       <TrainingSection detail={detail} />
