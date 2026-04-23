@@ -38,7 +38,9 @@ from api.models.journey import (
     JourneyNodeAggregated,
     JourneyNodeDetail,
     JourneyNodeHistoryEntry,
+    JourneyNodeState,
     JourneyPing,
+    JourneyStatePatchRequest,
     JourneySuccessEnvelope,
     PlaywrightWebhookRequest,
 )
@@ -141,6 +143,106 @@ async def get_journey_node_history(node_id: str, request: Request) -> JSONRespon
 
     entries = journey_service.get_node_history(node_id=node_id, limit=50)
     return success_response([e.model_dump() for e in entries])
+
+
+@router.patch(
+    "/node/{node_id:path}/state",
+    response_model=JourneySuccessEnvelope[JourneyNodeState],
+)
+async def patch_journey_node_state(
+    node_id: str, request: Request
+) -> JSONResponse:
+    """Apply a field-aware, optimistic-concurrency PATCH to a node's state row.
+
+    Path: PATCH /api/journey/node/{node_id}/state
+
+    Declared AFTER ``GET /node/{node_id:path}/history`` on purpose — FastAPI's
+    matcher prefers the longest literal suffix, so ``/history`` wins a GET,
+    and this route handles PATCH on the same path prefix (including
+    ``.../state``) without collisions. Moving this declaration before
+    ``/history`` would not break GET (methods differ) but keeps the ordering
+    intent explicit and consistent with the Task-13 handoff constraint.
+
+    Params (body — ``JourneyStatePatchRequest``):
+        version: int (required, ge=0) — last version the client saw.
+        impl_status: ImplStatus | None — new value or null to leave untouched.
+        qa_status: QaStatus | None — ditto.
+        notes: str | None — ditto.
+    Returns:
+        200 ``{"success": true, "data": JourneyNodeState}`` on success.
+        400 ``INVALID_PATCH`` on Pydantic validation failure (unknown field,
+            negative version, wrong status literal).
+        400 ``EMPTY_PATCH`` when every field is null (no write requested).
+        401 ``UNAUTHORIZED`` when the caller has no JWT.
+        403 ``FORBIDDEN_FIELD`` when the caller lacks write permission for
+            any field in the patch (full rollback — no partial write).
+        409 ``STALE_VERSION`` when stored version ≠ submitted version. The
+            response body carries the current state under ``data`` so the UI
+            can refresh without a second round-trip. This is the one place in
+            this file where an error response also ships ``data``; see the
+            explicit ``extra={"data": ...}`` branch below.
+    Side Effects:
+        UPDATE or INSERT on ``kvota.journey_node_state``. The AFTER UPDATE
+        trigger from migration 500 copies the pre-image to
+        ``journey_node_state_history``.
+    Roles: enforced per-field via ``ROLE_FIELD_PERMISSIONS`` (Req 6.4 / 6.5 /
+        6.8). ``top_manager`` is denied every field.
+    """
+    from pydantic import ValidationError  # local import — handler-only
+
+    from services import journey_service
+
+    # 1. Auth — Journey PATCH requires a caller identity for updated_by.
+    api_user = getattr(request.state, "api_user", None)
+    user_id, role_slugs = journey_service.resolve_caller_context(api_user)
+    if not user_id:
+        return error_response(
+            code="UNAUTHORIZED",
+            message="Journey state edits require an authenticated caller.",
+            status_code=401,
+        )
+
+    # 2. Parse + validate body.
+    try:
+        raw_body = await request.json()
+    except ValueError:
+        return error_response(
+            code="INVALID_PATCH",
+            message="Request body is not valid JSON.",
+            status_code=400,
+        )
+    try:
+        patch = JourneyStatePatchRequest.model_validate(raw_body)
+    except ValidationError as exc:
+        return error_response(
+            code="INVALID_PATCH",
+            message=f"Invalid patch payload: {exc.errors()}",
+            status_code=400,
+        )
+
+    # 3. Delegate to service. All domain errors raise JourneyStatePatchError.
+    try:
+        new_state = journey_service.patch_node_state(
+            node_id=node_id,
+            patch=patch,
+            caller_user_id=user_id,
+            caller_role_slugs=role_slugs,
+        )
+    except journey_service.JourneyStatePatchError as exc:
+        # STALE_VERSION is the one error that also ships ``data`` — the
+        # frontend uses it to reconcile without a second GET (Req 6.2). We
+        # override the envelope helper's default (error-only) by threading
+        # ``extra={"data": ...}``; status stays 409 and ``success=false`` so
+        # the shape remains ``{success:false, error:{...}, data:{...}}``.
+        extra = {"data": exc.data} if exc.data is not None else None
+        return error_response(
+            code=exc.code,
+            message=exc.message,
+            status_code=exc.status_code,
+            extra=extra,
+        )
+
+    return success_response(new_state.model_dump())
 
 
 @router.post(

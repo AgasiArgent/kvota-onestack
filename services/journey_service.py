@@ -38,7 +38,9 @@ from api.models.journey import (
     JourneyNodeAggregated,
     JourneyNodeDetail,
     JourneyNodeHistoryEntry,
+    JourneyNodeState,
     JourneyPin,
+    JourneyStatePatchRequest,
     JourneyVerification,
     PlaywrightWebhookPinUpdate,
 )
@@ -637,11 +639,259 @@ def apply_playwright_webhook_batch(
     return updated
 
 
+# ---------------------------------------------------------------------------
+# State PATCH — Task 12 (PATCH /api/journey/node/{node_id}/state)
+# ---------------------------------------------------------------------------
+
+
+#: Field-level write ACL for ``kvota.journey_node_state``. Source of truth:
+#: Req 6.4 / 6.5 / 6.8 in ``.kiro/specs/customer-journey-map/requirements.md``.
+#:
+#: | Role                      | impl_status | qa_status | notes |
+#: |---------------------------|:-----------:|:---------:|:-----:|
+#: | admin                     |     yes     |    yes    |  yes  |
+#: | head_of_sales             |     yes     |    no     |  yes  |
+#: | head_of_procurement       |     yes     |    no     |  yes  |
+#: | head_of_logistics         |     yes     |    no     |  yes  |
+#: | quote_controller          |     no      |    yes    |  yes  |
+#: | spec_controller           |     no      |    yes    |  yes  |
+#: | top_manager               |     no      |    no     |  no   |
+#: | everyone else             |     no      |    no     |  no   |
+#:
+#: ``notes`` is allowed for any role that can write at least one status — the
+#: requirements doc describes notes as part of the same state row, so writing
+#: notes is strictly-weaker than writing a status. ``top_manager`` is the one
+#: explicit exception (Req 6.8 — view-only tier).
+#:
+#: Exported so Task 19 (the drawer UI) can import the matrix verbatim and
+#: stay in lockstep with the API's 403 ``FORBIDDEN_FIELD`` surface.
+ROLE_FIELD_PERMISSIONS: dict[str, frozenset[str]] = {
+    "admin": frozenset({"impl_status", "qa_status", "notes"}),
+    "head_of_sales": frozenset({"impl_status", "notes"}),
+    "head_of_procurement": frozenset({"impl_status", "notes"}),
+    "head_of_logistics": frozenset({"impl_status", "notes"}),
+    "quote_controller": frozenset({"qa_status", "notes"}),
+    "spec_controller": frozenset({"qa_status", "notes"}),
+    "top_manager": frozenset(),
+}
+
+#: Fields that participate in a PATCH. ``version`` is metadata, not payload.
+_PATCHABLE_FIELDS: tuple[str, ...] = ("impl_status", "qa_status", "notes")
+
+
+class JourneyStatePatchError(Exception):
+    """Base class for patch_node_state failures the handler should translate.
+
+    Distinct from ``Exception`` so the handler can catch a narrow type and
+    let any other unexpected error propagate to the Starlette 500 path.
+    """
+
+    def __init__(
+        self,
+        *,
+        code: str,
+        message: str,
+        status_code: int,
+        data: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.status_code = status_code
+        self.data = data
+
+
+def _resolve_allowed_fields(role_slugs: set[str] | frozenset[str]) -> frozenset[str]:
+    """Union the fields writable by any role the caller holds."""
+    allowed: set[str] = set()
+    for slug in role_slugs:
+        allowed |= ROLE_FIELD_PERMISSIONS.get(slug, frozenset())
+    return frozenset(allowed)
+
+
+def _requested_fields(patch: JourneyStatePatchRequest) -> list[str]:
+    """Return the patchable fields the client set to a non-None value."""
+    return [
+        field for field in _PATCHABLE_FIELDS
+        if getattr(patch, field) is not None
+    ]
+
+
+def _state_row_to_model(row: dict[str, Any]) -> JourneyNodeState:
+    """Project a raw supabase row into the ``JourneyNodeState`` DTO."""
+    return JourneyNodeState.model_validate(
+        {
+            "node_id": row.get("node_id"),
+            "impl_status": row.get("impl_status"),
+            "qa_status": row.get("qa_status"),
+            "notes": row.get("notes"),
+            "version": int(row.get("version") or 0),
+            "last_tested_at": row.get("last_tested_at"),
+            "updated_at": row.get("updated_at") or "",
+            "updated_by": (
+                str(row["updated_by"]) if row.get("updated_by") else None
+            ),
+        }
+    )
+
+
+def patch_node_state(
+    *,
+    node_id: str,
+    patch: JourneyStatePatchRequest,
+    caller_user_id: str,
+    caller_role_slugs: set[str] | frozenset[str],
+) -> JourneyNodeState:
+    """Apply a field-aware, optimistically-concurrent PATCH to journey_node_state.
+
+    Path: invoked by ``PATCH /api/journey/node/{node_id}/state`` handler.
+    Params:
+        node_id: stable node identifier (``app:/...`` or ``ghost:...``).
+        patch: validated request body (version + optional impl/qa/notes).
+        caller_user_id: ``auth.users.id`` of the editor (required — the handler
+            rejects anonymous callers before this is called).
+        caller_role_slugs: role slugs active for the caller's org membership.
+    Returns:
+        JourneyNodeState — the post-write row (with ``version`` bumped by 1).
+    Raises:
+        JourneyStatePatchError with one of:
+            - ``EMPTY_PATCH`` (400) — no patchable field set.
+            - ``FORBIDDEN_FIELD`` (403) — any requested field lacks ACL.
+            - ``STALE_VERSION`` (409) — client version ≠ stored version. The
+              exception's ``data`` attribute carries the current state row so
+              the handler ships it under response ``data`` per Req 6.2.
+    Side Effects:
+        UPDATE on ``kvota.journey_node_state`` (when a row exists) or INSERT
+        (when version=0 and no row yet). The AFTER UPDATE trigger from
+        migration 500 copies the pre-image to ``journey_node_state_history``.
+    Roles: enforced here via ``ROLE_FIELD_PERMISSIONS`` (Req 6.4 / 6.5 / 6.6).
+    """
+    # 1. Reject empty patches (400).
+    requested = _requested_fields(patch)
+    if not requested:
+        raise JourneyStatePatchError(
+            code="EMPTY_PATCH",
+            message=(
+                "Request must set at least one of impl_status, qa_status, "
+                "or notes."
+            ),
+            status_code=400,
+        )
+
+    # 2. Field-level ACL. Any requested field outside the caller's union of
+    # allowed fields → 403 FORBIDDEN_FIELD, no partial write.
+    allowed = _resolve_allowed_fields(caller_role_slugs)
+    forbidden = [field for field in requested if field not in allowed]
+    if forbidden:
+        # Name the first offending field so the UI can highlight it. Role
+        # list is included for operator debugging (Req 6.4 error message).
+        field = forbidden[0]
+        roles_debug = ",".join(sorted(caller_role_slugs)) or "<none>"
+        raise JourneyStatePatchError(
+            code="FORBIDDEN_FIELD",
+            message=(
+                f"Role(s) [{roles_debug}] cannot write field {field!r} on "
+                f"kvota.journey_node_state."
+            ),
+            status_code=403,
+        )
+
+    # 3. Load current state row (if any).
+    sb = get_supabase()
+    existing_rows = _rows(
+        sb.table("journey_node_state")
+        .select("*")
+        .eq("node_id", node_id)
+        .execute()
+    )
+    existing = existing_rows[0] if existing_rows else None
+    stored_version = int(existing.get("version") or 0) if existing else 0
+
+    # 4. Optimistic concurrency check.
+    if patch.version != stored_version:
+        # STALE_VERSION: ship the current state so the UI can re-render
+        # without a second round-trip (Req 6.2).
+        if existing is not None:
+            current_payload: dict[str, Any] = _state_row_to_model(
+                existing
+            ).model_dump()
+        else:
+            # No row yet but client sent version != 0. Surface an empty
+            # placeholder with version=0 so the UI knows to send 0 next.
+            current_payload = {
+                "node_id": node_id,
+                "impl_status": None,
+                "qa_status": None,
+                "notes": None,
+                "version": 0,
+                "last_tested_at": None,
+                "updated_at": "",
+                "updated_by": None,
+            }
+        raise JourneyStatePatchError(
+            code="STALE_VERSION",
+            message=(
+                "State was updated by another editor; reload before retrying."
+            ),
+            status_code=409,
+            data=current_payload,
+        )
+
+    # 5. Build the write payload. Only requested fields are set so untouched
+    # columns keep their stored values.
+    now_iso = datetime.now(timezone.utc).isoformat()
+    new_version = stored_version + 1
+    write_payload: dict[str, Any] = {
+        "version": new_version,
+        "updated_at": now_iso,
+        "updated_by": caller_user_id,
+    }
+    for field in requested:
+        write_payload[field] = getattr(patch, field)
+
+    # 6. Apply UPDATE (existing row) or INSERT (no row yet).
+    if existing is not None:
+        response = (
+            sb.table("journey_node_state")
+            .update(write_payload)
+            .eq("node_id", node_id)
+            .execute()
+        )
+    else:
+        insert_payload = {"node_id": node_id, **write_payload}
+        # Fill non-requested fields explicitly so the INSERT matches the
+        # schema's NOT NULL + CHECK constraints cleanly.
+        for field in _PATCHABLE_FIELDS:
+            insert_payload.setdefault(field, None)
+        response = (
+            sb.table("journey_node_state").insert(insert_payload).execute()
+        )
+
+    rows = _rows(response)
+    if rows:
+        return _state_row_to_model(rows[0])
+
+    # Defensive fallback: supabase returned no row echo. Reconstruct from
+    # what we know was written — the version and requested fields are the
+    # authoritative post-write values.
+    reconstructed = {
+        "node_id": node_id,
+        "impl_status": (existing or {}).get("impl_status"),
+        "qa_status": (existing or {}).get("qa_status"),
+        "notes": (existing or {}).get("notes"),
+        **write_payload,
+    }
+    return _state_row_to_model(reconstructed)
+
+
 __all__ = [
     "JOURNEY_MANIFEST_PATH_ENV",
+    "ROLE_FIELD_PERMISSIONS",
+    "JourneyStatePatchError",
     "get_nodes_aggregated",
     "get_node_detail",
     "get_node_history",
     "apply_playwright_webhook_batch",
+    "patch_node_state",
     "resolve_caller_context",
 ]

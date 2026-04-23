@@ -608,7 +608,50 @@ class JourneyNodeHistoryEntry(JourneyBaseModel):
 
 
 # ---------------------------------------------------------------------------
-# 4e. Playwright webhook payloads — Task 13 (POST /playwright-webhook)
+# 4e. State PATCH request — Task 12 (PATCH /api/journey/node/{id}/state)
+# ---------------------------------------------------------------------------
+
+
+class JourneyStatePatchRequest(JourneyBaseModel):
+    """Request body for ``PATCH /api/journey/node/{node_id}/state``.
+
+    Carries the optimistic-concurrency guard (``version`` — required) plus one
+    or more of the three mutable fields. Empty patches (every field ``None``)
+    are rejected server-side with 400 ``EMPTY_PATCH`` — Pydantic accepts them
+    at the wire level because the validity rule is cross-field.
+
+    Field ACL is enforced in the handler before any write hits the DB — see
+    ``services.journey_service.ROLE_FIELD_PERMISSIONS``. A caller without
+    permission for any requested field receives 403 ``FORBIDDEN_FIELD`` with
+    no partial write (Req 6.6).
+    """
+
+    version: int = Field(
+        ...,
+        ge=0,
+        description=(
+            "Last version the client observed. ``0`` when no state row exists "
+            "yet — the server will INSERT at version=1. Any other value must "
+            "match the stored row's version exactly; a mismatch yields 409 "
+            "STALE_VERSION with the current state under ``data`` (Req 6.2)."
+        ),
+    )
+    impl_status: ImplStatus | None = Field(
+        default=None,
+        description="New implementation status; omit to leave untouched.",
+    )
+    qa_status: QaStatus | None = Field(
+        default=None,
+        description="New QA status; omit to leave untouched.",
+    )
+    notes: str | None = Field(
+        default=None,
+        description="New free-form notes; omit to leave untouched.",
+    )
+
+
+# ---------------------------------------------------------------------------
+# 4f. Playwright webhook payloads — Task 13 (POST /playwright-webhook)
 # ---------------------------------------------------------------------------
 
 
@@ -703,6 +746,7 @@ __all__ = [
     "JourneyFeedbackSummary",
     "JourneyNodeDetail",
     "JourneyNodeHistoryEntry",
+    "JourneyStatePatchRequest",
     "PlaywrightWebhookBbox",
     "PlaywrightWebhookPinUpdate",
     "PlaywrightWebhookRequest",
