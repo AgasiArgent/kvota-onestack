@@ -1,5 +1,5 @@
 """
-RLS matrix tests for migration 296 — Customer Journey Map annotation tables.
+RLS matrix tests for migration 501 — Customer Journey Map annotation tables.
 
 Source of truth: .kiro/specs/customer-journey-map/requirements.md Req 12
 and Req 18.2; design.md §4.3 / §6.
@@ -672,7 +672,7 @@ def test_journey_node_state_writes_denied_everyone(_rls_setup, slug):
 def test_journey_node_state_history_writes_denied_everyone(_rls_setup, slug):
     """Req 12.8: journey_node_state_history client writes always denied.
 
-    Only the SECURITY DEFINER trigger from migration 295 may INSERT rows.
+    Only the SECURITY DEFINER trigger from migration 500 may INSERT rows.
     """
     user_id = _rls_setup["user_by_slug"][slug]
     for op in ("INSERT", "UPDATE", "DELETE"):

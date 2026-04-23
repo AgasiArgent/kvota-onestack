@@ -1,4 +1,4 @@
--- Migration 295: Customer Journey Map — 6 annotation tables + helper + history trigger
+-- Migration 500: Customer Journey Map — 6 annotation tables + helper + history trigger
 -- Date: 2026-04-22
 -- Spec: .kiro/specs/customer-journey-map/design.md §3, §4.3
 -- Reqs: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 11.1, 18.1

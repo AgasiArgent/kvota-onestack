@@ -1,8 +1,8 @@
--- Migration 297: Backfill kvota.user_feedback.node_id for existing rows
+-- Migration 502: Backfill kvota.user_feedback.node_id for existing rows
 -- Date: 2026-04-22
 -- Spec:   .kiro/specs/customer-journey-map/requirements.md Req 11.1
 -- Task:   30 (Feedback integration)
--- Depends on: migration 295 (adds kvota.user_feedback.node_id column + index).
+-- Depends on: migration 500 (adds kvota.user_feedback.node_id column + index).
 --
 -- Goal
 -- ----
@@ -75,5 +75,5 @@ BEGIN
        AND uf.node_id IS NULL;
 
     GET DIAGNOSTICS v_updated = ROW_COUNT;
-    RAISE NOTICE 'migration 297: backfilled node_id on % user_feedback rows', v_updated;
+    RAISE NOTICE 'migration 502: backfilled node_id on % user_feedback rows', v_updated;
 END $$;

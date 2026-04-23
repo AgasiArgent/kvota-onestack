@@ -1,5 +1,5 @@
 """
-Schema tests for migration 295 — journey annotation tables.
+Schema tests for migration 500 — journey annotation tables.
 
 Covers the 6 tables that back every mutable Customer Journey Map annotation,
 plus the `kvota.user_has_role(slug)` helper reuse, the
@@ -31,7 +31,7 @@ def _get_db_connection():
     dsn = os.environ.get("DATABASE_URL") or os.environ.get("SUPABASE_DB_URL")
     if not dsn:
         pytest.skip(
-            "DATABASE_URL / SUPABASE_DB_URL not set — skipping migration 295 "
+            "DATABASE_URL / SUPABASE_DB_URL not set — skipping migration 500 "
             "schema tests (require direct DB access)."
         )
 
@@ -49,7 +49,7 @@ def _get_db_connection():
     except ImportError:
         pytest.skip(
             "Neither psycopg nor psycopg2 is installed — skipping migration "
-            "295 schema tests."
+            "500 schema tests."
         )
 
 

@@ -1,11 +1,11 @@
-"""Integration tests for migration 297 — kvota.user_feedback.node_id backfill.
+"""Integration tests for migration 502 — kvota.user_feedback.node_id backfill.
 
 Requires a live DB connection (psycopg). When DATABASE_URL / SUPABASE_DB_URL
 is not set, the module is skipped — matches the pattern used by
 test_journey_migration.py.
 
 The tests insert rows with various page_url shapes, apply the same mapping
-SQL that migration 297 uses, and assert the resulting node_id values.
+SQL that migration 502 uses, and assert the resulting node_id values.
 Every row is cleaned up inside the per-test transaction (rollback in the
 fixture teardown).
 
@@ -27,7 +27,7 @@ def _get_db_connection():
     dsn = os.environ.get("DATABASE_URL") or os.environ.get("SUPABASE_DB_URL")
     if not dsn:
         pytest.skip(
-            "DATABASE_URL / SUPABASE_DB_URL not set — skipping migration 297 "
+            "DATABASE_URL / SUPABASE_DB_URL not set — skipping migration 502 "
             "backfill tests (require direct DB access)."
         )
 
@@ -45,7 +45,7 @@ def _get_db_connection():
     except ImportError:
         pytest.skip(
             "Neither psycopg nor psycopg2 is installed — skipping migration "
-            "297 backfill tests."
+            "502 backfill tests."
         )
 
 
@@ -68,8 +68,8 @@ def db_conn():
 
 
 # ---------------------------------------------------------------------------
-# The exact SQL mapping expression migration 297 applies. Keep in lock-step
-# with migrations/297_user_feedback_node_id_backfill.sql — if the migration
+# The exact SQL mapping expression migration 502 applies. Keep in lock-step
+# with migrations/502_user_feedback_node_id_backfill.sql — if the migration
 # changes, this snippet must change too.
 # ---------------------------------------------------------------------------
 
@@ -185,7 +185,7 @@ class TestBackfillOnRealRows:
         short_ids = []
         for i, r in enumerate(rows):
             # short_id is UNIQUE — prefix with the test run's pid to keep it so.
-            short_id = f"FB-TEST-297-{os.getpid()}-{i:04d}"
+            short_id = f"FB-TEST-502-{os.getpid()}-{i:04d}"
             short_ids.append(short_id)
             cur.execute(
                 """
@@ -198,7 +198,7 @@ class TestBackfillOnRealRows:
         return short_ids
 
     def _run_backfill(self, cur):
-        """Run the UPDATE body from migration 297."""
+        """Run the UPDATE body from migration 502."""
         cur.execute(
             """
             WITH candidates AS (

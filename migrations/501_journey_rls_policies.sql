@@ -1,16 +1,16 @@
--- Migration 296: RLS policies for the 6 Customer Journey Map annotation tables.
+-- Migration 501: RLS policies for the 6 Customer Journey Map annotation tables.
 -- Date: 2026-04-22
 -- Spec: .kiro/specs/customer-journey-map/requirements.md Req 12, design.md §4.3/§6
 -- Reqs: 12.1, 12.2, 12.3, 12.4, 12.5, 12.6, 12.7, 12.8, 12.9
 --
--- Scope (Task 3, follow-up to migration 295):
+-- Scope (Task 3, follow-up to migration 500):
 --   - SELECT allowed to all authenticated users on every journey_* table.
 --   - Writes per the matrix below. `top_manager` explicitly gets NO write
 --     policy anywhere (read-only per access-control.md).
 --   - journey_node_state: NO client INSERT/UPDATE/DELETE — writes only via
 --     Python API running as service_role (which bypasses RLS).
 --   - journey_node_state_history: SELECT only; INSERTs happen via the
---     SECURITY DEFINER trigger from migration 295.
+--     SECURITY DEFINER trigger from migration 500.
 --   - journey_verifications: INSERT for admin / quote_controller /
 --     spec_controller; UPDATE and DELETE denied for everyone (append-only).
 --   - journey_ghost_nodes: INSERT/UPDATE/DELETE for admin only.
@@ -29,9 +29,9 @@
 --   top_manager       |  S      |  S     |  S    |  S   |  S    |  S  (explicitly read-only)
 --
 -- Notes:
---   * Policies use kvota.user_has_role('slug') which was created in migration 295.
+--   * Policies use kvota.user_has_role('slug') which was created in migration 500.
 --   * All statements are idempotent via DROP POLICY IF EXISTS + CREATE POLICY.
---   * RLS is already ENABLED on all six tables (migration 295); we only add policies.
+--   * RLS is already ENABLED on all six tables (migration 500); we only add policies.
 
 SET search_path TO kvota, public;
 
@@ -54,7 +54,7 @@ CREATE POLICY journey_node_state_select
 -- ───────────────────────────────────────────────────────────────────────────
 -- Table 2 — journey_node_state_history
 -- SELECT: authenticated.  INSERT only via SECURITY DEFINER trigger
--- (migration 295); UPDATE/DELETE denied for every role (Req 12.8).
+-- (migration 500); UPDATE/DELETE denied for every role (Req 12.8).
 -- ───────────────────────────────────────────────────────────────────────────
 DROP POLICY IF EXISTS journey_node_state_history_select ON kvota.journey_node_state_history;
 CREATE POLICY journey_node_state_history_select
