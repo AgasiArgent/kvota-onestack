@@ -23,6 +23,7 @@ import type { EntityNoteCardData } from "@/entities/entity-note/ui/entity-note-c
 import { CustomsInfoBlock } from "./customs-info-block";
 import { QuoteCustomsExpenses } from "./quote-customs-expenses";
 import { ItemCustomsExpenses } from "./item-customs-expenses";
+import { CustomsItemDialog } from "./customs-item-dialog";
 
 function ext<T>(row: unknown): T {
   return row as T;
@@ -139,6 +140,7 @@ export function CustomsStep({
   >([]);
   const [autofillDismissed, setAutofillDismissed] = useState(false);
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
+  const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
   const [bulkAcceptPending, startBulkAccept] = useTransition();
 
   const isPendingCustoms = quote.workflow_status === "pending_customs";
@@ -320,6 +322,7 @@ export function CustomsStep({
           userRoles={userRoles}
           autofillSuggestions={autofillSuggestions}
           onSelectRow={setSelectedRowId}
+          onExpandRow={setExpandedRowId}
         />
 
         {selectedItem && (
@@ -350,6 +353,17 @@ export function CustomsStep({
 
         <CustomsInfoBlock quoteId={quote.id} orgId={quote.organization_id} />
       </div>
+
+      <CustomsItemDialog
+        open={expandedRowId !== null}
+        onOpenChange={(next) => {
+          if (!next) setExpandedRowId(null);
+        }}
+        quoteId={quote.id}
+        item={items.find((it) => it.id === expandedRowId) ?? null}
+        userRoles={userRoles}
+        onSaved={() => router.refresh()}
+      />
     </div>
   );
 }
