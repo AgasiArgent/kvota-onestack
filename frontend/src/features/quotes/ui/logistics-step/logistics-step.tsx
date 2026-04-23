@@ -40,6 +40,7 @@ interface LogisticsStepProps {
   userId?: string;
   userRoles?: string[];
   quoteNotes?: EntityNoteCardData[];
+  invoiceNotesById?: Record<string, EntityNoteCardData[]>;
 }
 
 // Narrow shape returned by the `logistics_route_segments` query below.
@@ -116,6 +117,7 @@ export function LogisticsStep({
   userId,
   userRoles,
   quoteNotes = [],
+  invoiceNotesById = {},
 }: LogisticsStepProps) {
   const [activeInvoiceId, setActiveInvoiceId] = useState<string | null>(
     invoices[0]?.id ?? null,
@@ -414,6 +416,20 @@ export function LogisticsStep({
           currentUser={{ id: userId, roles: userRoles ?? [] }}
           title="Заметки логистов по КП"
           defaultVisibleTo={["logistics", "head_of_logistics", "sales", "procurement"]}
+        />
+      )}
+
+      {userId && activeInvoiceId && (
+        <EntityNotesPanel
+          key={activeInvoiceId}
+          entityType="invoice"
+          entityId={activeInvoiceId}
+          initialNotes={invoiceNotesById[activeInvoiceId] ?? []}
+          currentUser={{ id: userId, roles: userRoles ?? [] }}
+          title="Комментарий логиста для закупок"
+          subtitle="Видит закупки и руководитель закупок"
+          defaultVisibleTo={["procurement", "head_of_procurement"]}
+          revalidatePath={`/quotes/${quote.id}`}
         />
       )}
     </div>

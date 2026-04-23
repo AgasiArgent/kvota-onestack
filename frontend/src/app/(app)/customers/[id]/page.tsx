@@ -14,6 +14,8 @@ import {
 } from "@/entities/customer";
 import type { Customer } from "@/entities/customer";
 import { getSessionUser } from "@/entities/user";
+import { fetchEntityNotes } from "@/entities/entity-note/queries";
+import { EntityNotesPanel } from "@/entities/entity-note";
 import { CustomerHeader } from "@/features/customers/ui/customer-header";
 import { CustomerTabs } from "@/features/customers/ui/customer-tabs";
 import { TabOverview } from "@/features/customers/ui/tab-overview";
@@ -44,7 +46,14 @@ export default async function CustomerDetailPage({ params, searchParams }: Props
     <div>
       <CustomerHeader customer={customer} orgId={user.orgId} userId={user.id} />
       <CustomerTabs customerId={id} activeTab={tab}>
-        {tab === "overview" && <OverviewContent customerId={id} customer={customer} />}
+        {tab === "overview" && (
+          <OverviewContent
+            customerId={id}
+            customer={customer}
+            userId={user.id}
+            userRoles={user.roles}
+          />
+        )}
         {tab === "crm" && <CRMContent customerId={id} customer={customer} />}
         {tab === "documents" && <DocumentsContent customerId={id} subtab={subtab} />}
         {tab === "positions" && <PositionsContent customerId={id} />}
@@ -57,12 +66,30 @@ export default async function CustomerDetailPage({ params, searchParams }: Props
 async function OverviewContent({
   customerId,
   customer,
+  userId,
+  userRoles,
 }: {
   customerId: string;
   customer: Customer;
+  userId: string;
+  userRoles: string[];
 }) {
-  const stats = await fetchCustomerStats(customerId);
-  return <TabOverview customer={customer} stats={stats} />;
+  const [stats, notes] = await Promise.all([
+    fetchCustomerStats(customerId),
+    fetchEntityNotes("customer", customerId),
+  ]);
+  return (
+    <div className="space-y-6">
+      <TabOverview customer={customer} stats={stats} />
+      <EntityNotesPanel
+        entityType="customer"
+        entityId={customerId}
+        initialNotes={notes}
+        currentUser={{ id: userId, roles: userRoles }}
+        title="Заметки о клиенте"
+      />
+    </div>
+  );
 }
 
 async function CRMContent({

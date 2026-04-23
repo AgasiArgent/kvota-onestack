@@ -29,6 +29,7 @@ interface QuoteStepContentProps {
   dealId?: string | null;
   isReadOnly?: boolean;
   quoteNotes?: EntityNoteCardData[];
+  invoiceNotesById?: Record<string, EntityNoteCardData[]>;
   /** Table-view presets for the customs step (personal + shared). */
   customsTableViews?: readonly TableView[];
   /** Whether the user may create/edit org-shared customs views. */
@@ -59,6 +60,7 @@ export function QuoteStepContent({
   dealId,
   isReadOnly = false,
   quoteNotes = [],
+  invoiceNotesById = {},
   customsTableViews = [],
   canCreateCustomsSharedView = false,
 }: QuoteStepContentProps) {
@@ -97,6 +99,7 @@ export function QuoteStepContent({
           userId={userId}
           userRoles={userRoles}
           quoteNotes={quoteNotes}
+          invoiceNotesById={invoiceNotesById}
         />
       );
     case "customs":
