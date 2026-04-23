@@ -325,6 +325,116 @@ class JourneyFlow(JourneyBaseModel):
 
 
 # ---------------------------------------------------------------------------
+# 4b. Aggregated canvas-level DTO — Task 10 (GET /api/journey/nodes)
+# ---------------------------------------------------------------------------
+
+
+class JourneyNodeAggregated(JourneyBaseModel):
+    """Canvas-level merged view of a node (manifest + state + counts).
+
+    Returned by ``GET /api/journey/nodes`` — the primary data endpoint for
+    the Journey canvas (design.md §4.4, §5.2, requirements.md Req 4.3–4.8).
+
+    Data comes from three sources merged on ``node_id``:
+
+    1. **Manifest** (``frontend/public/journey-manifest.json``, Task 7) —
+       immutable route / cluster / title / roles / stories per node.
+    2. **State** (``kvota.journey_node_state``) — mutable impl/qa status.
+       Nodes with no state row surface with ``impl_status=None`` and
+       ``qa_status=None`` per Req 4.4 ("grey=unset").
+    3. **Ghost nodes** (``kvota.journey_ghost_nodes``) — planned-but-unshipped
+       rows; they carry their own ``title``/``cluster``/``proposed_route``
+       because they are absent from the manifest.
+
+    Counts are scalar integers computed server-side so the canvas does not
+    have to page through related rows:
+
+    - ``stories_count`` — length of the manifest node's ``stories`` array
+      (always 0 for ghost nodes: ghosts are not yet in code, so no story
+      can reference them).
+    - ``pins_count`` — count of ``kvota.journey_pins`` rows for this node.
+    - ``feedback_count`` — count of ``kvota.user_feedback`` rows for this
+      node *visible to the requesting user* (Req 4.6, 11.2 — admin sees all,
+      non-admin sees only own submissions).
+    """
+
+    node_id: NodeId = Field(..., description="Stable node identifier (app: or ghost:).")
+    route: str = Field(
+        ...,
+        description=(
+            "Next.js route path for ``app:*`` nodes; ``proposed_route`` "
+            "(possibly empty) for ``ghost:*`` nodes."
+        ),
+    )
+    title: str = Field(..., description="Display title from manifest or ghost row.")
+    cluster: str = Field(
+        ...,
+        description=(
+            "Cluster slug. ``ghost`` for ghost rows without an explicit "
+            "cluster; otherwise mirrors manifest ``cluster``."
+        ),
+    )
+    roles: list[str] = Field(
+        default_factory=list,
+        description="RoleSlug[] from manifest (empty for ghost nodes).",
+    )
+    impl_status: ImplStatus | None = Field(
+        default=None,
+        description="Impl status from state row; null until first recorded.",
+    )
+    qa_status: QaStatus | None = Field(
+        default=None,
+        description="QA status from state row; null until first recorded.",
+    )
+    version: int = Field(
+        default=0,
+        ge=0,
+        description=(
+            "Current optimistic-concurrency version on ``journey_node_state``. "
+            "Zero when no state row exists yet (client must treat as 0 on "
+            "first PATCH)."
+        ),
+    )
+    stories_count: int = Field(
+        default=0,
+        ge=0,
+        description="Number of stories attached to the node in the manifest.",
+    )
+    feedback_count: int = Field(
+        default=0,
+        ge=0,
+        description=(
+            "Count of ``kvota.user_feedback`` rows for this node visible to "
+            "the requesting user under application-layer access rules "
+            "(Req 11.2): admin sees all, non-admin sees only own."
+        ),
+    )
+    pins_count: int = Field(
+        default=0,
+        ge=0,
+        description="Count of ``kvota.journey_pins`` rows for this node.",
+    )
+    ghost_status: GhostStatus | None = Field(
+        default=None,
+        description="Only set for ``ghost:*`` nodes; mirrors ``journey_ghost_nodes.status``.",
+    )
+    proposed_route: str | None = Field(
+        default=None,
+        description=(
+            "Only set for ``ghost:*`` nodes. The human-supplied draft route; "
+            "may be null if the ghost was created without one."
+        ),
+    )
+    updated_at: str | None = Field(
+        default=None,
+        description=(
+            "ISO-8601 timestamp of the last state update (null if no state "
+            "row exists for the node)."
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
 # 5. Scaffold ping — used by Task 9 tests and the scaffold stub endpoint
 # ---------------------------------------------------------------------------
 
@@ -364,6 +474,7 @@ __all__ = [
     "JourneyVerification",
     "JourneyFlow",
     "JourneyFlowStep",
+    "JourneyNodeAggregated",
     # scaffold
     "JourneyPing",
 ]

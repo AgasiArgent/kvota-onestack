@@ -25,10 +25,11 @@ helpers in ``api/envelope.py``.
 from __future__ import annotations
 
 from fastapi import APIRouter
+from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from api.envelope import error_response, success_response
-from api.models.journey import JourneyPing
+from api.models.journey import JourneyNodeAggregated, JourneyPing, JourneySuccessEnvelope
 
 router = APIRouter(tags=["journey"])
 
@@ -48,6 +49,48 @@ async def journey_ping() -> JSONResponse:
            itself is open — Wave 4 handlers will enforce ACLs per design §6).
     """
     return success_response(JourneyPing().model_dump())
+
+
+@router.get(
+    "/nodes",
+    response_model=JourneySuccessEnvelope[list[JourneyNodeAggregated]],
+)
+async def get_journey_nodes(request: Request) -> JSONResponse:
+    """Return the canvas-level merged view for every journey node.
+
+    Path: GET /api/journey/nodes
+    Params: none (Task 10 — filter parameters deferred to future tasks).
+    Returns:
+        success: bool — ``true`` on success.
+        data: list[JourneyNodeAggregated] — one entry per manifest node
+            plus one per ``journey_ghost_nodes`` row, sorted by ``node_id``.
+            Each entry carries the merged shape: route / cluster / title /
+            roles from the manifest, impl/qa status + version from
+            ``journey_node_state``, and scalar counts for stories, pins,
+            feedback (filtered to the caller's visibility — Req 11.2).
+    Side Effects: none.
+    Roles: any authenticated user. Non-admin callers see ``feedback_count``
+        filtered to rows they themselves submitted (mirrors the admin-only
+        ``/admin/feedback`` gate in the frontend).
+
+    Implementation:
+        ``services.journey_service.get_nodes_aggregated`` owns the merge.
+        The handler's job is auth-context extraction + envelope shaping,
+        so Tasks 11 / 12 / 13 can reuse the same service module.
+    """
+    # Lazy import so tests can patch ``services.journey_service.get_supabase``
+    # without provoking a circular load at module-import time.
+    from services import journey_service
+
+    api_user = getattr(request.state, "api_user", None)
+    user_id, role_slugs = journey_service.resolve_caller_context(api_user)
+
+    nodes = journey_service.get_nodes_aggregated(
+        user_id=user_id,
+        role_slugs=role_slugs,
+    )
+
+    return success_response([n.model_dump() for n in nodes])
 
 
 @router.get("/_error-probe", include_in_schema=False)
