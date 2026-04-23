@@ -382,7 +382,7 @@ Endpoints (router prefix `/api/journey`):
 |---|---|---|---|---|
 | GET | `/nodes` | Aggregated canvas data | any authenticated | Req 6.x through 11 |
 | GET | `/node/{node_id}` | Full detail (state + pins + verifications latest + training steps + feedback page-1) | any authenticated | Req 5.x |
-| PATCH | `/node/{node_id}/state` | Field-aware state update with `If-Match` semantics via `version` | admin / head_of_* for impl; admin / quote_controller / spec_controller for qa | Req 6.1–6.6 |
+| PATCH | `/node/{node_id}/state` | Field-aware state update with `If-Match` semantics via `version` | admin / head_of_* / sales / procurement / procurement_senior / logistics / customs for impl; admin / quote_controller / spec_controller for qa | Req 6.1–6.6 |
 | GET | `/node/{node_id}/history` | Node state history (≤ 50 rows) | any authenticated | Req 6.9 |
 | POST | `/playwright-webhook` | Batched bbox update | `X-Journey-Webhook-Token` header | Req 10.7, 10.8 |
 

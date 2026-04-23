@@ -653,15 +653,24 @@ def apply_playwright_webhook_batch(
 #: | head_of_sales             |     yes     |    no     |  yes  |
 #: | head_of_procurement       |     yes     |    no     |  yes  |
 #: | head_of_logistics         |     yes     |    no     |  yes  |
+#: | sales                     |     yes     |    no     |  yes  |
+#: | procurement               |     yes     |    no     |  yes  |
+#: | procurement_senior        |     yes     |    no     |  yes  |
+#: | logistics                 |     yes     |    no     |  yes  |
+#: | customs                   |     yes     |    no     |  yes  |
 #: | quote_controller          |     no      |    yes    |  yes  |
 #: | spec_controller           |     no      |    yes    |  yes  |
 #: | top_manager               |     no      |    no     |  no   |
-#: | everyone else             |     no      |    no     |  no   |
+#: | everyone else (finance…)  |     no      |    no     |  no   |
 #:
-#: ``notes`` is allowed for any role that can write at least one status — the
-#: requirements doc describes notes as part of the same state row, so writing
-#: notes is strictly-weaker than writing a status. ``top_manager`` is the one
-#: explicit exception (Req 6.8 — view-only tier).
+#: Line-level executor roles (sales / procurement / procurement_senior /
+#: logistics / customs) can mark their own ``impl_status`` — they build the
+#: feature and know when it is done. ``qa_status`` stays reserved for the
+#: dedicated QA tier (Req 6.5). ``notes`` is allowed for any role that can
+#: write at least one status — the requirements doc describes notes as part
+#: of the same state row, so writing notes is strictly-weaker than writing
+#: a status. ``top_manager`` is view-only (Req 6.8); ``finance`` is not a
+#: feature executor so it is also denied here.
 #:
 #: Exported so Task 19 (the drawer UI) can import the matrix verbatim and
 #: stay in lockstep with the API's 403 ``FORBIDDEN_FIELD`` surface.
@@ -670,6 +679,11 @@ ROLE_FIELD_PERMISSIONS: dict[str, frozenset[str]] = {
     "head_of_sales": frozenset({"impl_status", "notes"}),
     "head_of_procurement": frozenset({"impl_status", "notes"}),
     "head_of_logistics": frozenset({"impl_status", "notes"}),
+    "sales": frozenset({"impl_status", "notes"}),
+    "procurement": frozenset({"impl_status", "notes"}),
+    "procurement_senior": frozenset({"impl_status", "notes"}),
+    "logistics": frozenset({"impl_status", "notes"}),
+    "customs": frozenset({"impl_status", "notes"}),
     "quote_controller": frozenset({"qa_status", "notes"}),
     "spec_controller": frozenset({"qa_status", "notes"}),
     "top_manager": frozenset(),

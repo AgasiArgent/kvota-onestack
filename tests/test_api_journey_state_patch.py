@@ -24,14 +24,22 @@ Req 6.4 / 6.5 / 6.8 in ``.kiro/specs/customer-journey-map/requirements.md``:
     | head_of_sales             |     yes     |    no     |  yes  |
     | head_of_procurement       |     yes     |    no     |  yes  |
     | head_of_logistics         |     yes     |    no     |  yes  |
+    | sales                     |     yes     |    no     |  yes  |
+    | procurement               |     yes     |    no     |  yes  |
+    | procurement_senior        |     yes     |    no     |  yes  |
+    | logistics                 |     yes     |    no     |  yes  |
+    | customs                   |     yes     |    no     |  yes  |
     | quote_controller          |     no      |    yes    |  yes  |
     | spec_controller           |     no      |    yes    |  yes  |
     | top_manager               |     no      |    no     |  no   |
-    | everyone else (sales, ...)|     no      |    no     |  no   |
+    | everyone else (finance)   |     no      |    no     |  no   |
 
-``notes`` is writable by any role that can write at least one status — the
-requirements doc doesn't name notes explicitly but Req 6 describes notes as
-part of the same state row, so writing notes is a strictly-weaker operation
+Line-level executor roles (sales / procurement / procurement_senior /
+logistics / customs) can mark their own ``impl_status`` — they build the
+feature and know when it's done. ``qa_status`` stays reserved for the QA
+tier. ``notes`` is writable by any role that can write at least one status —
+the requirements doc doesn't name notes explicitly but Req 6 describes
+notes as part of the same state row, so writing notes is strictly-weaker
 than writing a status. ``top_manager`` is denied everything (Req 6.8).
 
 Tests mock Supabase via ``services.journey_service.get_supabase`` — same
@@ -213,6 +221,44 @@ class TestPatchNodeStateEndpoint:
         updates = [c for c in calls if c["op"] == "update"]
         assert len(updates) == 1, f"expected 1 update, got {calls}"
         assert updates[0]["payload"]["version"] == 2
+        assert updates[0]["payload"]["impl_status"] == "done"
+
+    def test_patch_impl_accepted_for_sales_role(
+        self, api_client: TestClient
+    ) -> None:
+        """sales is a line-level executor → can mark its own impl_status."""
+        from services import journey_service
+
+        state_rows = [
+            {
+                "node_id": "app:/quotes",
+                "impl_status": None,
+                "qa_status": None,
+                "notes": None,
+                "version": 1,
+                "updated_at": "2026-04-22T12:00:00+00:00",
+                "updated_by": None,
+            }
+        ]
+        sb, calls = _mk_state_supabase(state_rows)
+
+        with patch.object(journey_service, "get_supabase", return_value=sb), _patch_caller(
+            {"sales"}
+        ):
+            response = api_client.patch(
+                "/api/journey/node/app:/quotes/state",
+                json={"version": 1, "impl_status": "done"},
+            )
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body.get("success") is True, body
+        data = body["data"]
+        assert data["impl_status"] == "done"
+        assert data["version"] == 2, "version must be bumped on write"
+
+        updates = [c for c in calls if c["op"] == "update"]
+        assert len(updates) == 1, f"expected 1 update, got {calls}"
         assert updates[0]["payload"]["impl_status"] == "done"
 
     def test_patch_state_stale_version_returns_409_with_current(
@@ -429,22 +475,33 @@ class TestRoleFieldPermissions:
     def test_role_field_permissions_matches_req_6(self) -> None:
         from services.journey_service import ROLE_FIELD_PERMISSIONS
 
-        # Req 6.4 — impl_status: admin, head_of_sales, head_of_procurement,
-        # head_of_logistics
-        assert "impl_status" in ROLE_FIELD_PERMISSIONS["admin"]
-        assert "impl_status" in ROLE_FIELD_PERMISSIONS["head_of_sales"]
-        assert "impl_status" in ROLE_FIELD_PERMISSIONS["head_of_procurement"]
-        assert "impl_status" in ROLE_FIELD_PERMISSIONS["head_of_logistics"]
+        # Req 6.4 — impl_status: admin, head_of_*, AND line-level executor
+        # roles (sales / procurement / procurement_senior / logistics /
+        # customs). They build the feature; they mark its impl status.
+        impl_writers = (
+            "admin",
+            "head_of_sales",
+            "head_of_procurement",
+            "head_of_logistics",
+            "sales",
+            "procurement",
+            "procurement_senior",
+            "logistics",
+            "customs",
+        )
+        for role in impl_writers:
+            assert "impl_status" in ROLE_FIELD_PERMISSIONS[role], role
 
-        # Req 6.5 — qa_status: admin, quote_controller, spec_controller
+        # Req 6.5 — qa_status: admin, quote_controller, spec_controller only.
         assert "qa_status" in ROLE_FIELD_PERMISSIONS["admin"]
         assert "qa_status" in ROLE_FIELD_PERMISSIONS["quote_controller"]
         assert "qa_status" in ROLE_FIELD_PERMISSIONS["spec_controller"]
 
-        # Head-of-X roles cannot write qa.
-        assert "qa_status" not in ROLE_FIELD_PERMISSIONS["head_of_sales"]
-        assert "qa_status" not in ROLE_FIELD_PERMISSIONS["head_of_procurement"]
-        assert "qa_status" not in ROLE_FIELD_PERMISSIONS["head_of_logistics"]
+        # No impl-writer (except admin) may write qa.
+        for role in impl_writers:
+            if role == "admin":
+                continue
+            assert "qa_status" not in ROLE_FIELD_PERMISSIONS[role], role
 
         # QA roles cannot write impl.
         assert "impl_status" not in ROLE_FIELD_PERMISSIONS["quote_controller"]
@@ -452,3 +509,8 @@ class TestRoleFieldPermissions:
 
         # Req 6.8 — top_manager has no permissions at all.
         assert ROLE_FIELD_PERMISSIONS.get("top_manager", frozenset()) == frozenset()
+
+        # finance is not a feature executor and is not in the matrix → no
+        # writes. Enforced by the "missing key → frozenset()" default used by
+        # the service.
+        assert "finance" not in ROLE_FIELD_PERMISSIONS
