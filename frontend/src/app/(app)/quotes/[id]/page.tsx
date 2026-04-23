@@ -86,6 +86,13 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
     fetchAllAvailableOnServer(user.orgId, CUSTOMS_TABLE_KEY, user.id),
   ]);
 
+  const invoiceNotesEntries = await Promise.all(
+    invoices.map(async (inv) =>
+      [inv.id, await fetchEntityNotes("invoice", inv.id)] as const,
+    ),
+  );
+  const invoiceNotesById = Object.fromEntries(invoiceNotesEntries);
+
   if (!quote || !hasAccess) notFound();
 
   const userRoles = user.roles;
@@ -145,6 +152,7 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
             dealId={dealId}
             isReadOnly={isReadOnly}
             quoteNotes={quoteNotes}
+            invoiceNotesById={invoiceNotesById}
             customsTableViews={customsTableViews}
             canCreateCustomsSharedView={canCreateCustomsSharedView}
           />
