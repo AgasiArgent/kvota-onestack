@@ -435,6 +435,138 @@ class JourneyNodeAggregated(JourneyBaseModel):
 
 
 # ---------------------------------------------------------------------------
+# 4c. Drawer-detail DTO — Task 11 (GET /api/journey/node/{node_id})
+# ---------------------------------------------------------------------------
+
+
+class JourneyFeedbackSummary(JourneyBaseModel):
+    """Compact feedback row for the drawer's top-3 list.
+
+    Mirrors the fields ``/admin/feedback`` surfaces in its list view. Not the
+    full ``kvota.user_feedback`` row — attachments, full timeline metadata,
+    and internal fields are fetched lazily by the drawer's "view all" link
+    (Req 5.3 opens ``/admin/feedback?node_id=...`` in a new tab).
+    """
+
+    id: str = Field(..., description="UUID primary key of the feedback row.")
+    short_id: str | None = Field(
+        default=None,
+        description="Short human-readable ID (e.g. ``FB-240421-152311-abc1``).",
+    )
+    node_id: NodeId | None = Field(
+        default=None,
+        description="Node this feedback targets (may be null for legacy rows).",
+    )
+    user_id: str | None = Field(
+        default=None,
+        description="``auth.users.id`` of the submitter, if recorded.",
+    )
+    description: str | None = Field(
+        default=None,
+        description="User-submitted description text.",
+    )
+    feedback_type: str | None = Field(
+        default=None,
+        description="Free-form type label (``bug``, ``improvement``, ...).",
+    )
+    status: str | None = Field(
+        default=None,
+        description="Lifecycle status (``new`` / ``triaged`` / ``done`` / ...).",
+    )
+    created_at: str | None = Field(
+        default=None,
+        description="ISO-8601 creation timestamp.",
+    )
+
+
+class JourneyNodeDetail(JourneyBaseModel):
+    """Full drawer payload for a single node (Req 5.1, design.md §4.4).
+
+    Composes five sources merged on ``node_id``:
+
+    1. **Manifest / ghost row** — route / title / cluster / roles / stories.
+    2. **State** — impl/qa status, version, notes, updated_at. Absent row →
+       status fields are ``None`` and ``version=0``.
+    3. **Pins** — every ``kvota.journey_pins`` row for this node (QA +
+       training). The drawer filters/splits client-side.
+    4. **Latest verification per pin** — map ``{pin_id: JourneyVerification}``.
+       Pins with no verification are simply absent from the map; the drawer
+       renders those as "untested".
+    5. **Feedback top-3** — ``JourneyFeedbackSummary[]`` ordered by
+       ``created_at`` DESC, filtered by application-layer visibility
+       (Req 11.2 — admin sees all, others see own). The full list is
+       reachable via the drawer's "view all" link.
+
+    Ghost nodes supply their own ``title`` / ``cluster`` / ``proposed_route``
+    (they are absent from the manifest) and expose ``ghost_status``. Pin /
+    verification sections remain queryable for ghosts but will typically be
+    empty (Req 5.2 hides screenshots/pins in the UI for ghosts).
+    """
+
+    node_id: NodeId = Field(..., description="Stable node identifier.")
+    route: str = Field(..., description="Route path (or proposed route for ghosts).")
+    title: str = Field(..., description="Display title.")
+    cluster: str = Field(..., description="Cluster slug.")
+    roles: list[str] = Field(
+        default_factory=list,
+        description="RoleSlug[] from manifest (empty for ghost nodes).",
+    )
+    stories_count: int = Field(
+        default=0,
+        ge=0,
+        description="Number of stories attached in the manifest.",
+    )
+    impl_status: ImplStatus | None = Field(
+        default=None,
+        description="Impl status from state row; null until first recorded.",
+    )
+    qa_status: QaStatus | None = Field(
+        default=None,
+        description="QA status from state row; null until first recorded.",
+    )
+    version: int = Field(
+        default=0,
+        ge=0,
+        description="Current optimistic-concurrency version (0 when no state row).",
+    )
+    notes: str | None = Field(
+        default=None,
+        description="Free-form state notes (Markdown rendered sanitised by UI).",
+    )
+    updated_at: str | None = Field(
+        default=None,
+        description="ISO-8601 timestamp of the last state update.",
+    )
+    ghost_status: GhostStatus | None = Field(
+        default=None,
+        description="Only set for ``ghost:*`` nodes.",
+    )
+    proposed_route: str | None = Field(
+        default=None,
+        description="Only set for ``ghost:*`` nodes.",
+    )
+    pins: list[JourneyPin] = Field(
+        default_factory=list,
+        description="Every pin anchored to this node (QA + training).",
+    )
+    verifications_by_pin: dict[str, JourneyVerification] = Field(
+        default_factory=dict,
+        description=(
+            "Latest verification per pin, keyed by ``pin_id``. Pins without "
+            "a verification are absent from the map."
+        ),
+    )
+    feedback: list[JourneyFeedbackSummary] = Field(
+        default_factory=list,
+        description=(
+            "Top-3 visible feedback rows for this node, ordered by "
+            "``created_at`` DESC. Filtered by the same admin/non-admin rule "
+            "as ``feedback_count`` on the canvas endpoint (Req 11.2)."
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
 # 5. Scaffold ping — used by Task 9 tests and the scaffold stub endpoint
 # ---------------------------------------------------------------------------
 
@@ -475,6 +607,8 @@ __all__ = [
     "JourneyFlow",
     "JourneyFlowStep",
     "JourneyNodeAggregated",
+    "JourneyFeedbackSummary",
+    "JourneyNodeDetail",
     # scaffold
     "JourneyPing",
 ]

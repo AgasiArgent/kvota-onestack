@@ -32,7 +32,13 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from api.models.journey import JourneyNodeAggregated
+from api.models.journey import (
+    JourneyFeedbackSummary,
+    JourneyNodeAggregated,
+    JourneyNodeDetail,
+    JourneyPin,
+    JourneyVerification,
+)
 from services.database import get_supabase
 
 logger = logging.getLogger(__name__)
@@ -240,6 +246,193 @@ def get_nodes_aggregated(
 
 
 # ---------------------------------------------------------------------------
+# Per-node detail — Task 11 (GET /api/journey/node/{node_id})
+# ---------------------------------------------------------------------------
+
+
+def _find_manifest_node(
+    manifest: dict[str, Any], node_id: str
+) -> dict[str, Any] | None:
+    """Locate a manifest node by ``node_id`` (linear scan — list is small)."""
+    for node in manifest.get("nodes", []) or []:
+        if isinstance(node, dict) and node.get("node_id") == node_id:
+            return node
+    return None
+
+
+def _latest_verification_per_pin(
+    rows: list[dict[str, Any]],
+) -> dict[str, JourneyVerification]:
+    """Reduce verification rows to ``{pin_id: latest_JourneyVerification}``.
+
+    Rows are sorted by ``tested_at`` DESC first so the first row seen per
+    pin is the most recent — mirrors the SQL pattern
+    ``ORDER BY tested_at DESC, take first per pin_id``.
+    """
+    sorted_rows = sorted(
+        rows,
+        key=lambda r: r.get("tested_at") or "",
+        reverse=True,
+    )
+    latest: dict[str, JourneyVerification] = {}
+    for row in sorted_rows:
+        pin_id = row.get("pin_id")
+        if not isinstance(pin_id, str) or not pin_id or pin_id in latest:
+            continue
+        try:
+            latest[pin_id] = JourneyVerification.model_validate(row)
+        except Exception as exc:  # pragma: no cover — defensive
+            logger.warning("skipping malformed verification row %s: %s", row.get("id"), exc)
+    return latest
+
+
+def get_node_detail(
+    *,
+    node_id: str,
+    user_id: str | None,
+    role_slugs: set[str] | frozenset[str],
+) -> JourneyNodeDetail | None:
+    """Return the full drawer payload for a single node.
+
+    Path: invoked by ``GET /api/journey/node/{node_id}`` handler.
+    Params:
+        node_id: stable node identifier (``app:/route`` or ``ghost:slug``).
+        user_id: caller's ``auth.users.id``; ``None`` for anonymous requests.
+            Used to filter the feedback top-3 for non-admin callers.
+        role_slugs: caller's role slugs for their active org — admin sees
+            every feedback row, others see only their own (Req 11.2).
+    Returns:
+        JourneyNodeDetail on success.
+        None when the node_id is unknown (not in manifest, not in
+        ``journey_ghost_nodes``) — the handler translates this to HTTP 404
+        with the ``NOT_FOUND`` error code.
+    Side Effects: none (pure read).
+    Roles: any authenticated user. Feedback visibility is filtered per
+        Req 11.2; pins and verifications are shown to every caller.
+    """
+    manifest = _load_manifest()
+    manifest_node = _find_manifest_node(manifest, node_id)
+
+    sb = get_supabase()
+
+    ghost_row: dict[str, Any] | None = None
+    if manifest_node is None:
+        ghost_rows = _rows(
+            sb.table("journey_ghost_nodes")
+            .select("*")
+            .eq("node_id", node_id)
+            .execute()
+        )
+        if ghost_rows:
+            ghost_row = ghost_rows[0]
+        else:
+            return None  # Unknown node — handler returns 404.
+
+    # State row (may be absent — defaults below).
+    state_rows = _rows(
+        sb.table("journey_node_state")
+        .select("*")
+        .eq("node_id", node_id)
+        .execute()
+    )
+    state = state_rows[0] if state_rows else {}
+
+    # Pins for this node.
+    pin_rows = _rows(
+        sb.table("journey_pins").select("*").eq("node_id", node_id).execute()
+    )
+    pins: list[JourneyPin] = []
+    for row in pin_rows:
+        try:
+            pins.append(JourneyPin.model_validate(row))
+        except Exception as exc:  # pragma: no cover — defensive
+            logger.warning("skipping malformed pin row %s: %s", row.get("id"), exc)
+
+    # Latest verification per pin (one SELECT, reduced in Python — pins-per-node
+    # is small enough that a server-side GROUP BY isn't worth a round-trip).
+    verification_rows = _rows(
+        sb.table("journey_verifications")
+        .select("*")
+        .eq("node_id", node_id)
+        .execute()
+    )
+    verifications_by_pin = _latest_verification_per_pin(verification_rows)
+
+    # Feedback top-3 (access-filtered, ordered by created_at DESC).
+    feedback_raw = _rows(
+        sb.table("user_feedback")
+        .select("*")
+        .eq("node_id", node_id)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    feedback_visible = _filter_feedback_visible(
+        feedback_raw, user_id=user_id, role_slugs=role_slugs
+    )
+    feedback_top = feedback_visible[:3]
+    feedback_summaries: list[JourneyFeedbackSummary] = []
+    for row in feedback_top:
+        # Project only the fields the summary model declares (extra='forbid'
+        # would reject e.g. 'page_url', 'metadata' passed verbatim).
+        feedback_summaries.append(
+            JourneyFeedbackSummary.model_validate(
+                {
+                    "id": str(row.get("id") or ""),
+                    "short_id": row.get("short_id"),
+                    "node_id": row.get("node_id"),
+                    "user_id": row.get("user_id"),
+                    "description": row.get("description"),
+                    "feedback_type": row.get("feedback_type"),
+                    "status": row.get("status"),
+                    "created_at": row.get("created_at"),
+                }
+            )
+        )
+
+    # Build the DTO — manifest vs ghost branches differ in source fields only.
+    if manifest_node is not None:
+        payload: dict[str, Any] = {
+            "node_id": node_id,
+            "route": manifest_node.get("route", ""),
+            "title": manifest_node.get("title", ""),
+            "cluster": manifest_node.get("cluster", ""),
+            "roles": list(manifest_node.get("roles") or []),
+            "stories_count": len(manifest_node.get("stories") or []),
+            "ghost_status": None,
+            "proposed_route": None,
+        }
+    else:
+        assert ghost_row is not None  # narrowing for the type-checker
+        payload = {
+            "node_id": node_id,
+            "route": ghost_row.get("proposed_route") or "",
+            "title": ghost_row.get("title") or "",
+            "cluster": ghost_row.get("cluster") or "ghost",
+            "roles": [],
+            "stories_count": 0,
+            "ghost_status": ghost_row.get("status"),
+            "proposed_route": ghost_row.get("proposed_route"),
+        }
+
+    payload.update(
+        {
+            "impl_status": state.get("impl_status"),
+            "qa_status": state.get("qa_status"),
+            "version": int(state.get("version") or 0),
+            "notes": state.get("notes"),
+            "updated_at": state.get("updated_at"),
+            "pins": [p.model_dump() for p in pins],
+            "verifications_by_pin": {
+                pid: v.model_dump() for pid, v in verifications_by_pin.items()
+            },
+            "feedback": [f.model_dump() for f in feedback_summaries],
+        }
+    )
+
+    return JourneyNodeDetail.model_validate(payload)
+
+
+# ---------------------------------------------------------------------------
 # Caller-context helper — used by the HTTP handler to resolve role slugs
 # from ``request.state.api_user`` without re-implementing the pattern in
 # every route. Deliberately small so Tasks 11 / 12 can reuse it.
@@ -316,5 +509,6 @@ def resolve_caller_context(api_user: Any | None) -> tuple[str | None, frozenset[
 __all__ = [
     "JOURNEY_MANIFEST_PATH_ENV",
     "get_nodes_aggregated",
+    "get_node_detail",
     "resolve_caller_context",
 ]

@@ -29,7 +29,12 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from api.envelope import error_response, success_response
-from api.models.journey import JourneyNodeAggregated, JourneyPing, JourneySuccessEnvelope
+from api.models.journey import (
+    JourneyNodeAggregated,
+    JourneyNodeDetail,
+    JourneyPing,
+    JourneySuccessEnvelope,
+)
 
 router = APIRouter(tags=["journey"])
 
@@ -91,6 +96,52 @@ async def get_journey_nodes(request: Request) -> JSONResponse:
     )
 
     return success_response([n.model_dump() for n in nodes])
+
+
+@router.get(
+    "/node/{node_id:path}",
+    response_model=JourneySuccessEnvelope[JourneyNodeDetail],
+)
+async def get_journey_node_detail(node_id: str, request: Request) -> JSONResponse:
+    """Return the full drawer payload for a single journey node.
+
+    Path: GET /api/journey/node/{node_id}
+    Params:
+        node_id: stable node identifier (``app:/route`` or ``ghost:slug``).
+            Declared with a ``:path`` converter because ``app:`` ids contain
+            ``/`` segments (e.g. ``app:/admin/users``) that would otherwise
+            be split across path params.
+    Returns:
+        200 with ``{"success": true, "data": JourneyNodeDetail}`` — manifest
+            fields + state + pins + latest verifications per pin + top-3
+            feedback (access-filtered per Req 11.2).
+        404 with ``{"success": false, "error": {"code": "NOT_FOUND", ...}}``
+            when the node_id is absent from both the manifest and
+            ``kvota.journey_ghost_nodes``.
+    Side Effects: none.
+    Roles: any authenticated user. Non-admin callers see only their own
+        feedback rows in the ``feedback`` list (admin sees all).
+    """
+    # Lazy import — keeps tests' ``patch("services.journey_service.get_supabase")``
+    # path stable and avoids circular-import risk at module load.
+    from services import journey_service
+
+    api_user = getattr(request.state, "api_user", None)
+    user_id, role_slugs = journey_service.resolve_caller_context(api_user)
+
+    detail = journey_service.get_node_detail(
+        node_id=node_id,
+        user_id=user_id,
+        role_slugs=role_slugs,
+    )
+    if detail is None:
+        return error_response(
+            code="NOT_FOUND",
+            message=f"Node {node_id!r} is not in the manifest or ghost-nodes table.",
+            status_code=404,
+        )
+
+    return success_response(detail.model_dump())
 
 
 @router.get("/_error-probe", include_in_schema=False)
