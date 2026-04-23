@@ -75,6 +75,47 @@ export async function listViews(
   return (data as RawTableViewRow[] | null)?.map(rowToTableView) ?? [];
 }
 
+/**
+ * List all views available to the user for a given registry: their personal
+ * views plus every shared view within their organization. Ordered so
+ * personal views appear first (by name), followed by shared views (by name).
+ *
+ * RLS enforces access: personal views are filtered to `user_id = self`;
+ * shared views are readable to any org member (migration 261 policies).
+ * The explicit `.or()` clause matches the policy union so a single round-trip
+ * returns both sets.
+ */
+export async function fetchAllAvailable(
+  orgId: string,
+  tableKey: string,
+  userId: string
+): Promise<TableView[]> {
+  const client = getUntypedClient();
+  const { data, error } = await client
+    .from("user_table_views")
+    .select("*")
+    .eq("table_key", tableKey)
+    .or(
+      `and(is_shared.eq.false,user_id.eq.${userId}),and(is_shared.eq.true,organization_id.eq.${orgId})`
+    );
+
+  if (error) {
+    console.error("Failed to fetch available table views:", error);
+    return [];
+  }
+
+  const rows = (data as RawTableViewRow[] | null) ?? [];
+  const views = rows.map(rowToTableView);
+
+  // Personal first (by name), then shared (by name).
+  return views.sort((a, b) => {
+    if (a.isShared !== b.isShared) {
+      return a.isShared ? 1 : -1;
+    }
+    return a.name.localeCompare(b.name, "ru");
+  });
+}
+
 /** Fetch a single view by id. Returns null if not found or access denied. */
 export async function fetchView(id: string): Promise<TableView | null> {
   const client = getUntypedClient();

@@ -47,7 +47,12 @@ type ItemExtras = {
   license_sgr_cost?: number | null;
 };
 
-/** Logical column keys (order matches HoT column array below). */
+/**
+ * Logical column keys (order matches HoT column array below).
+ *
+ * Exported (via {@link CUSTOMS_AVAILABLE_COLUMNS}) so the table-views
+ * settings dialog can present the same canonical column list.
+ */
 const COLUMN_KEYS = [
   "expand",
   "position",
@@ -230,6 +235,7 @@ const COL_HEADERS: string[] = [
   "СГР",
   headerWithTooltip("Ст-ть СГР", numericTooltip),
 ];
+
 
 /**
  * Composite "Пошлина" cell renderer.
@@ -449,6 +455,42 @@ interface CustomsHandsontableProps {
   onSelectRow?: (rowId: string | null) => void;
   /** Called when the per-row `↗` expand button is clicked (opens the dialog). */
   onExpandRow?: (rowId: string) => void;
+  /**
+   * Optional ordered list of logical column keys to show.
+   *
+   * - When undefined or empty, all columns are rendered (current behavior).
+   * - When provided, only listed keys are rendered, in the given order.
+   * - The `expand` (`↗`) column is always rendered first regardless of this
+   *   filter, because the row-expand affordance is essential UX.
+   */
+  visibleColumns?: readonly string[];
+}
+
+/**
+ * Apply a visible-column filter to a headers/columns pair. Keys not found
+ * in {@link COLUMN_KEYS} are silently dropped. `expand` is always prepended.
+ */
+function filterColumns(
+  visibleColumns: readonly string[]
+): { headers: string[]; columns: Handsontable.ColumnSettings[] } {
+  const keyToIndex = new Map<string, number>();
+  COLUMN_KEYS.forEach((k, i) => keyToIndex.set(k, i));
+
+  const orderedKeys: string[] = ["expand"];
+  for (const key of visibleColumns) {
+    if (key === "expand") continue;
+    if (keyToIndex.has(key)) orderedKeys.push(key);
+  }
+
+  const headers: string[] = [];
+  const columns: Handsontable.ColumnSettings[] = [];
+  for (const key of orderedKeys) {
+    const idx = keyToIndex.get(key);
+    if (idx === undefined) continue;
+    headers.push(COL_HEADERS[idx]);
+    columns.push(COLUMNS[idx]);
+  }
+  return { headers, columns };
 }
 
 export function CustomsHandsontable({
@@ -459,7 +501,25 @@ export function CustomsHandsontable({
   autofillSuggestions = [],
   onSelectRow,
   onExpandRow,
+  visibleColumns,
 }: CustomsHandsontableProps) {
+  // Resolve the column set: either filtered or the full default set.
+  // Memoized against the serialized key list so we don't rebuild on every render.
+  const visibleKey = visibleColumns?.join("|") ?? "";
+  const { colHeaders, colDefs, visibleKeys } = useMemo(() => {
+    if (visibleColumns && visibleColumns.length > 0) {
+      const { headers, columns } = filterColumns(visibleColumns);
+      const keys = columns.map((c) => String(c.data));
+      return { colHeaders: headers, colDefs: columns, visibleKeys: keys };
+    }
+    return {
+      colHeaders: COL_HEADERS,
+      colDefs: COLUMNS,
+      visibleKeys: [...COLUMN_KEYS] as string[],
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleKey]);
+
   const router = useRouter();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const hotRef = useRef<any>(null);
@@ -502,7 +562,7 @@ export function CustomsHandsontable({
       for (const [row, prop, , newVal] of changes) {
         const field =
           typeof prop === "number"
-            ? COLUMN_KEYS[prop]
+            ? visibleKeys[prop]
             : typeof prop === "string"
               ? prop
               : undefined;
@@ -569,7 +629,7 @@ export function CustomsHandsontable({
           .finally(() => pendingOps.current.delete(lockKey));
       }
     },
-    [router],
+    [router, visibleKeys],
   );
 
   /**
@@ -641,7 +701,7 @@ export function CustomsHandsontable({
         meta.className = (meta.className ?? "") + " row-import-banned";
       }
 
-      const prop = COLUMN_KEYS[col];
+      const prop = visibleKeys[col];
 
       if (prop === "position") {
         meta.renderer = positionRenderer;
@@ -660,7 +720,7 @@ export function CustomsHandsontable({
 
       return meta;
     },
-    [initialData, canToggleBan, positionRenderer],
+    [initialData, canToggleBan, positionRenderer, visibleKeys],
   );
 
   const handleAfterSelectionEnd = useCallback(
@@ -821,8 +881,8 @@ export function CustomsHandsontable({
             ref={hotRef}
             data={initialData}
             licenseKey="non-commercial-and-evaluation"
-            colHeaders={COL_HEADERS}
-            columns={COLUMNS}
+            colHeaders={colHeaders}
+            columns={colDefs}
             cells={cellsCallback}
             rowHeaders={false}
             stretchH="none"

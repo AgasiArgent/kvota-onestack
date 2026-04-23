@@ -24,6 +24,8 @@ import { fetchOrgMembers } from "@/features/messages/queries";
 import { fetchDocumentCount } from "@/features/quotes/ui/documents-step/queries";
 import { fetchQuoteContextData } from "@/features/quotes/ui/context-panel/queries";
 import { fetchEntityNotes } from "@/entities/entity-note/queries";
+import { fetchAllAvailableOnServer } from "@/entities/table-view/server-queries";
+import { CUSTOMS_TABLE_KEY } from "@/features/quotes/ui/customs-step/customs-columns";
 
 function getDefaultStep(roles: string[]): QuoteStep {
   for (const role of roles) {
@@ -68,6 +70,7 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
     hasAccess,
     contextData,
     quoteNotes,
+    customsTableViews,
   ] = await Promise.all([
     fetchQuoteDetail(id),
     fetchQuoteItems(id),
@@ -80,12 +83,15 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
     canAccessQuote(id, accessUser),
     fetchQuoteContextData(id),
     fetchEntityNotes("quote", id),
+    fetchAllAvailableOnServer(user.orgId, CUSTOMS_TABLE_KEY, user.id),
   ]);
 
   if (!quote || !hasAccess) notFound();
 
   const userRoles = user.roles;
   const isAdmin = userRoles.includes("admin");
+  const canCreateCustomsSharedView =
+    isAdmin || userRoles.includes("head_of_customs");
 
   // Fetch stage deadline data (depends on quote being loaded)
   const workflowStatusForDeadline = quote.workflow_status ?? "draft";
@@ -139,6 +145,8 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
             dealId={dealId}
             isReadOnly={isReadOnly}
             quoteNotes={quoteNotes}
+            customsTableViews={customsTableViews}
+            canCreateCustomsSharedView={canCreateCustomsSharedView}
           />
         }
         chat={

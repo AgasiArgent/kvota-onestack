@@ -30,6 +30,8 @@ interface CustomsItemsEditorProps {
   autofillSuggestions?: CustomsAutofillSuggestion[];
   onSelectRow?: (rowId: string | null) => void;
   onExpandRow?: (rowId: string) => void;
+  /** Ordered list of visible column keys — passed through to the table. */
+  visibleColumns?: readonly string[];
 }
 
 export function CustomsItemsEditor({
@@ -40,6 +42,7 @@ export function CustomsItemsEditor({
   autofillSuggestions,
   onSelectRow,
   onExpandRow,
+  visibleColumns,
 }: CustomsItemsEditorProps) {
   return (
     <CustomsHandsontable
@@ -50,6 +53,7 @@ export function CustomsItemsEditor({
       autofillSuggestions={autofillSuggestions}
       onSelectRow={onSelectRow}
       onExpandRow={onExpandRow}
+      visibleColumns={visibleColumns}
     />
   );
 }
