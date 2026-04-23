@@ -1,0 +1,38 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`computeLayout (dagre adapter) > produces a stable {x,y} map for a fixed 8-node fixture 1`] = `
+{
+  "app:/logistics": {
+    "x": 0,
+    "y": 480,
+  },
+  "app:/procurement": {
+    "x": 0,
+    "y": 320,
+  },
+  "app:/procurement/suppliers": {
+    "x": 360,
+    "y": 320,
+  },
+  "app:/quotes": {
+    "x": 0,
+    "y": 80,
+  },
+  "app:/quotes/[id]": {
+    "x": 360,
+    "y": 0,
+  },
+  "app:/quotes/new": {
+    "x": 360,
+    "y": 160,
+  },
+  "ghost:ai-assistant": {
+    "x": 0,
+    "y": 800,
+  },
+  "ghost:customs-calendar": {
+    "x": 0,
+    "y": 640,
+  },
+}
+`;

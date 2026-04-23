@@ -21,8 +21,10 @@
  * from URL on load), 3.11 (sidebar entry — handled in widgets/sidebar).
  */
 
-import type { JourneyManifest } from "@/entities/journey";
+import type { JourneyManifest, JourneyNodeId } from "@/entities/journey";
+import { useNodes } from "@/entities/journey";
 import { useJourneyUrlState, type JourneyUrlState } from "../lib/use-journey-url-state";
+import { JourneyCanvas } from "./canvas";
 
 interface JourneyShellProps {
   manifest: JourneyManifest;
@@ -35,8 +37,9 @@ export function JourneyShell({ manifest }: JourneyShellProps) {
   // don't need to thread `initialUrlState` through further — it exists as
   // a prop to make SSR hydration intent explicit and for future use once
   // React Flow needs an authoritative initial mount state.
-  const { state } = useJourneyUrlState();
+  const { state, setNode } = useJourneyUrlState();
   const drawerOpen = state.node !== null;
+  const nodesQuery = useNodes();
 
   return (
     <div
@@ -70,14 +73,24 @@ export function JourneyShell({ manifest }: JourneyShellProps) {
         data-testid="journey-canvas"
         className="relative flex-1 min-w-0 bg-background"
       >
-        <div className="flex h-full items-center justify-center text-text-subtle">
-          <div className="text-center">
-            <p className="text-base font-medium text-text">Карта путей</p>
-            <p className="mt-1 text-sm">
-              Canvas появится в Task 16 · Узлов в манифесте: {manifest.nodes.length}
-            </p>
+        {nodesQuery.isLoading && (
+          <div className="flex h-full items-center justify-center text-sm text-text-subtle">
+            Загрузка карты… · Узлов в манифесте: {manifest.nodes.length}
           </div>
-        </div>
+        )}
+        {nodesQuery.isError && (
+          <div className="flex h-full items-center justify-center p-6 text-center text-sm text-error">
+            Не удалось загрузить данные узлов. Попробуйте обновить страницу.
+          </div>
+        )}
+        {nodesQuery.data && (
+          <JourneyCanvas
+            nodes={nodesQuery.data}
+            edges={[]}
+            selectedNodeId={state.node}
+            onSelectNode={(id) => setNode(id as JourneyNodeId | null)}
+          />
+        )}
       </section>
 
       {drawerOpen && (
