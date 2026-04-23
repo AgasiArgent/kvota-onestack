@@ -49,6 +49,7 @@ type ItemExtras = {
 
 /** Logical column keys (order matches HoT column array below). */
 const COLUMN_KEYS = [
+  "expand",
   "position",
   "brand",
   "product_code",
@@ -110,7 +111,7 @@ interface RowData {
 }
 
 function resolveDutyMode(
-  duty: number | null | undefined,
+  _duty: number | null | undefined,
   dutyPerKg: number | null | undefined,
 ): DutyMode {
   return dutyPerKg != null ? "perKg" : "pct";
@@ -204,6 +205,7 @@ const numericTooltip = "Значение за единицу товара";
  * Handsontable re-initialization issues on React re-renders.
  */
 const COL_HEADERS: string[] = [
+  "",
   "No",
   "Бренд",
   "Артикул",
@@ -322,6 +324,28 @@ function dutyCompositeRenderer(
 }
 
 /**
+ * Expand-action cell renderer — draws a small `↗` button that opens the
+ * per-row customs dialog (Task 8). The click is handled via event delegation
+ * on the scrolling wrapper to avoid re-binding listeners on each render.
+ */
+function expandRenderer(
+  _instance: Handsontable,
+  td: HTMLTableCellElement,
+): HTMLTableCellElement {
+  td.innerHTML = "";
+  td.classList.add("customs-expand-cell");
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "customs-expand-btn";
+  btn.setAttribute("data-customs-expand", "1");
+  btn.title = "Открыть карточку позиции";
+  btn.setAttribute("aria-label", "Открыть карточку позиции");
+  btn.textContent = "↗";
+  td.appendChild(btn);
+  return td;
+}
+
+/**
  * Number renderer that adds a sparkle icon into the cell for autofilled rows.
  * Used on the `position` (№) column; the icon tooltip cites the source Q-number.
  */
@@ -380,6 +404,7 @@ function makePositionRenderer(
  * the active mode.
  */
 const COLUMNS: Handsontable.ColumnSettings[] = [
+  { data: "expand", type: "text", width: 36, readOnly: true },
   { data: "position", type: "numeric", width: 42, readOnly: true },
   { data: "brand", type: "text", width: 70, readOnly: true, wordWrap: false },
   { data: "product_code", type: "text", width: 100, readOnly: true, wordWrap: false },
@@ -422,6 +447,8 @@ interface CustomsHandsontableProps {
   autofillSuggestions?: CustomsAutofillSuggestion[];
   /** Called when user selects a row (for the item-level expenses card). */
   onSelectRow?: (rowId: string | null) => void;
+  /** Called when the per-row `↗` expand button is clicked (opens the dialog). */
+  onExpandRow?: (rowId: string) => void;
 }
 
 export function CustomsHandsontable({
@@ -431,6 +458,7 @@ export function CustomsHandsontable({
   userRoles,
   autofillSuggestions = [],
   onSelectRow,
+  onExpandRow,
 }: CustomsHandsontableProps) {
   const router = useRouter();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -619,6 +647,8 @@ export function CustomsHandsontable({
         meta.renderer = positionRenderer;
       } else if (prop === "customs_duty_composite") {
         meta.renderer = dutyCompositeRenderer;
+      } else if (prop === "expand") {
+        meta.renderer = expandRenderer;
       }
 
       if (prop === "import_banned" && !canToggleBan) {
@@ -639,6 +669,32 @@ export function CustomsHandsontable({
       onSelectRow?.(rowId);
     },
     [onSelectRow],
+  );
+
+  /**
+   * Delegated click handler for the per-row `↗` expand button. Uses
+   * HoT's getCoords(td) to resolve the row index rather than relying on
+   * walking DOM attributes, because Handsontable does not expose a stable
+   * data-row attribute on all render paths.
+   */
+  const handleExpandClick = useCallback(
+    (e: Event) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      const btn = target.closest<HTMLElement>("[data-customs-expand]");
+      if (!btn) return;
+      e.stopPropagation();
+      e.preventDefault();
+      const td = btn.closest<HTMLTableCellElement>("td");
+      const hot = hotRef.current?.hotInstance;
+      if (!td || !hot) return;
+      const coords = hot.getCoords(td);
+      if (!coords || coords.row < 0) return;
+      const rowId = rowIdsRef.current[coords.row];
+      if (!rowId) return;
+      onExpandRow?.(rowId);
+    },
+    [onExpandRow],
   );
 
   if (items.length === 0) {
@@ -713,6 +769,30 @@ export function CustomsHandsontable({
           .customs-autofill-row {
             background-color: color-mix(in oklch, var(--accent) 5%, transparent);
           }
+          .customs-expand-cell {
+            padding: 0 !important;
+            text-align: center;
+          }
+          .customs-expand-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            margin: 2px auto;
+            padding: 0;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            background: var(--card);
+            color: var(--muted-foreground);
+            font-size: 13px;
+            line-height: 1;
+            cursor: pointer;
+          }
+          .customs-expand-btn:hover {
+            color: var(--foreground);
+            border-color: var(--accent);
+          }
         `}</style>
         <div
           style={{ overflowX: "auto" }}
@@ -726,6 +806,14 @@ export function CustomsHandsontable({
             el.addEventListener(
               "kvota:duty-mode-change",
               handleDutyModeChange as EventListener,
+            );
+            el.removeEventListener(
+              "click",
+              handleExpandClick as EventListener,
+            );
+            el.addEventListener(
+              "click",
+              handleExpandClick as EventListener,
             );
           }}
         >

@@ -29,6 +29,7 @@ interface CustomsItemsEditorProps {
   userRoles: string[];
   autofillSuggestions?: CustomsAutofillSuggestion[];
   onSelectRow?: (rowId: string | null) => void;
+  onExpandRow?: (rowId: string) => void;
 }
 
 export function CustomsItemsEditor({
@@ -38,6 +39,7 @@ export function CustomsItemsEditor({
   userRoles,
   autofillSuggestions,
   onSelectRow,
+  onExpandRow,
 }: CustomsItemsEditorProps) {
   return (
     <CustomsHandsontable
@@ -47,6 +49,7 @@ export function CustomsItemsEditor({
       userRoles={userRoles}
       autofillSuggestions={autofillSuggestions}
       onSelectRow={onSelectRow}
+      onExpandRow={onExpandRow}
     />
   );
 }
