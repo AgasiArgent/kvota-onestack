@@ -567,6 +567,99 @@ class JourneyNodeDetail(JourneyBaseModel):
 
 
 # ---------------------------------------------------------------------------
+# 4d. History entry — Task 13 (GET /api/journey/node/{node_id}/history)
+# ---------------------------------------------------------------------------
+
+
+class JourneyNodeHistoryEntry(JourneyBaseModel):
+    """One audit-log row from ``kvota.journey_node_state_history``.
+
+    The history table is append-only and populated by the
+    ``trg_journey_node_state_history`` AFTER UPDATE trigger (migration 500).
+    Rows capture the *pre-image* of a state update: ``version`` and
+    ``updated_at`` are the values that existed before the UPDATE, while
+    ``changed_at`` is the timestamp of the audit insert (≈ the UPDATE time).
+    """
+
+    id: str = Field(..., description="UUID primary key of the history row.")
+    node_id: NodeId = Field(..., description="Node this history entry belongs to.")
+    impl_status: ImplStatus | None = Field(
+        default=None,
+        description="Pre-update impl_status.",
+    )
+    qa_status: QaStatus | None = Field(
+        default=None,
+        description="Pre-update qa_status.",
+    )
+    notes: str | None = Field(default=None, description="Pre-update notes.")
+    version: int = Field(
+        ...,
+        ge=0,
+        description="Pre-update optimistic-concurrency version.",
+    )
+    changed_by: str | None = Field(
+        default=None,
+        description="``auth.users.id`` of the editor who performed the update.",
+    )
+    changed_at: str = Field(
+        ...,
+        description="ISO-8601 timestamp of when the history row was inserted.",
+    )
+
+
+# ---------------------------------------------------------------------------
+# 4e. Playwright webhook payloads — Task 13 (POST /playwright-webhook)
+# ---------------------------------------------------------------------------
+
+
+class PlaywrightWebhookBbox(JourneyBaseModel):
+    """Relative bounding box (0.0–1.0 fractions) produced by Playwright.
+
+    Mirrors the ``last_rel_*`` columns on ``kvota.journey_pins``. A payload
+    with all four fields triggers a position refresh; a null / absent bbox on
+    the enclosing ``PlaywrightWebhookPinUpdate`` flips ``selector_broken`` and
+    leaves the existing bbox untouched.
+    """
+
+    rel_x: float = Field(..., ge=0.0, le=1.0, description="Fraction of screenshot width.")
+    rel_y: float = Field(..., ge=0.0, le=1.0, description="Fraction of screenshot height.")
+    rel_width: float = Field(..., ge=0.0, le=1.0, description="Width as fraction of screenshot width.")
+    rel_height: float = Field(..., ge=0.0, le=1.0, description="Height as fraction of screenshot height.")
+
+
+class PlaywrightWebhookPinUpdate(JourneyBaseModel):
+    """One pin-level entry in the nightly Playwright webhook batch."""
+
+    pin_id: str = Field(..., description="UUID of the pin to refresh.")
+    bbox: PlaywrightWebhookBbox | None = Field(
+        default=None,
+        description=(
+            "Fresh bounding box from Playwright. Null / omitted → the selector "
+            "did not resolve on this run and ``selector_broken`` is set to true."
+        ),
+    )
+
+
+class PlaywrightWebhookRequest(JourneyBaseModel):
+    """Request body for ``POST /api/journey/playwright-webhook``."""
+
+    updates: list[PlaywrightWebhookPinUpdate] = Field(
+        ...,
+        description="Batch of pin updates. Processed in a single best-effort transaction.",
+    )
+
+
+class PlaywrightWebhookResponse(JourneyBaseModel):
+    """Response payload inside the success envelope of the webhook."""
+
+    updated_count: int = Field(
+        ...,
+        ge=0,
+        description="Number of pins that received an UPDATE in this call.",
+    )
+
+
+# ---------------------------------------------------------------------------
 # 5. Scaffold ping — used by Task 9 tests and the scaffold stub endpoint
 # ---------------------------------------------------------------------------
 
@@ -609,6 +702,11 @@ __all__ = [
     "JourneyNodeAggregated",
     "JourneyFeedbackSummary",
     "JourneyNodeDetail",
+    "JourneyNodeHistoryEntry",
+    "PlaywrightWebhookBbox",
+    "PlaywrightWebhookPinUpdate",
+    "PlaywrightWebhookRequest",
+    "PlaywrightWebhookResponse",
     # scaffold
     "JourneyPing",
 ]

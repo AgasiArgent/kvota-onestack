@@ -28,6 +28,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -36,8 +37,10 @@ from api.models.journey import (
     JourneyFeedbackSummary,
     JourneyNodeAggregated,
     JourneyNodeDetail,
+    JourneyNodeHistoryEntry,
     JourneyPin,
     JourneyVerification,
+    PlaywrightWebhookPinUpdate,
 )
 from services.database import get_supabase
 
@@ -506,9 +509,139 @@ def resolve_caller_context(api_user: Any | None) -> tuple[str | None, frozenset[
     return user_id, frozenset(slugs)
 
 
+# ---------------------------------------------------------------------------
+# History read — Task 13 (GET /api/journey/node/{node_id}/history)
+# ---------------------------------------------------------------------------
+
+
+def get_node_history(
+    *,
+    node_id: str,
+    limit: int = 50,
+) -> list[JourneyNodeHistoryEntry]:
+    """Return the audit log for a node, reverse-chronological, capped at ``limit``.
+
+    Path: invoked by ``GET /api/journey/node/{node_id}/history`` handler.
+    Params:
+        node_id: stable node identifier (``app:/...`` or ``ghost:...``).
+        limit: maximum rows to return (default 50 — matches the drawer's
+            history tab). Caller is free to pass smaller values; values ≤ 0
+            are normalised to 1 to avoid a DB request for zero rows.
+    Returns:
+        list[JourneyNodeHistoryEntry] — ordered by ``changed_at`` DESC (newest
+        first). Empty list when the node has no history yet.
+    Side Effects: none.
+    Roles: any authenticated user — history is read-only, filtered by node.
+
+    Notes:
+        The history table is populated by the ``trg_journey_node_state_history``
+        trigger (migration 500). Rows capture the *pre-image* of each update;
+        clients interested in the current value should also call
+        ``get_node_detail``.
+    """
+    clamped_limit = max(1, limit)
+
+    sb = get_supabase()
+    rows = _rows(
+        sb.table("journey_node_state_history")
+        .select("*")
+        .eq("node_id", node_id)
+        .order("changed_at", desc=True)
+        .limit(clamped_limit)
+        .execute()
+    )
+
+    entries: list[JourneyNodeHistoryEntry] = []
+    for row in rows:
+        try:
+            entries.append(
+                JourneyNodeHistoryEntry.model_validate(
+                    {
+                        "id": str(row.get("id") or ""),
+                        "node_id": row.get("node_id"),
+                        "impl_status": row.get("impl_status"),
+                        "qa_status": row.get("qa_status"),
+                        "notes": row.get("notes"),
+                        "version": int(row.get("version") or 0),
+                        "changed_by": (
+                            str(row["changed_by"]) if row.get("changed_by") else None
+                        ),
+                        "changed_at": row.get("changed_at"),
+                    }
+                )
+            )
+        except Exception as exc:  # pragma: no cover — defensive
+            logger.warning("skipping malformed history row %s: %s", row.get("id"), exc)
+    return entries
+
+
+# ---------------------------------------------------------------------------
+# Playwright webhook — Task 13 (POST /api/journey/playwright-webhook)
+# ---------------------------------------------------------------------------
+
+
+def apply_playwright_webhook_batch(
+    updates: list[PlaywrightWebhookPinUpdate],
+) -> int:
+    """Apply a Playwright-produced batch of pin-bbox refreshes.
+
+    Path: invoked by ``POST /api/journey/playwright-webhook`` handler.
+    Params:
+        updates: list of per-pin payloads. Each update either carries a fresh
+            ``bbox`` (rel_x/y/width/height) — in which case the pin's
+            ``last_rel_*`` + ``last_position_update`` are refreshed and
+            ``selector_broken`` is cleared — or omits the bbox, in which case
+            ``selector_broken`` is flipped to true without touching the
+            existing bbox fields.
+    Returns:
+        int — number of pins that received an UPDATE (equal to
+        ``len(updates)`` on success; caller re-runs the webhook on partial
+        failure since it is idempotent).
+    Side Effects:
+        UPDATE on ``kvota.journey_pins`` — one row per update. The batch is
+        applied sequentially via supabase-py; supabase-py does not expose a
+        transactional wrapper, so this is best-effort. The webhook is
+        idempotent (same input → same final state) so re-running on partial
+        failure is safe.
+    Roles: service-role only — the handler gates on a shared secret header
+        (``X-Journey-Webhook-Token``), no per-user auth.
+    """
+    if not updates:
+        return 0
+
+    sb = get_supabase()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    updated = 0
+
+    for update in updates:
+        if update.bbox is None:
+            payload: dict[str, Any] = {"selector_broken": True}
+        else:
+            payload = {
+                "last_rel_x": update.bbox.rel_x,
+                "last_rel_y": update.bbox.rel_y,
+                "last_rel_width": update.bbox.rel_width,
+                "last_rel_height": update.bbox.rel_height,
+                "last_position_update": now_iso,
+                "selector_broken": False,
+            }
+        try:
+            sb.table("journey_pins").update(payload).eq("id", update.pin_id).execute()
+            updated += 1
+        except Exception as exc:  # pragma: no cover — defensive
+            logger.warning(
+                "playwright webhook: failed to update pin %s: %s",
+                update.pin_id,
+                exc,
+            )
+    return updated
+
+
 __all__ = [
     "JOURNEY_MANIFEST_PATH_ENV",
     "get_nodes_aggregated",
     "get_node_detail",
+    "get_node_history",
+    "apply_playwright_webhook_batch",
     "resolve_caller_context",
 ]

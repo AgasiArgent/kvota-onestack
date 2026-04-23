@@ -24,7 +24,12 @@ helpers in ``api/envelope.py``.
 
 from __future__ import annotations
 
+import hmac
+import logging
+import os
+
 from fastapi import APIRouter
+from pydantic import ValidationError
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -32,9 +37,19 @@ from api.envelope import error_response, success_response
 from api.models.journey import (
     JourneyNodeAggregated,
     JourneyNodeDetail,
+    JourneyNodeHistoryEntry,
     JourneyPing,
     JourneySuccessEnvelope,
+    PlaywrightWebhookRequest,
 )
+
+logger = logging.getLogger(__name__)
+
+#: Env var holding the shared secret that Playwright must send in the
+#: ``X-Journey-Webhook-Token`` header. Missing env var → the handler returns
+#: 503 (we never fall back to an empty / default token — that would make the
+#: webhook unauthenticated).
+JOURNEY_WEBHOOK_TOKEN_ENV = "JOURNEY_WEBHOOK_TOKEN"
 
 router = APIRouter(tags=["journey"])
 
@@ -96,6 +111,112 @@ async def get_journey_nodes(request: Request) -> JSONResponse:
     )
 
     return success_response([n.model_dump() for n in nodes])
+
+
+@router.get(
+    "/node/{node_id:path}/history",
+    response_model=JourneySuccessEnvelope[list[JourneyNodeHistoryEntry]],
+)
+async def get_journey_node_history(node_id: str, request: Request) -> JSONResponse:
+    """Return the audit log for a node, reverse-chronological, capped at 50.
+
+    Path: GET /api/journey/node/{node_id}/history
+    Params:
+        node_id: stable node identifier — ``app:/route`` or ``ghost:slug``.
+            The ``:path`` converter is required because ``app:`` ids contain
+            ``/`` segments. This route is declared BEFORE
+            ``GET /node/{node_id:path}`` so the longer literal suffix
+            ``/history`` wins the match.
+    Returns:
+        200 ``{"success": true, "data": JourneyNodeHistoryEntry[]}`` — up to
+            50 rows from ``kvota.journey_node_state_history`` ordered by
+            ``changed_at`` DESC. Empty list if no history yet (valid result —
+            no 404 for unknown nodes on history; the audit log is append-only
+            and simply absent until first update).
+    Side Effects: none.
+    Roles: any authenticated user (same visibility as the state itself — the
+        history is the same projection).
+    """
+    from services import journey_service
+
+    entries = journey_service.get_node_history(node_id=node_id, limit=50)
+    return success_response([e.model_dump() for e in entries])
+
+
+@router.post(
+    "/playwright-webhook",
+    response_model=None,
+)
+async def journey_playwright_webhook(request: Request) -> JSONResponse:
+    """Accept a nightly batch of pin-bbox refreshes from the Playwright crawler.
+
+    Path: POST /api/journey/playwright-webhook
+    Auth: shared secret via ``X-Journey-Webhook-Token`` header, compared to
+        the ``JOURNEY_WEBHOOK_TOKEN`` env var with ``hmac.compare_digest``
+        (constant-time). Missing env var → 503 SERVICE_UNAVAILABLE (we refuse
+        to run an unauthenticated webhook). Missing / mismatched header →
+        401 UNAUTHORIZED.
+    Params (body):
+        updates: PlaywrightWebhookPinUpdate[] — each entry carries a ``pin_id``
+            plus an optional ``bbox`` (rel_x/y/width/height, all 0.0–1.0).
+            Null/absent bbox → pin is marked ``selector_broken=true`` and
+            bbox fields are left untouched.
+    Returns:
+        200 ``{"success": true, "data": {"updated_count": int}}`` on success.
+        400 VALIDATION_ERROR when the body fails Pydantic validation.
+        401 UNAUTHORIZED when the header is missing or doesn't match.
+        503 SERVICE_UNAVAILABLE when ``JOURNEY_WEBHOOK_TOKEN`` is unset.
+    Side Effects:
+        UPDATE on ``kvota.journey_pins`` for each entry in ``updates``. The
+        batch is best-effort (supabase-py has no transaction wrapper) —
+        idempotent by design, so re-running on partial failure is safe.
+    Roles: service-role only (no per-user auth; the shared secret gates access).
+    """
+    from services import journey_service
+
+    expected_token = os.environ.get(JOURNEY_WEBHOOK_TOKEN_ENV)
+    if not expected_token:
+        logger.error(
+            "playwright webhook refused: %s env var is not set",
+            JOURNEY_WEBHOOK_TOKEN_ENV,
+        )
+        return error_response(
+            code="SERVICE_UNAVAILABLE",
+            message=(
+                f"Journey webhook is not configured: {JOURNEY_WEBHOOK_TOKEN_ENV} "
+                "env var is missing on the server."
+            ),
+            status_code=503,
+        )
+
+    provided_token = request.headers.get("X-Journey-Webhook-Token", "")
+    if not provided_token or not hmac.compare_digest(provided_token, expected_token):
+        return error_response(
+            code="UNAUTHORIZED",
+            message="Missing or invalid X-Journey-Webhook-Token header.",
+            status_code=401,
+        )
+
+    try:
+        raw_body = await request.json()
+    except ValueError:
+        return error_response(
+            code="VALIDATION_ERROR",
+            message="Request body is not valid JSON.",
+            status_code=400,
+        )
+
+    try:
+        payload = PlaywrightWebhookRequest.model_validate(raw_body)
+    except ValidationError as exc:
+        return error_response(
+            code="VALIDATION_ERROR",
+            message=f"Invalid webhook payload: {exc.errors()}",
+            status_code=400,
+        )
+
+    updated = journey_service.apply_playwright_webhook_batch(payload.updates)
+    return success_response({"updated_count": updated})
 
 
 @router.get(
