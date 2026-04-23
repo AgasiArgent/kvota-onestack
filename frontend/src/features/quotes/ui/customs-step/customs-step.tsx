@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { completeCustoms, skipCustoms } from "@/entities/quote/mutations";
 import type {
@@ -14,8 +14,15 @@ import {
   AutofillBanner,
   type CustomsAutofillSuggestion,
 } from "@/features/customs-autofill";
+import type { TableView } from "@/entities/table-view";
+import { fetchAllAvailable } from "@/entities/table-view";
+import { TableViewsDropdown } from "@/features/table-views";
 import { CustomsActionBar } from "./customs-action-bar";
 import { CustomsItemsEditor } from "./customs-items-editor";
+import {
+  CUSTOMS_AVAILABLE_COLUMNS,
+  CUSTOMS_TABLE_KEY,
+} from "./customs-columns";
 import { CustomsExpenses } from "./customs-expenses";
 import { CustomsNotes } from "./customs-notes";
 import { EntityNotesPanel } from "@/entities/entity-note";
@@ -122,6 +129,10 @@ interface CustomsStepProps {
   userRoles: string[];
   userId?: string;
   quoteNotes?: EntityNoteCardData[];
+  /** Table views available to the user (personal + org-shared). */
+  tableViews?: readonly TableView[];
+  /** True when the acting user may create/edit org-shared views. */
+  canCreateSharedView?: boolean;
 }
 
 export function CustomsStep({
@@ -131,8 +142,11 @@ export function CustomsStep({
   userRoles,
   userId,
   quoteNotes = [],
+  tableViews = [],
+  canCreateSharedView = false,
 }: CustomsStepProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [completing, setCompleting] = useState(false);
   const [skipping, setSkipping] = useState(false);
   const [autofillSuggestions, setAutofillSuggestions] = useState<
@@ -142,6 +156,57 @@ export function CustomsStep({
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
   const [bulkAcceptPending, startBulkAccept] = useTransition();
+
+  // Views are seeded from server props and refreshed client-side after the
+  // settings dialog mutates them. Keep them in state so a refresh after
+  // save reflects immediately without a full router.refresh() round-trip.
+  const [views, setViews] = useState<readonly TableView[]>(tableViews);
+  useEffect(() => {
+    setViews(tableViews);
+  }, [tableViews]);
+
+  // Active view: either the `?customs_view=<id>` query param or the user's
+  // default view. `null` means "show all columns".
+  const viewParam = searchParams?.get("customs_view") ?? null;
+  const defaultView = useMemo(
+    () => views.find((v) => v.isDefault && !v.isShared) ?? null,
+    [views]
+  );
+  const activeViewId = viewParam ?? defaultView?.id ?? null;
+  const activeView = useMemo(
+    () => views.find((v) => v.id === activeViewId) ?? null,
+    [views, activeViewId]
+  );
+  const visibleColumns = activeView?.visibleColumns;
+
+  const handleViewChange = useCallback(
+    (nextViewId: string | null) => {
+      const params = new URLSearchParams(searchParams?.toString() ?? "");
+      if (nextViewId) {
+        params.set("customs_view", nextViewId);
+      } else {
+        params.delete("customs_view");
+      }
+      // Preserve hash + pathname; push so back-button restores the previous view.
+      const query = params.toString();
+      router.push(query ? `?${query}` : "?", { scroll: false });
+    },
+    [router, searchParams]
+  );
+
+  const handleViewsRefresh = useCallback(async () => {
+    if (!userId || !quote.organization_id) return;
+    try {
+      const next = await fetchAllAvailable(
+        quote.organization_id,
+        CUSTOMS_TABLE_KEY,
+        userId
+      );
+      setViews(next);
+    } catch (err) {
+      console.error("Failed to refresh customs views:", err);
+    }
+  }, [userId, quote.organization_id]);
 
   const isPendingCustoms = quote.workflow_status === "pending_customs";
   const canSkipCustoms =
@@ -315,6 +380,22 @@ export function CustomsStep({
           />
         )}
 
+        {userId && quote.organization_id && (
+          <div className="flex items-center justify-end">
+            <TableViewsDropdown
+              views={views}
+              activeViewId={activeViewId}
+              onViewChange={handleViewChange}
+              onViewsRefresh={handleViewsRefresh}
+              tableKey={CUSTOMS_TABLE_KEY}
+              availableColumns={CUSTOMS_AVAILABLE_COLUMNS}
+              userId={userId}
+              orgId={quote.organization_id}
+              canCreateShared={canCreateSharedView}
+            />
+          </div>
+        )}
+
         <CustomsItemsEditor
           items={items}
           invoiceCountryMap={invoiceCountryMap}
@@ -323,6 +404,7 @@ export function CustomsStep({
           autofillSuggestions={autofillSuggestions}
           onSelectRow={setSelectedRowId}
           onExpandRow={setExpandedRowId}
+          visibleColumns={visibleColumns}
         />
 
         {selectedItem && (

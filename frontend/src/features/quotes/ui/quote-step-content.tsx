@@ -7,6 +7,7 @@ import type {
 } from "@/entities/quote/queries";
 import type { QuoteStep } from "@/entities/quote/types";
 import type { EntityNoteCardData } from "@/entities/entity-note/ui/entity-note-card";
+import type { TableView } from "@/entities/table-view";
 import { SalesStep } from "./sales-step/sales-step";
 import { ProcurementStep } from "./procurement-step/procurement-step";
 import { LogisticsStep } from "./logistics-step/logistics-step";
@@ -28,6 +29,10 @@ interface QuoteStepContentProps {
   dealId?: string | null;
   isReadOnly?: boolean;
   quoteNotes?: EntityNoteCardData[];
+  /** Table-view presets for the customs step (personal + shared). */
+  customsTableViews?: readonly TableView[];
+  /** Whether the user may create/edit org-shared customs views. */
+  canCreateCustomsSharedView?: boolean;
 }
 
 function ReadOnlyOverlay({ children }: { children: React.ReactNode }) {
@@ -54,6 +59,8 @@ export function QuoteStepContent({
   dealId,
   isReadOnly = false,
   quoteNotes = [],
+  customsTableViews = [],
+  canCreateCustomsSharedView = false,
 }: QuoteStepContentProps) {
   function wrapReadOnly(content: React.ReactNode) {
     if (!isReadOnly) return content;
@@ -101,6 +108,8 @@ export function QuoteStepContent({
           userRoles={userRoles}
           userId={userId}
           quoteNotes={quoteNotes}
+          tableViews={customsTableViews}
+          canCreateSharedView={canCreateCustomsSharedView}
         />
       );
     case "control":

@@ -25,7 +25,7 @@ export interface TableView {
   updatedAt: string;
 }
 
-/** Payload for creating a new personal view. */
+/** Payload for creating a new personal or shared view. */
 export interface CreateViewInput {
   tableKey: string;
   name: string;
@@ -33,6 +33,12 @@ export interface CreateViewInput {
   sort: string | null;
   visibleColumns: readonly string[];
   isDefault?: boolean;
+  /**
+   * When true, creates an organization-shared view. Requires the acting user
+   * to hold the `head_of_customs` or `admin` role — otherwise `createView`
+   * throws. Personal views (default) are scoped to the acting user only.
+   */
+  isShared?: boolean;
 }
 
 /** Payload for updating an existing view (only provided fields are touched). */
