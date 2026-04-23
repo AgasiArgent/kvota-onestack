@@ -21,6 +21,7 @@ import {
   SplitSquareHorizontal,
   LayoutGrid,
   Trash2,
+  Map as MapIcon,
 } from "lucide-react";
 
 export interface MenuItem {
@@ -28,7 +29,16 @@ export interface MenuItem {
   label: string;
   href: string;
   badge?: number;
+  /** Optional text badge (e.g. "NEW") — takes precedence over numeric `badge`. */
+  badgeText?: string;
 }
+
+/**
+ * "NEW" badge on the journey entry auto-hides after this date (2 weeks after
+ * Task 15 landed on 2026-04-22). Keep as an ISO string so the comparison is
+ * timezone-stable via `Date.parse`.
+ */
+const JOURNEY_NEW_BADGE_UNTIL = "2026-05-06";
 
 export interface MenuSection {
   title: string;
@@ -121,6 +131,17 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
       ...(pendingApprovalsCount > 0 ? { badge: pendingApprovalsCount } : {}),
     });
   }
+
+  // Carte du parcours — visible to all authenticated users (Req 3.2).
+  // "NEW" badge hides automatically two weeks after launch.
+  const isJourneyNew = Date.now() < Date.parse(JOURNEY_NEW_BADGE_UNTIL);
+  mainItems.push({
+    icon: MapIcon,
+    label: "Карта путей",
+    href: "/journey",
+    ...(isJourneyNew ? { badgeText: "NEW" } : {}),
+  });
+
   sections.push({ title: "Главное", items: mainItems });
 
   // === REGISTRIES ===

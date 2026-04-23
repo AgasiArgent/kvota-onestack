@@ -236,7 +236,15 @@ export function Sidebar({
                     {showLabels && (
                       <span className="truncate">{item.label}</span>
                     )}
-                    {showLabels && item.badge && (
+                    {showLabels && item.badgeText && (
+                      <Badge
+                        variant="secondary"
+                        className="ml-auto text-[10px] px-1.5 py-0 font-semibold uppercase tracking-wide"
+                      >
+                        {item.badgeText}
+                      </Badge>
+                    )}
+                    {showLabels && !item.badgeText && item.badge && (
                       <Badge
                         variant="destructive"
                         className="ml-auto text-[10px] px-1.5 py-0 min-w-[18px] text-center"

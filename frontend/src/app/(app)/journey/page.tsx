@@ -1,0 +1,61 @@
+/**
+ * `/journey` page — three-pane Customer Journey Map shell.
+ *
+ * - Auth guard is inherited from `(app)/layout.tsx` (redirects to /login).
+ * - Server Component: reads the build-time manifest from disk and parses
+ *   URL search params into `JourneyUrlState`, then hands both to a client
+ *   component that owns canvas/drawer/sidebar rendering.
+ *
+ * Reqs: 3.1, 3.2, 3.10, 3.11
+ */
+
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import type { JourneyManifest } from "@/entities/journey";
+import {
+  JourneyShell,
+  decodeFromSearchParams,
+  type JourneyUrlState,
+} from "@/features/journey";
+
+interface JourneyPageProps {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
+
+async function loadManifest(): Promise<JourneyManifest> {
+  const manifestPath = path.join(
+    process.cwd(),
+    "public",
+    "journey-manifest.json",
+  );
+  const raw = await fs.readFile(manifestPath, "utf8");
+  return JSON.parse(raw) as JourneyManifest;
+}
+
+function paramsToURLSearchParams(
+  params: Record<string, string | string[] | undefined>,
+): URLSearchParams {
+  const urlParams = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (typeof value === "string") {
+      urlParams.set(key, value);
+    } else if (Array.isArray(value) && value.length > 0) {
+      // Next.js collapses duplicate keys into string[]; the journey URL
+      // schema only uses scalar values, so we take the first occurrence.
+      urlParams.set(key, value[0]);
+    }
+  }
+  return urlParams;
+}
+
+export default async function JourneyPage({ searchParams }: JourneyPageProps) {
+  const params = await searchParams;
+  const manifest = await loadManifest();
+  const initialUrlState: JourneyUrlState = decodeFromSearchParams(
+    paramsToURLSearchParams(params),
+  );
+
+  return (
+    <JourneyShell manifest={manifest} initialUrlState={initialUrlState} />
+  );
+}
