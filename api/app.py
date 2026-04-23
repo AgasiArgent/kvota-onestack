@@ -45,6 +45,7 @@ from api.routers import (
     plan_fact,
     public,
     quotes,
+    workspace,
 )
 
 load_dotenv()
@@ -91,6 +92,7 @@ api_sub_app.include_router(documents.router, prefix="/documents")  # → /api/do
 api_sub_app.include_router(customs.router, prefix="/customs")  # → /api/customs/*
 api_sub_app.include_router(logistics.router, prefix="/logistics")  # → /api/logistics/*
 api_sub_app.include_router(notes.router, prefix="/notes")  # → /api/notes
+api_sub_app.include_router(workspace.router, prefix="/workspace")  # → /api/workspace/*
 # integrations.router spans /telegram/* + /internal/* — no single prefix fits.
 api_sub_app.include_router(integrations.router)
 

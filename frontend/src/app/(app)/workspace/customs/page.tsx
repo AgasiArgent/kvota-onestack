@@ -11,6 +11,10 @@ import {
 import { WorkspaceInvoicesTable } from "@/features/workspace-logistics/ui/workspace-invoices-table";
 import { WorkspaceStatsStrip } from "@/features/workspace-logistics/ui/workspace-stats-strip";
 import { UnassignedInbox } from "@/features/workspace-logistics/ui/unassigned-inbox";
+import {
+  AnalyticsPanel,
+  fetchWorkspaceAnalytics,
+} from "@/features/workspace-analytics";
 import { WorkspaceLogisticsClient } from "../logistics/workspace-logistics-client";
 
 type Tab = "my" | "completed" | "unassigned" | "all";
@@ -35,14 +39,16 @@ export default async function WorkspaceCustomsPage({ searchParams }: PageProps) 
 
   if (!isHead && (activeTab === "unassigned" || activeTab === "all")) notFound();
 
-  const [my, completed, unassigned, all, teamUsers, stats] = await Promise.all([
-    fetchMyAssignedInvoices("customs", user.id, orgId),
-    fetchMyCompletedInvoices("customs", user.id, orgId),
-    isHead ? fetchUnassignedInvoices("customs", orgId) : Promise.resolve([]),
-    isHead ? fetchAllActiveInvoices("customs", orgId) : Promise.resolve([]),
-    isHead ? fetchTeamUsers("customs", orgId) : Promise.resolve([]),
-    isHead ? fetchWorkspaceStats("customs", orgId) : Promise.resolve(null),
-  ]);
+  const [my, completed, unassigned, all, teamUsers, stats, analyticsRows] =
+    await Promise.all([
+      fetchMyAssignedInvoices("customs", user.id, orgId),
+      fetchMyCompletedInvoices("customs", user.id, orgId),
+      isHead ? fetchUnassignedInvoices("customs", orgId) : Promise.resolve([]),
+      isHead ? fetchAllActiveInvoices("customs", orgId) : Promise.resolve([]),
+      isHead ? fetchTeamUsers("customs", orgId) : Promise.resolve([]),
+      isHead ? fetchWorkspaceStats("customs", orgId) : Promise.resolve(null),
+      isHead ? fetchWorkspaceAnalytics("customs") : Promise.resolve([]),
+    ]);
 
   return (
     <div className="p-6 space-y-6 max-w-[1400px] mx-auto">
@@ -68,6 +74,8 @@ export default async function WorkspaceCustomsPage({ searchParams }: PageProps) 
           all: <WorkspaceInvoicesTable domain="customs" viewKind="all" invoices={all} emptyLabel="Нет заявок" />,
         }}
       </WorkspaceLogisticsClient>
+
+      {isHead && <AnalyticsPanel domain="customs" rows={analyticsRows} />}
     </div>
   );
 }
