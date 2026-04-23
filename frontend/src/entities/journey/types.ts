@@ -294,3 +294,97 @@ export type JourneyVerificationRow = JourneyVerification;
 
 /** Row type for `kvota.journey_flows`. TODO: regenerate after Task 1. */
 export type JourneyFlowRow = JourneyFlow;
+
+// ---------------------------------------------------------------------------
+// 7. API response shapes — mirror `api/models/journey.py` Wave 4 DTOs
+// ---------------------------------------------------------------------------
+//
+// These interfaces mirror the Pydantic models in `api/models/journey.py`
+// (§4b–§4d). They are returned by the Python API under `/api/journey/*`
+// wrapped in the standard `{success, data}` envelope (the entity slice
+// unwraps the envelope before handing data to hooks).
+//
+// Fields are `readonly` everywhere; arrays and records are `readonly` so
+// cached objects cannot be mutated by consumers.
+
+/**
+ * Canvas-level merged view of a node (manifest + state + counts).
+ * Returned by `GET /api/journey/nodes` — one entry per node, with manifest
+ * fields, current state, and scalar counts computed server-side.
+ *
+ * Mirrors `api/models/journey.py::JourneyNodeAggregated`.
+ */
+export interface JourneyNodeAggregated {
+  readonly node_id: JourneyNodeId;
+  readonly route: string;
+  readonly title: string;
+  readonly cluster: string;
+  readonly roles: readonly RoleSlug[];
+  readonly impl_status: ImplStatus | null;
+  readonly qa_status: QaStatus | null;
+  readonly version: number;
+  readonly stories_count: number;
+  readonly feedback_count: number;
+  readonly pins_count: number;
+  readonly ghost_status: GhostStatus | null;
+  readonly proposed_route: string | null;
+  readonly updated_at: string | null;
+}
+
+/**
+ * Compact feedback row for the drawer's top-3 list.
+ * Mirrors `api/models/journey.py::JourneyFeedbackSummary`.
+ */
+export interface JourneyFeedbackSummary {
+  readonly id: string;
+  readonly short_id: string | null;
+  readonly node_id: JourneyNodeId | null;
+  readonly user_id: string | null;
+  readonly description: string | null;
+  readonly feedback_type: string | null;
+  readonly status: string | null;
+  readonly created_at: string | null;
+}
+
+/**
+ * Full drawer payload for a single node.
+ * Returned by `GET /api/journey/node/{node_id}` — composes manifest, state,
+ * pins, latest-verification-per-pin map, and top-3 feedback rows.
+ *
+ * Mirrors `api/models/journey.py::JourneyNodeDetail`.
+ */
+export interface JourneyNodeDetail {
+  readonly node_id: JourneyNodeId;
+  readonly route: string;
+  readonly title: string;
+  readonly cluster: string;
+  readonly roles: readonly RoleSlug[];
+  readonly stories_count: number;
+  readonly impl_status: ImplStatus | null;
+  readonly qa_status: QaStatus | null;
+  readonly version: number;
+  readonly notes: string | null;
+  readonly updated_at: string | null;
+  readonly ghost_status: GhostStatus | null;
+  readonly proposed_route: string | null;
+  readonly pins: readonly JourneyPin[];
+  readonly verifications_by_pin: Readonly<Record<string, JourneyVerification>>;
+  readonly feedback: readonly JourneyFeedbackSummary[];
+}
+
+/**
+ * One audit-log entry from `kvota.journey_node_state_history`.
+ * Returned by `GET /api/journey/node/{node_id}/history` (most-recent-50).
+ *
+ * Mirrors `api/models/journey.py::JourneyNodeHistoryEntry`.
+ */
+export interface JourneyNodeHistoryEntry {
+  readonly id: string;
+  readonly node_id: JourneyNodeId;
+  readonly impl_status: ImplStatus | null;
+  readonly qa_status: QaStatus | null;
+  readonly notes: string | null;
+  readonly version: number;
+  readonly changed_by: string | null;
+  readonly changed_at: string;
+}

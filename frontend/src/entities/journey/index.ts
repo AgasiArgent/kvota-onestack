@@ -1,6 +1,7 @@
 // Public API for the `journey` entity slice.
-// Task 2 surfaces the type contracts only. API clients, queries, and mutations
-// arrive in Task 14 (`entities/journey/api.ts`, `queries.ts`, `mutations.ts`).
+// Task 2 surfaced the type contracts. Task 14 adds the runtime surface:
+// access helpers, TanStack Query hooks, Supabase direct queries, and the
+// optimistic-mutation hook for state PATCH.
 
 export type {
   // Status unions
@@ -26,6 +27,11 @@ export type {
   JourneyVerification,
   JourneyFlow,
   JourneyFlowStep,
+  // API response shapes
+  JourneyNodeAggregated,
+  JourneyFeedbackSummary,
+  JourneyNodeDetail,
+  JourneyNodeHistoryEntry,
   // Supabase row aliases (stubbed until Task 1 types land)
   JourneyNodeStateRow,
   JourneyNodeStateHistoryRow,
@@ -34,3 +40,47 @@ export type {
   JourneyVerificationRow,
   JourneyFlowRow,
 } from "./types";
+
+// Access control
+export {
+  IMPL_STATUS_WRITERS,
+  QA_STATUS_WRITERS,
+  NOTES_WRITERS,
+  GHOST_WRITERS,
+  PIN_WRITERS,
+  VERIFICATION_WRITERS,
+  canEditImpl,
+  canEditQa,
+  canEditNotes,
+  canCreateGhost,
+  canCreatePin,
+  canRecordVerification,
+} from "./access";
+
+// API hooks (TanStack Query)
+export {
+  journeyNodePath,
+  journeyFetch,
+  useNodes,
+  useNodeDetail,
+  useNodeHistory,
+  JOURNEY_QUERY_KEYS,
+} from "./api";
+
+// Supabase direct queries
+export {
+  listGhosts,
+  createGhost,
+  updateGhost,
+  deleteGhost,
+  listPinsForNode,
+  createPin,
+  updatePin,
+  deletePin,
+  listVerificationsForPin,
+  createVerification,
+  listFlows,
+} from "./queries";
+
+// Mutations
+export { useUpdateNodeState } from "./mutations";
