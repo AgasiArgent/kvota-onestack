@@ -19,7 +19,13 @@ SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")
 
 # Paths that skip auth entirely (health checks, webhooks)
-PUBLIC_API_PATHS = {"/api/health", "/api/telegram/webhook", "/api/changelog", "/api/cron/check-overdue"}
+PUBLIC_API_PATHS = {
+    "/api/health",
+    "/api/telegram/webhook",
+    "/api/changelog",
+    "/api/cron/check-overdue",
+    "/api/cron/sla-check",
+}
 
 # Paths that STRICTLY require JWT (no session fallback).
 # Add paths here only after the corresponding FastHTML route is fully removed.
