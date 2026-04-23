@@ -102,19 +102,6 @@ def _fetch_expired_quotes(supabase: Any, cutoff_iso: str, limit: int) -> list[di
     return list(response.data or [])
 
 
-def _delete_rows(supabase: Any, table: str, column: str, values: list[str] | str) -> int:
-    """Delete rows matching column in/eq values. Returns affected row count."""
-    query = supabase.table(table).delete()
-    if isinstance(values, list):
-        if not values:
-            return 0
-        query = query.in_(column, values)
-    else:
-        query = query.eq(column, values)
-    response = query.execute()
-    return len(response.data or [])
-
-
 def _purge_one_quote(
     supabase: Any, quote: dict[str, Any], dry_run: bool
 ) -> dict[str, int]:
@@ -161,12 +148,16 @@ def _purge_one_quote(
         )
         return counts
 
-    # Real run. Order matters: deals -> specs -> quote (FK RESTRICT forces it).
-    counts["deals"] = _delete_rows(supabase, "deals", "quote_id", quote_id)
-    counts["specifications"] = _delete_rows(
-        supabase, "specifications", "quote_id", quote_id
-    )
-    counts["quotes"] = _delete_rows(supabase, "quotes", "id", quote_id)
+    # Real run. Single atomic rpc — kvota.hard_purge_quote wraps the 3 deletes
+    # (deals -> specs -> quote, order forced by RESTRICT FKs) in one txn, so a
+    # network drop mid-call can't leave partial-purge state. Migration 281.
+    rpc_resp = supabase.rpc(
+        "hard_purge_quote", {"p_quote_id": quote_id}
+    ).execute()
+    row = (rpc_resp.data or [{}])[0]
+    counts["deals"] = int(row.get("deals_deleted", 0))
+    counts["specifications"] = int(row.get("specs_deleted", 0))
+    counts["quotes"] = int(row.get("quotes_deleted", 0))
 
     if counts["quotes"] == 0:
         # Row vanished between fetch and delete (parallel cron / manual cleanup).
