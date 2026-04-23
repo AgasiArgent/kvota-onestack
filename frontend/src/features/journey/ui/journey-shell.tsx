@@ -21,25 +21,98 @@
  * from URL on load), 3.11 (sidebar entry — handled in widgets/sidebar).
  */
 
-import type { JourneyManifest, JourneyNodeId } from "@/entities/journey";
+import { useState } from "react";
+import type {
+  JourneyManifest,
+  JourneyNodeId,
+  JourneyNodeAggregated,
+} from "@/entities/journey";
 import { useNodes } from "@/entities/journey";
-import { useJourneyUrlState, type JourneyUrlState } from "../lib/use-journey-url-state";
+import {
+  useJourneyUrlState,
+  DEFAULT_LAYERS,
+  type JourneyUrlState,
+} from "../lib/use-journey-url-state";
+import {
+  initialFilterState,
+  useLayerPersistence,
+  type JourneyFilterState,
+} from "../lib/use-journey-filter";
 import { JourneyCanvas } from "./canvas";
+import { JourneySidebar } from "./sidebar/journey-sidebar";
+import { JourneyDrawer } from "./drawer/node-drawer";
 
 interface JourneyShellProps {
   manifest: JourneyManifest;
   initialUrlState: JourneyUrlState;
+  userId?: string | null;
 }
 
-export function JourneyShell({ manifest }: JourneyShellProps) {
+export function JourneyShell({
+  manifest,
+  initialUrlState,
+  userId = null,
+}: JourneyShellProps) {
   // `initialUrlState` is seeded into the URL by the Server Component; the
   // client hook reads back the same values from `useSearchParams`, so we
   // don't need to thread `initialUrlState` through further — it exists as
   // a prop to make SSR hydration intent explicit and for future use once
   // React Flow needs an authoritative initial mount state.
-  const { state, setNode } = useJourneyUrlState();
+  const { state, setNode, setLayers, setViewAs } = useJourneyUrlState();
   const drawerOpen = state.node !== null;
   const nodesQuery = useNodes();
+
+  // Sidebar search + cluster list need node data. Use the live query when
+  // available; fall back to the static manifest shape during initial load.
+  const sidebarNodes: readonly JourneyNodeAggregated[] =
+    nodesQuery.data ??
+    manifest.nodes.map((n) => ({
+      node_id: n.node_id,
+      route: n.route,
+      title: n.title,
+      cluster: n.cluster,
+      roles: n.roles,
+      impl_status: null,
+      qa_status: null,
+      version: 0,
+      stories_count: n.stories.length,
+      feedback_count: 0,
+      pins_count: 0,
+      ghost_status: null,
+      proposed_route: null,
+      updated_at: null,
+    }));
+
+  // Filter state owned by the shell. Layers + viewAs are mirrored to the
+  // URL via `useJourneyUrlState` (primary filter state per Req 3.11);
+  // cluster/status/search exclusions are session-scoped only.
+  const [filterState, setFilterState] = useState<JourneyFilterState>(() => ({
+    ...initialFilterState(),
+    layers: state.layers,
+    viewAs: state.viewAs,
+  }));
+
+  // Hydrate layers from localStorage on mount unless URL carries them
+  // (Req 4.9 — URL takes precedence over localStorage on page load).
+  // `decodeFromSearchParams` returns the `DEFAULT_LAYERS` reference when the
+  // `?layers=` param is absent, so identity comparison reliably detects
+  // whether the user loaded with an explicit filter.
+  const urlHasExplicitLayers = initialUrlState.layers !== DEFAULT_LAYERS;
+  useLayerPersistence({
+    userId,
+    urlHasExplicitLayers,
+    currentLayers: filterState.layers,
+    onHydrate: (hydrated) => {
+      setFilterState((prev) => ({ ...prev, layers: hydrated }));
+      setLayers(hydrated);
+    },
+  });
+
+  const handleFilterStateChange = (next: JourneyFilterState) => {
+    setFilterState(next);
+    if (next.layers !== filterState.layers) setLayers(next.layers);
+    if (next.viewAs !== filterState.viewAs) setViewAs(next.viewAs);
+  };
 
   return (
     <div
@@ -50,23 +123,12 @@ export function JourneyShell({ manifest }: JourneyShellProps) {
         data-testid="journey-sidebar"
         className="w-[300px] shrink-0 border-r border-border-light bg-sidebar overflow-y-auto"
       >
-        <div className="p-4 text-sm text-text-muted">
-          <p className="mb-2 font-medium text-text">Слои и фильтры</p>
-          <p className="text-xs text-text-subtle">
-            Task 18 добавит переключатели слоёв и фильтры. Сейчас активны:{" "}
-            <span data-testid="journey-active-layers">
-              {state.layers.length > 0 ? state.layers.join(", ") : "—"}
-            </span>
-          </p>
-          {state.viewAs && (
-            <p
-              data-testid="journey-viewas-badge"
-              className="mt-2 inline-flex items-center rounded-md bg-accent-subtle px-2 py-0.5 text-xs font-medium text-accent"
-            >
-              View as: {state.viewAs}
-            </p>
-          )}
-        </div>
+        <JourneySidebar
+          nodes={sidebarNodes}
+          state={filterState}
+          onStateChange={handleFilterStateChange}
+          userId={userId}
+        />
       </aside>
 
       <section
@@ -94,23 +156,10 @@ export function JourneyShell({ manifest }: JourneyShellProps) {
       </section>
 
       {drawerOpen && (
-        <aside
-          data-testid="journey-drawer"
-          className="w-[400px] shrink-0 border-l border-border-light bg-sidebar overflow-y-auto"
-        >
-          <div className="p-4 text-sm text-text-muted">
-            <p className="mb-2 font-medium text-text">Детали узла</p>
-            <p
-              data-testid="journey-drawer-node-id"
-              className="break-all rounded-md bg-background px-2 py-1 text-xs font-mono"
-            >
-              {state.node}
-            </p>
-            <p className="mt-3 text-xs text-text-subtle">
-              Task 17 добавит подробную карточку.
-            </p>
-          </div>
-        </aside>
+        <JourneyDrawer
+          nodeId={state.node}
+          onClose={() => setNode(null)}
+        />
       )}
     </div>
   );
