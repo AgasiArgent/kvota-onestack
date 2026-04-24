@@ -173,6 +173,7 @@ export function JourneyShell({
           nodeId={state.node}
           onClose={() => setNode(null)}
           userRoles={userRoles}
+          userId={userId ?? undefined}
         />
       )}
 

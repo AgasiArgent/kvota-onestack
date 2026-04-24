@@ -99,12 +99,19 @@ export interface JourneyDrawerProps {
    * Req 6.4–6.5. Omitted / empty → read-only drawer.
    */
   readonly userRoles?: readonly RoleSlug[];
+  /**
+   * Current user's UUID — required for `PinCreator` (Task 21) and any
+   * section that writes a `created_by` column. Omitted → create buttons
+   * stay hidden.
+   */
+  readonly userId?: string;
 }
 
 export function JourneyDrawer({
   nodeId,
   onClose,
   userRoles = [],
+  userId,
 }: JourneyDrawerProps) {
   // `useNodeDetail` requires a non-empty string. We pass `""` when the drawer
   // is closed; it's fine because we early-return before touching `data`.
@@ -151,7 +158,12 @@ export function JourneyDrawer({
       )}
 
       {query.data && (
-        <DrawerBody detail={query.data} onClose={onClose} userRoles={userRoles} />
+        <DrawerBody
+          detail={query.data}
+          onClose={onClose}
+          userRoles={userRoles}
+          userId={userId}
+        />
       )}
     </aside>
   );
@@ -165,10 +177,12 @@ function DrawerBody({
   detail,
   onClose,
   userRoles,
+  userId,
 }: {
   detail: JourneyNodeDetail;
   onClose: () => void;
   userRoles: readonly RoleSlug[];
+  userId?: string;
 }) {
   return (
     <div className="flex flex-col divide-y divide-border-light">
@@ -179,7 +193,13 @@ function DrawerBody({
       {shouldShowScreenshot(detail) && <ScreenshotSection detail={detail} />}
       <FeedbackSection detail={detail} />
       <TrainingSection detail={detail} />
-      {shouldShowPinList(detail) && <PinListSection detail={detail} />}
+      {shouldShowPinList(detail) && (
+        <PinListSection
+          detail={detail}
+          userRoles={userRoles}
+          userId={userId}
+        />
+      )}
       <HistoryExpander nodeId={detail.node_id} />
     </div>
   );
