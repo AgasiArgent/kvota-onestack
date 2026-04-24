@@ -1,6 +1,8 @@
+import "server-only";
+
 import { createClient, createAdminClient } from "@/shared/lib/supabase/server";
 import type { ProcurementUserWorkload } from "@/shared/types/procurement-user";
-import { ROLE_LABELS_RU } from "./types";
+import { ROLE_LABELS_RU, type UserDepartment } from "./types";
 
 export async function fetchUserSalesGroupId(
   userId: string,
@@ -14,11 +16,6 @@ export async function fetchUserSalesGroupId(
     .eq("organization_id", orgId)
     .maybeSingle();
   return data?.sales_group_id ?? null;
-}
-
-export interface UserDepartment {
-  roles: Array<{ name: string; slug: string }>;
-  supervisor: { full_name: string } | null;
 }
 
 export async function fetchUserDepartment(

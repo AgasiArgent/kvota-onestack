@@ -13,7 +13,7 @@ import {
   fetchOrgUsers,
 } from "@/entities/customer";
 import type { Customer } from "@/entities/customer";
-import { getSessionUser } from "@/entities/user";
+import { getSessionUser } from "@/entities/user/server";
 import { CustomerHeader } from "@/features/customers/ui/customer-header";
 import { CustomerTabs } from "@/features/customers/ui/customer-tabs";
 import { TabOverview } from "@/features/customers/ui/tab-overview";

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Trash2 } from "lucide-react";
-import { getSessionUser } from "@/entities/user";
+import { getSessionUser } from "@/entities/user/server";
 import { createAdminClient } from "@/shared/lib/supabase/server";
 import { TrashRestoreButton } from "@/features/quotes";
 import {

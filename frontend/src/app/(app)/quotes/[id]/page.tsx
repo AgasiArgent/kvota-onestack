@@ -1,5 +1,5 @@
 import { redirect, notFound } from "next/navigation";
-import { getSessionUser, fetchUserSalesGroupId } from "@/entities/user";
+import { getSessionUser, fetchUserSalesGroupId } from "@/entities/user/server";
 import { isSalesOnly } from "@/shared/lib/roles";
 import {
   fetchQuoteDetail,

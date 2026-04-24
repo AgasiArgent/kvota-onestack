@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { fetchCustomersList, fetchCustomerFinancials } from "@/entities/customer";
-import { getSessionUser, fetchUserSalesGroupId } from "@/entities/user";
+import { getSessionUser, fetchUserSalesGroupId } from "@/entities/user/server";
 import { isSalesOnly } from "@/shared/lib/roles";
 import { CustomersTable } from "@/features/customers";
 

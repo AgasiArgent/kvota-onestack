@@ -25,6 +25,11 @@ export const ACTIVE_ROLES = [
 
 export type RoleCode = (typeof ACTIVE_ROLES)[number];
 
+export interface UserDepartment {
+  roles: Array<{ name: string; slug: string }>;
+  supervisor: { full_name: string } | null;
+}
+
 export const ROLE_LABELS_RU: Record<string, string> = {
   admin: "Администратор",
   sales: "Продажи",

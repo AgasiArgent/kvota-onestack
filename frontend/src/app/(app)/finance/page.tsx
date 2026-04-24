@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getSessionUser } from "@/entities/user";
+import { getSessionUser } from "@/entities/user/server";
 import { canAccessFinance } from "@/entities/finance/types";
 import { fetchDeals, fetchPayments, fetchSupplierInvoices } from "@/entities/finance/queries";
 import type { DealsFilterParams, PaymentsFilterParams, SupplierInvoicesFilterParams } from "@/entities/finance/types";

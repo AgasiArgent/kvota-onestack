@@ -2,7 +2,7 @@
 
 import { createClient } from "@/shared/lib/supabase/server";
 import { apiServerClient } from "@/shared/lib/api-server";
-import { getSessionUser } from "@/entities/user";
+import { getSessionUser } from "@/entities/user/server";
 import { revalidatePath } from "next/cache";
 
 export async function createSpecification(data: {

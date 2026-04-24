@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getSessionUser } from "@/entities/user";
+import { getSessionUser } from "@/entities/user/server";
 import { LocationsPage } from "@/features/locations";
 import {
   fetchLocations,

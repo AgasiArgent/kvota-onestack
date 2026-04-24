@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { fetchPositionsList } from "@/entities/position/queries";
-import { getSessionUser } from "@/entities/user";
+import { getSessionUser } from "@/entities/user/server";
 import { PositionsTable } from "@/features/positions";
 
 interface Props {

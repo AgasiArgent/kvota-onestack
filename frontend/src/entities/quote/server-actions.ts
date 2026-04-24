@@ -1,7 +1,7 @@
 "use server";
 
 import { createAdminClient } from "@/shared/lib/supabase/server";
-import { getSessionUser } from "@/entities/user";
+import { getSessionUser } from "@/entities/user/server";
 import { revalidatePath } from "next/cache";
 
 /**

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { fetchSuppliersList } from "@/entities/supplier/queries";
-import { getSessionUser } from "@/entities/user";
+import { getSessionUser } from "@/entities/user/server";
 import { hasProcurementAccess } from "@/shared/lib/roles";
 import { SuppliersTable } from "@/features/suppliers";
 

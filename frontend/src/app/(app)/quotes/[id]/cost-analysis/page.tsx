@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import { getSessionUser } from "@/entities/user";
+import { getSessionUser } from "@/entities/user/server";
 import {
   CostAnalysisView,
   COST_ANALYSIS_ROLES,

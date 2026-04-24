@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getSessionUser } from "@/entities/user";
+import { getSessionUser } from "@/entities/user/server";
 import { fetchFeedbackList } from "@/entities/admin";
 import { FeedbackList } from "@/features/admin-feedback";
 

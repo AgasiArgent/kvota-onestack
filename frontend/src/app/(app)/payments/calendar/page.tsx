@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getSessionUser } from "@/entities/user";
+import { getSessionUser } from "@/entities/user/server";
 import { createAdminClient } from "@/shared/lib/supabase/server";
 import { PaymentsCalendar } from "@/features/payments-calendar";
 

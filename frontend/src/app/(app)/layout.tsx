@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getSessionUser } from "@/entities/user";
+import { getSessionUser } from "@/entities/user/server";
 import { Sidebar } from "@/widgets/sidebar";
 import { FeedbackButton } from "@/features/feedback";
 import { fetchUnassignedItemCount } from "@/features/procurement-distribution/api/server-queries";

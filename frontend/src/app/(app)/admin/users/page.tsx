@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getSessionUser } from "@/entities/user";
+import { getSessionUser } from "@/entities/user/server";
 import { fetchOrgMembers, fetchAllRoles, fetchSalesGroups, fetchDepartments } from "@/entities/admin";
 import { UsersPageClient } from "@/features/admin-users";
 

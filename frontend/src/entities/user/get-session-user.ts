@@ -1,3 +1,5 @@
+import "server-only";
+
 import { createClient, createAdminClient } from "@/shared/lib/supabase/server";
 import type { SessionUser } from "./types";
 import { ACTIVE_ROLES } from "./types";

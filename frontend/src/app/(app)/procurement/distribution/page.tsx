@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getSessionUser, fetchProcurementWorkload } from "@/entities/user";
+import { getSessionUser, fetchProcurementWorkload } from "@/entities/user/server";
 import { DistributionPage } from "@/features/procurement-distribution";
 import { fetchDistributionData } from "@/features/procurement-distribution/api/server-queries";
 

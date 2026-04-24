@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getSessionUser } from "@/entities/user";
+import { getSessionUser } from "@/entities/user/server";
 import { VatRatesTable } from "@/features/admin/ui/vat-rates-table";
 
 export default async function VatRatesPage() {

@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getSessionUser, fetchUserDepartment } from "@/entities/user";
+import { getSessionUser, fetchUserDepartment } from "@/entities/user/server";
 import { fetchCurrentUserProfile } from "@/entities/profile/queries";
 import { createAdminClient } from "@/shared/lib/supabase/server";
 import { ProfileForm } from "@/features/profile";

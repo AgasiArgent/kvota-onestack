@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getSessionUser, fetchProcurementWorkload } from "@/entities/user";
+import { getSessionUser, fetchProcurementWorkload } from "@/entities/user/server";
 import { KanbanPage } from "@/features/procurement-kanban";
 import { fetchKanbanData } from "@/features/procurement-kanban/api/server-queries";
 

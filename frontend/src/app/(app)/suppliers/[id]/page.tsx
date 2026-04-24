@@ -8,7 +8,7 @@ import {
   fetchProcurementUsers,
   canAccessSupplier,
 } from "@/entities/supplier/queries";
-import { getSessionUser } from "@/entities/user";
+import { getSessionUser } from "@/entities/user/server";
 import { hasProcurementAccess, canManageSupplierAssignees } from "@/shared/lib/roles";
 import { SupplierHeader } from "@/features/suppliers/ui/supplier-header";
 import { SupplierTabs } from "@/features/suppliers/ui/supplier-tabs";

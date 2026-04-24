@@ -12,7 +12,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import type { JourneyManifest, RoleSlug } from "@/entities/journey";
-import { getSessionUser } from "@/entities/user";
+import { getSessionUser } from "@/entities/user/server";
 import {
   JourneyShell,
   decodeFromSearchParams,

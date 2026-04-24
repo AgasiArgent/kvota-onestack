@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getSessionUser } from "@/entities/user";
+import { getSessionUser } from "@/entities/user/server";
 import { RoutingPage } from "@/features/admin-routing";
 import {
   fetchBrandsData,

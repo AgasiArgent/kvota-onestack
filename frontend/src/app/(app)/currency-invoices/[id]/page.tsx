@@ -1,5 +1,5 @@
 import { redirect, notFound } from "next/navigation";
-import { getSessionUser } from "@/entities/user";
+import { getSessionUser } from "@/entities/user/server";
 import {
   fetchCurrencyInvoiceDetail,
   fetchCompanyOptions,
