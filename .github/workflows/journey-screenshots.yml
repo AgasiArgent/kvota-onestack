@@ -1,0 +1,62 @@
+name: Journey Screenshots (Nightly)
+
+# Customer Journey Map — Task 25 skeleton. Task 26 will fill in real capture
+# logic. Until then, this workflow validates env/dep setup and exercises the
+# capture script's --dry-run path on PRs that touch it.
+#
+# Requirements: §10.1, §10.3, §10.4 of the customer-journey-map spec.
+
+on:
+  schedule:
+    # 03:00 UTC nightly — after staging deploys, before Moscow business hours.
+    - cron: "0 3 * * *"
+  workflow_dispatch: {}
+  pull_request:
+    paths:
+      - "frontend/scripts/journey/**"
+      - ".github/workflows/journey-screenshots.yml"
+
+concurrency:
+  group: journey-screenshots
+  # Don't cancel an in-flight capture: a partial nightly run is worse than
+  # a queued one when storage cleanup depends on complete iteration.
+  cancel-in-progress: false
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      JOURNEY_TEST_USERS_PASSWORD: ${{ secrets.JOURNEY_TEST_USERS_PASSWORD }}
+      JOURNEY_WEBHOOK_TOKEN: ${{ secrets.JOURNEY_WEBHOOK_TOKEN }}
+      JOURNEY_BASE_URL: ${{ secrets.JOURNEY_BASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          # Matches frontend-build job in ci.yml.
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright browser (chromium)
+        working-directory: frontend
+        # --with-deps pulls in OS libs required by headless chromium.
+        run: npx playwright install --with-deps chromium
+
+      - name: Capture (dry-run on PR, full on schedule / dispatch)
+        working-directory: frontend
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            npx tsx scripts/journey/capture-screenshots.ts --dry-run=1
+          else
+            npx tsx scripts/journey/capture-screenshots.ts
+          fi

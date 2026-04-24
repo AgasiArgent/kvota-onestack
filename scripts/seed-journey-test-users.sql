@@ -1,0 +1,18 @@
+-- Journey Test User Seed (Task 25 — Customer Journey Map, Req 10.3/10.4).
+--
+-- NOTE: This file is intentionally a pointer, not an executable SQL seed.
+--
+-- Creating Supabase auth users from raw SQL requires hand-crafting password
+-- hashes, GoTrue-quirk nullable string columns, and confirmed-email flags.
+-- The project's canonical pattern (see scripts/create_beta_users.py and the
+-- `create-users` skill) uses the Supabase admin API via service-role key.
+--
+-- Use the Python seed instead:
+--
+--   export SUPABASE_URL=...
+--   export SUPABASE_SERVICE_ROLE_KEY=...
+--   export JOURNEY_TEST_USERS_PASSWORD=...
+--   python scripts/seed-journey-test-users.py
+--
+-- The Python script is idempotent: existing users and role mappings are
+-- detected and skipped. Re-runs are safe.
