@@ -27,6 +27,7 @@ import {
   VerifyButtons,
   classifyPinBadgeState,
 } from "@/features/journey/ui/pin-overlay";
+import { VerificationThumbnails } from "./verification-thumbnails";
 
 const RESULT_LABELS: Record<VerifyResult, string> = {
   verified: "Проверено",
@@ -123,6 +124,12 @@ export function PinListSection({
                     </span>
                   )}
                 </div>
+                {latest?.attachment_urls &&
+                  latest.attachment_urls.length > 0 && (
+                    <VerificationThumbnails
+                      paths={latest.attachment_urls}
+                    />
+                  )}
                 {userId && (
                   <div className="mt-2">
                     <VerifyButtons

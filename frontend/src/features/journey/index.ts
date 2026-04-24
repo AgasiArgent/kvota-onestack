@@ -40,3 +40,30 @@ export type {
   QaFilterValue,
   FilterResult,
 } from "./lib/use-journey-filter";
+
+export {
+  ALLOWED_MIME,
+  ATTACHMENT_BUCKET,
+  MAX_ATTACHMENTS,
+  MAX_FILE_BYTES,
+  composeAttachmentKey,
+  uploadAttachments,
+  validateAttachments,
+} from "./lib/attachment-upload";
+
+export type {
+  AttachmentRejection,
+  AttachmentRejectionReason,
+  AttachmentValidationResult,
+  SupabaseRemoveFn,
+  SupabaseUploadFn,
+  UploadAttachmentsOptions,
+  UploadAttachmentsResult,
+} from "./lib/attachment-upload";
+
+export {
+  DEFAULT_SIGNED_URL_TTL_SECONDS,
+  getSignedUrl,
+} from "./lib/signed-url";
+
+export type { SupabaseStorageLike } from "./lib/signed-url";

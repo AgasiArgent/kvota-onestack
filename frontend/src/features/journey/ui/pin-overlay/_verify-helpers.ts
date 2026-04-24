@@ -43,21 +43,32 @@ export interface BuildVerificationPayloadInput {
   /** Optional — trimmed; empty/whitespace becomes `null`. */
   readonly note?: string | null;
   readonly testedBy: string;
+  /**
+   * Task 24: Supabase Storage object keys for up to 3 screenshots. When
+   * omitted or empty, the payload stores `null` (no attachments). The UI
+   * uploads files first via `uploadAttachments` and only on success does
+   * it pass the returned paths here — partial attachment is not permitted
+   * (Req 9.6).
+   */
+  readonly attachmentUrls?: readonly string[] | null;
 }
 
 export function buildVerificationPayload(
   input: BuildVerificationPayloadInput,
 ): VerificationInsert {
-  const { pinId, nodeId, result, note, testedBy } = input;
+  const { pinId, nodeId, result, note, testedBy, attachmentUrls } = input;
   const trimmed =
     typeof note === "string" && note.trim().length > 0 ? note.trim() : null;
+  const attachments =
+    Array.isArray(attachmentUrls) && attachmentUrls.length > 0
+      ? attachmentUrls
+      : null;
   return {
     pin_id: pinId,
     node_id: nodeId,
     result,
     note: trimmed,
-    // Task 24 owns attachment uploads. Task 23 always writes null.
-    attachment_urls: null,
+    attachment_urls: attachments,
     tested_by: testedBy,
   };
 }
