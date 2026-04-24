@@ -3,22 +3,33 @@
 /**
  * Screenshot section (Req 5.1). Hidden for ghost nodes by the parent
  * (`shouldShowScreenshot`). The nightly Playwright pipeline (Req 10) will
- * populate the screenshot URL; for now we render a placeholder skeleton.
+ * populate the screenshot URL; for now the drawer payload carries no
+ * `screenshot_url`, so `AnnotatedScreen` renders its placeholder.
  *
- * DEBT: The drawer payload (`JourneyNodeDetail`) doesn't carry a
- * `screenshot_url` yet — that's delivered by the nightly pipeline in a
- * later task. Render a skeleton until the field is wired up.
+ * Task 22 wires in the pin overlay: pins with resolved positions sit on
+ * top of the screenshot (or placeholder) at rel-coord-derived px. Pins
+ * without a bbox are surfaced by `pin-list-section` separately (Req 14.4).
+ *
+ * DEBT: `screenshot_url` still isn't on `JourneyNodeDetail` — `null` is
+ * passed through until the nightly pipeline ships.
  */
 
+import { useState } from "react";
+
 import type { JourneyNodeDetail } from "@/entities/journey";
+import { AnnotatedScreen } from "@/features/journey/ui/pin-overlay";
 
 export interface ScreenshotSectionProps {
-  // Reserved for the nightly-screenshot payload once the pipeline wires it in.
   readonly detail: JourneyNodeDetail;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function ScreenshotSection(_props: ScreenshotSectionProps) {
+export function ScreenshotSection({ detail }: ScreenshotSectionProps) {
+  const [selectedPinId, setSelectedPinId] = useState<string | null>(null);
+
+  const togglePin = (pinId: string) => {
+    setSelectedPinId((current) => (current === pinId ? null : pinId));
+  };
+
   return (
     <section
       data-testid="screenshot-section"
@@ -28,12 +39,12 @@ export function ScreenshotSection(_props: ScreenshotSectionProps) {
       <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-subtle">
         Скриншот
       </h3>
-      <div
-        aria-hidden
-        className="flex h-40 w-full items-center justify-center rounded-md border border-dashed border-border-light bg-background text-xs text-text-subtle"
-      >
-        Скриншот появится после nightly-прогона
-      </div>
+      <AnnotatedScreen
+        screenshotUrl={null}
+        pins={detail.pins}
+        selectedPinId={selectedPinId}
+        onPinClick={togglePin}
+      />
     </section>
   );
 }

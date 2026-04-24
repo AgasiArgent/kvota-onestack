@@ -22,7 +22,10 @@ import {
   type VerifyResult,
 } from "@/entities/journey";
 import { Button } from "@/components/ui/button";
-import { PinCreator } from "@/features/journey/ui/pin-overlay";
+import {
+  PinCreator,
+  classifyPinBadgeState,
+} from "@/features/journey/ui/pin-overlay";
 
 const RESULT_LABELS: Record<VerifyResult, string> = {
   verified: "Проверено",
@@ -88,22 +91,37 @@ export function PinListSection({
         <ul className="space-y-2">
           {pins.map((pin) => {
             const latest = detail.verifications_by_pin[pin.id];
+            const badge = classifyPinBadgeState(pin);
             return (
               <li
                 key={pin.id}
+                data-testid={`pin-list-item-${pin.id}`}
+                data-state={badge}
                 className="rounded-md border border-border-light bg-background p-2 text-xs"
               >
                 <p className="font-medium text-text">{pin.expected_behavior}</p>
                 <p className="mt-1 break-all font-mono text-text-subtle">
                   {pin.selector}
                 </p>
-                {latest && (
-                  <span
-                    className={`mt-1 inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-medium ${RESULT_CLASS[latest.result]}`}
-                  >
-                    {RESULT_LABELS[latest.result]}
-                  </span>
-                )}
+                <div className="mt-1 flex flex-wrap items-center gap-1">
+                  {latest && (
+                    <span
+                      className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-medium ${RESULT_CLASS[latest.result]}`}
+                    >
+                      {RESULT_LABELS[latest.result]}
+                    </span>
+                  )}
+                  {badge === "broken" && (
+                    <span className="inline-flex items-center rounded-md bg-destructive/10 px-1.5 py-0.5 text-[11px] font-medium text-destructive">
+                      Селектор сломан
+                    </span>
+                  )}
+                  {badge === "pending" && (
+                    <span className="inline-flex items-center rounded-md bg-background px-1.5 py-0.5 text-[11px] font-medium text-text-subtle">
+                      Позиция не обновлена
+                    </span>
+                  )}
+                </div>
               </li>
             );
           })}
