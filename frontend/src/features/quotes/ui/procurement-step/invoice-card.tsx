@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronRight, Download, Loader2, Mail, Merge, Package, Paperclip, Split, Trash2, Undo2, Weight } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, Loader2, Mail, Merge, Package, Paperclip, Plus, Split, Trash2, Undo2, Weight } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,10 +15,12 @@ import { ProcurementUnlockButton } from "./procurement-unlock-button";
 import { LetterDraftComposer } from "./letter-draft-composer";
 import { SplitModal } from "./split-modal";
 import { MergeModal } from "./merge-modal";
+import { AddPositionsModal } from "./add-positions-modal";
 import type { QuoteItemRow, QuoteInvoiceRow } from "@/entities/quote/queries";
 import { deleteInvoice, fetchCargoPlaces } from "@/entities/quote/mutations";
 import { downloadInvoiceXls } from "@/entities/invoice/mutations";
 import { createClient } from "@/shared/lib/supabase/client";
+import { extractErrorMessage } from "@/shared/lib/errors";
 import { findCountryByCode } from "@/shared/ui/geo";
 
 type InvoiceExtras = {
@@ -137,6 +139,7 @@ export function InvoiceCard({
   >([]);
   const [splitOpen, setSplitOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
+  const [addPositionsOpen, setAddPositionsOpen] = useState(false);
 
   const procurementCompleted = quote.procurement_completed_at != null;
   const invoiceItems = invoiceItemsOverride ?? fetchedInvoiceItems;
@@ -334,8 +337,9 @@ export function InvoiceCard({
       if (error) throw error;
       toast.success("Сохранено");
       router.refresh();
-    } catch {
-      toast.error("Не удалось сохранить");
+    } catch (err) {
+      console.error("[invoice-card] save field failed:", err);
+      toast.error(extractErrorMessage(err) ?? "Не удалось сохранить");
     }
   }
 
@@ -345,8 +349,9 @@ export function InvoiceCard({
       await downloadInvoiceXls(invoice.id, language);
       toast.success("XLS скачан");
       router.refresh();
-    } catch {
-      toast.error("Не удалось скачать XLS");
+    } catch (err) {
+      console.error("[invoice-card] download XLS failed:", err);
+      toast.error(extractErrorMessage(err) ?? "Не удалось скачать XLS");
     } finally {
       setDownloadingXls(false);
     }
@@ -381,8 +386,9 @@ export function InvoiceCard({
         `${invoiceItems.length} поз. возвращены в нераспределённые`
       );
       router.refresh();
-    } catch {
-      toast.error("Не удалось убрать позиции из КП");
+    } catch (err) {
+      console.error("[invoice-card] unassign all failed:", err);
+      toast.error(extractErrorMessage(err) ?? "Не удалось убрать позиции из КП");
     } finally {
       setUnassigning(false);
     }
@@ -394,8 +400,9 @@ export function InvoiceCard({
       await deleteInvoice(invoice.id);
       toast.success(`Инвойс ${invoice.invoice_number} удалён`);
       router.refresh();
-    } catch {
-      toast.error("Не удалось удалить КП");
+    } catch (err) {
+      console.error("[invoice-card] delete invoice failed:", err);
+      toast.error(extractErrorMessage(err) ?? "Не удалось удалить КП");
     } finally {
       setDeleting(false);
     }
@@ -490,16 +497,27 @@ export function InvoiceCard({
             <ProcurementUnlockButton invoiceId={invoice.id} />
           </div>
         ) : isEmpty ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="mr-2 text-muted-foreground hover:text-destructive"
-            onClick={handleDelete}
-            disabled={deleting}
-            title="Удалить пустое КП поставщику"
-          >
-            {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-          </Button>
+          <div className="mr-2 flex items-center gap-1">
+            <Button
+              size="sm"
+              className="bg-accent text-white hover:bg-accent-hover"
+              onClick={() => setAddPositionsOpen(true)}
+              title="Добавить позиции в КП поставщику"
+            >
+              <Plus size={14} className="mr-1" />
+              Добавить позиции
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground hover:text-destructive"
+              onClick={handleDelete}
+              disabled={deleting}
+              title="Удалить пустое КП поставщику"
+            >
+              {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+            </Button>
+          </div>
         ) : (
           <div className="mr-2 flex items-center gap-0.5">
             {/* Phase 5c Task 12/13: Split + Merge structural actions.
@@ -758,6 +776,18 @@ export function InvoiceCard({
         invoiceId={invoice.id}
         candidates={oneToOneCandidates}
         defaultCurrency={currency}
+      />
+
+      {/* Task 73 — AddPositionsModal for empty КП (Requirement 7).
+          Opened from the isEmpty branch "+ Добавить позиции" button.
+          Lets the user pick quote_items to assign into this empty invoice,
+          including items already covered by another КП (multi-KP coverage
+          is allowed per Phase 5b REQ-1 AC#1). */}
+      <AddPositionsModal
+        open={addPositionsOpen}
+        onClose={() => setAddPositionsOpen(false)}
+        invoiceId={invoice.id}
+        quoteId={invoice.quote_id}
       />
     </Card>
   );

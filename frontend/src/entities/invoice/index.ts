@@ -1,7 +1,7 @@
-export type { VatRate, LetterDraft } from "./queries";
+export type { VatRate, LetterDraft, VatResolverReason } from "./queries";
 export {
   fetchVatRates,
-  fetchVatRate,
+  fetchSupplierVatRate,
   fetchActiveLetterDraft,
   fetchSendHistory,
 } from "./queries";

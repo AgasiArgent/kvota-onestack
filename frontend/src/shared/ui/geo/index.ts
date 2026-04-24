@@ -12,6 +12,11 @@ export { CountryCombobox } from "./country-combobox";
 export type { CountryComboboxProps } from "./country-combobox";
 export { CityCombobox } from "./city-combobox";
 export type { CityComboboxProps, CityComboboxValue } from "./city-combobox";
+export { CityAutocomplete } from "./city-autocomplete";
+export type {
+  CityAutocompleteProps,
+  CityAutocompleteItem,
+} from "./city-autocomplete";
 export {
   COUNTRIES,
   findCountryByCode,

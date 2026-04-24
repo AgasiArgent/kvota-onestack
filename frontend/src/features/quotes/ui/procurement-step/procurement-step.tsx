@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createClient } from "@/shared/lib/supabase/client";
+import { extractErrorMessage } from "@/shared/lib/errors";
 import { completeProcurement } from "@/entities/quote/mutations";
 import type {
   QuoteDetailRow,
@@ -240,7 +241,8 @@ export function ProcurementStep({
       toast.success("Закупка завершена");
       router.refresh();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Не удалось завершить закупку");
+      console.error("[procurement-step] complete procurement failed:", err);
+      toast.error(extractErrorMessage(err) ?? "Не удалось завершить закупку");
     } finally {
       setCompleting(false);
     }

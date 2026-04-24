@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { SUPPORTED_CURRENCIES } from "@/shared/lib/currencies";
+import { extractErrorMessage } from "@/shared/lib/errors";
 import { mergeInvoiceItems } from "@/entities/quote/mutations";
 
 /**
@@ -344,9 +345,8 @@ export function MergeModal({
       onClose();
       router.refresh();
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Не удалось объединить позиции"
-      );
+      console.error("[merge-modal] submit failed:", err);
+      toast.error(extractErrorMessage(err) ?? "Не удалось объединить позиции");
     } finally {
       setSubmitting(false);
     }

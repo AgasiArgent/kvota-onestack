@@ -15,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { extractErrorMessage } from "@/shared/lib/errors";
 import {
   fetchActiveLetterDraft,
   type LetterDraft,
@@ -207,7 +208,8 @@ export function LetterDraftComposer({
           lastRenderedBodyRef.current = rendered.body;
         }
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error("[letter-draft-composer] load draft failed:", err);
         // On error, still populate from template
         if (cancelled) return;
         setLanguage(initialLanguage);
@@ -272,8 +274,9 @@ export function LetterDraftComposer({
         language,
       });
       toast.success("Черновик сохранён");
-    } catch {
-      toast.error("Не удалось сохранить черновик");
+    } catch (err) {
+      console.error("[letter-draft-composer] save draft failed:", err);
+      toast.error(extractErrorMessage(err) ?? "Не удалось сохранить черновик");
     } finally {
       setSaving(false);
     }
@@ -292,8 +295,9 @@ export function LetterDraftComposer({
       await sendLetterDraft(invoiceId);
       toast.success("Письмо отправлено");
       onClose();
-    } catch {
-      toast.error("Не удалось отправить письмо");
+    } catch (err) {
+      console.error("[letter-draft-composer] send draft failed:", err);
+      toast.error(extractErrorMessage(err) ?? "Не удалось отправить письмо");
     } finally {
       setSending(false);
     }

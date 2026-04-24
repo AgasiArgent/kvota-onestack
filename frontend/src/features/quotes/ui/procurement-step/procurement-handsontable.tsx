@@ -6,6 +6,7 @@ import { HotTable } from "@handsontable/react";
 import { registerAllModules } from "handsontable/registry";
 import Handsontable from "handsontable";
 import { toast } from "sonner";
+import { extractErrorMessage } from "@/shared/lib/errors";
 import { updateInvoiceItem, unassignInvoiceItem } from "@/entities/quote/mutations";
 import { isMoqViolation } from "./moq-warning";
 
@@ -190,7 +191,10 @@ export function ProcurementHandsontable({
         pendingOps.current.add(`unassign-${rowId}`);
         unassignInvoiceItem(rowId)
           .then(() => { toast.success("Позиция убрана из КП"); router.refresh(); })
-          .catch(() => toast.error("Не удалось убрать позицию"))
+          .catch((err) => {
+            console.error("[procurement-handsontable] unassign failed:", err);
+            toast.error(extractErrorMessage(err) ?? "Не удалось убрать позицию");
+          })
           .finally(() => pendingOps.current.delete(`unassign-${rowId}`));
       };
       td.appendChild(btn);
@@ -305,7 +309,10 @@ export function ProcurementHandsontable({
 
         updateInvoiceItem(rowId, updates)
           .then(() => router.refresh())
-          .catch(() => toast.error("Не удалось сохранить"))
+          .catch((err) => {
+            console.error("[procurement-handsontable] update failed:", err);
+            toast.error(extractErrorMessage(err) ?? "Не удалось сохранить");
+          })
           .finally(() => pendingOps.current.delete(lockKey));
       }
     },

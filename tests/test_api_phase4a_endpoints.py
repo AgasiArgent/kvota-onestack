@@ -101,28 +101,55 @@ def _make_org_roles_mocks(sb_mock, user_id: str, org_id: str, role_slugs: list[s
 
 # ============================================================================
 # GET /api/geo/vat-rate
+#
+# Endpoint signature updated in procurement-bugs-fix REQ-3 (April 2026):
+# now takes supplier_country_code + buyer_company_id and returns
+# {rate, reason} where reason ∈ {"domestic", "export_zero_rated", "unknown"}.
 # ============================================================================
 
 
 class TestGetVatRate:
     @pytest.mark.asyncio
-    async def test_returns_rate_for_known_country(self):
+    async def test_returns_domestic_rate_when_countries_match(self):
+        """RU supplier + RU buyer → domestic rate."""
         user_id = _uuid()
         org_id = _uuid()
+        buyer_id = _uuid()
         api_user = _mock_api_user(user_id)
 
         with patch("api.geo.get_supabase") as mock_sb:
             sb = MagicMock()
             mock_sb.return_value = sb
 
-            tables = _make_org_roles_mocks(sb, user_id, org_id, ["procurement"])
+            # Chain for org/roles auth + buyer_companies lookup
+            om_mock = _chain_mock()
+            om_mock.execute.return_value = MagicMock(data=[{"organization_id": org_id}])
+
+            ur_mock = _chain_mock()
+            ur_mock.execute.return_value = MagicMock(
+                data=[{"roles": {"slug": "procurement"}}]
+            )
+
+            bc_mock = _chain_mock()
+            bc_mock.maybe_single.return_value.execute.return_value = MagicMock(
+                data={"country_code": "RU"}
+            )
+
+            tables = {
+                "organization_members": om_mock,
+                "user_roles": ur_mock,
+                "buyer_companies": bc_mock,
+            }
             sb.table.side_effect = lambda name: tables.get(name, _chain_mock())
 
-            with patch("services.vat_service.get_vat_rate", return_value=Decimal("0.00")):
+            with patch("services.vat_service.get_vat_rate", return_value=Decimal("22.00")):
                 from api.geo import get_vat_rate
 
                 request = _mock_request(
-                    query_params={"country_code": "KZ"},
+                    query_params={
+                        "supplier_country_code": "RU",
+                        "buyer_company_id": buyer_id,
+                    },
                     api_user=api_user,
                 )
                 response = await get_vat_rate(request)
@@ -130,37 +157,55 @@ class TestGetVatRate:
         assert response.status_code == 200
         data = json.loads(response.body)
         assert data["success"] is True
-        assert data["data"]["country_code"] == "KZ"
-        assert data["data"]["rate"] == 0.00
+        assert data["data"]["rate"] == 22.00
+        assert data["data"]["reason"] == "domestic"
 
     @pytest.mark.asyncio
-    async def test_returns_default_for_unknown_country(self):
+    async def test_returns_export_zero_rated_when_countries_differ(self):
+        """DE buyer + CN supplier → 0% export."""
         user_id = _uuid()
         org_id = _uuid()
+        buyer_id = _uuid()
         api_user = _mock_api_user(user_id)
 
         with patch("api.geo.get_supabase") as mock_sb:
             sb = MagicMock()
             mock_sb.return_value = sb
 
-            tables = _make_org_roles_mocks(sb, user_id, org_id, ["sales"])
+            om_mock = _chain_mock()
+            om_mock.execute.return_value = MagicMock(data=[{"organization_id": org_id}])
+            ur_mock = _chain_mock()
+            ur_mock.execute.return_value = MagicMock(data=[{"roles": {"slug": "sales"}}])
+            bc_mock = _chain_mock()
+            bc_mock.maybe_single.return_value.execute.return_value = MagicMock(
+                data={"country_code": "DE"}
+            )
+
+            tables = {
+                "organization_members": om_mock,
+                "user_roles": ur_mock,
+                "buyer_companies": bc_mock,
+            }
             sb.table.side_effect = lambda name: tables.get(name, _chain_mock())
 
-            with patch("services.vat_service.get_vat_rate", return_value=Decimal("20.00")):
-                from api.geo import get_vat_rate
+            from api.geo import get_vat_rate
 
-                request = _mock_request(
-                    query_params={"country_code": "XX"},
-                    api_user=api_user,
-                )
-                response = await get_vat_rate(request)
+            request = _mock_request(
+                query_params={
+                    "supplier_country_code": "CN",
+                    "buyer_company_id": buyer_id,
+                },
+                api_user=api_user,
+            )
+            response = await get_vat_rate(request)
 
         assert response.status_code == 200
         data = json.loads(response.body)
-        assert data["data"]["rate"] == 20.00
+        assert data["data"]["rate"] == 0
+        assert data["data"]["reason"] == "export_zero_rated"
 
     @pytest.mark.asyncio
-    async def test_returns_400_on_missing_country_code(self):
+    async def test_returns_400_on_missing_supplier_country_code(self):
         user_id = _uuid()
         org_id = _uuid()
         api_user = _mock_api_user(user_id)
@@ -175,7 +220,7 @@ class TestGetVatRate:
             from api.geo import get_vat_rate
 
             request = _mock_request(
-                query_params={},
+                query_params={"buyer_company_id": _uuid()},
                 api_user=api_user,
             )
             response = await get_vat_rate(request)
@@ -185,7 +230,7 @@ class TestGetVatRate:
         assert data["error"]["code"] == "VALIDATION_ERROR"
 
     @pytest.mark.asyncio
-    async def test_returns_400_on_invalid_country_code(self):
+    async def test_returns_400_on_missing_buyer_company_id(self):
         user_id = _uuid()
         org_id = _uuid()
         api_user = _mock_api_user(user_id)
@@ -200,7 +245,35 @@ class TestGetVatRate:
             from api.geo import get_vat_rate
 
             request = _mock_request(
-                query_params={"country_code": "123"},
+                query_params={"supplier_country_code": "CN"},
+                api_user=api_user,
+            )
+            response = await get_vat_rate(request)
+
+        assert response.status_code == 400
+        data = json.loads(response.body)
+        assert data["error"]["code"] == "VALIDATION_ERROR"
+
+    @pytest.mark.asyncio
+    async def test_returns_400_on_invalid_supplier_country_code(self):
+        user_id = _uuid()
+        org_id = _uuid()
+        api_user = _mock_api_user(user_id)
+
+        with patch("api.geo.get_supabase") as mock_sb:
+            sb = MagicMock()
+            mock_sb.return_value = sb
+
+            tables = _make_org_roles_mocks(sb, user_id, org_id, ["sales"])
+            sb.table.side_effect = lambda name: tables.get(name, _chain_mock())
+
+            from api.geo import get_vat_rate
+
+            request = _mock_request(
+                query_params={
+                    "supplier_country_code": "123",
+                    "buyer_company_id": _uuid(),
+                },
                 api_user=api_user,
             )
             response = await get_vat_rate(request)
@@ -208,11 +281,81 @@ class TestGetVatRate:
         assert response.status_code == 400
 
     @pytest.mark.asyncio
+    async def test_returns_400_on_malformed_buyer_company_id(self):
+        user_id = _uuid()
+        org_id = _uuid()
+        api_user = _mock_api_user(user_id)
+
+        with patch("api.geo.get_supabase") as mock_sb:
+            sb = MagicMock()
+            mock_sb.return_value = sb
+
+            tables = _make_org_roles_mocks(sb, user_id, org_id, ["sales"])
+            sb.table.side_effect = lambda name: tables.get(name, _chain_mock())
+
+            from api.geo import get_vat_rate
+
+            request = _mock_request(
+                query_params={
+                    "supplier_country_code": "CN",
+                    "buyer_company_id": "not-a-uuid",
+                },
+                api_user=api_user,
+            )
+            response = await get_vat_rate(request)
+
+        assert response.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_returns_404_when_buyer_not_found(self):
+        user_id = _uuid()
+        org_id = _uuid()
+        buyer_id = _uuid()
+        api_user = _mock_api_user(user_id)
+
+        with patch("api.geo.get_supabase") as mock_sb:
+            sb = MagicMock()
+            mock_sb.return_value = sb
+
+            om_mock = _chain_mock()
+            om_mock.execute.return_value = MagicMock(data=[{"organization_id": org_id}])
+            ur_mock = _chain_mock()
+            ur_mock.execute.return_value = MagicMock(data=[{"roles": {"slug": "sales"}}])
+            # buyer_companies returns None data → LookupError
+            bc_mock = _chain_mock()
+            bc_mock.maybe_single.return_value.execute.return_value = MagicMock(data=None)
+
+            tables = {
+                "organization_members": om_mock,
+                "user_roles": ur_mock,
+                "buyer_companies": bc_mock,
+            }
+            sb.table.side_effect = lambda name: tables.get(name, _chain_mock())
+
+            from api.geo import get_vat_rate
+
+            request = _mock_request(
+                query_params={
+                    "supplier_country_code": "CN",
+                    "buyer_company_id": buyer_id,
+                },
+                api_user=api_user,
+            )
+            response = await get_vat_rate(request)
+
+        assert response.status_code == 404
+        data = json.loads(response.body)
+        assert data["error"]["code"] == "NOT_FOUND"
+
+    @pytest.mark.asyncio
     async def test_returns_401_when_unauthenticated(self):
         from api.geo import get_vat_rate
 
         request = _mock_request(
-            query_params={"country_code": "CN"},
+            query_params={
+                "supplier_country_code": "CN",
+                "buyer_company_id": _uuid(),
+            },
             api_user=None,
         )
         response = await get_vat_rate(request)

@@ -173,6 +173,9 @@ export async function fetchSupplierDetail(
     name: data.name,
     supplier_code: data.supplier_code,
     country: data.country,
+    // country_code added in migration 295, not yet in generated types
+    country_code:
+      (data as unknown as Record<string, unknown>).country_code as string | null ?? null,
     city: data.city,
     // registration_number added in migration 217, not yet in generated types
     registration_number: (data as unknown as Record<string, unknown>).registration_number as string | null ?? null,
