@@ -1,0 +1,4 @@
+{
+  "$schema": "Map of node_id -> id segment used to substitute [param] in dynamic routes. Keys must match manifest node_id values (e.g. 'app:/quotes/[id]'). Missing entries cause the route to be skipped.",
+  "fixtures": {}
+}
