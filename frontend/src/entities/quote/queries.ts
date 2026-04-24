@@ -688,7 +688,8 @@ export async function fetchStageDeadline(
       .eq("stage", workflowStatus)
       .maybeSingle();
     deadlineHours = (data as Record<string, unknown> | null)?.deadline_hours as number ?? null;
-  } catch {
+  } catch (err) {
+    console.error("[quote-queries] fetch stage deadline failed:", err);
     deadlineHours = null;
   }
 

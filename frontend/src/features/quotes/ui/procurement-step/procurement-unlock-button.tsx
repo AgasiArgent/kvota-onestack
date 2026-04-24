@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Loader2, PenLine } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { extractErrorMessage } from "@/shared/lib/errors";
 import { requestProcurementUnlock } from "@/entities/invoice/mutations";
 
 interface ProcurementUnlockButtonProps {
@@ -29,8 +30,9 @@ export function ProcurementUnlockButton({
       await requestProcurementUnlock(invoiceId);
       setRequested(true);
       toast.success("Запрос на одобрение отправлен");
-    } catch {
-      toast.error("Не удалось отправить запрос");
+    } catch (err) {
+      console.error("[procurement-unlock-button] request failed:", err);
+      toast.error(extractErrorMessage(err) ?? "Не удалось отправить запрос");
     } finally {
       setRequesting(false);
     }

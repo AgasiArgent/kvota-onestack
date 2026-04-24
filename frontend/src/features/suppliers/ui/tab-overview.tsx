@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Pencil, Save, X } from "lucide-react";
+import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,9 +11,33 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { SupplierDetail } from "@/entities/supplier/types";
 import { updateSupplier } from "@/entities/supplier/mutations";
+import { extractErrorMessage } from "@/shared/lib/errors";
+import {
+  CityAutocomplete,
+  CountryCombobox,
+  findCountryByCode,
+  findCountryByName,
+} from "@/shared/ui/geo";
 
 interface Props {
   supplier: SupplierDetail;
+}
+
+/**
+ * Resolve the initial country code for the edit form. If the row already
+ * has a canonical `country_code` (post-migration 295), use it; otherwise
+ * attempt a best-effort match against the free-text `country` column so
+ * the picker starts with a reasonable selection even for un-backfilled rows.
+ */
+function resolveInitialCountryCode(
+  supplier: SupplierDetail,
+): string | null {
+  if (supplier.country_code) return supplier.country_code;
+  if (!supplier.country) return null;
+  const match =
+    findCountryByName(supplier.country, "ru") ??
+    findCountryByName(supplier.country, "en");
+  return match?.code ?? null;
 }
 
 export function TabOverview({ supplier }: Props) {
@@ -22,7 +47,9 @@ export function TabOverview({ supplier }: Props) {
 
   const [name, setName] = useState(supplier.name);
   const [supplierCode, setSupplierCode] = useState(supplier.supplier_code ?? "");
-  const [country, setCountry] = useState(supplier.country ?? "");
+  const [countryCode, setCountryCode] = useState<string | null>(() =>
+    resolveInitialCountryCode(supplier),
+  );
   const [city, setCity] = useState(supplier.city ?? "");
   const [registrationNumber, setRegistrationNumber] = useState(
     supplier.registration_number ?? ""
@@ -32,10 +59,21 @@ export function TabOverview({ supplier }: Props) {
   );
   const [notes, setNotes] = useState(supplier.notes ?? "");
 
+  function handleCountryChange(next: string | null) {
+    // When the editor picks a different country, the prior city is scoped to
+    // the old country — clear it so CityAutocomplete can re-suggest under the
+    // new country. Event-handler path is preferred over an effect so we don't
+    // wipe the city on mount or when toggling into edit mode.
+    setCountryCode(next);
+    if (next !== countryCode) {
+      setCity("");
+    }
+  }
+
   function resetForm() {
     setName(supplier.name);
     setSupplierCode(supplier.supplier_code ?? "");
-    setCountry(supplier.country ?? "");
+    setCountryCode(resolveInitialCountryCode(supplier));
     setCity(supplier.city ?? "");
     setRegistrationNumber(supplier.registration_number ?? "");
     setPaymentTerms(supplier.default_payment_terms ?? "");
@@ -43,12 +81,17 @@ export function TabOverview({ supplier }: Props) {
   }
 
   async function handleSave() {
+    const countryRu = countryCode
+      ? findCountryByCode(countryCode)?.nameRu ?? null
+      : null;
+
     setSaving(true);
     try {
       await updateSupplier(supplier.id, {
         name,
         supplier_code: supplierCode,
-        country,
+        country: countryRu ?? "",
+        country_code: countryCode ?? "",
         city,
         registration_number: registrationNumber,
         default_payment_terms: paymentTerms,
@@ -57,7 +100,10 @@ export function TabOverview({ supplier }: Props) {
       setEditing(false);
       router.refresh();
     } catch (err) {
-      console.error("Failed to update supplier:", err);
+      console.error("[tab-overview] save failed:", err);
+      toast.error(
+        extractErrorMessage(err) ?? "Не удалось сохранить поставщика",
+      );
     } finally {
       setSaving(false);
     }
@@ -145,8 +191,27 @@ export function TabOverview({ supplier }: Props) {
           <CardContent>
             {editing ? (
               <div className="space-y-3">
-                <Field label="Страна" value={country} onChange={setCountry} placeholder="Страна поставщика" />
-                <Field label="Город" value={city} onChange={setCity} placeholder="Город" />
+                <fieldset className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                    Страна
+                  </Label>
+                  <CountryCombobox
+                    value={countryCode}
+                    onChange={handleCountryChange}
+                    ariaLabel="Страна поставщика"
+                  />
+                </fieldset>
+                <fieldset className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                    Город
+                  </Label>
+                  <CityAutocomplete
+                    value={city}
+                    onChange={setCity}
+                    countryCode={countryCode}
+                    ariaLabel="Город поставщика"
+                  />
+                </fieldset>
               </div>
             ) : (
               <div className="space-y-2 text-sm">

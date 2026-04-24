@@ -1,7 +1,7 @@
 """
-Geo API endpoints — VAT rate lookup, admin CRUD, and city autocomplete.
+Geo API endpoints — VAT resolver, admin CRUD, and city autocomplete.
 
-GET /api/geo/vat-rate      — Lookup VAT rate for a country
+GET /api/geo/vat-rate      — Resolve VAT rate for supplier/buyer pair
 PUT /api/admin/vat-rates   — Admin-only rate upsert
 GET /api/geo/cities/search — City autocomplete via HERE Geocoding API
 
@@ -11,6 +11,7 @@ Auth: JWT via ApiAuthMiddleware (request.state.api_user) OR
 
 import logging
 import re
+import uuid
 from typing import Any
 
 from starlette.responses import JSONResponse
@@ -100,44 +101,78 @@ def _get_authenticated_user(request) -> tuple[dict | None, JSONResponse | None]:
 
 
 async def get_vat_rate(request) -> JSONResponse:
-    """Get VAT rate for a country.
+    """Resolve VAT rate for an invoice line based on supplier and buyer country match.
 
     Path: GET /api/geo/vat-rate
     Params:
-        country_code: str (required) — ISO 3166-1 alpha-2 (query param)
+        supplier_country_code: str (required) — ISO 3166-1 alpha-2 (query param)
+        buyer_company_id: UUID (required) — buyer company this KP belongs to (query param)
     Returns:
-        country_code: str
-        rate: float — VAT rate percentage (e.g., 20.00)
+        rate: float — VAT rate percentage (e.g., 22.0)
+        reason: "domestic" | "export_zero_rated" | "unknown"
     Roles: any authenticated user
+    Errors:
+        400 VALIDATION_ERROR — missing/malformed params
+        404 NOT_FOUND — buyer_company_id unknown
     """
     # Auth
     user, err = _get_authenticated_user(request)
     if err:
         return err
 
-    # Validate country_code
-    country_code = request.query_params.get("country_code", "").strip()
-    if not country_code:
+    # Validate supplier_country_code
+    supplier_country_code = request.query_params.get("supplier_country_code", "").strip()
+    if not supplier_country_code:
         return JSONResponse(
-            {"success": False, "error": {"code": "VALIDATION_ERROR", "message": "country_code query parameter is required"}},
+            {"success": False, "error": {"code": "VALIDATION_ERROR", "message": "supplier_country_code query parameter is required"}},
             status_code=400,
         )
-    if not _COUNTRY_CODE_RE.match(country_code):
+    if not _COUNTRY_CODE_RE.match(supplier_country_code):
         return JSONResponse(
-            {"success": False, "error": {"code": "VALIDATION_ERROR", "message": "country_code must be a valid ISO 3166-1 alpha-2 code (2 letters)"}},
+            {"success": False, "error": {"code": "VALIDATION_ERROR", "message": "supplier_country_code must be a valid ISO 3166-1 alpha-2 code (2 letters)"}},
             status_code=400,
         )
 
-    from services.vat_service import get_vat_rate as lookup_vat_rate
+    # Validate buyer_company_id
+    buyer_company_id_raw = request.query_params.get("buyer_company_id", "").strip()
+    if not buyer_company_id_raw:
+        return JSONResponse(
+            {"success": False, "error": {"code": "VALIDATION_ERROR", "message": "buyer_company_id query parameter is required"}},
+            status_code=400,
+        )
+    try:
+        buyer_company_id = str(uuid.UUID(buyer_company_id_raw))
+    except (ValueError, AttributeError):
+        return JSONResponse(
+            {"success": False, "error": {"code": "VALIDATION_ERROR", "message": "buyer_company_id must be a valid UUID"}},
+            status_code=400,
+        )
 
-    rate = lookup_vat_rate(country_code)
+    from services.vat_service import resolve_vat_for_invoice
+
+    try:
+        result = resolve_vat_for_invoice(
+            supplier_country_code=supplier_country_code,
+            buyer_company_id=buyer_company_id,
+            supabase_client=get_supabase(),
+        )
+    except LookupError:
+        return JSONResponse(
+            {"success": False, "error": {"code": "NOT_FOUND", "message": "buyer_company_id not found"}},
+            status_code=404,
+        )
+    except ValueError as exc:
+        return JSONResponse(
+            {"success": False, "error": {"code": "VALIDATION_ERROR", "message": str(exc)}},
+            status_code=400,
+        )
 
     return JSONResponse(
         {
             "success": True,
             "data": {
-                "country_code": country_code.upper(),
-                "rate": float(rate),
+                "rate": float(result["rate"]),
+                "reason": result["reason"],
             },
         },
         status_code=200,

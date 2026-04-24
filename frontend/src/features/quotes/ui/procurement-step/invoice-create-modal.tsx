@@ -24,7 +24,11 @@ import type { QuoteItemRow } from "@/entities/quote/queries";
 import { CountryCombobox, findCountryByCode, findCountryByName } from "@/shared/ui/geo";
 import { INCOTERMS_2020 } from "@/shared/lib/incoterms";
 import { SUPPORTED_CURRENCIES } from "@/shared/lib/currencies";
-import { fetchVatRate } from "@/entities/invoice/queries";
+import { extractErrorMessage } from "@/shared/lib/errors";
+import {
+  fetchSupplierVatRate,
+  type VatResolverReason,
+} from "@/entities/invoice/queries";
 import { Badge } from "@/components/ui/badge";
 
 interface Supplier {
@@ -69,27 +73,39 @@ export function InvoiceCreateModal({
     Array<{ weight_kg: string; length_mm: string; width_mm: string; height_mm: string }>
   >([{ weight_kg: "", length_mm: "", width_mm: "", height_mm: "" }]);
   const [vatRate, setVatRate] = useState("");
+  const [vatReason, setVatReason] = useState<VatResolverReason | null>(null);
   const [vatManuallyOverridden, setVatManuallyOverridden] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Auto-fill VAT rate when country changes (unless manually overridden)
+  // Auto-fill VAT rate + reason when both supplier country AND buyer company
+  // are selected. Reason is surfaced as an inline badge next to the rate.
+  // Manual override suppresses the auto-fill (but we still keep the user's
+  // value — no mutation of vatRate here).
   useEffect(() => {
-    if (!countryCode || vatManuallyOverridden) return;
+    if (!countryCode || !buyerCompanyId || vatManuallyOverridden) return;
 
     let cancelled = false;
 
-    fetchVatRate(countryCode).then((result) => {
+    fetchSupplierVatRate({
+      supplierCountryCode: countryCode,
+      buyerCompanyId,
+    }).then((result) => {
       if (cancelled) return;
       if (result) {
         setVatRate(result.rate.toString());
+        setVatReason(result.reason);
+      } else {
+        // Network / backend failure — keep user's current vatRate, hide badge.
+        // Fail silently per Requirement 3.8.
+        setVatReason(null);
       }
     });
 
     return () => {
       cancelled = true;
     };
-  }, [countryCode, vatManuallyOverridden]);
+  }, [countryCode, buyerCompanyId, vatManuallyOverridden]);
 
   function handleClose() {
     resetForm();
@@ -104,6 +120,7 @@ export function InvoiceCreateModal({
     setIncoterms("");
     setCurrency("USD");
     setVatRate("");
+    setVatReason(null);
     setVatManuallyOverridden(false);
     setBoxes([{ weight_kg: "", length_mm: "", width_mm: "", height_mm: "" }]);
     setErrors({});
@@ -183,18 +200,20 @@ export function InvoiceCreateModal({
         const parsedVat = vatRate.trim() ? parseFloat(vatRate) : null;
         if (parsedVat !== null && !isNaN(parsedVat)) {
           const supabase = (await import("@/shared/lib/supabase/client")).createClient();
-          await supabase
+          const { error } = await supabase
             .from("quote_items")
             .update({ vat_rate: parsedVat })
             .in("id", selectedItems.map((i) => i.id));
+          if (error) throw error;
         }
       }
 
       toast.success("КП поставщику создано");
       handleClose();
       router.refresh();
-    } catch {
-      toast.error("Не удалось создать КП поставщику");
+    } catch (err) {
+      console.error("[invoice-create-modal] submit failed:", err);
+      toast.error(extractErrorMessage(err) ?? "Не удалось создать КП поставщику");
     } finally {
       setSubmitting(false);
     }
@@ -224,11 +243,15 @@ export function InvoiceCreateModal({
                 setSupplierId(newSupplierId);
                 setErrors((prev) => { const { supplier, ...rest } = prev; return rest; });
                 // Auto-fill country from supplier when user hasn't manually picked one.
+                // Try RU locale first, fall back to EN so suppliers stored with
+                // English country names ("Germany", "Turkey") also resolve.
                 // useEffect on countryCode then triggers VAT autofill.
                 if (!vatManuallyOverridden && newSupplierId) {
                   const supplier = suppliers.find((s) => s.id === newSupplierId);
                   if (supplier?.country) {
-                    const match = findCountryByName(supplier.country, "ru");
+                    const match =
+                      findCountryByName(supplier.country, "ru") ??
+                      findCountryByName(supplier.country, "en");
                     if (match) setCountryCode(match.code);
                   }
                 }
@@ -332,6 +355,21 @@ export function InvoiceCreateModal({
                 placeholder="Ставка НДС"
                 className="h-8 w-28 text-sm tabular-nums"
               />
+              {!vatManuallyOverridden && vatReason === "domestic" && (
+                <Badge variant="secondary" className="text-xs">
+                  Внутренний НДС
+                </Badge>
+              )}
+              {!vatManuallyOverridden && vatReason === "export_zero_rated" && (
+                <Badge variant="outline" className="text-xs">
+                  Экспорт, 0%
+                </Badge>
+              )}
+              {!vatManuallyOverridden && vatReason === "unknown" && (
+                <Badge variant="outline" className="text-xs text-muted-foreground">
+                  Неизвестно
+                </Badge>
+              )}
               {vatManuallyOverridden && (
                 <>
                   <Badge variant="outline" className="text-xs">
@@ -381,7 +419,7 @@ export function InvoiceCreateModal({
                     type="number"
                     step="0.01"
                     min="0"
-                    className="h-8 text-sm"
+                    className={`h-8 text-sm ${errors[`box_${i}`] ? "border-destructive" : ""}`}
                     placeholder="Вес, кг"
                     value={box.weight_kg}
                     onChange={(e) => updateBox(i, "weight_kg", e.target.value)}
@@ -390,7 +428,7 @@ export function InvoiceCreateModal({
                     type="number"
                     step="1"
                     min="0"
-                    className="h-8 text-sm"
+                    className={`h-8 text-sm ${errors[`box_${i}`] ? "border-destructive" : ""}`}
                     placeholder="Длина, мм"
                     value={box.length_mm}
                     onChange={(e) => updateBox(i, "length_mm", e.target.value)}
@@ -399,7 +437,7 @@ export function InvoiceCreateModal({
                     type="number"
                     step="1"
                     min="0"
-                    className="h-8 text-sm"
+                    className={`h-8 text-sm ${errors[`box_${i}`] ? "border-destructive" : ""}`}
                     placeholder="Ширина, мм"
                     value={box.width_mm}
                     onChange={(e) => updateBox(i, "width_mm", e.target.value)}
@@ -408,7 +446,7 @@ export function InvoiceCreateModal({
                     type="number"
                     step="1"
                     min="0"
-                    className="h-8 text-sm"
+                    className={`h-8 text-sm ${errors[`box_${i}`] ? "border-destructive" : ""}`}
                     placeholder="Высота, мм"
                     value={box.height_mm}
                     onChange={(e) => updateBox(i, "height_mm", e.target.value)}

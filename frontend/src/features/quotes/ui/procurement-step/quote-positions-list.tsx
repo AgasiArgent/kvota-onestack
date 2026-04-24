@@ -24,6 +24,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { createClient } from "@/shared/lib/supabase/client";
+import { extractErrorMessage } from "@/shared/lib/errors";
 import { assignItemsToInvoice } from "@/entities/quote/mutations";
 import type { QuoteItemRow, QuoteInvoiceRow } from "@/entities/quote/queries";
 
@@ -159,8 +160,9 @@ export function QuotePositionsList({
       toast.success(`${selectedIds.size} поз. назначено в КП`);
       setSelectedIds(new Set());
       router.refresh();
-    } catch {
-      toast.error("Не удалось назначить позиции");
+    } catch (err) {
+      console.error("[quote-positions-list] assign failed:", err);
+      toast.error(extractErrorMessage(err) ?? "Не удалось назначить позиции");
     } finally {
       setAssigning(false);
     }

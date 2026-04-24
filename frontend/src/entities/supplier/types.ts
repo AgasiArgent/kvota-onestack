@@ -16,6 +16,8 @@ export interface SupplierDetail {
   name: string;
   supplier_code: string | null;
   country: string | null;
+  /** ISO 3166-1 alpha-2 (migration 295). Nullable for unmatched legacy rows. */
+  country_code: string | null;
   city: string | null;
   registration_number: string | null;
   default_payment_terms: string | null;

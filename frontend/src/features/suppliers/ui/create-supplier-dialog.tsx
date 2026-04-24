@@ -15,22 +15,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { createSupplier } from "@/entities/supplier/mutations";
+import { extractErrorMessage } from "@/shared/lib/errors";
+import {
+  CityAutocomplete,
+  CountryCombobox,
+  findCountryByCode,
+} from "@/shared/ui/geo";
 
 interface CreateSupplierDialogProps {
   orgId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
-
-const COUNTRY_SUGGESTIONS = [
-  "Россия", "Китай", "Турция", "Германия", "Италия", "Франция",
-  "Испания", "Польша", "Литва", "Латвия", "Эстония", "Финляндия",
-  "Швеция", "Норвегия", "Нидерланды", "Бельгия", "Австрия", "Чехия",
-  "Болгария", "Румыния", "Великобритания", "Индия", "Южная Корея",
-  "Япония", "Тайвань", "Вьетнам", "Индонезия", "Малайзия", "Таиланд",
-  "ОАЭ", "Казахстан", "Узбекистан", "Беларусь", "Украина", "Грузия",
-  "США", "Канада", "Бразилия", "Мексика", "Португалия", "Греция",
-];
 
 export function CreateSupplierDialog({
   orgId,
@@ -40,19 +36,32 @@ export function CreateSupplierDialog({
   const router = useRouter();
 
   const [name, setName] = useState("");
-  const [country, setCountry] = useState("");
+  // Store ISO-2 code — the display name is derived via findCountryByCode.
+  const [countryCode, setCountryCode] = useState<string | null>(null);
+  const [city, setCity] = useState("");
   const [registrationNumber, setRegistrationNumber] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (open) {
       setName("");
-      setCountry("");
+      setCountryCode(null);
+      setCity("");
       setRegistrationNumber("");
     }
   }, [open]);
 
-  async function handleSubmit(e: React.SubmitEvent<HTMLFormElement>) {
+  function handleCountryChange(next: string | null) {
+    // Prior city selection is scoped to the prior country — clear on change
+    // (REQ 2.1). Event-handler path avoids an effect that would trip the
+    // set-state-in-effect lint rule.
+    setCountryCode(next);
+    if (next !== countryCode) {
+      setCity("");
+    }
+  }
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
     const trimmedName = name.trim();
@@ -61,23 +70,38 @@ export function CreateSupplierDialog({
       return;
     }
 
+    const countryRu = countryCode
+      ? findCountryByCode(countryCode)?.nameRu ?? null
+      : null;
+
     setSubmitting(true);
     try {
       const result = await createSupplier(orgId, {
         name: trimmedName,
-        country: country.trim() || undefined,
+        country: countryRu ?? undefined,
+        country_code: countryCode ?? undefined,
+        city: city.trim() || undefined,
         registration_number: registrationNumber.trim() || undefined,
       });
 
       onOpenChange(false);
       router.push(`/suppliers/${result.id}`);
     } catch (err) {
+      console.error("[create-supplier-dialog] create failed:", err);
+      // UX niceties: surface common PG error classes in Russian. These text
+      // matches are fragile to PG wording changes, so they're best-effort —
+      // any miss falls through to extractErrorMessage which handles Postgrest
+      // shape, then a final generic Russian fallback.
       const raw = err instanceof Error ? err.message : String(err);
-      const message = raw.includes("row-level security")
-        ? "Недостаточно прав для создания поставщика"
-        : raw.includes("unique") || raw.includes("duplicate")
-          ? "Поставщик с таким названием уже существует"
-          : "Ошибка создания поставщика";
+      let message: string;
+      if (raw.includes("row-level security")) {
+        message = "Нет прав для создания поставщика";
+      } else if (raw.includes("unique") || raw.includes("duplicate")) {
+        message = "Поставщик с таким названием уже существует";
+      } else {
+        message =
+          extractErrorMessage(err) ?? "Не удалось создать поставщика";
+      }
       toast.error(message);
     } finally {
       setSubmitting(false);
@@ -115,18 +139,26 @@ export function CreateSupplierDialog({
             >
               Страна
             </Label>
-            <Input
-              id="supplier-country"
-              list="country-suggestions"
-              value={country}
-              onChange={(e) => setCountry(e.target.value)}
-              placeholder="Начните вводить..."
+            <CountryCombobox
+              value={countryCode}
+              onChange={handleCountryChange}
+              ariaLabel="Страна поставщика"
             />
-            <datalist id="country-suggestions">
-              {COUNTRY_SUGGESTIONS.map((c) => (
-                <option key={c} value={c} />
-              ))}
-            </datalist>
+          </fieldset>
+
+          <fieldset className="flex flex-col gap-1.5">
+            <Label
+              htmlFor="supplier-city"
+              className="text-xs font-semibold uppercase tracking-wide text-text-muted"
+            >
+              Город
+            </Label>
+            <CityAutocomplete
+              value={city}
+              onChange={setCity}
+              countryCode={countryCode}
+              ariaLabel="Город поставщика"
+            />
           </fieldset>
 
           <fieldset className="flex flex-col gap-1.5">

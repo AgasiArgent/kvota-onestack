@@ -16,6 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { SUPPORTED_CURRENCIES } from "@/shared/lib/currencies";
+import { extractErrorMessage } from "@/shared/lib/errors";
 import { splitInvoiceItem } from "@/entities/quote/mutations";
 
 /**
@@ -420,9 +421,8 @@ export function SplitModal({
       onClose();
       router.refresh();
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Не удалось разделить позицию"
-      );
+      console.error("[split-modal] submit failed:", err);
+      toast.error(extractErrorMessage(err) ?? "Не удалось разделить позицию");
     } finally {
       setSubmitting(false);
     }

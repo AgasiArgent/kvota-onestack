@@ -12,7 +12,10 @@ function getUntypedClient(): UntypedClient {
 export interface SupplierFormData {
   name: string;
   supplier_code?: string;
+  /** Russian display name — kept in sync with country_code via CountryCombobox. */
   country?: string;
+  /** ISO 3166-1 alpha-2 (migration 295) — empty string clears the column. */
+  country_code?: string;
   city?: string;
   registration_number?: string;
   default_payment_terms?: string;
@@ -66,12 +69,16 @@ export async function createSupplier(
   const supabase = createClient();
   const userId = await getCurrentUserId();
 
-  const { data: supplier, error } = await supabase
+  // `country_code` column (migration 295) isn't yet in generated types —
+  // write it through the untyped client so the payload still typechecks.
+  const untyped = supabase as unknown as UntypedClient;
+  const { data: supplier, error } = await untyped
     .from("suppliers")
     .insert({
       name: data.name,
       supplier_code: data.supplier_code || null,
       country: data.country || null,
+      country_code: data.country_code || null,
       city: data.city || null,
       registration_number: data.registration_number || null,
       default_payment_terms: data.default_payment_terms || null,
@@ -84,8 +91,8 @@ export async function createSupplier(
 
   if (error) throw error;
 
-  // Auto-assign the creator as a manager of this supplier
-  const untyped = supabase as unknown as UntypedClient;
+  // Auto-assign the creator as a manager of this supplier — reuse the
+  // untyped client from the insert above.
   await untyped
     .from("supplier_assignees")
     .insert({
@@ -107,13 +114,18 @@ export async function updateSupplier(
   if (data.name !== undefined) updatePayload.name = data.name;
   if (data.supplier_code !== undefined) updatePayload.supplier_code = data.supplier_code || null;
   if (data.country !== undefined) updatePayload.country = data.country || null;
+  if (data.country_code !== undefined)
+    updatePayload.country_code = data.country_code || null;
   if (data.city !== undefined) updatePayload.city = data.city || null;
   if (data.registration_number !== undefined) updatePayload.registration_number = data.registration_number || null;
   if (data.default_payment_terms !== undefined) updatePayload.default_payment_terms = data.default_payment_terms || null;
   if (data.notes !== undefined) updatePayload.notes = data.notes || null;
   if (data.is_active !== undefined) updatePayload.is_active = data.is_active;
 
-  const { error } = await supabase
+  // country_code (migration 295) and notes aren't yet in generated types —
+  // write through the untyped client so arbitrary keys are accepted.
+  const untyped = supabase as unknown as UntypedClient;
+  const { error } = await untyped
     .from("suppliers")
     .update(updatePayload)
     .eq("id", supplierId);
