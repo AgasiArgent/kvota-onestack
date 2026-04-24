@@ -425,16 +425,20 @@ WHERE bc.country_code IS NULL
 -- =============================================================================
 -- Part 4: Unmatched-rows diagnostic (REQ-1 AC#3)
 --
--- Count rows that still have country_code IS NULL but had a non-empty `country`
--- value — i.e., values we couldn't map (junk, typos, missing from dictionary).
--- Emitted as NOTICE so CI logs carry the number for human triage without
+-- Count + sample rows that still have country_code IS NULL but had a non-empty
+-- `country` value — i.e., values we couldn't map (junk, typos, missing from
+-- dictionary). Emitted as NOTICE so CI logs carry the triage info without
 -- failing the migration.
+--
+-- Per-row listing is bounded to 20 rows per table to avoid log flooding.
 -- =============================================================================
 
 DO $$
 DECLARE
     v_suppliers_unmatched INT;
     v_buyer_companies_unmatched INT;
+    r RECORD;
+    n INT;
 BEGIN
     SELECT COUNT(*) INTO v_suppliers_unmatched
     FROM kvota.suppliers
@@ -452,6 +456,36 @@ BEGIN
         v_suppliers_unmatched;
     RAISE NOTICE '[m295] Buyer companies with unmatched country (country_code=NULL, country non-empty): %',
         v_buyer_companies_unmatched;
+
+    -- Sample unmatched supplier rows (up to 20)
+    n := 0;
+    FOR r IN SELECT id, country FROM kvota.suppliers
+             WHERE country_code IS NULL
+               AND country IS NOT NULL
+               AND TRIM(country) <> ''
+             ORDER BY id
+             LIMIT 20 LOOP
+        RAISE NOTICE '[m295] Unmatched supplier % (country=%)', r.id, r.country;
+        n := n + 1;
+    END LOOP;
+    IF n = 0 THEN
+        RAISE NOTICE '[m295] No unmatched suppliers';
+    END IF;
+
+    -- Sample unmatched buyer_company rows (up to 20)
+    n := 0;
+    FOR r IN SELECT id, country FROM kvota.buyer_companies
+             WHERE country_code IS NULL
+               AND country IS NOT NULL
+               AND TRIM(country) <> ''
+             ORDER BY id
+             LIMIT 20 LOOP
+        RAISE NOTICE '[m295] Unmatched buyer_company % (country=%)', r.id, r.country;
+        n := n + 1;
+    END LOOP;
+    IF n = 0 THEN
+        RAISE NOTICE '[m295] No unmatched buyer_companies';
+    END IF;
 END $$;
 
 INSERT INTO kvota.migrations (id, filename, applied_at)

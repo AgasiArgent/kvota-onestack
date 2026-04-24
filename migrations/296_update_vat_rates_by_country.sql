@@ -118,7 +118,32 @@ INSERT INTO kvota.vat_rates_by_country (country_code, rate, notes) VALUES
 ON CONFLICT (country_code) DO UPDATE SET
     rate       = EXCLUDED.rate,
     notes      = EXCLUDED.notes,
-    updated_at = NOW();
+    updated_at = NOW()
+WHERE kvota.vat_rates_by_country.updated_by IS NULL
+   OR kvota.vat_rates_by_country.rate = EXCLUDED.rate;
+
+-- =============================================================================
+-- Skipped admin-edited rates diagnostic (REQ-9 AC#2)
+--
+-- Surface country_codes whose rate was NOT overwritten because an admin had
+-- previously edited them (updated_by IS NOT NULL). This lets CI logs show
+-- which seed rows were preserved so humans can reconcile if needed.
+-- =============================================================================
+
+DO $$
+DECLARE
+  skipped_count INTEGER;
+  skipped_list TEXT;
+BEGIN
+  SELECT COUNT(*), STRING_AGG(country_code, ', ' ORDER BY country_code)
+  INTO skipped_count, skipped_list
+  FROM kvota.vat_rates_by_country
+  WHERE updated_by IS NOT NULL;
+
+  IF skipped_count > 0 THEN
+    RAISE NOTICE 'Migration 296: % admin-edited rate(s) preserved (%)', skipped_count, skipped_list;
+  END IF;
+END $$;
 
 -- =============================================================================
 -- Updated documentation on table and rate column

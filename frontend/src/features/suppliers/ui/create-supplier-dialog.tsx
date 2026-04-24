@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { createSupplier } from "@/entities/supplier/mutations";
+import { extractErrorMessage } from "@/shared/lib/errors";
 import {
   CityAutocomplete,
   CountryCombobox,
@@ -60,7 +61,7 @@ export function CreateSupplierDialog({
     }
   }
 
-  async function handleSubmit(e: React.SubmitEvent<HTMLFormElement>) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
     const trimmedName = name.trim();
@@ -86,12 +87,21 @@ export function CreateSupplierDialog({
       onOpenChange(false);
       router.push(`/suppliers/${result.id}`);
     } catch (err) {
+      console.error("[create-supplier-dialog] create failed:", err);
+      // UX niceties: surface common PG error classes in Russian. These text
+      // matches are fragile to PG wording changes, so they're best-effort —
+      // any miss falls through to extractErrorMessage which handles Postgrest
+      // shape, then a final generic Russian fallback.
       const raw = err instanceof Error ? err.message : String(err);
-      const message = raw.includes("row-level security")
-        ? "Недостаточно прав для создания поставщика"
-        : raw.includes("unique") || raw.includes("duplicate")
-          ? "Поставщик с таким названием уже существует"
-          : "Ошибка создания поставщика";
+      let message: string;
+      if (raw.includes("row-level security")) {
+        message = "Нет прав для создания поставщика";
+      } else if (raw.includes("unique") || raw.includes("duplicate")) {
+        message = "Поставщик с таким названием уже существует";
+      } else {
+        message =
+          extractErrorMessage(err) ?? "Не удалось создать поставщика";
+      }
       toast.error(message);
     } finally {
       setSubmitting(false);

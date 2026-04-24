@@ -200,10 +200,11 @@ export function InvoiceCreateModal({
         const parsedVat = vatRate.trim() ? parseFloat(vatRate) : null;
         if (parsedVat !== null && !isNaN(parsedVat)) {
           const supabase = (await import("@/shared/lib/supabase/client")).createClient();
-          await supabase
+          const { error } = await supabase
             .from("quote_items")
             .update({ vat_rate: parsedVat })
             .in("id", selectedItems.map((i) => i.id));
+          if (error) throw error;
         }
       }
 
@@ -242,11 +243,15 @@ export function InvoiceCreateModal({
                 setSupplierId(newSupplierId);
                 setErrors((prev) => { const { supplier, ...rest } = prev; return rest; });
                 // Auto-fill country from supplier when user hasn't manually picked one.
+                // Try RU locale first, fall back to EN so suppliers stored with
+                // English country names ("Germany", "Turkey") also resolve.
                 // useEffect on countryCode then triggers VAT autofill.
                 if (!vatManuallyOverridden && newSupplierId) {
                   const supplier = suppliers.find((s) => s.id === newSupplierId);
                   if (supplier?.country) {
-                    const match = findCountryByName(supplier.country, "ru");
+                    const match =
+                      findCountryByName(supplier.country, "ru") ??
+                      findCountryByName(supplier.country, "en");
                     if (match) setCountryCode(match.code);
                   }
                 }

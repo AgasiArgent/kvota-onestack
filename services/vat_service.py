@@ -12,12 +12,15 @@ Provides:
 Table: kvota.vat_rates_by_country (Migration 269, reseeded by Migration 296)
 """
 
+import logging
 import re
 from decimal import Decimal
 from datetime import datetime, timezone
 from typing import Any
 
 from services.database import get_supabase
+
+logger = logging.getLogger(__name__)
 
 
 # Default VAT rate for countries not in the table (used by get_vat_rate; the
@@ -54,7 +57,10 @@ def get_vat_rate(country_code: str) -> Decimal:
             .execute()
         )
         return Decimal(str(result.data["rate"]))
-    except Exception:
+    except Exception as e:
+        logger.warning(
+            "[vat_service] Failed to fetch VAT rate for %s: %s", code, e
+        )
         return DEFAULT_VAT_RATE
 
 
