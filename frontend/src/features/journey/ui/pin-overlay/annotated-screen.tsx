@@ -18,7 +18,11 @@
 
 import { useRef } from "react";
 
-import type { JourneyPin } from "@/entities/journey";
+import type {
+  JourneyNodeId,
+  JourneyPin,
+  RoleSlug,
+} from "@/entities/journey";
 import { useContainerSize } from "@/features/journey/lib/use-container-size";
 
 import {
@@ -34,6 +38,10 @@ export interface AnnotatedScreenProps {
   readonly pins: readonly JourneyPin[];
   readonly selectedPinId: string | null;
   readonly onPinClick: (pinId: string) => void;
+  /** Optional — when provided, the popover renders Task 23 verify buttons for QA pins. */
+  readonly nodeId?: JourneyNodeId;
+  readonly userId?: string;
+  readonly userRoles?: readonly RoleSlug[];
 }
 
 export function AnnotatedScreen({
@@ -41,6 +49,9 @@ export function AnnotatedScreen({
   pins,
   selectedPinId,
   onPinClick,
+  nodeId,
+  userId,
+  userRoles,
 }: AnnotatedScreenProps) {
   const ref = useRef<HTMLDivElement>(null);
   const size = useContainerSize(ref);
@@ -124,6 +135,9 @@ export function AnnotatedScreen({
           state={classifyPinBadgeState(selected)}
           container={size}
           onClose={() => onPinClick(selected.id)}
+          nodeId={nodeId}
+          userId={userId}
+          userRoles={userRoles}
         />
       )}
     </div>

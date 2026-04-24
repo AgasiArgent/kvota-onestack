@@ -24,6 +24,7 @@ import {
 import { Button } from "@/components/ui/button";
 import {
   PinCreator,
+  VerifyButtons,
   classifyPinBadgeState,
 } from "@/features/journey/ui/pin-overlay";
 
@@ -122,6 +123,16 @@ export function PinListSection({
                     </span>
                   )}
                 </div>
+                {userId && (
+                  <div className="mt-2">
+                    <VerifyButtons
+                      pin={pin}
+                      nodeId={detail.node_id}
+                      userId={userId}
+                      userRoles={userRoles}
+                    />
+                  </div>
+                )}
               </li>
             );
           })}

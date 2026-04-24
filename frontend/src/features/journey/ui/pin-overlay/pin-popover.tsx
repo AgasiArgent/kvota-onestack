@@ -10,9 +10,14 @@
 
 import type { CSSProperties } from "react";
 
-import type { JourneyPin } from "@/entities/journey";
+import type {
+  JourneyNodeId,
+  JourneyPin,
+  RoleSlug,
+} from "@/entities/journey";
 import { Button } from "@/components/ui/button";
 import type { AbsRect, PinBadgeState } from "./_overlay-math";
+import { VerifyButtons } from "./verify-buttons";
 
 export interface PinPopoverProps {
   readonly pin: JourneyPin;
@@ -20,6 +25,10 @@ export interface PinPopoverProps {
   readonly state: PinBadgeState;
   readonly container: { readonly width: number; readonly height: number };
   readonly onClose: () => void;
+  /** When provided, QA-mode pins render verify buttons inside the popover (Task 23). */
+  readonly nodeId?: JourneyNodeId;
+  readonly userId?: string;
+  readonly userRoles?: readonly RoleSlug[];
 }
 
 const STATE_COPY: Record<PinBadgeState, string> = {
@@ -39,6 +48,9 @@ export function PinPopover({
   state,
   container,
   onClose,
+  nodeId,
+  userId,
+  userRoles,
 }: PinPopoverProps) {
   // Prefer below-the-bbox; flip above if there isn't room.
   const below = rect.y + rect.height + 140 < container.height;
@@ -90,6 +102,16 @@ export function PinPopover({
       <p className="mb-2 text-[11px] text-text-subtle">
         Обновлено: {updated}
       </p>
+      {nodeId && userId && userRoles && (
+        <div className="mb-2">
+          <VerifyButtons
+            pin={pin}
+            nodeId={nodeId}
+            userId={userId}
+            userRoles={userRoles}
+          />
+        </div>
+      )}
       <div className="flex justify-end">
         <Button
           size="sm"
