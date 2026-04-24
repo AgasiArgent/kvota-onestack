@@ -201,7 +201,8 @@ export function useJourneyUrlState(): UseJourneyUrlStateReturn {
   const replaceParams = useCallback(
     (next: JourneyUrlState) => {
       const qs = encodeToSearchParams(next).toString();
-      const url = qs ? `${pathname}?${qs}` : pathname;
+      const safePath = pathname ?? "/journey";
+      const url = qs ? `${safePath}?${qs}` : safePath;
       router.replace(url, { scroll: false });
     },
     [pathname, router],
