@@ -192,7 +192,11 @@ function DrawerBody({
       <StatusSection detail={detail} userRoles={userRoles} />
       {shouldShowScreenshot(detail) && <ScreenshotSection detail={detail} />}
       <FeedbackSection detail={detail} />
-      <TrainingSection detail={detail} />
+      <TrainingSection
+        detail={detail}
+        userRoles={userRoles}
+        userId={userId}
+      />
       {shouldShowPinList(detail) && (
         <PinListSection
           detail={detail}

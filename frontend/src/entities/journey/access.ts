@@ -70,6 +70,20 @@ export const VERIFICATION_WRITERS: ReadonlySet<RoleSlug> = new Set<RoleSlug>([
   "spec_controller",
 ]);
 
+/**
+ * Roles permitted to create / edit / reorder training steps (Req 12.10).
+ *
+ * Narrower than {@link PIN_WRITERS}: training content is an onboarding /
+ * documentation surface, so only admin + each head_of_* curates it. QA
+ * controllers continue to manage QA pins via {@link PIN_WRITERS}.
+ */
+export const TRAINING_WRITERS: ReadonlySet<RoleSlug> = new Set<RoleSlug>([
+  "admin",
+  "head_of_sales",
+  "head_of_procurement",
+  "head_of_logistics",
+]);
+
 // ---------------------------------------------------------------------------
 // Guard functions
 // ---------------------------------------------------------------------------
@@ -109,4 +123,9 @@ export function canCreatePin(heldRoles: readonly RoleSlug[]): boolean {
 /** True iff the caller holds at least one role in {@link VERIFICATION_WRITERS}. */
 export function canRecordVerification(heldRoles: readonly RoleSlug[]): boolean {
   return anyMatch(heldRoles, VERIFICATION_WRITERS);
+}
+
+/** True iff the caller holds at least one role in {@link TRAINING_WRITERS}. */
+export function canEditTraining(heldRoles: readonly RoleSlug[]): boolean {
+  return anyMatch(heldRoles, TRAINING_WRITERS);
 }
