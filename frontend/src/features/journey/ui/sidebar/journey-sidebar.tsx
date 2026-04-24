@@ -40,6 +40,8 @@ import { ViewAsRole } from "./view-as-role";
 import { JourneySearch } from "./search";
 import { ClusterMultiselect } from "./cluster-multiselect";
 import { ImplStatusFilter, QaStatusFilter } from "./status-filters";
+import { FlowList } from "../flows/flow-list";
+import { useFlows } from "@/entities/journey";
 
 interface Props {
   readonly nodes: readonly JourneyNodeAggregated[];
@@ -92,6 +94,9 @@ export function JourneySidebar({
     onStateChange({ ...state, search });
   };
 
+  const flowsQuery = useFlows();
+  const flows = flowsQuery.data ?? [];
+
   return (
     <div
       data-testid="journey-sidebar-content"
@@ -138,6 +143,21 @@ export function JourneySidebar({
           excluded={state.clustersExcluded}
           onToggle={handleClusterToggle}
         />
+      </section>
+
+      <section data-testid="journey-sidebar-flows">
+        <h3 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-text-subtle">
+          <span>Пути</span>
+          {flows.length > 0 ? (
+            <span
+              data-testid="journey-sidebar-flows-count"
+              className="inline-flex min-w-5 justify-center rounded-full bg-surface-muted px-1.5 py-0.5 text-[10px] font-medium normal-case tracking-normal text-text-subtle"
+            >
+              {flows.length}
+            </span>
+          ) : null}
+        </h3>
+        <FlowList flows={flows} />
       </section>
     </div>
   );

@@ -23,7 +23,9 @@
  */
 
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
+import { listFlows } from "./queries";
 import type {
+  JourneyFlow,
   JourneyNodeAggregated,
   JourneyNodeDetail,
   JourneyNodeHistoryEntry,
@@ -44,6 +46,7 @@ export const JOURNEY_QUERY_KEYS = {
   nodeDetail: (nodeId: JourneyNodeId) => ["journey", "node", nodeId] as const,
   nodeHistory: (nodeId: JourneyNodeId) =>
     ["journey", "node", nodeId, "history"] as const,
+  flows: () => ["journey", "flows"] as const,
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -143,5 +146,22 @@ export function useNodeHistory(
       journeyFetch<JourneyNodeHistoryEntry[]>(
         `/api/journey/node/${journeyNodePath(nodeId)}/history`
       ),
+  });
+}
+
+/**
+ * Fetch every non-archived curated flow (Req 18.3). Reads Supabase directly
+ * via `entities/journey/queries.ts::listFlows` — this is curriculum content
+ * guarded by RLS, not business logic, so the API-First rule doesn't require a
+ * Python endpoint.
+ */
+export function useFlows(): UseQueryResult<readonly JourneyFlow[]> {
+  return useQuery({
+    queryKey: JOURNEY_QUERY_KEYS.flows(),
+    queryFn: async () => {
+      const { data, error } = await listFlows();
+      if (error) throw new Error(error.message);
+      return (data ?? []) as readonly JourneyFlow[];
+    },
   });
 }
