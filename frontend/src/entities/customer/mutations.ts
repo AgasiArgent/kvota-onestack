@@ -221,6 +221,27 @@ export async function createCustomer(
     .single();
 
   if (error) throw error;
+
+  // Auto-assign the creator. Without this row the customer-list filter
+  // (``customer_assignees.user_id = self``) excludes МОП/РОП-created
+  // customers from their own list, even though they appear as manager.
+  // Best-effort: if the assignee insert fails, the customer itself is
+  // already saved — surface a non-fatal warning rather than rolling back.
+  const untyped = supabase as unknown as UntypedClient;
+  const { error: assigneeError } = await untyped
+    .from("customer_assignees")
+    .insert({
+      customer_id: customer.id,
+      user_id: userId,
+      created_by: userId,
+    });
+  if (assigneeError) {
+    console.error(
+      "[createCustomer] failed to auto-assign creator:",
+      assigneeError
+    );
+  }
+
   return customer;
 }
 

@@ -21,6 +21,7 @@ historical notes.
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -31,6 +32,79 @@ from services.role_service import get_user_role_codes
 logger = logging.getLogger(__name__)
 
 _ALLOWED_ENTITY_TYPES = {"quote", "customer", "invoice", "supplier"}
+
+
+def _resolve_author_profiles(
+    sb: Any, user_ids: list[str]
+) -> dict[str, dict[str, str | None]]:
+    """Resolve author display names + avatars for each user id.
+
+    Uses ``auth.admin.list_users()`` (one round-trip per request) and returns a
+    map ``user_id -> {"name": str, "email": str | None, "avatar_url": str | None}``.
+    Missing/deleted users get a short-id fallback name so the UI never breaks
+    on a stale ``author_id``.
+    """
+    profiles: dict[str, dict[str, str | None]] = {}
+    if not user_ids:
+        return profiles
+
+    try:
+        page = sb.auth.admin.list_users()
+        users_iter = getattr(page, "users", None) or page or []
+        wanted = set(user_ids)
+        for u in users_iter:
+            uid = getattr(u, "id", None)
+            if uid is None or uid not in wanted:
+                continue
+            meta = getattr(u, "user_metadata", {}) or {}
+            email = getattr(u, "email", None)
+            display = (
+                meta.get("full_name")
+                or meta.get("name")
+                or email
+                or str(uid)[:8]
+            )
+            profiles[uid] = {
+                "name": display,
+                "email": email,
+                "avatar_url": meta.get("avatar_url"),
+            }
+    except Exception as exc:  # noqa: BLE001 — never 500 on auth lookup
+        logger.warning("notes: failed to resolve author profiles: %s", exc)
+
+    for uid in user_ids:
+        profiles.setdefault(
+            uid,
+            {"name": str(uid)[:8], "email": None, "avatar_url": None},
+        )
+    return profiles
+
+
+def _enrich_notes_with_author(
+    sb: Any, rows: list[dict]
+) -> list[dict]:
+    """Attach ``author_name`` / ``author_email`` / ``author_avatar_url`` to each row.
+
+    Frontend ``EntityNoteCard`` renders an avatar chip whose hash function
+    crashes on a missing ``author_id``; without enrichment the panel
+    throws ``Cannot read properties of undefined (reading 'length')`` and
+    blacks out the customer profile (Bug #2026-05-01).
+    """
+    if not rows:
+        return rows
+    user_ids = [r["author_id"] for r in rows if r.get("author_id")]
+    profiles = _resolve_author_profiles(sb, user_ids)
+    for row in rows:
+        prof = profiles.get(row.get("author_id") or "")
+        if prof:
+            row["author_name"] = prof["name"]
+            row["author_email"] = prof["email"]
+            row["author_avatar_url"] = prof["avatar_url"]
+        else:
+            row["author_name"] = None
+            row["author_email"] = None
+            row["author_avatar_url"] = None
+    return rows
 
 
 # ---------------------------------------------------------------------------
@@ -178,7 +252,8 @@ async def list_notes(request: Request) -> JSONResponse:
         .order("created_at", desc=True)
         .execute()
     )
-    return _ok(res.data or [])
+    rows = list(res.data or [])
+    return _ok(_enrich_notes_with_author(sb, rows))
 
 
 async def create_note(request: Request) -> JSONResponse:
@@ -260,7 +335,8 @@ async def create_note(request: Request) -> JSONResponse:
     )
     if not res.data:
         return _err("INTERNAL_ERROR", "Failed to create note", 500)
-    return _ok(res.data[0], status=201)
+    enriched = _enrich_notes_with_author(sb, [dict(res.data[0])])
+    return _ok(enriched[0], status=201)
 
 
 async def update_note(request: Request, note_id: str) -> JSONResponse:

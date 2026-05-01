@@ -17,22 +17,33 @@ interface RawNoteRow {
   id: string;
   body: string;
   pinned: boolean | null;
-  author_user_id: string;
+  /** DB column on ``kvota.entity_notes``. Source of truth for author identity. */
+  author_id: string;
+  /** Joined from ``auth.users`` by the Python API (see api/notes.py). */
   author_name: string | null;
+  author_email: string | null;
+  author_avatar_url: string | null;
   author_role: string | null;
   visible_to: string[] | null;
   created_at: string;
 }
 
 function mapRow(r: RawNoteRow): EntityNoteCardData {
+  // ``author.id`` MUST be a non-empty string — the avatar chip's hash
+  // function blows up on undefined and tears down the whole customer
+  // profile. Fall back to the row id so rendering stays safe even if a
+  // historical note has a stale author_id.
+  const safeAuthorId = r.author_id ?? r.id;
   return {
     id: r.id,
     body: r.body,
     pinned: !!r.pinned,
     authorRole: r.author_role ?? "",
     author: {
-      id: r.author_user_id,
+      id: safeAuthorId,
       name: r.author_name ?? "",
+      email: r.author_email ?? undefined,
+      avatarUrl: r.author_avatar_url,
     },
     visibleTo: r.visible_to ?? ["*"],
     createdAt: r.created_at,
