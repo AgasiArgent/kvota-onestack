@@ -61,12 +61,35 @@ export async function getAssignedCustomerIds(
 ): Promise<string[]> {
   const userIds = await resolveScopedUserIds(supabase, user);
 
-  const { data } = await supabase
-    .from("customer_assignees")
-    .select("customer_id")
-    .in("user_id", userIds);
+  // Two sources of truth for sales visibility:
+  //   (a) customer_assignees junction — the canonical multi-assignee
+  //       mechanism. Auto-populated for new customers; managed via the
+  //       Assignees tab.
+  //   (b) customers.manager_id — the customer's primary owner. We union
+  //       it in so legacy rows (created before auto-assign) and any
+  //       customer whose junction insert silently failed remain visible
+  //       to their manager. Without this fallback МОП/РОП see an empty
+  //       list immediately after creating a customer.
+  const [assigneesRes, managersRes] = await Promise.all([
+    supabase
+      .from("customer_assignees")
+      .select("customer_id")
+      .in("user_id", userIds),
+    supabase
+      .from("customers")
+      .select("id")
+      .in("manager_id", userIds)
+      .eq("organization_id", user.orgId),
+  ]);
 
-  return (data ?? []).map((r) => r.customer_id);
+  const ids = new Set<string>();
+  for (const row of assigneesRes.data ?? []) {
+    if (row.customer_id) ids.add(row.customer_id);
+  }
+  for (const row of managersRes.data ?? []) {
+    if (row.id) ids.add(row.id);
+  }
+  return Array.from(ids);
 }
 
 /**

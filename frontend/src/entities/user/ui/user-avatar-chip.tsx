@@ -47,8 +47,11 @@ const WARM_AVATAR_CLASSES = [
   "bg-accent-hover text-white", // burnt copper (darker accent)
 ] as const;
 
-function hashToIndex(input: string, modulo: number): number {
+function hashToIndex(input: string | null | undefined, modulo: number): number {
   // Simple FNV-1a 32-bit — stable, deterministic, no deps.
+  // Tolerate null/undefined: a missing author_id used to crash the whole
+  // React tree on EntityNotesPanel re-render (Bug 2026-05-01).
+  if (!input) return 0;
   let hash = 0x811c9dc5;
   for (let i = 0; i < input.length; i++) {
     hash ^= input.charCodeAt(i);
