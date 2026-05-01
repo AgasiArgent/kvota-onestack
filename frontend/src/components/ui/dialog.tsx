@@ -53,7 +53,15 @@ function DialogContent({
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cn(
-          "fixed top-1/2 left-1/2 z-[200] grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-background p-4 text-sm ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          "fixed top-1/2 left-1/2 z-[200] grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-background px-4 pt-4 text-sm ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          // Bound the popup to the viewport and let inner content scroll.
+          // `dvh` tracks the live viewport (handles iOS Safari address bar).
+          // `overscroll-contain` keeps the page underneath from scrolling
+          // when the user reaches the modal's scroll boundary. Bottom padding
+          // is intentionally omitted: the sticky DialogFooter pins flush to
+          // the popup's outer bottom edge (no `pb-4` zone for content to bleed
+          // into).
+          "max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain",
           className
         )}
         {...props}
@@ -84,7 +92,13 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-header"
-      className={cn("flex flex-col gap-2", className)}
+      // Sticky so the title/description stay visible while the body scrolls.
+      // Negative margins extend the sticky band over the popup's `p-4`, and
+      // `bg-background` ensures content scrolls under it cleanly.
+      className={cn(
+        "sticky top-0 z-10 -mx-4 -mt-4 flex flex-col gap-2 bg-background px-4 pb-2 pt-4",
+        className
+      )}
       {...props}
     />
   )
@@ -102,7 +116,12 @@ function DialogFooter({
     <div
       data-slot="dialog-footer"
       className={cn(
-        "-mx-4 -mb-4 flex flex-col-reverse gap-2 rounded-b-xl border-t bg-muted/50 p-4 sm:flex-row sm:justify-end",
+        // Sticky bottom keeps action buttons reachable when the body scrolls.
+        // Solid `bg-muted` (not `bg-muted/50`) so scrolling content doesn't
+        // bleed through the action bar. Popup omits `pb-*`, so the footer
+        // sits flush at the popup's outer bottom edge — no negative margin
+        // and no gap below for content to peek through.
+        "sticky bottom-0 z-10 -mx-4 flex flex-col-reverse gap-2 rounded-b-xl border-t bg-muted p-4 sm:flex-row sm:justify-end",
         className
       )}
       {...props}

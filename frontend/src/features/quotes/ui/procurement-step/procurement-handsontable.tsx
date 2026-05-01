@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useCallback, useMemo } from "react";
+import { useRef, useCallback, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { HotTable } from "@handsontable/react";
 import { registerAllModules } from "handsontable/registry";
@@ -70,6 +70,11 @@ const COLUMN_KEYS = PROCUREMENT_COLUMN_KEYS;
 interface RowData {
   id: string;
   brand: string;
+  // Sales-side display columns joined from quote_items via
+  // invoice_item_coverage. Read-only — procurement sees what sales recorded
+  // alongside their own supplier-side fields.
+  sales_product_code: string;
+  sales_product_name: string;
   supplier_sku: string;
   product_name: string;
   quantity: number | null;
@@ -118,12 +123,40 @@ function parseDimensions(
  *   purchase_currency, production_time_days, weight_in_kg,
  *   dimension_*_mm, minimum_order_quantity
  */
-function itemToRow(item: ProcurementEditorItem): RowData {
+function itemToRow(
+  item: ProcurementEditorItem,
+  sales: { product_code: string; product_name: string } | undefined
+): RowData {
+  // Manufacturer-substitution semantics: "Артикул производителя" /
+  // "Наименование производителя" are filled by procurement ONLY when the
+  // supplier replies with a substitute (e.g., the requested product was
+  // discontinued and replaced with a different SKU/name). Downstream
+  // consumers (calc engine, exports, KP letters) fall back to the sales
+  // fields when these are blank.
+  //
+  // The DB copies quote_items.product_name into invoice_items.product_name
+  // at assignment time (NOT NULL constraint forces a value). To honor the
+  // user-facing "blank until substituted" semantic, we display the
+  // supplier copy as empty whenever it still matches the joined sales
+  // source. As soon as procurement edits the cell to anything different,
+  // the substituted value surfaces. Same idea for supplier_sku — though
+  // that field is nullable and typically already blank by default.
+  const supplierProductName =
+    sales && item.product_name === sales.product_name
+      ? ""
+      : item.product_name ?? "";
+  const supplierSku =
+    sales && item.supplier_sku && item.supplier_sku === sales.product_code
+      ? ""
+      : item.supplier_sku ?? "";
+
   return {
     id: item.id,
     brand: item.brand ?? "",
-    supplier_sku: item.supplier_sku ?? "",
-    product_name: item.product_name ?? "",
+    sales_product_code: sales?.product_code ?? "",
+    sales_product_name: sales?.product_name ?? "",
+    supplier_sku: supplierSku,
+    product_name: supplierProductName,
     quantity: item.quantity,
     minimum_order_quantity: item.minimum_order_quantity ?? null,
     purchase_price_original: item.purchase_price_original ?? null,
@@ -142,11 +175,70 @@ interface ProcurementHandsontableProps {
   items: ProcurementEditorItem[];
   invoiceId: string;
   procurementCompleted: boolean;
+  salesByItemId?: Record<string, { product_code: string; product_name: string }>;
+  /**
+   * Per-row eligibility for the inline split action. Indexed by
+   * invoice_item.id. Rows present in this map render a "↧" split icon next
+   * to the unassign button; rows missing from it don't.
+   */
+  splitableByItemId?: Record<
+    string,
+    {
+      sourceQuoteItemId: string;
+      sourceQuantity: number;
+      sourceProductName: string;
+    }
+  >;
+  /**
+   * Per-row "this is a split child" info. Indexed by invoice_item.id. Rows
+   * present in this map render a "↪" undo-split icon (clicking it
+   * collapses the entire split back to a 1:1 row).
+   */
+  splitChildByItemId?: Record<
+    string,
+    { sourceQuoteItemId: string; sourceProductName: string }
+  >;
+  /**
+   * Per-row merge eligibility. Indexed by invoice_item.id. Rows present in
+   * this map render a "⋃" merge icon (clicking it opens MergeInlineDialog
+   * with this row pre-selected as the initiator).
+   */
+  mergeableByItemId?: Record<
+    string,
+    {
+      sourceQuoteItemId: string;
+      sourceProductName: string;
+      sourceQuantity: number;
+    }
+  >;
+  /**
+   * Per-row "this is a merge result" map. Indexed by invoice_item.id.
+   * Drives the inline ↩ undo-merge icon (clicking it splits the merged
+   * row back into its N source 1:1 invoice_items).
+   */
+  mergeResultByItemId?: Record<string, true>;
+  /** Fired when the user clicks the row's split icon. */
+  onSplitRow?: (invoiceItemId: string) => void;
+  /** Fired when the user clicks the row's undo-split icon. */
+  onUndoSplitRow?: (invoiceItemId: string) => void;
+  /** Fired when the user clicks the row's merge icon. */
+  onMergeRow?: (invoiceItemId: string) => void;
+  /** Fired when the user clicks the row's undo-merge icon. */
+  onUndoMergeRow?: (invoiceItemId: string) => void;
 }
 
 export function ProcurementHandsontable({
   items,
   procurementCompleted,
+  salesByItemId,
+  splitableByItemId,
+  splitChildByItemId,
+  mergeableByItemId,
+  mergeResultByItemId,
+  onSplitRow,
+  onUndoSplitRow,
+  onMergeRow,
+  onUndoMergeRow,
 }: ProcurementHandsontableProps) {
   const router = useRouter();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -155,16 +247,50 @@ export function ProcurementHandsontable({
   const rowIdsRef = useRef<string[]>(items.map((i) => i.id));
 
   const initialData = useMemo(
-    () => items.map(itemToRow),
-    [items]
+    () => items.map((it) => itemToRow(it, salesByItemId?.[it.id])),
+    [items, salesByItemId]
   );
+
+  // Refs let the cell renderer read fresh prop values without us having to
+  // remount HotTable when split/undo eligibility maps change. Direct closure
+  // capture in `useCallback` was masking later prop updates — the renderer
+  // saw an empty `splitChildByItemId` from first mount and never noticed
+  // the populated map that arrived after the coverage query resolved.
+  const splitableRef = useRef(splitableByItemId);
+  const splitChildRef = useRef(splitChildByItemId);
+  const mergeableRef = useRef(mergeableByItemId);
+  const mergeResultRef = useRef(mergeResultByItemId);
+  const onSplitRowRef = useRef(onSplitRow);
+  const onUndoSplitRowRef = useRef(onUndoSplitRow);
+  const onMergeRowRef = useRef(onMergeRow);
+  const onUndoMergeRowRef = useRef(onUndoMergeRow);
+  splitableRef.current = splitableByItemId;
+  splitChildRef.current = splitChildByItemId;
+  mergeableRef.current = mergeableByItemId;
+  mergeResultRef.current = mergeResultByItemId;
+  onSplitRowRef.current = onSplitRow;
+  onUndoSplitRowRef.current = onUndoSplitRow;
+  onMergeRowRef.current = onMergeRow;
+  onUndoMergeRowRef.current = onUndoMergeRow;
+
+  // Refs are read imperatively at cell-render time, but Handsontable doesn't
+  // re-render cells just because the React parent re-rendered. Tell it to
+  // repaint when the maps change so the ↧ / ⋃ / ↪ / ↩ icons appear/disappear.
+  useEffect(() => {
+    hotRef.current?.hotInstance?.render();
+  }, [
+    splitableByItemId,
+    splitChildByItemId,
+    mergeableByItemId,
+    mergeResultByItemId,
+  ]);
 
   // Keep rowIds in sync with items
   if (rowIdsRef.current.length !== initialData.length) {
     rowIdsRef.current = initialData.map((r) => r.id);
   }
 
-  const unassignRenderer = useCallback(
+  const rowActionsRenderer = useCallback(
     (
       _instance: Handsontable,
       td: HTMLTableCellElement,
@@ -173,32 +299,175 @@ export function ProcurementHandsontable({
       td.innerHTML = "";
       td.style.textAlign = "center";
       td.style.verticalAlign = "middle";
-      td.style.cursor = "pointer";
+      td.style.cursor = "default";
       td.style.padding = "0";
+      td.style.whiteSpace = "nowrap";
 
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.textContent = "✕";
-      btn.title = "Убрать из КП";
-      btn.style.cssText =
-        "border:none;background:none;color:#a1a1aa;cursor:pointer;font-size:14px;padding:2px 6px;border-radius:4px;";
-      btn.onmouseenter = () => { btn.style.color = "#dc2626"; btn.style.backgroundColor = "#fee2e2"; };
-      btn.onmouseleave = () => { btn.style.color = "#a1a1aa"; btn.style.backgroundColor = "transparent"; };
-      btn.onclick = (e) => {
-        e.stopPropagation();
-        const rowId = rowIdsRef.current[row];
-        if (!rowId || pendingOps.current.has(`unassign-${rowId}`)) return;
-        pendingOps.current.add(`unassign-${rowId}`);
-        unassignInvoiceItem(rowId)
-          .then(() => { toast.success("Позиция убрана из КП"); router.refresh(); })
-          .catch((err) => {
-            console.error("[procurement-handsontable] unassign failed:", err);
-            toast.error(extractErrorMessage(err) ?? "Не удалось убрать позицию");
-          })
-          .finally(() => pendingOps.current.delete(`unassign-${rowId}`));
+      const rowId = rowIdsRef.current[row];
+
+      // Custom 250ms tooltip — replaces the native HTML `title` attribute
+      // (browser default ≈ 500ms+, too slow per user feedback). Reuses one
+      // floating tooltip element per button via mouseenter/leave.
+      const attachFastTooltip = (btn: HTMLButtonElement, text: string) => {
+        let tip: HTMLDivElement | null = null;
+        let timer: ReturnType<typeof setTimeout> | null = null;
+        const show = () => {
+          if (tip) return;
+          tip = document.createElement("div");
+          tip.textContent = text;
+          tip.style.cssText =
+            "position:fixed;z-index:9999;background:#1f2937;color:#fff;font-size:11px;font-weight:400;padding:3px 6px;border-radius:4px;pointer-events:none;white-space:nowrap;box-shadow:0 2px 4px rgba(0,0,0,0.15);";
+          document.body.appendChild(tip);
+          const r = btn.getBoundingClientRect();
+          // Anchor below the button, horizontally centred. Falls back above
+          // when the row is near the viewport bottom — simple, no Floating-UI.
+          const y = r.bottom + 6;
+          tip.style.left = `${r.left + r.width / 2 - tip.offsetWidth / 2}px`;
+          tip.style.top = `${y + tip.offsetHeight > window.innerHeight ? r.top - tip.offsetHeight - 6 : y}px`;
+        };
+        btn.addEventListener("mouseenter", () => {
+          timer = setTimeout(show, 250);
+        });
+        btn.addEventListener("mouseleave", () => {
+          if (timer) clearTimeout(timer);
+          if (tip) {
+            tip.remove();
+            tip = null;
+          }
+        });
       };
-      td.appendChild(btn);
+
+      // SVG glyphs styled via currentColor — replaces opaque unicode arrows
+      // (↧ ⋃ ↪ ↩) for split/merge/undo with explicit "diverging" / "converging"
+      // line drawings that read at a glance. Stroke inherits btn.style.color
+      // so the existing hover treatment still applies.
+      const SVG_OPEN =
+        '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;">';
+      const SVG_CLOSE = "</svg>";
+      // Split = «one path branches out into two». Lucide-style: a vertical
+      // trunk that forks into two arrow-tipped diagonals at the top.
+      const SPLIT_SVG = `${SVG_OPEN}<path d="M12 21V11"/><path d="M12 11l-5 -5"/><path d="M12 11l5 -5"/><path d="M3 6h6"/><path d="M21 6h-6"/>${SVG_CLOSE}`;
+      // Merge = «two paths converge into one». Inverse: two diagonals come
+      // together at the top of a single vertical trunk.
+      const MERGE_SVG = `${SVG_OPEN}<path d="M12 21V11"/><path d="M12 11l-5 5"/><path d="M12 11l5 5"/><path d="M3 16h6"/><path d="M21 16h-6"/>${SVG_CLOSE}`;
+      // Undo-split = «two siblings collapse back to one» — visually the same
+      // shape as merge, but rotated 180° (heads at bottom). Keeps the action
+      // legible without confusing it with the regular merge icon.
+      const UNDO_SPLIT_SVG = `${SVG_OPEN}<path d="M12 3v10"/><path d="M12 13l-5 5"/><path d="M12 13l5 5"/><path d="M3 18h6"/><path d="M21 18h-6"/>${SVG_CLOSE}`;
+      // Undo-merge = inverse: a single source diverges back into N children.
+      const UNDO_MERGE_SVG = `${SVG_OPEN}<path d="M12 3v10"/><path d="M12 13l-5 -5"/><path d="M12 13l5 -5"/><path d="M3 8h6"/><path d="M21 8h-6"/>${SVG_CLOSE}`;
+
+      const makeIcon = (
+        content: string,
+        title: string,
+        hoverColor: string,
+        hoverBg: string,
+        onClick: () => void
+      ): HTMLButtonElement => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        // `content` is either plain text (the unicode ✕ for unassign) or an
+        // SVG string. innerHTML covers both cases — there's no untrusted
+        // input mixed in.
+        btn.innerHTML = content;
+        btn.style.cssText =
+          "border:none;background:none;color:#a1a1aa;cursor:pointer;font-size:14px;padding:2px 4px;margin-right:2px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;";
+        btn.addEventListener("mouseenter", () => {
+          btn.style.color = hoverColor;
+          btn.style.backgroundColor = hoverBg;
+        });
+        btn.addEventListener("mouseleave", () => {
+          btn.style.color = "#a1a1aa";
+          btn.style.backgroundColor = "transparent";
+        });
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          onClick();
+        };
+        attachFastTooltip(btn, title);
+        return btn;
+      };
+
+      // Split icon — visible only when this row is a 1:1 candidate.
+      if (rowId && splitableRef.current?.[rowId] && onSplitRowRef.current) {
+        td.appendChild(
+          makeIcon(SPLIT_SVG, "Разделить позицию", "#1f2937", "#e5e7eb", () => {
+            onSplitRowRef.current?.(rowId);
+          })
+        );
+      }
+
+      // Merge icon — only when ≥ 2 1:1 candidates exist in this invoice.
+      if (rowId && mergeableRef.current?.[rowId] && onMergeRowRef.current) {
+        td.appendChild(
+          makeIcon(
+            MERGE_SVG,
+            "Объединить с другими позициями",
+            "#1f2937",
+            "#e5e7eb",
+            () => {
+              onMergeRowRef.current?.(rowId);
+            }
+          )
+        );
+      }
+
+      // Undo-split icon — visible on any row that's a split child.
+      if (rowId && splitChildRef.current?.[rowId] && onUndoSplitRowRef.current) {
+        td.appendChild(
+          makeIcon(UNDO_SPLIT_SVG, "Отменить разделение", "#1f2937", "#e5e7eb", () => {
+            onUndoSplitRowRef.current?.(rowId);
+          })
+        );
+      }
+
+      // Undo-merge icon — visible on any row that IS a merge result
+      // (covers ≥ 2 quote_items).
+      if (
+        rowId &&
+        mergeResultRef.current?.[rowId] &&
+        onUndoMergeRowRef.current
+      ) {
+        td.appendChild(
+          makeIcon(UNDO_MERGE_SVG, "Отменить объединение", "#1f2937", "#e5e7eb", () => {
+            onUndoMergeRowRef.current?.(rowId);
+          })
+        );
+      }
+
+      // Unassign — always last, distinctive red hover.
+      const unassignBtn = makeIcon(
+        "✕",
+        "Убрать из КП",
+        "#dc2626",
+        "#fee2e2",
+        () => {
+          if (!rowId || pendingOps.current.has(`unassign-${rowId}`)) return;
+          pendingOps.current.add(`unassign-${rowId}`);
+          unassignInvoiceItem(rowId)
+            .then(() => {
+              toast.success("Позиция убрана из КП");
+              router.refresh();
+            })
+            .catch((err) => {
+              console.error(
+                "[procurement-handsontable] unassign failed:",
+                err
+              );
+              toast.error(
+                extractErrorMessage(err) ?? "Не удалось убрать позицию"
+              );
+            })
+            .finally(() => pendingOps.current.delete(`unassign-${rowId}`));
+        }
+      );
+      // Distinctive padding for the unassign vs the structural icons.
+      unassignBtn.style.padding = "2px 6px";
+      td.appendChild(unassignBtn);
     },
+    // The renderer reads from refs (kept fresh above), so its own deps stay
+    // minimal. Capturing the maps directly here was the source of the
+    // stale-closure bug that hid the ↪ icon after data loaded.
     [router]
   );
 
@@ -265,6 +534,12 @@ export function ProcurementHandsontable({
               ? prop
               : undefined;
         if (!field || field === "id") continue;
+        // Sales-side display columns are read-only; never persisted to
+        // invoice_items. Defensive skip in case handsontable surfaces a
+        // synthetic change (e.g., bulk paste over read-only cells).
+        if (field === "sales_product_code" || field === "sales_product_name") {
+          continue;
+        }
 
         if (!changedRows.has(row)) {
           changedRows.set(row, new Map());
@@ -319,13 +594,34 @@ export function ProcurementHandsontable({
     [router]
   );
 
+  // Visible column order in the rendered handsontable. Includes the two
+  // sales-side read-only columns at indices 1-2 (which COLUMN_KEYS — bound
+  // to invoice_items save targets — does NOT contain). Used to map field
+  // names to actual rendered column positions for lockedColIndices.
+  const VISIBLE_KEYS = [
+    "brand",
+    "sales_product_code",
+    "sales_product_name",
+    "supplier_sku",
+    "product_name",
+    "quantity",
+    "minimum_order_quantity",
+    "purchase_price_original",
+    "production_time_days",
+    "weight_in_kg",
+    "dimensions",
+    "id",
+  ] as const;
+
   const lockedColIndices = useMemo(() => {
     if (!procurementCompleted) return [];
     return [
-      COLUMN_KEYS.indexOf("supplier_sku"),
-      COLUMN_KEYS.indexOf("purchase_price_original"),
-      COLUMN_KEYS.indexOf("production_time_days"),
+      VISIBLE_KEYS.indexOf("supplier_sku"),
+      VISIBLE_KEYS.indexOf("purchase_price_original"),
+      VISIBLE_KEYS.indexOf("production_time_days"),
     ];
+    // VISIBLE_KEYS is module-stable; no need to depend on it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [procurementCompleted]);
 
   const cellsCallback = useCallback(
@@ -368,8 +664,10 @@ export function ProcurementHandsontable({
         licenseKey="non-commercial-and-evaluation"
         colHeaders={[
           "Бренд",
-          "Арт.произ.",
+          "Артикул",
           "Наименование",
+          "Артикул производителя",
+          "Наименование производителя",
           "Кол",
           "Мин. заказ",
           "Цена",
@@ -380,13 +678,17 @@ export function ProcurementHandsontable({
         ]}
         columns={[
           { data: "brand", type: "text", width: 55, readOnly: true },
+          // Sales-side columns: read-only, joined from quote_items.
+          { data: "sales_product_code", type: "text", width: 70, readOnly: true },
+          { data: "sales_product_name", type: "text", width: 140, readOnly: true },
+          // Supplier-side columns: editable by procurement.
           {
             data: "supplier_sku",
             type: "text",
             width: 70,
             readOnly: procurementCompleted,
           },
-          { data: "product_name", type: "text", width: 140, readOnly: true },
+          { data: "product_name", type: "text", width: 140, readOnly: procurementCompleted },
           { data: "quantity", type: "numeric", width: 35, readOnly: true },
           {
             data: "minimum_order_quantity",
@@ -398,7 +700,7 @@ export function ProcurementHandsontable({
           { data: "production_time_days", type: "numeric", width: 45, readOnly: procurementCompleted },
           { data: "weight_in_kg", type: "numeric", width: 45 },
           { data: "dimensions", type: "text", width: 60 },
-          { data: "id", readOnly: true, width: 28, renderer: unassignRenderer },
+          { data: "id", readOnly: true, width: 96, renderer: rowActionsRenderer },
         ]}
         rowHeaders={false}
         stretchH="all"

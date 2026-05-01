@@ -352,6 +352,7 @@ async def get_kanban(request) -> JSONResponse:
             "customer_name": customer_name,
             "procurement_substatus": substatus,
             "days_in_state": days,
+            "updated_at": r.get("updated_at"),
             "manager_name": manager_name,
             "procurement_user_names": procurement_user_names,
             "invoice_sums": invoice_sums,

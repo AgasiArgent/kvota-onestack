@@ -78,9 +78,6 @@ interface ProcurementActionBarProps {
    */
   minOrderQuantityByQuoteItemId?: Record<string, number | null>;
   onCreateInvoice: () => void;
-  onCompleteProcurement: () => void;
-  completing?: boolean;
-  procurementCompleted?: boolean;
 }
 
 export function ProcurementActionBar({
@@ -89,9 +86,6 @@ export function ProcurementActionBar({
   invoiceIdByQuoteItemId = {},
   minOrderQuantityByQuoteItemId = {},
   onCreateInvoice,
-  onCompleteProcurement,
-  completing = false,
-  procurementCompleted = false,
 }: ProcurementActionBarProps) {
   const totalItems = items.length;
   const assignedUserCount = items.filter((i) => i.assigned_procurement_user != null).length;
@@ -116,43 +110,24 @@ export function ProcurementActionBar({
 
   return (
     <div className="sticky top-[52px] z-[5] bg-card border-b border-border px-6 py-2 flex items-center gap-3">
-      {!procurementCompleted && (
-        <Badge variant="outline" className={`gap-1 ${stageConfig.style}`}>
-          <StageIcon size={12} />
-          {stageConfig.label}
-        </Badge>
-      )}
+      <Badge variant="outline" className={`gap-1 ${stageConfig.style}`}>
+        <StageIcon size={12} />
+        {stageConfig.label}
+      </Badge>
 
       <Button
         size="sm"
         className="bg-accent text-white hover:bg-accent-hover"
         onClick={onCreateInvoice}
-        disabled={procurementCompleted}
       >
         <Plus size={14} />
         Создать КП поставщику
       </Button>
 
-      {procurementCompleted ? (
-        <span className="inline-flex items-center gap-1.5 text-sm text-success font-medium">
-          <CheckCircle size={14} />
-          Закупка завершена
-        </span>
-      ) : (
-        <Button
-          size="sm"
-          className="bg-success text-white hover:bg-success/90"
-          disabled={completing}
-          onClick={onCompleteProcurement}
-        >
-          {completing ? (
-            <Loader2 size={14} className="animate-spin" />
-          ) : (
-            <CheckCircle size={14} />
-          )}
-          Завершить закупку
-        </Button>
-      )}
+      {/* Per-invoice completion: «Завершить закупку» button moved to each
+          КП-карточка (invoice-card.tsx). The quote-level «Завершить
+          закупку» trigger here is retired — multi-supplier procurement
+          finalizes invoice-by-invoice. */}
 
       {moqViolationCount > 0 && (
         <Badge

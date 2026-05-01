@@ -1,11 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
 import { createClient } from "@/shared/lib/supabase/client";
-import { extractErrorMessage } from "@/shared/lib/errors";
-import { completeProcurement } from "@/entities/quote/mutations";
 import type {
   QuoteDetailRow,
   QuoteItemRow,
@@ -15,6 +11,7 @@ import { ProcurementActionBar } from "./procurement-action-bar";
 import { QuotePositionsList } from "./quote-positions-list";
 import { InvoiceCard } from "./invoice-card";
 import { InvoiceCreateModal } from "./invoice-create-modal";
+import { AppToaster } from "@/shared/ui/app-toaster";
 
 /**
  * Phase 5d Task 14 — "can complete procurement" guard.
@@ -85,12 +82,10 @@ export function ProcurementStep({
   invoices,
   userRoles = [],
 }: ProcurementStepProps) {
-  const router = useRouter();
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [preselectedItemIds, setPreselectedItemIds] = useState<string[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [buyerCompanies, setBuyerCompanies] = useState<BuyerCompany[]>([]);
-  const [completing, setCompleting] = useState(false);
   // Phase 5d: coverage-derived readiness. Map: quote_item_id → has at least
   // one covering invoice_item in its selected invoice with non-null
   // purchase_price_original. Post-migration 284 this replaces reading the
@@ -213,40 +208,10 @@ export function ProcurementStep({
     setCreateModalOpen(true);
   }
 
-  async function handleCompleteProcurement() {
-    const guard = validateCompleteProcurementGuard(
-      items.map((i) => ({
-        id: i.id,
-        invoice_id: invoiceIdByQuoteItemId[i.id] ?? null,
-        is_unavailable: i.is_unavailable === true,
-      })),
-      priceReadyByQuoteItemId
-    );
-    if (!guard.ok) {
-      if (guard.reason === "no-price") {
-        toast.error(
-          `Нельзя завершить: ${guard.count} поз. без цены. Заполните цену или отметьте Н/Д.`
-        );
-      } else {
-        toast.error(
-          `Нельзя завершить: ${guard.count} поз. не распределены по КП поставщиков.`
-        );
-      }
-      return;
-    }
-
-    setCompleting(true);
-    try {
-      await completeProcurement(quote.id);
-      toast.success("Закупка завершена");
-      router.refresh();
-    } catch (err) {
-      console.error("[procurement-step] complete procurement failed:", err);
-      toast.error(extractErrorMessage(err) ?? "Не удалось завершить закупку");
-    } finally {
-      setCompleting(false);
-    }
-  }
+  // Quote-level «Завершить закупку» retired (migration 298) — completion
+  // now lives on each КП-карточка via `completeInvoiceProcurement`. The
+  // legacy `completeProcurement` mutation + its `validateCompleteProcurementGuard`
+  // checks are no longer reachable from this UI.
 
   const preselectedItems = items.filter((i) =>
     preselectedItemIds.includes(i.id)
@@ -260,9 +225,6 @@ export function ProcurementStep({
         invoiceIdByQuoteItemId={invoiceIdByQuoteItemId}
         minOrderQuantityByQuoteItemId={minOrderQuantityByQuoteItemId}
         onCreateInvoice={handleCreateInvoice}
-        onCompleteProcurement={handleCompleteProcurement}
-        completing={completing}
-        procurementCompleted={quote.procurement_completed_at != null}
       />
 
       <div className="p-6 space-y-4">
@@ -300,6 +262,12 @@ export function ProcurementStep({
         suppliers={suppliers}
         buyerCompanies={buyerCompanies}
       />
+
+      {/* Toaster for sonner notifications. Other quote-step pages mount
+          their own AppToaster; procurement-step missed it, so toasts from
+          invoice-card buttons (mark sent, complete procurement, etc.)
+          rendered to nowhere. */}
+      <AppToaster />
     </div>
   );
 }

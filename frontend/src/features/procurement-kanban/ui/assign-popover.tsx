@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { UserSearchSelect } from "@/shared/ui/procurement/user-search-select";
 import { assignBrandGroup } from "@/entities/quote/server-actions";
+import { SUBSTATUS_LABELS_RU } from "@/shared/lib/workflow-substates";
 import { createClient } from "@/shared/lib/supabase/client";
 import type { ProcurementUserWorkload } from "@/shared/types/procurement-user";
 import type { KanbanBrandCard } from "../model/types";
@@ -94,6 +95,15 @@ export function AssignPopover({
       toast.success(
         `${card.idn_quote}: ${itemIds.length} поз. назначено на ${userName}`
       );
+      // Auto-advance toast: notify the user when the kanban card moved
+      // forward as a side-effect of their assignment.
+      if (result.advancedSlices && result.advancedSlices.length > 0) {
+        for (const s of result.advancedSlices) {
+          toast.info(
+            `Карточка «${s.brand || "без бренда"}» автоматически переведена в «${SUBSTATUS_LABELS_RU[s.to as keyof typeof SUBSTATUS_LABELS_RU] ?? s.to}»`
+          );
+        }
+      }
       // Reset local state; parent will close popover via onAssigned.
       setUserId("");
       setPinBrand(false);

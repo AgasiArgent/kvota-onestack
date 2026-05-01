@@ -1,13 +1,23 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { apiServerClient } from "@/shared/lib/api-server";
 import { getSessionUser } from "@/entities/user";
+import { createAdminClient } from "@/shared/lib/supabase/server";
 
 /**
- * reassignInvoice — single endpoint for both logistics & customs reassignment.
- * Per spec §6.3: POST /workflow/reassign { invoice_id, type, new_user_id }.
- * One auth policy, one business-logic path, one changelog record.
+ * reassignInvoice — assigns / unassigns the invoice's logistics or customs
+ * owner.
+ *
+ * Per-invoice procurement completion (Phase «per-invoice») decoupled
+ * assignment from the legacy quote-level workflow transition. The Python
+ * `/workflow/reassign` endpoint guards on quote.workflow_status which now
+ * stays at `pending_procurement` even when individual КП are finalized —
+ * making the endpoint refuse and surface as «failed to reassign» in the
+ * UI.
+ *
+ * Frontend writes directly to `invoices.assigned_logistics_user` /
+ * `assigned_customs_user` via the admin client. Auth is enforced here
+ * (same role gate the Python endpoint had).
  */
 
 export async function reassignInvoice(
@@ -28,16 +38,26 @@ export async function reassignInvoice(
     throw new Error("Forbidden");
   }
 
-  const res = await apiServerClient("/workflow/reassign", {
-    method: "POST",
-    body: JSON.stringify({
-      invoice_id: invoiceId,
-      type: domain,
-      new_user_id: newUserId,
-    }),
-  });
-  if (!res.success) {
-    throw new Error(res.error?.message ?? "Failed to reassign");
+  const userCol =
+    domain === "logistics" ? "assigned_logistics_user" : "assigned_customs_user";
+  const assignedAtCol =
+    domain === "logistics" ? "logistics_assigned_at" : "customs_assigned_at";
+
+  // Workspace stats and SLA averages count off the *_assigned_at timestamp,
+  // not the *_user UUID. Stamp it on assign, clear it on unassign — same
+  // contract the legacy Python workflow honoured.
+  const admin = createAdminClient();
+  const updates: Record<string, string | null> = {
+    [userCol]: newUserId,
+    [assignedAtCol]: newUserId ? new Date().toISOString() : null,
+  };
+  const { error } = await admin
+    .from("invoices")
+    .update(updates)
+    .eq("id", invoiceId);
+  if (error) {
+    console.error("[reassignInvoice] update failed:", error);
+    throw new Error(error.message ?? "Failed to reassign");
   }
 
   revalidatePath(`/workspace/${domain}`);

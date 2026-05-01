@@ -863,6 +863,152 @@ export async function unassignInvoiceItem(invoiceItemId: string) {
   }
 }
 
+/**
+ * Inverse of splitInvoiceItem — collapses N child invoice_items (split from
+ * a single source quote_item in this invoice) back to one 1:1-covered
+ * invoice_item.
+ *
+ * Sequence:
+ *   1. Find every invoice_item in this invoice that currently covers
+ *      sourceQuoteItemId. Refuse the operation if there are fewer than 2
+ *      (nothing to undo) or if any of them also covers another quote_item
+ *      (would be a merge mid-split — out of scope).
+ *   2. DELETE those invoice_items (ON DELETE CASCADE on coverage cleans up
+ *      the linked invoice_item_coverage rows).
+ *   3. Re-assign the source quote_item via assignItemsToInvoice — this is
+ *      the canonical 1:1 path and it idempotently rebuilds invoice_item +
+ *      coverage at ratio=1.
+ *
+ * Coverage in OTHER invoices for the same quote_item is left alone.
+ */
+export async function undoSplit(invoiceId: string, sourceQuoteItemId: string) {
+  const supabase = createClient();
+
+  // 1. Find this invoice's invoice_items covering sourceQuoteItemId.
+  const { data: cov, error: covErr } = await supabase
+    .from("invoice_item_coverage")
+    .select("invoice_item_id, invoice_items!inner(id, invoice_id)")
+    .eq("quote_item_id", sourceQuoteItemId);
+  if (covErr) throw covErr;
+
+  const splitChildIds = (
+    (cov ?? []) as unknown as Array<{
+      invoice_item_id: string;
+      invoice_items: { id: string; invoice_id: string };
+    }>
+  )
+    .filter((r) => r.invoice_items?.invoice_id === invoiceId)
+    .map((r) => r.invoice_item_id);
+
+  if (splitChildIds.length < 2) {
+    throw new Error("Эта позиция не разделена — нечего отменять");
+  }
+
+  // Refuse if any child also covers another quote_item (would be a merge
+  // entangled with the split — outside this operation's scope).
+  const { data: entangled, error: entErr } = await supabase
+    .from("invoice_item_coverage")
+    .select("invoice_item_id, quote_item_id")
+    .in("invoice_item_id", splitChildIds);
+  if (entErr) throw entErr;
+
+  for (const r of (entangled ?? []) as Array<{
+    invoice_item_id: string;
+    quote_item_id: string;
+  }>) {
+    if (r.quote_item_id !== sourceQuoteItemId) {
+      throw new Error(
+        "Часть участвует ещё и в объединении — отмените слияние сначала"
+      );
+    }
+  }
+
+  // 2. Delete the split-child invoice_items (cascades coverage).
+  const { error: delErr } = await supabase
+    .from("invoice_items")
+    .delete()
+    .in("id", splitChildIds);
+  if (delErr) throw delErr;
+
+  // 3. Re-assign as 1:1 — assignItemsToInvoice handles position + coverage.
+  await assignItemsToInvoice([sourceQuoteItemId], invoiceId);
+}
+
+/**
+ * Inverse of mergeInvoiceItems — collapses one merged invoice_item (covering
+ * N quote_items) back into N separate 1:1 invoice_items.
+ *
+ * Sequence:
+ *   1. Read coverage rows for the merged invoice_item; if there are fewer
+ *      than 2, the row isn't actually a merge result → refuse.
+ *   2. Refuse if any covered quote_item is also covered by another
+ *      invoice_item in this invoice (i.e. a tangled split + merge state).
+ *   3. DELETE the merged invoice_item (ON DELETE CASCADE clears the
+ *      coverage rows automatically).
+ *   4. Re-assign every previously-covered quote_item via
+ *      assignItemsToInvoice — this rebuilds N separate 1:1 invoice_items
+ *      with their own coverage at ratio=1, in canonical position order.
+ *
+ * Coverage in OTHER invoices for those quote_items is left alone.
+ */
+export async function undoMerge(
+  invoiceId: string,
+  mergedInvoiceItemId: string
+) {
+  const supabase = createClient();
+
+  // 1. Read coverage rows for the merged invoice_item.
+  const { data: cov, error: covErr } = await supabase
+    .from("invoice_item_coverage")
+    .select("invoice_item_id, quote_item_id")
+    .eq("invoice_item_id", mergedInvoiceItemId);
+  if (covErr) throw covErr;
+
+  const coverageRows = (cov ?? []) as Array<{
+    invoice_item_id: string;
+    quote_item_id: string;
+  }>;
+
+  if (coverageRows.length < 2) {
+    throw new Error("Эта позиция не объединена — нечего отменять");
+  }
+
+  const sourceQiIds = coverageRows.map((r) => r.quote_item_id);
+
+  // 2. Refuse if any of those quote_items is also covered by another
+  //    invoice_item in this invoice (tangled split-merge state).
+  const { data: otherCov, error: otherErr } = await supabase
+    .from("invoice_item_coverage")
+    .select("invoice_item_id, quote_item_id, invoice_items!inner(invoice_id)")
+    .in("quote_item_id", sourceQiIds);
+  if (otherErr) throw otherErr;
+
+  for (const r of (otherCov ?? []) as unknown as Array<{
+    invoice_item_id: string;
+    quote_item_id: string;
+    invoice_items: { invoice_id: string };
+  }>) {
+    if (
+      r.invoice_items?.invoice_id === invoiceId &&
+      r.invoice_item_id !== mergedInvoiceItemId
+    ) {
+      throw new Error(
+        "Одна из исходных позиций ещё участвует в разделении — отмените разделение сначала"
+      );
+    }
+  }
+
+  // 3. Delete the merged invoice_item (cascades coverage).
+  const { error: delErr } = await supabase
+    .from("invoice_items")
+    .delete()
+    .eq("id", mergedInvoiceItemId);
+  if (delErr) throw delErr;
+
+  // 4. Re-assign each source qi as its own 1:1 invoice_item.
+  await assignItemsToInvoice(sourceQiIds, invoiceId);
+}
+
 // ---------------------------------------------------------------------------
 // Quote Item CRUD
 // ---------------------------------------------------------------------------
@@ -1001,12 +1147,20 @@ export async function createInvoice(data: {
 }> {
   const supabase = createClient();
 
-  // Compute totals from boxes
-  const totalWeightKg = data.boxes.reduce((sum, b) => sum + b.weight_kg, 0);
-  const totalVolumeM3 = data.boxes.reduce(
-    (sum, b) => sum + (b.length_mm * b.width_mm * b.height_mm) / 1e9,
-    0
-  );
+  // Compute totals from boxes. When no boxes are provided (cargo not yet
+  // known at КП creation time), persist NULLs rather than 0 — the
+  // `total_volume_m3` CHECK constraint is `IS NULL OR > 0`, and NULL also
+  // matches "unknown" semantics for downstream consumers.
+  const hasBoxes = data.boxes.length > 0;
+  const totalWeightKg = hasBoxes
+    ? data.boxes.reduce((sum, b) => sum + b.weight_kg, 0)
+    : null;
+  const totalVolumeM3 = hasBoxes
+    ? data.boxes.reduce(
+        (sum, b) => sum + (b.length_mm * b.width_mm * b.height_mm) / 1e9,
+        0
+      )
+    : null;
 
   // Phase 5b bypass detection (Decision #6) + Phase 3 pickup_country_code/incoterms:
   //   1. If the caller passes pickup_country_override (Phase 3 modal), that wins
@@ -1116,6 +1270,42 @@ export async function createInvoice(data: {
   return { ...invoice, bypass_reason: bypassReason };
 }
 
+/**
+ * Per-invoice procurement completion (replaces legacy quote-level flag).
+ *
+ * `completeInvoiceProcurement` stamps the invoice as procurement-finalized
+ * — locks the КП, signals logistics/customs to pick it up. Sibling
+ * invoices on the same quote are unaffected.
+ *
+ * `reopenInvoiceProcurement` is the inverse — used by the existing
+ * ProcurementUnlockButton role-gated flow when typos need fixing.
+ */
+export async function completeInvoiceProcurement(invoiceId: string): Promise<void> {
+  const supabase = createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  const userId = auth.user?.id ?? null;
+  const { error } = await supabase
+    .from("invoices")
+    .update({
+      procurement_completed_at: new Date().toISOString(),
+      procurement_completed_by: userId,
+    } as never)
+    .eq("id", invoiceId);
+  if (error) throw error;
+}
+
+export async function reopenInvoiceProcurement(invoiceId: string): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("invoices")
+    .update({
+      procurement_completed_at: null,
+      procurement_completed_by: null,
+    } as never)
+    .eq("id", invoiceId);
+  if (error) throw error;
+}
+
 // ---------------------------------------------------------------------------
 // Cargo places query (client-side — used by invoice-card and logistics-invoice-row)
 // ---------------------------------------------------------------------------
@@ -1128,6 +1318,74 @@ export async function fetchCargoPlaces(invoiceId: string) {
     .eq("invoice_id", invoiceId)
     .order("position", { ascending: true });
   return data ?? [];
+}
+
+/**
+ * Editable cargo place — used by the post-creation editor in InvoiceCard.
+ * Each field is independently nullable so the user can add a blank row and
+ * fill it in piecemeal as the supplier's reply arrives.
+ */
+export interface EditableCargoPlace {
+  weight_kg: number | null;
+  length_mm: number | null;
+  width_mm: number | null;
+  height_mm: number | null;
+}
+
+export async function addCargoPlace(
+  invoiceId: string,
+  place: EditableCargoPlace
+): Promise<{ id: string; position: number }> {
+  const supabase = createClient();
+
+  const { data: maxRow, error: maxErr } = await supabase
+    .from("invoice_cargo_places")
+    .select("position")
+    .eq("invoice_id", invoiceId)
+    .order("position", { ascending: false })
+    .limit(1);
+  if (maxErr) throw maxErr;
+  const nextPosition =
+    ((maxRow?.[0] as { position: number } | undefined)?.position ?? 0) + 1;
+
+  // Cast: generated DB types still mark the four dimension columns NOT NULL
+  // (pre-migration-297). After migration 297 ships and `npm run db:types`
+  // re-runs, the casts can be removed and EditableCargoPlace flows directly.
+  const { data, error } = await supabase
+    .from("invoice_cargo_places")
+    .insert({
+      invoice_id: invoiceId,
+      position: nextPosition,
+      weight_kg: place.weight_kg,
+      length_mm: place.length_mm,
+      width_mm: place.width_mm,
+      height_mm: place.height_mm,
+    } as never)
+    .select("id, position")
+    .single();
+  if (error) throw error;
+  return data as { id: string; position: number };
+}
+
+export async function updateCargoPlace(
+  placeId: string,
+  updates: Partial<EditableCargoPlace>
+): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("invoice_cargo_places")
+    .update(updates as never)
+    .eq("id", placeId);
+  if (error) throw error;
+}
+
+export async function deleteCargoPlace(placeId: string): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("invoice_cargo_places")
+    .delete()
+    .eq("id", placeId);
+  if (error) throw error;
 }
 
 export async function updateInvoice(

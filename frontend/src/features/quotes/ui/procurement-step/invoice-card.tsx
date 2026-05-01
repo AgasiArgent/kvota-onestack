@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronRight, Download, Loader2, Mail, Merge, Package, Paperclip, Plus, Split, Trash2, Undo2, Weight } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronRight, Download, Loader2, Mail, Package, Paperclip, Plus, Trash2, Undo2, Weight } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,15 +13,31 @@ import type { ProcurementEditorItem } from "./procurement-handsontable";
 import { SendHistoryPanel } from "./send-history-panel";
 import { ProcurementUnlockButton } from "./procurement-unlock-button";
 import { LetterDraftComposer } from "./letter-draft-composer";
-import { SplitModal } from "./split-modal";
-import { MergeModal } from "./merge-modal";
+import { SplitInlineDialog } from "./split-inline-dialog";
+import { MergeInlineDialog } from "./merge-inline-dialog";
+import { AddCargoPlaceDialog } from "./add-cargo-place-dialog";
 import { AddPositionsModal } from "./add-positions-modal";
 import type { QuoteItemRow, QuoteInvoiceRow } from "@/entities/quote/queries";
-import { deleteInvoice, fetchCargoPlaces } from "@/entities/quote/mutations";
-import { downloadInvoiceXls } from "@/entities/invoice/mutations";
+import {
+  completeInvoiceProcurement,
+  deleteCargoPlace,
+  deleteInvoice,
+  fetchCargoPlaces,
+  undoMerge,
+  undoSplit,
+  updateCargoPlace,
+} from "@/entities/quote/mutations";
+import {
+  notifyInvoiceCompletedForKanban,
+  notifyInvoiceSentForKanban,
+} from "@/entities/quote/server-actions";
+import { SUBSTATUS_LABELS_RU } from "@/shared/lib/workflow-substates";
+import { INCOTERMS_2020 } from "@/shared/lib/incoterms";
+import { SUPPORTED_CURRENCIES } from "@/shared/lib/currencies";
+import { downloadInvoiceXls, markInvoiceSent } from "@/entities/invoice/mutations";
 import { createClient } from "@/shared/lib/supabase/client";
 import { extractErrorMessage } from "@/shared/lib/errors";
-import { findCountryByCode } from "@/shared/ui/geo";
+import { CityAutocomplete, CountryCombobox, findCountryByCode } from "@/shared/ui/geo";
 
 type InvoiceExtras = {
   invoice_file_url?: string | null;
@@ -104,7 +120,10 @@ const numberFmtInline = new Intl.NumberFormat("ru-RU", {
 export function InvoiceCard({
   invoice,
   items,
-  quote,
+  // `quote` is no longer the source of procurement-completion truth (each
+  // invoice has its own flag now). Kept in props for backward compat with
+  // tests + the parent procurement-step.tsx, but unused inside the card.
+  quote: _quote,
   invoiceItems: invoiceItemsOverride,
   coverageSummaryByItem: coverageOverride,
   defaultExpanded = false,
@@ -120,12 +139,32 @@ export function InvoiceCard({
   const [cargoPlaces, setCargoPlaces] = useState<
     Array<{ position: number; weight_kg: number; length_mm: number; width_mm: number; height_mm: number }>
   >([]);
-  const [weightKg, setWeightKg] = useState(invoice.total_weight_kg?.toString() ?? "");
-  const [volumeM3, setVolumeM3] = useState(invoice.total_volume_m3?.toString() ?? "");
+  // Invoice-level deferred-fill fields. Initial values from the `invoice`
+  // prop; saves go through `updateInvoice` on blur (text/number) or
+  // change (selects). Local state survives in-flight saves so failures
+  // don't blank the user's input.
+  const [pickupCityLocal, setPickupCityLocal] = useState(invoice.pickup_city ?? "");
+  const [pickupCountryCodeLocal, setPickupCountryCodeLocal] = useState<string | null>(
+    invoice.pickup_country_code ?? null
+  );
+  const [incotermsLocal, setIncotermsLocal] = useState(invoice.supplier_incoterms ?? "");
+  const [currencyLocal, setCurrencyLocal] = useState(invoice.currency ?? "USD");
+  const [vatRateLocal, setVatRateLocal] = useState(
+    (invoice as { vat_rate?: number | null }).vat_rate != null
+      ? String((invoice as { vat_rate?: number | null }).vat_rate)
+      : ""
+  );
   const [fetchedInvoiceItems, setFetchedInvoiceItems] = useState<
     InvoiceItemRow[]
   >([]);
   const [fetchedCoverage, setFetchedCoverage] = useState<Record<string, string>>({});
+  // Sales-side columns (product_code, product_name) joined from the linked
+  // quote_items via invoice_item_coverage. Read-only in the procurement
+  // handsontable; let the procurement manager see what sales recorded
+  // alongside their own supplier-side fields.
+  const [salesByItemId, setSalesByItemId] = useState<
+    Record<string, { product_code: string; product_name: string }>
+  >({});
   const [invoiceItemsLoading, setInvoiceItemsLoading] = useState(
     invoiceItemsOverride === undefined
   );
@@ -137,11 +176,84 @@ export function InvoiceCard({
   const [oneToOneCandidates, setOneToOneCandidates] = useState<
     Array<{ id: string; product_name: string; quantity: number }>
   >([]);
-  const [splitOpen, setSplitOpen] = useState(false);
-  const [mergeOpen, setMergeOpen] = useState(false);
+  // Per-row split eligibility, keyed by invoice_item.id. Same 1:1 condition
+  // as oneToOneCandidates, but indexed for O(1) lookup from the handsontable
+  // row renderer (which only knows the invoice_item.id, not the source qi).
+  const [splitableByItemId, setSplitableByItemId] = useState<
+    Record<
+      string,
+      {
+        sourceQuoteItemId: string;
+        sourceQuantity: number;
+        sourceProductName: string;
+      }
+    >
+  >({});
+  // Per-row "this is a split child" info, keyed by invoice_item.id. Drives
+  // the inline ↪ undo-split icon. Set when the row's source quote_item is
+  // covered by ≥2 invoice_items in this invoice.
+  const [splitChildByItemId, setSplitChildByItemId] = useState<
+    Record<string, { sourceQuoteItemId: string; sourceProductName: string }>
+  >({});
+  // Per-row merge eligibility, keyed by invoice_item.id. Same 1:1 condition
+  // as splitableByItemId, BUT only populated when the invoice has ≥ 2 such
+  // candidates total — a single 1:1 row has nobody to merge with, so the
+  // ⋃ icon stays hidden. Carries source-qi metadata so the dialog can
+  // resolve partners without re-querying.
+  const [mergeableByItemId, setMergeableByItemId] = useState<
+    Record<
+      string,
+      {
+        sourceQuoteItemId: string;
+        sourceProductName: string;
+        sourceQuantity: number;
+      }
+    >
+  >({});
+  // Per-row "this is a merge result" info, keyed by invoice_item.id. Drives
+  // the inline ↩ undo-merge icon. Set when this invoice_item covers ≥ 2
+  // quote_items (the canonical merge state).
+  const [mergeResultByItemId, setMergeResultByItemId] = useState<
+    Record<string, true>
+  >({});
+  // Bumped after structural ops (split, merge) so the load() effect re-runs
+  // even though invoice.id is stable. Without this, splitableByItemId stays
+  // stale and the split icon may surface on rows that are no longer 1:1 —
+  // causing a confusing "split didn't work" toast on the second attempt.
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [splitInlineState, setSplitInlineState] = useState<{
+    invoiceItemId: string;
+    sourceQuoteItemId: string;
+    sourceQuantity: number;
+    sourceProductName: string;
+    defaults: {
+      product_name: string;
+      brand: string;
+      supplier_sku: string;
+      purchase_price_original: number | null;
+    };
+  } | null>(null);
+  const [mergeInlineState, setMergeInlineState] = useState<{
+    initiatorInvoiceItemId: string;
+    initiatorSourceQuoteItemId: string;
+    defaults: {
+      product_name: string;
+      brand: string;
+      supplier_sku: string;
+      purchase_price_original: number | null;
+    };
+  } | null>(null);
   const [addPositionsOpen, setAddPositionsOpen] = useState(false);
+  const [addCargoOpen, setAddCargoOpen] = useState(false);
 
-  const procurementCompleted = quote.procurement_completed_at != null;
+  // Procurement completion now lives PER invoice (migration 298). Reading
+  // off `quote.procurement_completed_at` was the legacy behaviour — kept
+  // as a fallback for any unmigrated rows but ignored once the new column
+  // is populated, so the new field always wins when set.
+  const invoiceProcurementCompletedAt =
+    (invoice as { procurement_completed_at?: string | null })
+      .procurement_completed_at ?? null;
+  const procurementCompleted = invoiceProcurementCompletedAt != null;
   const invoiceItems = invoiceItemsOverride ?? fetchedInvoiceItems;
   const coverageSummaryByItem = coverageOverride ?? fetchedCoverage;
   const isEmpty = invoiceItems.length === 0;
@@ -180,6 +292,11 @@ export function InvoiceCard({
 
         if (rows.length === 0) {
           setFetchedCoverage({});
+          setSalesByItemId({});
+          setSplitableByItemId({});
+          setSplitChildByItemId({});
+          setMergeableByItemId({});
+          setMergeResultByItemId({});
           return;
         }
 
@@ -188,21 +305,55 @@ export function InvoiceCard({
         //   split  = 1 quote_item → N invoice_items → "→ A ×1 + B ×2"
         //   merge  = N quote_items → 1 invoice_item → "← A, B, C объединены"
         //   1:1    = no entry in map
+        // Step 1: pull coverage rows (FK pairs only — no embed). Embed via
+        // PostgREST has been flaky in this stack with multi-field selects;
+        // a plain join + separate quote_items fetch is more robust.
         const { data: cov } = await supabase
           .from("invoice_item_coverage")
-          .select(
-            "invoice_item_id, quote_item_id, ratio, quote_items!inner(id, product_name, quantity)"
-          )
+          .select("invoice_item_id, quote_item_id, ratio")
           .in(
             "invoice_item_id",
             rows.map((r) => r.id)
           );
+
+        // Step 2: fetch the quote_items referenced by the coverage rows.
+        // product_code and product_name fuel the read-only sales-side
+        // columns in the procurement handsontable; product_name + quantity
+        // also drive the split/merge coverage label below.
+        const referencedQiIds = Array.from(
+          new Set(
+            (cov ?? []).map((r) => (r as { quote_item_id: string }).quote_item_id)
+          )
+        );
+        const qiById = new Map<
+          string,
+          { product_code: string | null; product_name: string; quantity: number }
+        >();
+        if (referencedQiIds.length > 0) {
+          const { data: qis } = await supabase
+            .from("quote_items")
+            .select("id, product_code, product_name, quantity")
+            .in("id", referencedQiIds);
+          for (const qi of (qis ?? []) as Array<{
+            id: string;
+            product_code: string | null;
+            product_name: string;
+            quantity: number;
+          }>) {
+            qiById.set(qi.id, {
+              product_code: qi.product_code,
+              product_name: qi.product_name,
+              quantity: qi.quantity,
+            });
+          }
+        }
 
         const coverageByIi = new Map<
           string,
           Array<{
             quote_item_id: string;
             ratio: number;
+            product_code: string;
             product_name: string;
             quantity: number;
           }>
@@ -212,20 +363,44 @@ export function InvoiceCard({
           invoice_item_id: string;
           quote_item_id: string;
           ratio: number;
-          quote_items: { id: string; product_name: string; quantity: number };
         }>) {
+          const qi = qiById.get(row.quote_item_id);
           const list = coverageByIi.get(row.invoice_item_id) ?? [];
           list.push({
             quote_item_id: row.quote_item_id,
             ratio: row.ratio,
-            product_name: row.quote_items?.product_name ?? "",
-            quantity: Number(row.quote_items?.quantity ?? 0),
+            product_code: qi?.product_code ?? "",
+            product_name: qi?.product_name ?? "",
+            quantity: Number(qi?.quantity ?? 0),
           });
           coverageByIi.set(row.invoice_item_id, list);
 
           const iis = iiByQi.get(row.quote_item_id) ?? [];
           iis.push(row.invoice_item_id);
           iiByQi.set(row.quote_item_id, iis);
+        }
+
+        // Build sales-side display map: per invoice_item, join all linked
+        // quote_items' product_code / product_name with " / " for the merge
+        // case (N qi → 1 ii). Empty strings are skipped so we don't emit
+        // " / " padding when one of the joined items has no product_code.
+        const salesMap: Record<
+          string,
+          { product_code: string; product_name: string }
+        > = {};
+        for (const ii of rows) {
+          const covers = coverageByIi.get(ii.id) ?? [];
+          if (covers.length === 0) continue;
+          salesMap[ii.id] = {
+            product_code: covers
+              .map((c) => c.product_code)
+              .filter(Boolean)
+              .join(" / "),
+            product_name: covers
+              .map((c) => c.product_name)
+              .filter(Boolean)
+              .join(" / "),
+          };
         }
 
         const summary: Record<string, string> = {};
@@ -236,10 +411,24 @@ export function InvoiceCard({
           product_name: string;
           quantity: number;
         }> = [];
+        const splitable: Record<
+          string,
+          {
+            sourceQuoteItemId: string;
+            sourceQuantity: number;
+            sourceProductName: string;
+          }
+        > = {};
+        const splitChild: Record<
+          string,
+          { sourceQuoteItemId: string; sourceProductName: string }
+        > = {};
+        const mergeResult: Record<string, true> = {};
         const seenQi = new Set<string>();
         for (const ii of rows) {
           const covers = coverageByIi.get(ii.id) ?? [];
           if (covers.length > 1) {
+            mergeResult[ii.id] = true;
             // Merge: 1 invoice_item covers ≥2 quote_items
             summary[ii.id] =
               "\u2190 " +
@@ -261,6 +450,10 @@ export function InvoiceCard({
                 })
                 .filter(Boolean);
               summary[ii.id] = "\u2192 " + parts.join(" + ");
+              splitChild[ii.id] = {
+                sourceQuoteItemId: sourceQi,
+                sourceProductName: covers[0].product_name,
+              };
             } else if (
               Number(covers[0].ratio) === 1 &&
               !seenQi.has(sourceQi)
@@ -271,13 +464,44 @@ export function InvoiceCard({
                 product_name: covers[0].product_name,
                 quantity: covers[0].quantity,
               });
+              splitable[ii.id] = {
+                sourceQuoteItemId: sourceQi,
+                sourceQuantity: covers[0].quantity,
+                sourceProductName: covers[0].product_name,
+              };
               seenQi.add(sourceQi);
             }
           }
         }
+        // Merge eligibility: only if the invoice has ≥2 1:1 candidates,
+        // i.e. a candidate has somebody else to merge with. Otherwise the
+        // ⋃ icon stays hidden everywhere.
+        const mergeable: Record<
+          string,
+          {
+            sourceQuoteItemId: string;
+            sourceProductName: string;
+            sourceQuantity: number;
+          }
+        > = {};
+        if (Object.keys(splitable).length >= 2) {
+          for (const [iiId, meta] of Object.entries(splitable)) {
+            mergeable[iiId] = {
+              sourceQuoteItemId: meta.sourceQuoteItemId,
+              sourceProductName: meta.sourceProductName,
+              sourceQuantity: meta.sourceQuantity,
+            };
+          }
+        }
+
         if (!cancelled) {
           setFetchedCoverage(summary);
+          setSalesByItemId(salesMap);
           setOneToOneCandidates(candidates);
+          setSplitableByItemId(splitable);
+          setSplitChildByItemId(splitChild);
+          setMergeableByItemId(mergeable);
+          setMergeResultByItemId(mergeResult);
         }
       } finally {
         if (!cancelled) setInvoiceItemsLoading(false);
@@ -287,7 +511,7 @@ export function InvoiceCard({
     return () => {
       cancelled = true;
     };
-  }, [invoice.id, invoiceItemsOverride]);
+  }, [invoice.id, invoiceItemsOverride, refreshKey]);
 
   const supplierName =
     (invoice.supplier as { name: string } | null)?.name ?? "\u2014";
@@ -325,20 +549,23 @@ export function InvoiceCard({
 
   const hasInvoiceWeight = invoice.total_weight_kg != null || invoice.total_volume_m3 != null;
 
-  async function handleSaveField(field: "total_weight_kg" | "total_volume_m3", raw: string) {
-    const value = raw.trim() === "" ? null : Number(raw);
-    if (value !== null && isNaN(value)) return;
+  // Generic save for the deferred-fill invoice-level fields. No-op when the
+  // new value is identical to the current invoice prop (avoids spurious
+  // PostgREST round-trips on blur of unchanged inputs).
+  async function handleSaveInvoiceField(
+    updates: Record<string, string | number | null>
+  ) {
     try {
       const supabase = (await import("@/shared/lib/supabase/client")).createClient();
       const { error } = await supabase
         .from("invoices")
-        .update({ [field]: value })
+        .update(updates)
         .eq("id", invoice.id);
       if (error) throw error;
       toast.success("Сохранено");
       router.refresh();
     } catch (err) {
-      console.error("[invoice-card] save field failed:", err);
+      console.error("[invoice-card] save invoice field failed:", err);
       toast.error(extractErrorMessage(err) ?? "Не удалось сохранить");
     }
   }
@@ -481,9 +708,22 @@ export function InvoiceCard({
 
           {hasSentAt && (
             // Phase 5c: purely informational — NOT a lock indicator.
-            // The edit-gate is driven by quote.procurement_completed_at.
+            // The edit-gate is driven by per-invoice procurement_completed_at.
             <Badge variant="default" className="shrink-0 text-xs bg-green-600">
               Отправлено {new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "2-digit" }).format(new Date(sentAt!))}
+            </Badge>
+          )}
+
+          {procurementCompleted && invoiceProcurementCompletedAt && (
+            <Badge
+              variant="default"
+              className="shrink-0 text-xs bg-blue-600 hover:bg-blue-600"
+            >
+              Закупка завершена{" "}
+              {new Intl.DateTimeFormat("ru-RU", {
+                day: "2-digit",
+                month: "2-digit",
+              }).format(new Date(invoiceProcurementCompletedAt))}
             </Badge>
           )}
 
@@ -520,34 +760,89 @@ export function InvoiceCard({
           </div>
         ) : (
           <div className="mr-2 flex items-center gap-0.5">
-            {/* Phase 5c Task 12/13: Split + Merge structural actions.
-                Gated on `!isLocked` (outer else branch); Split needs ≥1 1:1
-                candidate, Merge needs ≥2. Quote_items already in a split
-                or merge are excluded from oneToOneCandidates. */}
-            {oneToOneCandidates.length >= 1 && (
+            {/* Both Split (↧) and Merge (⋃) live as per-row icons in the
+                procurement handsontable below. Header buttons retired. */}
+            {!hasSentAt && invoiceItems.length > 0 && (
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
-                className="text-muted-foreground hover:text-foreground"
-                onClick={() => setSplitOpen(true)}
-                title="Разделить позицию"
+                className="text-xs"
+                onClick={async () => {
+                  try {
+                    await markInvoiceSent(invoice.id);
+                    toast.success("КП отмечен отправленным");
+                    try {
+                      const { advancedSlices } =
+                        await notifyInvoiceSentForKanban(invoice.id);
+                      for (const s of advancedSlices) {
+                        toast.info(
+                          `Карточка «${s.brand || "без бренда"}» автоматически переведена в «${SUBSTATUS_LABELS_RU[s.to as keyof typeof SUBSTATUS_LABELS_RU] ?? s.to}»`
+                        );
+                      }
+                    } catch (err) {
+                      console.error(
+                        "[invoice-card] kanban advance failed:",
+                        err
+                      );
+                    }
+                    router.refresh();
+                  } catch (err) {
+                    console.error(
+                      "[invoice-card] markInvoiceSent failed:",
+                      err
+                    );
+                    toast.error(
+                      extractErrorMessage(err) ?? "Не удалось отметить отправленным"
+                    );
+                  }
+                }}
+                title="Пометить КП как отправленный поставщику. Позиции бренда в этом КП передвинутся на канбане в «Ожидание цен»."
               >
-                <Split size={14} className="mr-1" />
-                Разделить
+                <Mail size={14} className="mr-1" />
+                Отправлено поставщику
               </Button>
             )}
-            {oneToOneCandidates.length >= 2 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground hover:text-foreground"
-                onClick={() => setMergeOpen(true)}
-                title="Объединить позиции"
-              >
-                <Merge size={14} className="mr-1" />
-                Объединить
-              </Button>
-            )}
+            <Button
+              variant="default"
+              size="sm"
+              className="bg-blue-600 text-white hover:bg-blue-700 text-xs"
+              onClick={async () => {
+                try {
+                  await completeInvoiceProcurement(invoice.id);
+                  toast.success("Закупка по КП завершена");
+                  // Best-effort kanban advance for any brand-slice that's
+                  // now fully covered by completed invoices.
+                  try {
+                    const { advancedSlices } =
+                      await notifyInvoiceCompletedForKanban(invoice.id);
+                    for (const s of advancedSlices) {
+                      toast.info(
+                        `Карточка «${s.brand || "без бренда"}» автоматически переведена в «${SUBSTATUS_LABELS_RU[s.to as keyof typeof SUBSTATUS_LABELS_RU] ?? s.to}»`
+                      );
+                    }
+                  } catch (err) {
+                    console.error(
+                      "[invoice-card] kanban advance failed:",
+                      err
+                    );
+                  }
+                  router.refresh();
+                  setRefreshKey((k) => k + 1);
+                } catch (err) {
+                  console.error(
+                    "[invoice-card] complete procurement failed:",
+                    err
+                  );
+                  toast.error(
+                    extractErrorMessage(err) ?? "Не удалось завершить закупку"
+                  );
+                }
+              }}
+              title="Закрыть закупку по этому КП и передать его в логистику / таможню"
+            >
+              <CheckCircle2 size={14} className="mr-1" />
+              Завершить закупку
+            </Button>
             <Button
               variant="ghost"
               size="sm"
@@ -565,39 +860,118 @@ export function InvoiceCard({
       {expanded && (
         <div className="border-t border-border">
           {!procurementCompleted ? (
-            <div className="px-4 py-2 bg-muted/30 border-b border-border">
-              <div className="flex items-center gap-2 mb-1">
+            <div className="px-4 py-3 bg-muted/30 border-b border-border space-y-3">
+              <div className="flex items-center gap-2">
                 <Weight size={14} className="text-muted-foreground" />
                 <span className="text-xs font-medium text-muted-foreground">
-                  Вес и габариты
+                  Параметры отгрузки
                 </span>
               </div>
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5">
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="Вес"
-                    value={weightKg}
-                    onChange={(e) => setWeightKg(e.target.value)}
-                    onBlur={() => handleSaveField("total_weight_kg", weightKg)}
-                    className="h-7 w-24 text-xs tabular-nums"
+
+              {/* Row: Country + City + Incoterms */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="space-y-1">
+                  <span className="text-xs text-muted-foreground">Страна отгрузки</span>
+                  <CountryCombobox
+                    value={pickupCountryCodeLocal}
+                    onChange={(code) => {
+                      if (code === pickupCountryCodeLocal) return;
+                      setPickupCountryCodeLocal(code);
+                      const ruName = code ? findCountryByCode(code)?.nameRu ?? null : null;
+                      void handleSaveInvoiceField({
+                        pickup_country_code: code,
+                        pickup_country: ruName,
+                      });
+                    }}
+                    placeholder="Выберите страну…"
+                    ariaLabel="Страна отгрузки"
                   />
-                  <span className="text-xs text-muted-foreground">кг</span>
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="space-y-1">
+                  <span className="text-xs text-muted-foreground">Город</span>
+                  {/* Country-aware autocomplete with HERE-Geocode-backed
+                      catalog (per shared/ui/geo). Without a country code
+                      the input self-disables and asks the user to pick a
+                      country first — which is the correct UX for shipping
+                      origin. */}
+                  <CityAutocomplete
+                    value={pickupCityLocal}
+                    countryCode={pickupCountryCodeLocal}
+                    onChange={(next) => {
+                      setPickupCityLocal(next);
+                      const value = next.trim() === "" ? null : next;
+                      if (value === (invoice.pickup_city ?? null)) return;
+                      void handleSaveInvoiceField({ pickup_city: value });
+                    }}
+                    placeholder="Начните вводить город…"
+                    ariaLabel="Город отгрузки"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <span className="text-xs text-muted-foreground">Условия поставки</span>
+                  <select
+                    value={incotermsLocal}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setIncotermsLocal(next);
+                      const value = next || null;
+                      if (value === (invoice.supplier_incoterms ?? null)) return;
+                      void handleSaveInvoiceField({ supplier_incoterms: value });
+                    }}
+                    className="w-full h-7 px-2 text-xs border border-input rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-ring"
+                  >
+                    <option value="">— не указано —</option>
+                    {INCOTERMS_2020.map((term) => (
+                      <option key={term.code} value={term.code}>
+                        {term.code} — {term.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Row: Currency + VAT */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="space-y-1">
+                  <span className="text-xs text-muted-foreground">Валюта</span>
+                  <select
+                    value={currencyLocal}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setCurrencyLocal(next);
+                      if (next === (invoice.currency ?? "USD")) return;
+                      void handleSaveInvoiceField({ currency: next });
+                    }}
+                    className="w-full h-7 px-2 text-xs border border-input rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-ring"
+                  >
+                    {SUPPORTED_CURRENCIES.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-xs text-muted-foreground">НДС, %</span>
                   <Input
                     type="number"
                     step="0.01"
                     min="0"
-                    placeholder="Объём"
-                    value={volumeM3}
-                    onChange={(e) => setVolumeM3(e.target.value)}
-                    onBlur={() => handleSaveField("total_volume_m3", volumeM3)}
-                    className="h-7 w-24 text-xs tabular-nums"
+                    max="100"
+                    placeholder="НДС"
+                    value={vatRateLocal}
+                    onChange={(e) => setVatRateLocal(e.target.value)}
+                    onBlur={() => {
+                      const trimmed = vatRateLocal.trim();
+                      const parsed = trimmed === "" ? null : parseFloat(trimmed);
+                      if (parsed !== null && Number.isNaN(parsed)) return;
+                      const current =
+                        (invoice as { vat_rate?: number | null }).vat_rate ?? null;
+                      if (parsed === current) return;
+                      void handleSaveInvoiceField({ vat_rate: parsed });
+                    }}
+                    className="h-7 text-xs tabular-nums"
                   />
-                  <span className="text-xs text-muted-foreground">м³</span>
                 </div>
               </div>
             </div>
@@ -613,7 +987,185 @@ export function InvoiceCard({
               </div>
             </div>
           ) : null}
-          {hasCargoPlaces && (
+          {!procurementCompleted ? (
+            <div className="px-4 py-3 bg-muted/30 border-b border-border space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Package size={14} className="text-muted-foreground" />
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Грузовые места ({cargoPlaces.length})
+                  </span>
+                  {cargoPlaces.length > 0 && (
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      · Σ{" "}
+                      {numberFmt.format(
+                        cargoPlaces.reduce(
+                          (sum, cp) => sum + (cp.weight_kg ?? 0),
+                          0
+                        )
+                      )}{" "}
+                      кг
+                    </span>
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs"
+                  onClick={() => setAddCargoOpen(true)}
+                >
+                  <Plus size={14} />
+                  Добавить место
+                </Button>
+              </div>
+              {cargoPlaces.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic">
+                  Грузовые места не указаны.
+                </p>
+              ) : (
+                <div className="space-y-1.5">
+                  {cargoPlaces.map((cp) => (
+                    <div
+                      key={cp.position}
+                      className="flex items-center gap-2"
+                    >
+                      <span className="text-xs text-muted-foreground w-16 shrink-0">
+                        Место {cp.position}
+                      </span>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="Вес, кг"
+                        defaultValue={cp.weight_kg}
+                        onBlur={(e) => {
+                          const v = parseFloat(e.target.value);
+                          if (!Number.isFinite(v) || v === cp.weight_kg) return;
+                          void updateCargoPlace(
+                            (cp as unknown as { id: string }).id,
+                            { weight_kg: v }
+                          )
+                            .then(() =>
+                              fetchCargoPlaces(invoice.id).then(setCargoPlaces)
+                            )
+                            .catch((err) =>
+                              toast.error(
+                                extractErrorMessage(err) ??
+                                  "Не удалось сохранить"
+                              )
+                            );
+                        }}
+                        className="h-7 text-xs tabular-nums w-20"
+                      />
+                      <Input
+                        type="number"
+                        step="1"
+                        min="0"
+                        placeholder="Длина"
+                        defaultValue={cp.length_mm}
+                        onBlur={(e) => {
+                          const v = parseInt(e.target.value, 10);
+                          if (!Number.isFinite(v) || v === cp.length_mm) return;
+                          void updateCargoPlace(
+                            (cp as unknown as { id: string }).id,
+                            { length_mm: v }
+                          )
+                            .then(() =>
+                              fetchCargoPlaces(invoice.id).then(setCargoPlaces)
+                            )
+                            .catch((err) =>
+                              toast.error(
+                                extractErrorMessage(err) ??
+                                  "Не удалось сохранить"
+                              )
+                            );
+                        }}
+                        className="h-7 text-xs tabular-nums w-20"
+                      />
+                      <Input
+                        type="number"
+                        step="1"
+                        min="0"
+                        placeholder="Ширина"
+                        defaultValue={cp.width_mm}
+                        onBlur={(e) => {
+                          const v = parseInt(e.target.value, 10);
+                          if (!Number.isFinite(v) || v === cp.width_mm) return;
+                          void updateCargoPlace(
+                            (cp as unknown as { id: string }).id,
+                            { width_mm: v }
+                          )
+                            .then(() =>
+                              fetchCargoPlaces(invoice.id).then(setCargoPlaces)
+                            )
+                            .catch((err) =>
+                              toast.error(
+                                extractErrorMessage(err) ??
+                                  "Не удалось сохранить"
+                              )
+                            );
+                        }}
+                        className="h-7 text-xs tabular-nums w-20"
+                      />
+                      <Input
+                        type="number"
+                        step="1"
+                        min="0"
+                        placeholder="Высота"
+                        defaultValue={cp.height_mm}
+                        onBlur={(e) => {
+                          const v = parseInt(e.target.value, 10);
+                          if (!Number.isFinite(v) || v === cp.height_mm) return;
+                          void updateCargoPlace(
+                            (cp as unknown as { id: string }).id,
+                            { height_mm: v }
+                          )
+                            .then(() =>
+                              fetchCargoPlaces(invoice.id).then(setCargoPlaces)
+                            )
+                            .catch((err) =>
+                              toast.error(
+                                extractErrorMessage(err) ??
+                                  "Не удалось сохранить"
+                              )
+                            );
+                        }}
+                        className="h-7 text-xs tabular-nums w-20"
+                      />
+                      <span className="text-xs text-muted-foreground">мм</span>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await deleteCargoPlace(
+                              (cp as unknown as { id: string }).id
+                            );
+                            const fresh = await fetchCargoPlaces(invoice.id);
+                            setCargoPlaces(fresh);
+                            toast.success("Место удалено");
+                          } catch (err) {
+                            console.error(
+                              "[invoice-card] deleteCargoPlace failed:",
+                              err
+                            );
+                            toast.error(
+                              extractErrorMessage(err) ??
+                                "Не удалось удалить место"
+                            );
+                          }
+                        }}
+                        className="text-muted-foreground hover:text-destructive ml-auto"
+                        title="Удалить место"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : hasCargoPlaces ? (
             <div className="px-4 py-2 bg-muted/30 border-b border-border">
               <div className="flex items-center gap-2 mb-1">
                 <Package size={14} className="text-muted-foreground" />
@@ -629,7 +1181,7 @@ export function InvoiceCard({
                 ))}
               </div>
             </div>
-          )}
+          ) : null}
           {canSend && (
             <div className="px-4 py-2 bg-muted/30 border-b border-border">
               <div className="flex items-center gap-2 flex-wrap">
@@ -701,11 +1253,21 @@ export function InvoiceCard({
               <div className="py-6 text-center text-sm text-muted-foreground">
                 Загрузка...
               </div>
-            ) : invoiceItems.length === 0 ? null : (
+            ) : !invoiceItems.some(
+                (ii) =>
+                  coverageSummaryByItem[ii.id] &&
+                  // Show only MERGE labels («← X, Y объединены»). Split labels
+                  // («→ A ×1 + B ×2») would otherwise repeat for every child
+                  // — pure duplication of the handsontable below, since the
+                  // split children share their sales-side columns visually.
+                  coverageSummaryByItem[ii.id].startsWith("←")
+              ) ? null : (
               <div className="border-b border-border bg-muted/20">
                 <ul className="divide-y divide-border">
                   {invoiceItems.map((ii) => {
                     const coverage = coverageSummaryByItem[ii.id];
+                    // Same gate as the outer null-return: only merge labels.
+                    if (!coverage || !coverage.startsWith("←")) return null;
                     return (
                       <li key={ii.id} className="px-4 py-2">
                         <div className="flex items-center gap-2 text-sm">
@@ -735,7 +1297,88 @@ export function InvoiceCard({
                 </ul>
               </div>
             )}
-            <ProcurementItemsEditor items={invoiceItems} invoiceId={invoice.id} procurementCompleted={procurementCompleted} />
+            <ProcurementItemsEditor
+              items={invoiceItems}
+              invoiceId={invoice.id}
+              procurementCompleted={procurementCompleted}
+              salesByItemId={salesByItemId}
+              splitableByItemId={splitableByItemId}
+              splitChildByItemId={splitChildByItemId}
+              mergeableByItemId={mergeableByItemId}
+              mergeResultByItemId={mergeResultByItemId}
+              onUndoMergeRow={async (invoiceItemId) => {
+                if (
+                  !window.confirm(
+                    "Отменить объединение? Объединённая позиция будет удалена и заменена N исходными 1:1 позициями."
+                  )
+                ) {
+                  return;
+                }
+                try {
+                  await undoMerge(invoice.id, invoiceItemId);
+                  toast.success("Объединение отменено");
+                  setRefreshKey((k) => k + 1);
+                } catch (err) {
+                  console.error("[invoice-card] undoMerge failed:", err);
+                  toast.error(
+                    extractErrorMessage(err) ?? "Не удалось отменить объединение"
+                  );
+                }
+              }}
+              onMergeRow={(invoiceItemId) => {
+                const meta = mergeableByItemId[invoiceItemId];
+                if (!meta) return;
+                const item = invoiceItems.find((i) => i.id === invoiceItemId);
+                setMergeInlineState({
+                  initiatorInvoiceItemId: invoiceItemId,
+                  initiatorSourceQuoteItemId: meta.sourceQuoteItemId,
+                  defaults: {
+                    product_name: item?.product_name ?? "",
+                    brand: item?.brand ?? "",
+                    supplier_sku: item?.supplier_sku ?? "",
+                    purchase_price_original:
+                      item?.purchase_price_original ?? null,
+                  },
+                });
+              }}
+              onSplitRow={(invoiceItemId) => {
+                const meta = splitableByItemId[invoiceItemId];
+                if (!meta) return;
+                const item = invoiceItems.find((i) => i.id === invoiceItemId);
+                setSplitInlineState({
+                  invoiceItemId,
+                  ...meta,
+                  defaults: {
+                    product_name: item?.product_name ?? "",
+                    brand: item?.brand ?? "",
+                    supplier_sku: item?.supplier_sku ?? "",
+                    purchase_price_original:
+                      item?.purchase_price_original ?? null,
+                  },
+                });
+              }}
+              onUndoSplitRow={async (invoiceItemId) => {
+                const meta = splitChildByItemId[invoiceItemId];
+                if (!meta) return;
+                if (
+                  !window.confirm(
+                    `Отменить разделение позиции «${meta.sourceProductName}»? Все дочерние строки будут удалены и заменены одной 1:1.`
+                  )
+                ) {
+                  return;
+                }
+                try {
+                  await undoSplit(invoice.id, meta.sourceQuoteItemId);
+                  toast.success("Разделение отменено");
+                  setRefreshKey((k) => k + 1);
+                } catch (err) {
+                  console.error("[invoice-card] undoSplit failed:", err);
+                  toast.error(
+                    extractErrorMessage(err) ?? "Не удалось отменить разделение"
+                  );
+                }
+              }}
+            />
           </div>
         </div>
       )}
@@ -756,26 +1399,79 @@ export function InvoiceCard({
         initialLanguage={language}
       />
 
-      {/* Phase 5c Task 12: SplitModal — decompose 1 quote_item into N
-          invoice_items within THIS invoice. Local action; coverage in other
-          invoices for the same quote_item is untouched. */}
-      <SplitModal
-        open={splitOpen}
-        onClose={() => setSplitOpen(false)}
+      {/* Inline split: triggered per-row from the procurement handsontable.
+          The source quote_item is pre-resolved (see splitableByItemId), so
+          this dialog only collects the per-child fields. Replaces the
+          top-level SplitModal flow for 1:1 candidates. */}
+      <SplitInlineDialog
+        open={splitInlineState !== null}
+        onClose={() => {
+          setSplitInlineState(null);
+          // Force re-fetch — invoice.id alone won't trigger the load()
+          // effect, so the splitable map (and coverage labels) need an
+          // explicit nudge after a successful split.
+          setRefreshKey((k) => k + 1);
+        }}
         invoiceId={invoice.id}
-        candidates={oneToOneCandidates}
-        defaultCurrency={currency}
+        sourceQuoteItemId={splitInlineState?.sourceQuoteItemId ?? ""}
+        sourceQuantity={splitInlineState?.sourceQuantity ?? 0}
+        sourceProductName={splitInlineState?.sourceProductName ?? ""}
+        currency={currency}
+        defaults={splitInlineState?.defaults}
       />
 
-      {/* Phase 5c Task 13: MergeModal — consolidate N 1:1-covered
-          quote_items into 1 merged invoice_item (N coverage rows, ratio=1
-          each). Local action; blocks chain-merge of already-merged items. */}
-      <MergeModal
-        open={mergeOpen}
-        onClose={() => setMergeOpen(false)}
+      {/* Inline merge: per-row trigger from the procurement handsontable.
+          Replaces the legacy MergeModal flow. Initiator is the row clicked;
+          partner candidates come from the same 1:1-eligibility map split
+          uses, minus the initiator. */}
+      <MergeInlineDialog
+        open={mergeInlineState !== null}
+        onClose={() => {
+          setMergeInlineState(null);
+          // Same refresh trick as split: invoice.id stable → load() won't
+          // re-fire on its own → eligibility maps would stay stale.
+          setRefreshKey((k) => k + 1);
+        }}
         invoiceId={invoice.id}
-        candidates={oneToOneCandidates}
-        defaultCurrency={currency}
+        initiatorInvoiceItemId={
+          mergeInlineState?.initiatorInvoiceItemId ?? ""
+        }
+        initiatorSourceQuoteItemId={
+          mergeInlineState?.initiatorSourceQuoteItemId ?? ""
+        }
+        initiatorQuantity={(() => {
+          const id = mergeInlineState?.initiatorSourceQuoteItemId;
+          if (!id) return 0;
+          // Look up via the mergeable map (carries source-qi quantity).
+          const meta = Object.values(mergeableByItemId).find(
+            (m) => m.sourceQuoteItemId === id
+          );
+          return meta?.sourceQuantity ?? 0;
+        })()}
+        candidates={Object.entries(mergeableByItemId)
+          .filter(
+            ([id]) => id !== mergeInlineState?.initiatorInvoiceItemId
+          )
+          .map(([id, meta]) => {
+            const ii = invoiceItems.find((r) => r.id === id);
+            return {
+              invoice_item_id: id,
+              source_quote_item_id: meta.sourceQuoteItemId,
+              brand: ii?.brand ?? "",
+              supplier_sku: ii?.supplier_sku ?? "",
+              product_name: meta.sourceProductName,
+              quantity: meta.sourceQuantity,
+            };
+          })}
+        currency={currency}
+        defaults={
+          mergeInlineState?.defaults ?? {
+            product_name: "",
+            brand: "",
+            supplier_sku: "",
+            purchase_price_original: null,
+          }
+        }
       />
 
       {/* Task 73 — AddPositionsModal for empty КП (Requirement 7).
@@ -788,6 +1484,19 @@ export function InvoiceCard({
         onClose={() => setAddPositionsOpen(false)}
         invoiceId={invoice.id}
         quoteId={invoice.quote_id}
+      />
+
+      {/* Add a single cargo place via small dialog. Replaces the older
+          placeholder-default insert pattern — user enters real values
+          (weight + 3 dims, all > 0) before persistence. */}
+      <AddCargoPlaceDialog
+        open={addCargoOpen}
+        onClose={() => setAddCargoOpen(false)}
+        invoiceId={invoice.id}
+        onAdded={() => {
+          setAddCargoOpen(false);
+          void fetchCargoPlaces(invoice.id).then(setCargoPlaces);
+        }}
       />
     </Card>
   );

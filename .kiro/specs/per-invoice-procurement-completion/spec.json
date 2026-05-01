@@ -1,0 +1,14 @@
+{
+  "feature_name": "per-invoice-procurement-completion",
+  "created_at": "2026-04-30T09:05:28Z",
+  "updated_at": "2026-04-30T09:05:28Z",
+  "language": "ru",
+  "phase": "tasks-generated",
+  "approvals": {
+    "requirements": { "generated": true, "approved": true },
+    "design": { "generated": true, "approved": true },
+    "tasks": { "generated": true, "approved": true }
+  },
+  "ready_for_implementation": true,
+  "project_description": "Move procurement completion from quote-level to per-invoice (КП поставщика). Replace single «Завершить закупку» button on the quote with per-КП «Завершить закупку по КП». Each invoice locks independently when completed; remaining invoices stay editable. Customs queries get re-grouped by invoice. Logistics already filters per-invoice. Quote-level status becomes derived («3/5 КП завершено» badge). Re-open flow stays as-is, just scoped per-invoice."
+}

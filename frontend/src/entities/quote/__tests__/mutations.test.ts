@@ -421,3 +421,49 @@ describe("createInvoice — Phase 5b bypass logic", () => {
     expect(fakeSupabase.supplierQueryCount).toBe(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Empty-boxes path: cargo dimensions are unknown at КП creation time and only
+// arrive later from the supplier's reply. The DB has CHECK constraints
+// (`total_volume_m3 IS NULL OR > 0`) that reject 0, so totals must be NULL —
+// not 0 — when no boxes are provided.
+// ---------------------------------------------------------------------------
+
+describe("createInvoice — empty boxes (deferred-cargo workflow)", () => {
+  beforeEach(() => {
+    fakeSupabase = makeFakeSupabase();
+  });
+
+  it("persists NULL totals and skips the cargo_places insert when boxes is empty", async () => {
+    const { createInvoice } = await import("../mutations");
+
+    await createInvoice({
+      quote_id: "quote-1",
+      idn_quote: "Q-202604-0001",
+      supplier_id: "supplier-1",
+      buyer_company_id: "buyer-1",
+      boxes: [],
+    });
+
+    expect(fakeSupabase.insertedRows).toHaveLength(1);
+    expect(fakeSupabase.insertedRows[0].total_weight_kg).toBeNull();
+    expect(fakeSupabase.insertedRows[0].total_volume_m3).toBeNull();
+  });
+
+  it("computes totals normally when boxes is non-empty", async () => {
+    const { createInvoice } = await import("../mutations");
+
+    await createInvoice({
+      quote_id: "quote-1",
+      idn_quote: "Q-202604-0001",
+      supplier_id: "supplier-1",
+      buyer_company_id: "buyer-1",
+      boxes: [
+        { weight_kg: 5, length_mm: 1000, width_mm: 1000, height_mm: 1000 },
+      ],
+    });
+
+    expect(fakeSupabase.insertedRows[0].total_weight_kg).toBe(5);
+    expect(fakeSupabase.insertedRows[0].total_volume_m3).toBe(1);
+  });
+});

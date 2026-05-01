@@ -19,6 +19,12 @@ export async function apiServerClient<T = unknown>(
 
   const response = await fetch(`${PYTHON_API_URL}/api${path}`, {
     ...options,
+    // SSR-side calls to the Python API must be uncached — pages like the
+    // procurement kanban depend on per-request session context AND on
+    // mutations that aren't routed through Next.js cache invalidation
+    // (e.g. backfill SQL, Python-side workflow transitions). Default
+    // fetch caching could surface stale rows after a backend mutation.
+    cache: "no-store",
     headers: {
       ...(hasBody ? { "Content-Type": "application/json" } : {}),
       ...(session?.access_token
