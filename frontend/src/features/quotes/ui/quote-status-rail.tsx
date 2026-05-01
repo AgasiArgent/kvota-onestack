@@ -131,7 +131,7 @@ export function QuoteStatusRail({
   return (
     <nav
       className="w-28 shrink-0 border-l border-border py-4 px-1"
-      aria-label="Этапы КП"
+      aria-label="Стадии КП"
     >
       <ul className="flex flex-col gap-0.5">
         {STEPS.map((step, idx) => {

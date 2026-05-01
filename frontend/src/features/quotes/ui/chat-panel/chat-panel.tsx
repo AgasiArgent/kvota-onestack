@@ -5,8 +5,8 @@ import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { QuoteComment } from "@/entities/quote/types";
 import type { OrgMember } from "./chat-input";
-import { ChatMessage } from "./chat-message";
 import { ChatInput } from "./chat-input";
+import { MessagesList } from "./messages-list";
 import { useRealtimeComments } from "./use-realtime-comments";
 
 interface ChatPanelProps {
@@ -93,13 +93,7 @@ export function ChatPanel({
           </div>
         ) : (
           <>
-            {messages.map((msg) => (
-              <ChatMessage
-                key={msg.id}
-                comment={msg}
-                isOwn={msg.user_id === userId}
-              />
-            ))}
+            <MessagesList messages={messages} userId={userId} />
             <div ref={messagesEndRef} />
           </>
         )}

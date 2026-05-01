@@ -4,8 +4,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { MessageSquare, ArrowLeft, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ChatMessage } from "@/features/quotes/ui/chat-panel/chat-message";
 import { ChatInput } from "@/features/quotes/ui/chat-panel/chat-input";
+import { MessagesList } from "@/features/quotes/ui/chat-panel/messages-list";
 import type { OrgMember } from "@/features/quotes/ui/chat-panel/chat-input";
 import { useRealtimeComments } from "@/features/quotes/ui/chat-panel/use-realtime-comments";
 import type { ChatListItem } from "../queries";
@@ -128,13 +128,7 @@ function ActiveChat({
           </div>
         ) : (
           <>
-            {messages.map((msg) => (
-              <ChatMessage
-                key={msg.id}
-                comment={msg}
-                isOwn={msg.user_id === userId}
-              />
-            ))}
+            <MessagesList messages={messages} userId={userId} />
             <div ref={messagesEndRef} />
           </>
         )}
@@ -208,13 +202,19 @@ export function MessagesInbox({
       // Batch-resolve user profiles
       const userIds = [...new Set(data.map((c) => c.user_id))];
 
-      const [profilesRes, membersRes] = await Promise.all([
+      // Role lookup goes through ``user_roles`` (the actual mapping table)
+      // rather than ``organization_members.roles!inner(slug)`` — the
+      // direct FK on ``organization_members.role_id`` was dropped in
+      // migration 255, so the embedded join silently returned an empty
+      // map, which the chat then rendered as "unknown" for every sender.
+      // МОЗ Тест 2026-05-01 fail #35.
+      const [profilesRes, rolesRes] = await Promise.all([
         supabase
           .from("user_profiles")
           .select("user_id, full_name")
           .in("user_id", userIds),
         supabase
-          .from("organization_members")
+          .from("user_roles")
           .select("user_id, roles!inner(slug)")
           .in("user_id", userIds),
       ]);
@@ -224,12 +224,17 @@ export function MessagesInbox({
       const profileMap = new Map(
         (profilesRes.data ?? []).map((p) => [p.user_id, p])
       );
-      const roleMap = new Map(
-        (membersRes.data ?? []).map((m) => [
-          m.user_id,
-          (m.roles as unknown as { slug: string })?.slug ?? "unknown",
-        ])
-      );
+      // Pick the first non-admin role per user (stable display preference —
+      // admin users that also have an operational role render as that role).
+      const roleMap = new Map<string, string>();
+      for (const row of rolesRes.data ?? []) {
+        const slug = (row.roles as unknown as { slug: string } | null)?.slug;
+        if (!slug) continue;
+        const existing = roleMap.get(row.user_id);
+        if (!existing || (existing === "admin" && slug !== "admin")) {
+          roleMap.set(row.user_id, slug);
+        }
+      }
 
       const resolved: QuoteComment[] = data.map((c) => {
         const profile = profileMap.get(c.user_id);
