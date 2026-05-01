@@ -163,7 +163,7 @@ export function InvoiceCard({
   // handsontable; let the procurement manager see what sales recorded
   // alongside their own supplier-side fields.
   const [salesByItemId, setSalesByItemId] = useState<
-    Record<string, { product_code: string; product_name: string }>
+    Record<string, { product_code: string; product_name: string; unit: string }>
   >({});
   const [invoiceItemsLoading, setInvoiceItemsLoading] = useState(
     invoiceItemsOverride === undefined
@@ -327,23 +327,30 @@ export function InvoiceCard({
         );
         const qiById = new Map<
           string,
-          { product_code: string | null; product_name: string; quantity: number }
+          {
+            product_code: string | null;
+            product_name: string;
+            quantity: number;
+            unit: string | null;
+          }
         >();
         if (referencedQiIds.length > 0) {
           const { data: qis } = await supabase
             .from("quote_items")
-            .select("id, product_code, product_name, quantity")
+            .select("id, product_code, product_name, quantity, unit")
             .in("id", referencedQiIds);
           for (const qi of (qis ?? []) as Array<{
             id: string;
             product_code: string | null;
             product_name: string;
             quantity: number;
+            unit: string | null;
           }>) {
             qiById.set(qi.id, {
               product_code: qi.product_code,
               product_name: qi.product_name,
               quantity: qi.quantity,
+              unit: qi.unit,
             });
           }
         }
@@ -356,6 +363,7 @@ export function InvoiceCard({
             product_code: string;
             product_name: string;
             quantity: number;
+            unit: string;
           }>
         >();
         const iiByQi = new Map<string, string[]>();
@@ -372,6 +380,7 @@ export function InvoiceCard({
             product_code: qi?.product_code ?? "",
             product_name: qi?.product_name ?? "",
             quantity: Number(qi?.quantity ?? 0),
+            unit: qi?.unit ?? "",
           });
           coverageByIi.set(row.invoice_item_id, list);
 
@@ -384,9 +393,11 @@ export function InvoiceCard({
         // quote_items' product_code / product_name with " / " for the merge
         // case (N qi → 1 ii). Empty strings are skipped so we don't emit
         // " / " padding when one of the joined items has no product_code.
+        // ``unit`` (Ед. Изм) is taken from the first covering quote_item —
+        // merged rows must share unit by construction (validated elsewhere).
         const salesMap: Record<
           string,
-          { product_code: string; product_name: string }
+          { product_code: string; product_name: string; unit: string }
         > = {};
         for (const ii of rows) {
           const covers = coverageByIi.get(ii.id) ?? [];
@@ -400,6 +411,7 @@ export function InvoiceCard({
               .map((c) => c.product_name)
               .filter(Boolean)
               .join(" / "),
+            unit: covers[0]?.unit ?? "",
           };
         }
 
@@ -1306,6 +1318,7 @@ export function InvoiceCard({
               splitChildByItemId={splitChildByItemId}
               mergeableByItemId={mergeableByItemId}
               mergeResultByItemId={mergeResultByItemId}
+              onMutated={() => setRefreshKey((k) => k + 1)}
               onUndoMergeRow={async (invoiceItemId) => {
                 if (
                   !window.confirm(
@@ -1484,6 +1497,7 @@ export function InvoiceCard({
         onClose={() => setAddPositionsOpen(false)}
         invoiceId={invoice.id}
         quoteId={invoice.quote_id}
+        onAdded={() => setRefreshKey((k) => k + 1)}
       />
 
       {/* Add a single cargo place via small dialog. Replaces the older

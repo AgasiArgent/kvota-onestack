@@ -21,6 +21,20 @@ export interface UserDepartment {
   supervisor: { full_name: string } | null;
 }
 
+/**
+ * Map a user's primary role to the slug of the role that supervises them.
+ * Used as a fallback when ``organization_members.supervisor_id`` is unset
+ * (which is the case for 100% of prod members today — see МОЗ Тест fail
+ * #56). Heads of departments and admin/top_manager have no upward link.
+ */
+const SUPERVISOR_ROLE_BY_SLUG: Record<string, string> = {
+  sales: "head_of_sales",
+  procurement: "head_of_procurement",
+  procurement_senior: "head_of_procurement",
+  logistics: "head_of_logistics",
+  customs: "head_of_customs",
+};
+
 export async function fetchUserDepartment(
   userId: string,
   orgId: string
@@ -62,6 +76,70 @@ export async function fetchUserDepartment(
 
     if (supProfile?.full_name) {
       supervisor = { full_name: supProfile.full_name };
+    }
+  }
+
+  // Fallback: when no explicit supervisor_id is set, derive the supervisor
+  // from role hierarchy. Pick the user's primary non-admin role and look
+  // up the corresponding head_of_X user in the same org. If multiple
+  // candidates exist (e.g. several heads of sales), prefer the one in
+  // the user's sales_group_id; else take the first by sort order. МОЗ
+  // Тест fail #56 surfaced this gap — every member has supervisor_id
+  // NULL on prod, so the field rendered "—" universally.
+  if (!supervisor) {
+    const primarySlug = roles.find((r) => r.slug !== "admin")?.slug;
+    const supSlug = primarySlug
+      ? SUPERVISOR_ROLE_BY_SLUG[primarySlug]
+      : undefined;
+
+    if (supSlug) {
+      const { data: candidates } = await supabase
+        .from("user_roles")
+        .select("user_id, roles!inner(slug)")
+        .eq("organization_id", orgId);
+
+      const candidateIds: string[] = [];
+      for (const row of candidates ?? []) {
+        const r = row.roles as unknown as { slug: string } | null;
+        if (r?.slug === supSlug && row.user_id !== userId) {
+          candidateIds.push(row.user_id);
+        }
+      }
+
+      if (candidateIds.length > 0) {
+        // Prefer same sales group when applicable.
+        let chosen: string | null = null;
+        if (primarySlug === "sales") {
+          const { data: meProfile } = await supabase
+            .from("user_profiles")
+            .select("sales_group_id")
+            .eq("user_id", userId)
+            .eq("organization_id", orgId)
+            .maybeSingle();
+          const myGroup = (meProfile as { sales_group_id: string | null } | null)
+            ?.sales_group_id;
+          if (myGroup) {
+            const { data: groupHeads } = await supabase
+              .from("user_profiles")
+              .select("user_id")
+              .in("user_id", candidateIds)
+              .eq("organization_id", orgId)
+              .eq("sales_group_id", myGroup);
+            chosen = (groupHeads ?? [])[0]?.user_id ?? null;
+          }
+        }
+        const supId = chosen ?? candidateIds[0];
+
+        const { data: supProfile } = await supabase
+          .from("user_profiles")
+          .select("full_name")
+          .eq("user_id", supId)
+          .eq("organization_id", orgId)
+          .maybeSingle();
+        if (supProfile?.full_name) {
+          supervisor = { full_name: supProfile.full_name };
+        }
+      }
     }
   }
 
