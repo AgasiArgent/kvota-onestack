@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   DndContext,
@@ -69,7 +69,42 @@ export function KanbanBoard({
   orgId,
 }: KanbanBoardProps) {
   const router = useRouter();
-  const [columns, setColumns] = useState<KanbanColumns>(initialColumns);
+
+  // Sort each column so the most recently updated card appears at the top.
+  // Primary key: `updated_at` DESC (precise to the ms). Falls back to
+  // `days_in_state` ASC for legacy responses that don't carry updated_at.
+  // Applied to both the initial SSR payload AND every refresh propagated
+  // from the server (e.g. after an auto-advance from a Server Action).
+  function sortColumns(cols: KanbanColumns): KanbanColumns {
+    const out: KanbanColumns = {
+      distributing: [],
+      searching_supplier: [],
+      waiting_prices: [],
+      prices_ready: [],
+    };
+    for (const k of Object.keys(out) as Array<keyof KanbanColumns>) {
+      out[k] = [...(cols[k] ?? [])].sort((a, b) => {
+        const ta = a.updated_at ? Date.parse(a.updated_at) : NaN;
+        const tb = b.updated_at ? Date.parse(b.updated_at) : NaN;
+        if (!Number.isNaN(ta) && !Number.isNaN(tb)) return tb - ta;
+        return (a.days_in_state ?? 0) - (b.days_in_state ?? 0);
+      });
+    }
+    return out;
+  }
+
+  const [columns, setColumns] = useState<KanbanColumns>(() =>
+    sortColumns(initialColumns)
+  );
+
+  // Sync local kanban state with fresh server data. router.refresh() —
+  // fired after assignBrandGroup / drag commit / external mutations —
+  // re-runs the page server component and pushes a new `initialColumns`
+  // prop into the board. Without this effect, the local columns state
+  // would never see the update because useState only seeds on mount.
+  useEffect(() => {
+    setColumns(sortColumns(initialColumns));
+  }, [initialColumns]);
   const [activeCard, setActiveCard] = useState<KanbanBrandCard | null>(null);
   const [pendingBackward, setPendingBackward] =
     useState<PendingBackwardMove | null>(null);

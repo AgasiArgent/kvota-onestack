@@ -151,11 +151,14 @@ describe("InvoiceCard — isLocked semantics (Phase 5c edit-gate)", () => {
     expect(html).not.toContain("Редактировать с одобрением");
   });
 
-  it("renders ProcurementUnlockButton when procurement_completed_at is set", () => {
-    const invoice = makeInvoice({ sent_at: null });
-    const quote: InvoiceCardQuoteStub = {
+  it("renders ProcurementUnlockButton when invoice.procurement_completed_at is set", () => {
+    // Migration 298: procurement completion moved from quote-level to
+    // invoice-level. The unlock button now follows the per-invoice flag.
+    const invoice = makeInvoice({
+      sent_at: null,
       procurement_completed_at: "2026-04-18T10:00:00Z",
-    };
+    } as unknown as Parameters<typeof makeInvoice>[0]);
+    const quote: InvoiceCardQuoteStub = { procurement_completed_at: null };
 
     const html = renderToString(
       <InvoiceCard
@@ -243,13 +246,18 @@ describe("InvoiceCard — items source is invoice_items (not legacy FK filter)",
       }),
     ];
 
+    // Coverage is required for the redundant list to render in SSR — the
+    // handsontable below it is dynamically imported with `ssr: false`. Pass
+    // a synthetic coverage label so the supplier-side row surfaces in the
+    // SSR HTML (the post-redesign list filters out items with no coverage
+    // info to eliminate the 1:1 duplicate-name noise).
     const html = renderToString(
       <InvoiceCard
         invoice={invoice}
         items={quoteItems}
         quote={quote}
         invoiceItems={invoiceItems}
-        coverageSummaryByItem={{}}
+        coverageSummaryByItem={{ "ii-1": "← merge for SSR coverage check" }}
         defaultExpanded
       />
     );
@@ -287,7 +295,12 @@ describe("InvoiceCard — items source is invoice_items (not legacy FK filter)",
     expect(html).toContain("← болт, гайка, шайба объединены");
   });
 
-  it("renders coverage summary for a split (1 → N) invoice_item", () => {
+  it("hides split (1 → N) coverage labels from the redundant list to avoid per-child duplication", () => {
+    // Updated semantics: split children share the same → label and would
+    // duplicate per child in the list above the handsontable. Now the
+    // redundant list shows ONLY merge (←) labels — split children are
+    // visually grouped via their shared sales-side columns in the table
+    // itself.
     const invoice = makeInvoice();
     const quote: InvoiceCardQuoteStub = { procurement_completed_at: null };
     const invoiceItems = [
@@ -322,7 +335,7 @@ describe("InvoiceCard — items source is invoice_items (not legacy FK filter)",
       />
     );
 
-    expect(html).toContain("→ болт ×1 + шайба ×2");
+    expect(html).not.toContain("→ болт ×1 + шайба ×2");
   });
 
   it("renders no coverage summary label for a plain 1:1 invoice_item", () => {

@@ -1,0 +1,14 @@
+{
+  "feature_name": "merge-inline-ux",
+  "created_at": "2026-04-28T17:48:41Z",
+  "updated_at": "2026-04-28T18:15:00Z",
+  "language": "ru",
+  "phase": "tasks-generated",
+  "approvals": {
+    "requirements": { "generated": true, "approved": true },
+    "design": { "generated": true, "approved": true },
+    "tasks": { "generated": true, "approved": false }
+  },
+  "ready_for_implementation": false,
+  "project_description": "Inline merge UX for procurement КП positions: per-row trigger replaces top-level «Объединить» button, popover/dialog with checkbox list of merge candidates + form for the resulting merged row (name, brand, supplier_sku, price). Reuses existing mergeInvoiceItems mutation. Symmetric with the inline split UX shipped earlier this session."
+}

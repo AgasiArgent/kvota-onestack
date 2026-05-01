@@ -1,0 +1,14 @@
+{
+  "feature_name": "kanban-auto-advance",
+  "created_at": "2026-05-01T08:17:37Z",
+  "updated_at": "2026-05-01T08:17:37Z",
+  "language": "ru",
+  "phase": "tasks-generated",
+  "approvals": {
+    "requirements": { "generated": true, "approved": true },
+    "design": { "generated": true, "approved": true },
+    "tasks": { "generated": true, "approved": true }
+  },
+  "ready_for_implementation": true,
+  "project_description": "Auto-advance procurement kanban brand-slices on key user actions: (1) when all items of a brand have МОЗ assigned → distributing → searching_supplier; (2) when invoices.sent_at is set → searching_supplier → waiting_prices for brands present in that invoice; (3) when an invoice is procurement-completed → waiting_prices → prices_ready for brands fully covered by completed invoices. Wired into existing Server Actions (assignBrandGroup, sendInvoice, completeInvoiceProcurement) without a new Python endpoint. Manual drag-and-drop continues to work and overrides auto-advance."
+}

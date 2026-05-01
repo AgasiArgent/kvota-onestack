@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { UserSearchSelect } from "@/shared/ui/procurement/user-search-select";
 import { assignBrandGroup } from "@/entities/quote/server-actions";
+import { SUBSTATUS_LABELS_RU } from "@/shared/lib/workflow-substates";
 import type {
   QuoteWithBrandGroups,
   BrandGroup,
@@ -79,6 +80,14 @@ export function QuoteBrandCard({ data, users, orgId }: Props) {
       toast.success(
         `${bg.itemCount} поз. назначено на ${userName}`
       );
+      // Notify when the kanban card auto-advanced as a side-effect.
+      if (result.advancedSlices && result.advancedSlices.length > 0) {
+        for (const s of result.advancedSlices) {
+          toast.info(
+            `Карточка «${s.brand || "без бренда"}» автоматически переведена в «${SUBSTATUS_LABELS_RU[s.to as keyof typeof SUBSTATUS_LABELS_RU] ?? s.to}»`
+          );
+        }
+      }
       router.refresh();
     } else {
       toast.error(result.error ?? "Ошибка назначения");

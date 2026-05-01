@@ -21,7 +21,7 @@ import {
   type CargoPlaceInput,
 } from "@/entities/quote/mutations";
 import type { QuoteItemRow } from "@/entities/quote/queries";
-import { CountryCombobox, findCountryByCode, findCountryByName } from "@/shared/ui/geo";
+import { CityAutocomplete, CountryCombobox, findCountryByCode, findCountryByName } from "@/shared/ui/geo";
 import { INCOTERMS_2020 } from "@/shared/lib/incoterms";
 import { SUPPORTED_CURRENCIES } from "@/shared/lib/currencies";
 import { extractErrorMessage } from "@/shared/lib/errors";
@@ -143,20 +143,33 @@ export function InvoiceCreateModal({
     setBoxes((prev) => prev.filter((_, i) => i !== index));
   }
 
+  // Real procurement workflow: КП is created early with only supplier + buyer
+  // known. Country, incoterms, currency, cargo dimensions arrive later from
+  // the supplier's reply and are filled in afterward. Keep validation minimal
+  // so the form matches the workflow.
+  function isBoxBlank(box: (typeof boxes)[number]): boolean {
+    return !box.weight_kg && !box.length_mm && !box.width_mm && !box.height_mm;
+  }
+
+  function isBoxComplete(box: (typeof boxes)[number]): boolean {
+    const w = parseFloat(box.weight_kg);
+    const l = parseInt(box.length_mm, 10);
+    const wd = parseInt(box.width_mm, 10);
+    const h = parseInt(box.height_mm, 10);
+    return w > 0 && l > 0 && wd > 0 && h > 0;
+  }
+
   function validate(): boolean {
     const e: Record<string, string> = {};
     if (!supplierId) e.supplier = "Выберите поставщика";
     if (!buyerCompanyId) e.buyer = "Выберите компанию-покупателя";
-    if (!currency) e.currency = "Выберите валюту";
 
+    // Cargo places are optional. If a row is touched, require all four fields
+    // > 0 so we never persist partial garbage (weight without dimensions etc.).
     for (let i = 0; i < boxes.length; i++) {
       const box = boxes[i];
-      const w = parseFloat(box.weight_kg);
-      const l = parseInt(box.length_mm, 10);
-      const wd = parseInt(box.width_mm, 10);
-      const h = parseInt(box.height_mm, 10);
-      if (!w || w <= 0 || !l || l <= 0 || !wd || wd <= 0 || !h || h <= 0) {
-        e[`box_${i}`] = `Место ${i + 1}: все поля обязательны и > 0`;
+      if (!isBoxBlank(box) && !isBoxComplete(box)) {
+        e[`box_${i}`] = `Место ${i + 1}: заполните все поля > 0 или очистите`;
       }
     }
 
@@ -168,12 +181,15 @@ export function InvoiceCreateModal({
     if (!validate()) return;
     setSubmitting(true);
     try {
-      const parsedBoxes: CargoPlaceInput[] = boxes.map((box) => ({
-        weight_kg: parseFloat(box.weight_kg),
-        length_mm: parseInt(box.length_mm, 10),
-        width_mm: parseInt(box.width_mm, 10),
-        height_mm: parseInt(box.height_mm, 10),
-      }));
+      // Drop blank rows so the empty-by-default first row doesn't reach the API.
+      const parsedBoxes: CargoPlaceInput[] = boxes
+        .filter((b) => !isBoxBlank(b))
+        .map((box) => ({
+          weight_kg: parseFloat(box.weight_kg),
+          length_mm: parseInt(box.length_mm, 10),
+          width_mm: parseInt(box.width_mm, 10),
+          height_mm: parseInt(box.height_mm, 10),
+        }));
 
       const invoice = await createInvoice({
         quote_id: quoteId,
@@ -227,7 +243,8 @@ export function InvoiceCreateModal({
         <DialogHeader>
           <DialogTitle>Создать КП поставщику</DialogTitle>
           <DialogDescription>
-            Заполните данные КП поставщика и назначьте позиции
+            Укажите поставщика и компанию-покупателя. Остальные поля можно
+            заполнить позже — после получения ответа от поставщика.
           </DialogDescription>
         </DialogHeader>
 
@@ -299,10 +316,12 @@ export function InvoiceCreateModal({
 
           <div className="space-y-1.5">
             <Label>Город</Label>
-            <Input
+            <CityAutocomplete
               value={city}
-              onChange={(e) => setCity(e.target.value)}
-              placeholder="Город отгрузки"
+              onChange={setCity}
+              countryCode={countryCode}
+              placeholder="Начните вводить город…"
+              ariaLabel="Город отгрузки"
             />
           </div>
 

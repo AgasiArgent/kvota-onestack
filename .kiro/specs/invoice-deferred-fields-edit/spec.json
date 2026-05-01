@@ -1,0 +1,14 @@
+{
+  "feature_name": "invoice-deferred-fields-edit",
+  "created_at": "2026-04-29T08:44:16Z",
+  "updated_at": "2026-04-29T08:44:16Z",
+  "language": "ru",
+  "phase": "tasks-generated",
+  "approvals": {
+    "requirements": { "generated": true, "approved": true },
+    "design": { "generated": true, "approved": true },
+    "tasks": { "generated": true, "approved": true }
+  },
+  "ready_for_implementation": true,
+  "project_description": "Make every field that became optional in the КП creation modal editable inside the existing КП card after creation: pickup country, city, incoterms, currency, VAT rate, and cargo places (with full CRUD per place). Symmetric with the deferred-fill workflow: КП is created with supplier+buyer only, the rest is filled in once the supplier replies. Reuses existing updateInvoice mutation; adds CRUD mutations for invoice_cargo_places."
+}

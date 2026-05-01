@@ -411,7 +411,7 @@ export async function fetchUnassignedInvoices(
   const deadlineCol =
     domain === "logistics" ? "logistics_deadline_at" : "customs_deadline_at";
 
-  const { data, error } = await admin
+  const query = admin
     .from("invoices")
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .select(INVOICE_COLUMNS as any)
@@ -420,6 +420,14 @@ export async function fetchUnassignedInvoices(
     .is("quote.deleted_at", null)
     .is(completedCol, null)
     .order(deadlineCol, { ascending: true, nullsFirst: false });
+
+  // Per-invoice procurement completion: only surface invoices for both
+  // logistics AND customs tabs once procurement has finalized THIS КП.
+  // Without this gate, in-progress invoices with no assignee yet would
+  // pollute the Unassigned inbox.
+  query.not("procurement_completed_at", "is", null);
+
+  const { data, error } = await query;
 
   if (error) {
     console.error("fetchUnassignedInvoices failed", error);
@@ -473,7 +481,7 @@ export async function fetchAllActiveInvoices(
   const deadlineCol =
     domain === "logistics" ? "logistics_deadline_at" : "customs_deadline_at";
 
-  const { data, error } = await admin
+  const query = admin
     .from("invoices")
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .select(INVOICE_COLUMNS as any)
@@ -481,6 +489,11 @@ export async function fetchAllActiveInvoices(
     .is("quote.deleted_at", null)
     .is(completedCol, null)
     .order(deadlineCol, { ascending: true, nullsFirst: false });
+
+  // Per-invoice procurement gate — applies to both logistics and customs.
+  query.not("procurement_completed_at", "is", null);
+
+  const { data, error } = await query;
 
   if (error) {
     console.error("fetchAllActiveInvoices failed", error);
@@ -547,6 +560,10 @@ export async function fetchWorkspaceStats(
     Date.now() - 30 * 24 * 60 * 60 * 1000
   ).toISOString();
 
+  // Per-invoice procurement gate: legacy invoices that had `*_assigned_at`
+  // set by the old quote-level workflow should not pollute the new
+  // per-invoice stats. We filter on `procurement_completed_at IS NOT NULL`
+  // to align stats with the list views.
   const activeQuery = admin
     .from("invoices")
     .select("id, quote:quotes!inner(organization_id, deleted_at)", {
@@ -556,6 +573,7 @@ export async function fetchWorkspaceStats(
     .eq("quote.organization_id", orgId)
     .is("quote.deleted_at", null)
     .is(completedCol, null)
+    .not("procurement_completed_at", "is", null)
     .not(assignedCol, "is", null);
 
   const overdueQuery = admin
@@ -567,6 +585,7 @@ export async function fetchWorkspaceStats(
     .eq("quote.organization_id", orgId)
     .is("quote.deleted_at", null)
     .is(completedCol, null)
+    .not("procurement_completed_at", "is", null)
     .lt(deadlineCol, nowIso);
 
   const weekDoneQuery = admin

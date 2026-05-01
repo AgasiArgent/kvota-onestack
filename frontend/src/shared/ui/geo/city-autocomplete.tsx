@@ -20,7 +20,8 @@
  * when the backend returns broader matches.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Loader2 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
@@ -283,38 +284,46 @@ export function CityAutocomplete({
     : placeholder;
   const showList = open && items.length > 0 && !isDisabled;
 
-  return (
-    <div className={cn("relative", className)}>
-      <div className="relative">
-        <Input
-          value={value}
-          onChange={(e) => handleChange(e.target.value)}
-          onFocus={() => !isDisabled && setOpen(true)}
-          onBlur={() => {
-            // Delay so a click on a result lands before the dropdown closes.
-            setTimeout(() => setOpen(false), 150);
-          }}
-          onKeyDown={handleKeyDown}
-          disabled={isDisabled}
-          placeholder={resolvedPlaceholder}
-          aria-label={ariaLabel}
-          aria-autocomplete="list"
-          aria-expanded={showList}
-          className={cn(loading ? "pr-8" : undefined)}
-        />
-        {loading && (
-          <Loader2
-            className="absolute right-2 top-1/2 -translate-y-1/2 animate-spin text-muted-foreground"
-            size={14}
-            aria-label="Поиск…"
-          />
-        )}
-      </div>
+  // Portal-positioned dropdown — renders to document.body to escape any
+  // ancestor `overflow:hidden` (notably the shadcn Card primitive that
+  // wraps the КП editor). Position is computed from the input rect on
+  // open and on scroll/resize so the list stays anchored.
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [rect, setRect] = useState<{
+    left: number;
+    top: number;
+    width: number;
+  } | null>(null);
 
-      {showList && (
+  useLayoutEffect(() => {
+    if (!showList) return;
+    function updateRect() {
+      const el = inputRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setRect({ left: r.left, top: r.bottom + 4, width: r.width });
+    }
+    updateRect();
+    window.addEventListener("scroll", updateRect, true);
+    window.addEventListener("resize", updateRect);
+    return () => {
+      window.removeEventListener("scroll", updateRect, true);
+      window.removeEventListener("resize", updateRect);
+    };
+  }, [showList]);
+
+  const dropdown = showList && rect && typeof document !== "undefined"
+    ? createPortal(
         <div
           role="listbox"
-          className="absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-border bg-background py-1 shadow-md"
+          style={{
+            position: "fixed",
+            left: rect.left,
+            top: rect.top,
+            width: rect.width,
+            zIndex: 250,
+          }}
+          className="max-h-64 overflow-y-auto rounded-lg border border-border bg-background py-1 shadow-md"
         >
           {items.map((item, idx) => {
             const isFocused = idx === focusedIndex;
@@ -346,8 +355,40 @@ export function CityAutocomplete({
               </button>
             );
           })}
-        </div>
-      )}
+        </div>,
+        document.body
+      )
+    : null;
+
+  return (
+    <div className={cn("relative", className)}>
+      <div className="relative">
+        <Input
+          ref={inputRef}
+          value={value}
+          onChange={(e) => handleChange(e.target.value)}
+          onFocus={() => !isDisabled && setOpen(true)}
+          onBlur={() => {
+            // Delay so a click on a result lands before the dropdown closes.
+            setTimeout(() => setOpen(false), 150);
+          }}
+          onKeyDown={handleKeyDown}
+          disabled={isDisabled}
+          placeholder={resolvedPlaceholder}
+          aria-label={ariaLabel}
+          aria-autocomplete="list"
+          aria-expanded={showList}
+          className={cn(loading ? "pr-8" : undefined)}
+        />
+        {loading && (
+          <Loader2
+            className="absolute right-2 top-1/2 -translate-y-1/2 animate-spin text-muted-foreground"
+            size={14}
+            aria-label="Поиск…"
+          />
+        )}
+      </div>
+      {dropdown}
     </div>
   );
 }

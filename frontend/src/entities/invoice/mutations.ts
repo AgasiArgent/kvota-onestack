@@ -158,6 +158,25 @@ export async function downloadInvoiceXls(
 // has been renamed to `requestProcurementUnlock` to keep the contract obvious.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Mark invoice as sent to supplier
+//
+// Manual analogue of the letter-draft/send flow: stamps `sent_at = NOW()`
+// directly on the invoice without going through the email composer. Used
+// by the «Отправлено поставщику» button in InvoiceCard so procurement can
+// progress the kanban (Phase B auto-advance to «Ожидание цен») without
+// relying on the email pipeline.
+// ---------------------------------------------------------------------------
+
+export async function markInvoiceSent(invoiceId: string): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("invoices")
+    .update({ sent_at: new Date().toISOString() })
+    .eq("id", invoiceId);
+  if (error) throw error;
+}
+
 export async function requestProcurementUnlock(invoiceId: string): Promise<void> {
   const headers = await getAuthHeaders();
 

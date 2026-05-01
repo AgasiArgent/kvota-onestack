@@ -16,6 +16,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { extractErrorMessage } from "@/shared/lib/errors";
+import { notifyInvoiceSentForKanban } from "@/entities/quote/server-actions";
+import { SUBSTATUS_LABELS_RU } from "@/shared/lib/workflow-substates";
 import {
   fetchActiveLetterDraft,
   type LetterDraft,
@@ -294,6 +296,17 @@ export function LetterDraftComposer({
       });
       await sendLetterDraft(invoiceId);
       toast.success("Письмо отправлено");
+      // Best-effort kanban advance for every brand in this invoice.
+      try {
+        const { advancedSlices } = await notifyInvoiceSentForKanban(invoiceId);
+        for (const s of advancedSlices) {
+          toast.info(
+            `Карточка «${s.brand || "без бренда"}» автоматически переведена в «${SUBSTATUS_LABELS_RU[s.to as keyof typeof SUBSTATUS_LABELS_RU] ?? s.to}»`
+          );
+        }
+      } catch (err) {
+        console.error("[letter-draft-composer] kanban advance failed:", err);
+      }
       onClose();
     } catch (err) {
       console.error("[letter-draft-composer] send draft failed:", err);

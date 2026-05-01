@@ -21,6 +21,13 @@ export interface KanbanBrandCard {
   idn_quote: string;
   customer_name: string | null;
   days_in_state: number;
+  /**
+   * ISO-8601 timestamp of the underlying `quote_brand_substates.updated_at`.
+   * Used by the kanban board to sort newest-first (more precise than the
+   * day-rounded `days_in_state`). Optional for backwards compat with
+   * pre-deploy responses.
+   */
+  updated_at?: string | null;
   latest_reason: string | null;
   procurement_substatus: ProcurementSubstatus;
   manager_name: string | null;
