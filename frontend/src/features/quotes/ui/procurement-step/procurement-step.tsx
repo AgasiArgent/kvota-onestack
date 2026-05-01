@@ -224,6 +224,12 @@ export function ProcurementStep({
         priceReadyByQuoteItemId={priceReadyByQuoteItemId}
         invoiceIdByQuoteItemId={invoiceIdByQuoteItemId}
         minOrderQuantityByQuoteItemId={minOrderQuantityByQuoteItemId}
+        invoiceProgress={invoices.map((inv) => ({
+          procurement_completed_at:
+            (inv as { procurement_completed_at?: string | null })
+              .procurement_completed_at ?? null,
+          items_count: invoiceItemsMap.get(inv.id)?.length ?? 0,
+        }))}
         onCreateInvoice={handleCreateInvoice}
       />
 

@@ -767,7 +767,7 @@ class TestEditRequestApproval:
             mock_sb.return_value = sb
             self._setup_mocks(sb, user_id, org_id, invoice_id, quote_id, sent=True)
 
-            with patch("services.invoice_send_service.is_quote_procurement_locked", return_value=True), \
+            with patch("services.invoice_send_service.is_invoice_procurement_locked", return_value=True), \
                  patch("services.approval_service.create_approvals_for_role", return_value=[mock_approval]) as mock_create:
                 from api.invoices import request_procurement_unlock
 
@@ -799,7 +799,7 @@ class TestEditRequestApproval:
             mock_sb.return_value = sb
             self._setup_mocks(sb, user_id, org_id, invoice_id, quote_id, sent=False)
 
-            with patch("services.invoice_send_service.is_quote_procurement_locked", return_value=False):
+            with patch("services.invoice_send_service.is_invoice_procurement_locked", return_value=False):
                 from api.invoices import request_procurement_unlock
 
                 request = _mock_request(method="POST", api_user=api_user)
@@ -826,7 +826,7 @@ class TestEditAfterSendGuard:
         from services.invoice_send_service import check_edit_permission
 
         # check_edit_permission returns False for sent invoice + non-override roles
-        with patch("services.invoice_send_service.is_quote_procurement_locked", return_value=True):
+        with patch("services.invoice_send_service.is_invoice_procurement_locked", return_value=True):
             result = check_edit_permission("any-id", ["procurement"])
         assert result is False
 
@@ -835,7 +835,7 @@ class TestEditAfterSendGuard:
         """Admin should bypass the sent guard."""
         from services.invoice_send_service import check_edit_permission
 
-        with patch("services.invoice_send_service.is_quote_procurement_locked", return_value=True):
+        with patch("services.invoice_send_service.is_invoice_procurement_locked", return_value=True):
             result = check_edit_permission("any-id", ["admin"])
         assert result is True
 
@@ -844,7 +844,7 @@ class TestEditAfterSendGuard:
         """Unsent invoices should be editable by anyone with procurement role."""
         from services.invoice_send_service import check_edit_permission
 
-        with patch("services.invoice_send_service.is_quote_procurement_locked", return_value=False):
+        with patch("services.invoice_send_service.is_invoice_procurement_locked", return_value=False):
             result = check_edit_permission("any-id", ["procurement"])
         assert result is True
 

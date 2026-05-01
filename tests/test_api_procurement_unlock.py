@@ -130,7 +130,7 @@ class TestProcurementUnlockRequest:
 
             with (
                 patch(
-                    "services.invoice_send_service.is_quote_procurement_locked",
+                    "services.invoice_send_service.is_invoice_procurement_locked",
                     return_value=True,
                 ),
                 patch(

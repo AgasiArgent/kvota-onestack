@@ -426,12 +426,12 @@ async def request_procurement_unlock(request, id: str) -> JSONResponse:
     if err:
         return err
 
-    # Procurement for the parent quote must be completed (locked) to need unlock approval
-    from services.invoice_send_service import is_quote_procurement_locked
+    # Procurement for THIS invoice must be completed (locked) to need unlock approval
+    from services.invoice_send_service import is_invoice_procurement_locked
 
-    if not is_quote_procurement_locked(id):
+    if not is_invoice_procurement_locked(id):
         return JSONResponse(
-            {"success": False, "error": {"code": "NOT_LOCKED", "message": "Procurement is still active — edit freely without approval"}},
+            {"success": False, "error": {"code": "NOT_LOCKED", "message": "Закупка по этому КП ещё не завершена — редактируйте напрямую"}},
             status_code=400,
         )
 

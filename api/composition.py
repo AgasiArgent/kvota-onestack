@@ -514,6 +514,15 @@ async def approve_procurement_unlock(request, invoice_id: str, approval_id: str)
         if isinstance(change, dict) and "new" in change:
             new_values[field_name] = change["new"]
 
+    # Per-invoice unlock: granting an edit_completed_procurement approval
+    # always clears the lock fields on the target invoice, regardless of
+    # whether the diff carried field-level updates. Without this, МОЗ
+    # cannot edit the КП after the approval is granted because the
+    # per-invoice ``procurement_completed_at`` flag still gates writes.
+    if approval_row.get("approval_type") == "edit_completed_procurement":
+        new_values["procurement_completed_at"] = None
+        new_values["procurement_completed_by"] = None
+
     sb = get_supabase()
     now_iso = datetime.now(timezone.utc).isoformat()
 
