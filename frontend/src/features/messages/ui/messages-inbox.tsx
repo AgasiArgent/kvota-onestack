@@ -44,7 +44,15 @@ function truncate(text: string, maxLen: number): string {
 // ---------------------------------------------------------------------------
 
 interface MessagesInboxProps {
+  /** Chats the user can see at all (role-scoped). Drives the "Все" tab. */
   chats: ChatListItem[];
+  /**
+   * Chats where the user is a responsible party (МОП ownership, МОЗ item
+   * assignment, МОЛ/МОТ quote-level assignment). Drives "Мои КП".
+   * Server-resolved via {@link resolveMyAssignedQuoteIds}.
+   */
+  myChats: ChatListItem[];
+  initialFilter?: "all" | "my";
   userId: string;
   orgId: string;
   orgMembers: OrgMember[];
@@ -158,21 +166,22 @@ function ActiveChat({
 
 export function MessagesInbox({
   chats,
+  myChats,
+  initialFilter = "all",
   userId,
   orgId,
   orgMembers,
 }: MessagesInboxProps) {
-  const [filter, setFilter] = useState<"all" | "my">("all");
+  const [filter, setFilter] = useState<"all" | "my">(initialFilter);
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
   const [comments, setComments] = useState<QuoteComment[]>([]);
   const [loadingComments, setLoadingComments] = useState(false);
   const [mobileShowChat, setMobileShowChat] = useState(false);
 
-
-  const filteredChats =
-    filter === "my"
-      ? chats.filter((c) => c.lastMessageUserId === userId)
-      : chats;
+  // "Мои КП" comes from a server-resolved set of personally-assigned quotes —
+  // not from "did I author the last message" (the old client filter, which
+  // hid every chat where the user was a participant but had not yet replied).
+  const filteredChats = filter === "my" ? myChats : chats;
 
   const selectedChat = filteredChats.find((c) => c.quoteId === selectedQuoteId);
 
@@ -322,7 +331,9 @@ export function MessagesInbox({
                     {chat.idnQuote}
                   </span>
                   <span className="text-[11px] text-muted-foreground">
-                    {formatRelativeTime(chat.lastMessageAt)}
+                    {chat.lastMessageAt
+                      ? formatRelativeTime(chat.lastMessageAt)
+                      : ""}
                   </span>
                 </div>
                 {chat.customerName && (
@@ -330,13 +341,23 @@ export function MessagesInbox({
                     {chat.customerName}
                   </p>
                 )}
-                <p className="text-xs text-muted-foreground/80 truncate">
-                  {chat.lastMessageUserName && (
-                    <span className="font-medium text-muted-foreground">
-                      {chat.lastMessageUserName.split(" ")[0]}:{" "}
+                <p className="text-xs text-muted-foreground/80 truncate italic">
+                  {chat.commentCount === 0 ? (
+                    <span className="text-muted-foreground/60">
+                      Нет сообщений
                     </span>
+                  ) : (
+                    <>
+                      {chat.lastMessageUserName && (
+                        <span className="font-medium text-muted-foreground not-italic">
+                          {chat.lastMessageUserName.split(" ")[0]}:{" "}
+                        </span>
+                      )}
+                      <span className="not-italic">
+                        {truncate(chat.lastMessageBody, 60)}
+                      </span>
+                    </>
                   )}
-                  {truncate(chat.lastMessageBody, 60)}
                 </p>
               </button>
             ))
