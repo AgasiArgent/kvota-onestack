@@ -57,7 +57,12 @@ export async function fetchQuotesMetrics(
 ): Promise<QuotesMetrics> {
   const admin = createAdminClient();
 
-  const [createdRes, processedRes] = await Promise.all([
+  // Per-invoice procurement model (post PR #74): closure lives on
+  // ``invoices.procurement_completed_at``. A quote counts as "processed"
+  // when at least one of its invoices is procurement-complete; the
+  // duration metric uses the LATEST invoice closure (≈ when the whole
+  // quote left procurement).
+  const [createdRes, completedInvoicesRes] = await Promise.all([
     admin
       .from("quotes")
       .select("id", { count: "exact", head: true })
@@ -66,39 +71,57 @@ export async function fetchQuotesMetrics(
       .gte("created_at", range.from)
       .lte("created_at", range.to),
     admin
-      .from("quotes")
-      .select("created_at, procurement_completed_at")
-      .eq("organization_id", orgId)
-      .is("deleted_at", null)
+      .from("invoices")
+      .select(
+        "quote_id, procurement_completed_at, quotes!quote_id!inner(organization_id, created_at, deleted_at)"
+      )
+      .eq("quotes.organization_id", orgId)
+      .is("quotes.deleted_at", null)
       .not("procurement_completed_at", "is", null)
       .gte("procurement_completed_at", range.from)
       .lte("procurement_completed_at", range.to),
   ]);
 
   const created = createdRes.count ?? 0;
-  const processedRows = processedRes.data ?? [];
-  const processed = processedRows.length;
+
+  // Group invoice closures by quote, keep the latest closure per quote.
+  type InvoiceRow = {
+    quote_id: string;
+    procurement_completed_at: string;
+    quotes: { created_at: string | null } | null;
+  };
+  const completedInvoices =
+    (completedInvoicesRes.data ?? []) as unknown as InvoiceRow[];
+  const latestByQuote = new Map<string, { createdAt: string; completedAt: string }>();
+  for (const inv of completedInvoices) {
+    const completedAt = inv.procurement_completed_at;
+    const createdAt = inv.quotes?.created_at;
+    if (!completedAt || !createdAt) continue;
+    const prev = latestByQuote.get(inv.quote_id);
+    if (!prev || prev.completedAt < completedAt) {
+      latestByQuote.set(inv.quote_id, { createdAt, completedAt });
+    }
+  }
+
+  const processed = latestByQuote.size;
   const processedPct = created > 0 ? Math.round((processed / created) * 100) : 0;
 
   let medianProcessingDays: number | null = null;
-  if (processedRows.length > 0) {
-    const durations = processedRows
-      .filter((r) => r.created_at && r.procurement_completed_at)
-      .map((r) => {
-        const start = new Date(r.created_at!).getTime();
-        const end = new Date(r.procurement_completed_at!).getTime();
+  if (latestByQuote.size > 0) {
+    const durations = Array.from(latestByQuote.values())
+      .map(({ createdAt, completedAt }) => {
+        const start = new Date(createdAt).getTime();
+        const end = new Date(completedAt).getTime();
         return (end - start) / (1000 * 60 * 60 * 24);
       })
       .sort((a, b) => a - b);
 
-    if (durations.length > 0) {
-      const mid = Math.floor(durations.length / 2);
-      medianProcessingDays =
-        durations.length % 2 === 0
-          ? (durations[mid - 1] + durations[mid]) / 2
-          : durations[mid];
-      medianProcessingDays = Math.round(medianProcessingDays * 10) / 10;
-    }
+    const mid = Math.floor(durations.length / 2);
+    medianProcessingDays =
+      durations.length % 2 === 0
+        ? (durations[mid - 1] + durations[mid]) / 2
+        : durations[mid];
+    medianProcessingDays = Math.round(medianProcessingDays * 10) / 10;
   }
 
   return { created, processed, processedPct, medianProcessingDays };

@@ -5,6 +5,10 @@ import { Plus, CheckCircle, Loader2, UserCheck, DollarSign } from "lucide-react"
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { QuoteItemRow } from "@/entities/quote/queries";
+import {
+  getProcurementProgress,
+  type ProcurementProgressInvoice,
+} from "@/entities/quote/procurement-progress";
 import { isMoqViolation } from "./moq-warning";
 
 type ProcurementSubStage = "assignment" | "pricing" | "ready";
@@ -77,6 +81,13 @@ interface ProcurementActionBarProps {
    * quote_items.min_order_quantity column.
    */
   minOrderQuantityByQuoteItemId?: Record<string, number | null>;
+  /**
+   * Per-invoice procurement-closure summary. Each entry corresponds to one
+   * supplier-side КП on this quote. Empty invoices (`items_count === 0`)
+   * are excluded from the displayed progress badge — they are drafts, not
+   * real procurement work.
+   */
+  invoiceProgress?: ProcurementProgressInvoice[];
   onCreateInvoice: () => void;
 }
 
@@ -85,8 +96,10 @@ export function ProcurementActionBar({
   priceReadyByQuoteItemId = {},
   invoiceIdByQuoteItemId = {},
   minOrderQuantityByQuoteItemId = {},
+  invoiceProgress = [],
   onCreateInvoice,
 }: ProcurementActionBarProps) {
+  const progress = getProcurementProgress(invoiceProgress);
   const totalItems = items.length;
   const assignedUserCount = items.filter((i) => i.assigned_procurement_user != null).length;
   const assignedInvoiceCount = items.filter(
@@ -128,6 +141,21 @@ export function ProcurementActionBar({
           КП-карточка (invoice-card.tsx). The quote-level «Завершить
           закупку» trigger here is retired — multi-supplier procurement
           finalizes invoice-by-invoice. */}
+
+      {progress.total > 0 && (
+        <Badge
+          variant="outline"
+          className={
+            progress.completed === progress.total
+              ? "gap-1 bg-blue-100 text-blue-700"
+              : "gap-1 bg-muted text-muted-foreground"
+          }
+          title="Прогресс по завершённым КП поставщиков"
+        >
+          <CheckCircle size={12} />
+          {progress.label}
+        </Badge>
+      )}
 
       {moqViolationCount > 0 && (
         <Badge
