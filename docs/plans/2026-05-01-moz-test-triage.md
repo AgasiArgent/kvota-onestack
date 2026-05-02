@@ -171,6 +171,9 @@
 - **H.98** XLS export RU/EN toggle → PR #79
 - **A.39, A.42** chat file appears in bubble after send → PR #80
 - **A.40, A.43** chat file linked to documents (no race) → PR #80
+- **E.82** VAT auto-resolve always overwrites on country (strategy B) → PR #81
+- **H.104** letter composer items scoped to КП → PR #81
+- **E.76, E.78** searchable entity-picker (foundation UserSelect) → PR #82 (+ audit doc for remaining dropdowns)
 
 ### 🔴 P5 — Срочное исправление (mission-critical)
 - **A.27, A.28** Чаты — права доступа неверные. Безопасность/доверие к данным.
