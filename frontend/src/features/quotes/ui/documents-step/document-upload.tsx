@@ -13,6 +13,7 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 import { createClient } from "@/shared/lib/supabase/client";
 import { DOCUMENT_TYPE_OPTIONS, DOCUMENT_TYPE_LABELS } from "./constants";
 
@@ -32,12 +33,10 @@ export function DocumentUpload({
   const [uploading, setUploading] = useState(false);
   const [documentType, setDocumentType] = useState("other");
   const [description, setDescription] = useState("");
+  const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  async function uploadFile(file: File) {
     setUploading(true);
     try {
       const supabase = createClient();
@@ -91,11 +90,47 @@ export function DocumentUpload({
     }
   }
 
+  function handleFileInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) void uploadFile(file);
+  }
+
+  function handleDragOver(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!dragActive) setDragActive(true);
+  }
+
+  function handleDragLeave(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    e.stopPropagation();
+    // Only reset when leaving the wrapper itself, not when crossing a child.
+    if (e.currentTarget === e.target) setDragActive(false);
+  }
+
+  function handleDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) void uploadFile(file);
+  }
+
   return (
-    <div className="border-2 border-dashed border-border rounded-lg p-4 space-y-3">
+    <div
+      className={cn(
+        "border-2 border-dashed rounded-lg p-4 space-y-3 transition-colors",
+        dragActive ? "border-primary bg-primary/5" : "border-border"
+      )}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
         <Upload size={16} />
-        Загрузить документ
+        {dragActive
+          ? "Отпустите файл, чтобы загрузить"
+          : "Загрузить документ — нажмите кнопку или перетащите файл"}
       </div>
       <div className="grid grid-cols-[1fr_1fr_auto] gap-3 items-end">
         <div>
@@ -146,7 +181,7 @@ export function DocumentUpload({
             type="file"
             className="hidden"
             accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx"
-            onChange={handleUpload}
+            onChange={handleFileInputChange}
           />
         </div>
       </div>

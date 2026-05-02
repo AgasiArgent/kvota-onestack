@@ -8,6 +8,7 @@ import { ENTITY_TYPE_LABELS } from "./constants";
 import { DocumentUpload } from "./document-upload";
 import { DocumentGroup, type DocumentRow } from "./document-group";
 import { PromoteDocumentDialog } from "./promote-document-dialog";
+import { AppToaster } from "@/shared/ui/app-toaster";
 
 interface DocumentsStepProps {
   quote: QuoteDetailRow;
@@ -168,6 +169,12 @@ export function DocumentsStep({ quote, userId }: DocumentsStepProps) {
           void loadDocuments();
         }}
       />
+
+      {/* Local Toaster — without it, success/error toasts from upload, drag-drop,
+          delete, and download silently render to nowhere. МОЗ Тест fail #70
+          looked like "delete does nothing" because the failure path showed no
+          UI feedback. */}
+      <AppToaster />
     </div>
   );
 }
