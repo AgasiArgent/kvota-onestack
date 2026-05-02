@@ -49,25 +49,45 @@ const ROLE_LABELS: Record<string, string> = {
   top_manager: "Руководитель",
 };
 
+/**
+ * Formats a message timestamp for the chat bubble header.
+ *
+ * Shows an absolute HH:MM time (МОЗ Тест 2026-05-01 fail #37 — time was
+ * missing entirely) plus a relative or date suffix when the message is
+ * older than today. Telegram-style: "13:42", "вчера 13:42", "28 апр 13:42",
+ * "12.04.2025 13:42".
+ */
 function formatRelativeTime(dateStr: string): string {
   const date = new Date(dateStr);
   const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMin = Math.floor(diffMs / 60_000);
-  const diffHours = Math.floor(diffMs / 3_600_000);
-  const diffDays = Math.floor(diffMs / 86_400_000);
-
-  if (diffMin < 1) return "только что";
-  if (diffMin < 60) return `${diffMin} мин назад`;
-  if (diffHours < 24) return `${diffHours} ч назад`;
-  if (diffDays === 1) return "вчера";
-  if (diffDays < 7) return `${diffDays} дн назад`;
-
-  return date.toLocaleDateString("ru-RU", {
-    day: "numeric",
-    month: "short",
+  const time = date.toLocaleTimeString("ru-RU", {
+    hour: "2-digit",
+    minute: "2-digit",
     timeZone: "Europe/Moscow",
-    });
+  });
+
+  const startOfToday = new Date(now);
+  startOfToday.setHours(0, 0, 0, 0);
+  const startOfYesterday = new Date(startOfToday);
+  startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+
+  if (date >= startOfToday) return time;
+  if (date >= startOfYesterday) return `вчера ${time}`;
+
+  if (date.getFullYear() === now.getFullYear()) {
+    return `${date.toLocaleDateString("ru-RU", {
+      day: "numeric",
+      month: "short",
+      timeZone: "Europe/Moscow",
+    })} ${time}`;
+  }
+
+  return `${date.toLocaleDateString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "Europe/Moscow",
+  })} ${time}`;
 }
 
 interface ChatMessageProps {

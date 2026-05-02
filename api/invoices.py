@@ -150,8 +150,21 @@ async def download_invoice_xls(request, id: str) -> Response:
     if err:
         return err
 
-    # Parse language from query param or body
-    language = request.query_params.get("language", "ru").strip().lower()
+    # Parse language from query param or body. Frontend sends it in the JSON
+    # body (`{ language: "en" }`) — see frontend/src/entities/invoice/mutations.ts.
+    # Reading only query_params silently ignored the toggle, producing always-RU
+    # output (МОЗ Тест 2026-05-01 fail #98). Fall back to query, then "ru".
+    language = (request.query_params.get("language") or "").strip().lower()
+    if language not in ("ru", "en"):
+        try:
+            body = await request.json()
+            body_lang = (body or {}).get("language") if isinstance(body, dict) else None
+            if isinstance(body_lang, str):
+                body_lang = body_lang.strip().lower()
+                if body_lang in ("ru", "en"):
+                    language = body_lang
+        except Exception:
+            pass  # Body is optional; fallthrough to default.
     if language not in ("ru", "en"):
         language = "ru"
 

@@ -71,11 +71,23 @@ export function DocumentGroup({
     setDownloadingId(doc.id);
     try {
       const supabase = createClient();
+      // Pass `download: <filename>` so Supabase appends `Content-Disposition:
+      // attachment` to the signed URL — clicking the button now triggers a
+      // browser download instead of opening the file inline (МОЗ Тест fail
+      // #71). Anchor click + revoke avoids opening a blank tab.
       const { data, error } = await supabase.storage
         .from("kvota-documents")
-        .createSignedUrl(doc.storage_path, 3600);
+        .createSignedUrl(doc.storage_path, 3600, {
+          download: doc.original_filename,
+        });
       if (error) throw error;
-      window.open(data.signedUrl, "_blank");
+      const a = document.createElement("a");
+      a.href = data.signedUrl;
+      a.download = doc.original_filename;
+      a.rel = "noopener";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     } catch {
       toast.error("Не удалось получить ссылку для скачивания");
     } finally {
