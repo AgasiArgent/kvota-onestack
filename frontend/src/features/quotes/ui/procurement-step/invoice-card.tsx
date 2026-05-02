@@ -1383,6 +1383,13 @@ export function InvoiceCard({
         </div>
       )}
 
+      {/* Letter composer items are scoped to THIS invoice — not the whole
+          quote — so the «Запрос коммерческого предложения» template lists
+          only what this КП covers. The supplier-side row carries
+          product_name + quantity + brand directly; product_code (Артикул
+          запрошенный) is joined from quote_items via salesByItemId.
+          МОЗ Тест 2026-05-01 fail #104 was that the list rendered the
+          full quote, not the КП subset. */}
       <LetterDraftComposer
         open={composerOpen}
         onClose={() => {
@@ -1392,7 +1399,23 @@ export function InvoiceCard({
         invoiceId={invoice.id}
         supplierName={supplierName}
         supplierEmail={(invoice.supplier as { email?: string } | null)?.email ?? null}
-        items={items}
+        items={invoiceItems.map((ii) => {
+          const sales = salesByItemId[ii.id];
+          return {
+            // The composer reads `product_code`, `product_name`, `quantity`,
+            // `brand`, and optional `name_en` from each row. Other QuoteItemRow
+            // fields are unused by the template; cast keeps the shape happy.
+            id: ii.id,
+            quote_id: invoice.quote_id,
+            product_code: sales?.product_code ?? ii.supplier_sku ?? "",
+            product_name:
+              ii.product_name ||
+              sales?.product_name ||
+              "",
+            quantity: ii.quantity,
+            brand: ii.brand ?? "",
+          } as unknown as QuoteItemRow;
+        })}
         currency={currency}
         incoterms={supplierIncoterms}
         pickupCountry={pickupCountryRu}
