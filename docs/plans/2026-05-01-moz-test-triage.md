@@ -169,6 +169,8 @@
 - **C.47** «Этапы»→«Стадии» aria-label → PR #79
 - **D.71** force download via Content-Disposition → PR #79
 - **H.98** XLS export RU/EN toggle → PR #79
+- **A.39, A.42** chat file appears in bubble after send → PR #80
+- **A.40, A.43** chat file linked to documents (no race) → PR #80
 
 ### 🔴 P5 — Срочное исправление (mission-critical)
 - **A.27, A.28** Чаты — права доступа неверные. Безопасность/доверие к данным.
