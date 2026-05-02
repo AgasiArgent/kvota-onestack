@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Plus, RotateCcw, X } from "lucide-react";
+import { Loader2, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -74,16 +74,20 @@ export function InvoiceCreateModal({
   >([{ weight_kg: "", length_mm: "", width_mm: "", height_mm: "" }]);
   const [vatRate, setVatRate] = useState("");
   const [vatReason, setVatReason] = useState<VatResolverReason | null>(null);
-  const [vatManuallyOverridden, setVatManuallyOverridden] = useState(false);
+  // Strategy B (МОЗ Тест 2026-05-01 fail #82): every country/buyer change
+  // re-fetches and OVERWRITES the rate, even when the user previously typed
+  // a value. Country defines VAT — manual edits between country picks are
+  // treated as transient. The ``vatManuallyEdited`` flag is now used only
+  // to render an inline "вручную" badge until the next auto-fill arrives.
+  const [vatManuallyEdited, setVatManuallyEdited] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Auto-fill VAT rate + reason when both supplier country AND buyer company
-  // are selected. Reason is surfaced as an inline badge next to the rate.
-  // Manual override suppresses the auto-fill (but we still keep the user's
-  // value — no mutation of vatRate here).
+  // are selected. Re-fires on every country / buyer change and overwrites
+  // the field — see strategy B comment above.
   useEffect(() => {
-    if (!countryCode || !buyerCompanyId || vatManuallyOverridden) return;
+    if (!countryCode || !buyerCompanyId) return;
 
     let cancelled = false;
 
@@ -95,6 +99,7 @@ export function InvoiceCreateModal({
       if (result) {
         setVatRate(result.rate.toString());
         setVatReason(result.reason);
+        setVatManuallyEdited(false);
       } else {
         // Network / backend failure — keep user's current vatRate, hide badge.
         // Fail silently per Requirement 3.8.
@@ -105,7 +110,7 @@ export function InvoiceCreateModal({
     return () => {
       cancelled = true;
     };
-  }, [countryCode, buyerCompanyId, vatManuallyOverridden]);
+  }, [countryCode, buyerCompanyId]);
 
   function handleClose() {
     resetForm();
@@ -121,7 +126,7 @@ export function InvoiceCreateModal({
     setCurrency("USD");
     setVatRate("");
     setVatReason(null);
-    setVatManuallyOverridden(false);
+    setVatManuallyEdited(false);
     setBoxes([{ weight_kg: "", length_mm: "", width_mm: "", height_mm: "" }]);
     setErrors({});
   }
@@ -259,11 +264,11 @@ export function InvoiceCreateModal({
                 const newSupplierId = e.target.value;
                 setSupplierId(newSupplierId);
                 setErrors((prev) => { const { supplier, ...rest } = prev; return rest; });
-                // Auto-fill country from supplier when user hasn't manually picked one.
-                // Try RU locale first, fall back to EN so suppliers stored with
+                // Auto-fill country from supplier; useEffect on countryCode
+                // then re-resolves VAT (strategy B always overwrites). Try RU
+                // locale first, fall back to EN so suppliers stored with
                 // English country names ("Germany", "Turkey") also resolve.
-                // useEffect on countryCode then triggers VAT autofill.
-                if (!vatManuallyOverridden && newSupplierId) {
+                if (newSupplierId) {
                   const supplier = suppliers.find((s) => s.id === newSupplierId);
                   if (supplier?.country) {
                     const match =
@@ -367,50 +372,30 @@ export function InvoiceCreateModal({
                 value={vatRate}
                 onChange={(e) => {
                   setVatRate(e.target.value);
-                  if (!vatManuallyOverridden) {
-                    setVatManuallyOverridden(true);
-                  }
+                  setVatManuallyEdited(true);
                 }}
                 placeholder="Ставка НДС"
                 className="h-8 w-28 text-sm tabular-nums"
               />
-              {!vatManuallyOverridden && vatReason === "domestic" && (
+              {!vatManuallyEdited && vatReason === "domestic" && (
                 <Badge variant="secondary" className="text-xs">
                   Внутренний НДС
                 </Badge>
               )}
-              {!vatManuallyOverridden && vatReason === "export_zero_rated" && (
+              {!vatManuallyEdited && vatReason === "export_zero_rated" && (
                 <Badge variant="outline" className="text-xs">
                   Экспорт, 0%
                 </Badge>
               )}
-              {!vatManuallyOverridden && vatReason === "unknown" && (
+              {!vatManuallyEdited && vatReason === "unknown" && (
                 <Badge variant="outline" className="text-xs text-muted-foreground">
                   Неизвестно
                 </Badge>
               )}
-              {vatManuallyOverridden && (
-                <>
-                  <Badge variant="outline" className="text-xs">
-                    вручную
-                  </Badge>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 px-2 text-xs text-muted-foreground"
-                    onClick={() => {
-                      setVatManuallyOverridden(false);
-                      // Trigger re-fetch by clearing override — useEffect will pick up countryCode
-                      if (countryCode) {
-                        setVatRate("");
-                      }
-                    }}
-                  >
-                    <RotateCcw size={12} className="mr-1" />
-                    Сбросить
-                  </Button>
-                </>
+              {vatManuallyEdited && (
+                <Badge variant="outline" className="text-xs">
+                  вручную
+                </Badge>
               )}
             </div>
           </div>
