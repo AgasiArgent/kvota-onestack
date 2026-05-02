@@ -51,6 +51,24 @@ export type Database = {
         }
         Relationships: []
       }
+      areals: {
+        Row: {
+          code: string
+          name_ru: string
+          description: string | null
+        }
+        Insert: {
+          code: string
+          name_ru: string
+          description?: string | null
+        }
+        Update: {
+          code?: string
+          name_ru?: string
+          description?: string | null
+        }
+        Relationships: []
+      }
       bank_accounts: {
         Row: {
           id: string
@@ -189,6 +207,7 @@ export type Database = {
           legal_name: string | null
           tax_id: string | null
           address: string | null
+          country_code: string | null
         }
         Insert: {
           id?: string
@@ -210,6 +229,7 @@ export type Database = {
           legal_name?: string | null
           tax_id?: string | null
           address?: string | null
+          country_code?: string | null
         }
         Update: {
           id?: string
@@ -231,6 +251,7 @@ export type Database = {
           legal_name?: string | null
           tax_id?: string | null
           address?: string | null
+          country_code?: string | null
         }
         Relationships: []
       }
@@ -351,6 +372,54 @@ export type Database = {
           user_id?: string
           last_read_date?: string
           last_read_at?: string
+        }
+        Relationships: []
+      }
+      countries: {
+        Row: {
+          oksm_digital: number
+          iso_alpha2: string
+          iso_alpha3: string
+          name_ru: string
+          name_en: string
+          is_unfriendly: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          oksm_digital: number
+          iso_alpha2: string
+          iso_alpha3: string
+          name_ru: string
+          name_en: string
+          is_unfriendly?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          oksm_digital?: number
+          iso_alpha2?: string
+          iso_alpha3?: string
+          name_ru?: string
+          name_en?: string
+          is_unfriendly?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      country_areals: {
+        Row: {
+          country_oksm: number
+          areal_code: string
+        }
+        Insert: {
+          country_oksm: number
+          areal_code: string
+        }
+        Update: {
+          country_oksm?: number
+          areal_code?: string
         }
         Relationships: []
       }
@@ -1259,30 +1328,30 @@ export type Database = {
           id: string
           invoice_id: string
           position: number
-          weight_kg: number
-          length_mm: number
-          width_mm: number
-          height_mm: number
+          weight_kg: number | null
+          length_mm: number | null
+          width_mm: number | null
+          height_mm: number | null
           created_at: string
         }
         Insert: {
           id?: string
           invoice_id: string
           position?: number
-          weight_kg: number
-          length_mm: number
-          width_mm: number
-          height_mm: number
+          weight_kg?: number | null
+          length_mm?: number | null
+          width_mm?: number | null
+          height_mm?: number | null
           created_at?: string
         }
         Update: {
           id?: string
           invoice_id?: string
           position?: number
-          weight_kg?: number
-          length_mm?: number
-          width_mm?: number
-          height_mm?: number
+          weight_kg?: number | null
+          length_mm?: number | null
+          width_mm?: number | null
+          height_mm?: number | null
           created_at?: string
         }
         Relationships: []
@@ -1446,6 +1515,27 @@ export type Database = {
           created_at?: string
           updated_at?: string
           sent_at?: string | null
+        }
+        Relationships: []
+      }
+      invoice_sla_notifications_sent: {
+        Row: {
+          id: string
+          invoice_id: string
+          kind: string
+          sent_at: string
+        }
+        Insert: {
+          id?: string
+          invoice_id: string
+          kind: string
+          sent_at?: string
+        }
+        Update: {
+          id?: string
+          invoice_id?: string
+          kind?: string
+          sent_at?: string
         }
         Relationships: []
       }
@@ -1647,6 +1737,249 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      journey_flows: {
+        Row: {
+          id: string
+          slug: string
+          title: string
+          role: string
+          persona: string
+          description: string | null
+          est_minutes: number | null
+          steps: Json
+          is_archived: boolean
+          display_order: number
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          slug: string
+          title: string
+          role: string
+          persona: string
+          description?: string | null
+          est_minutes?: number | null
+          steps?: Json
+          is_archived?: boolean
+          display_order?: number
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          slug?: string
+          title?: string
+          role?: string
+          persona?: string
+          description?: string | null
+          est_minutes?: number | null
+          steps?: Json
+          is_archived?: boolean
+          display_order?: number
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      journey_ghost_nodes: {
+        Row: {
+          id: string
+          node_id: string
+          proposed_route: string | null
+          title: string
+          planned_in: string | null
+          assignee: string | null
+          parent_node_id: string | null
+          cluster: string | null
+          status: string
+          created_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          node_id: string
+          proposed_route?: string | null
+          title: string
+          planned_in?: string | null
+          assignee?: string | null
+          parent_node_id?: string | null
+          cluster?: string | null
+          status?: string
+          created_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          node_id?: string
+          proposed_route?: string | null
+          title?: string
+          planned_in?: string | null
+          assignee?: string | null
+          parent_node_id?: string | null
+          cluster?: string | null
+          status?: string
+          created_by?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      journey_node_state: {
+        Row: {
+          node_id: string
+          impl_status: string | null
+          qa_status: string | null
+          notes: string | null
+          version: number
+          last_tested_at: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          node_id: string
+          impl_status?: string | null
+          qa_status?: string | null
+          notes?: string | null
+          version?: number
+          last_tested_at?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          node_id?: string
+          impl_status?: string | null
+          qa_status?: string | null
+          notes?: string | null
+          version?: number
+          last_tested_at?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      journey_node_state_history: {
+        Row: {
+          id: string
+          node_id: string
+          impl_status: string | null
+          qa_status: string | null
+          notes: string | null
+          version: number
+          changed_by: string | null
+          changed_at: string
+        }
+        Insert: {
+          id?: string
+          node_id: string
+          impl_status?: string | null
+          qa_status?: string | null
+          notes?: string | null
+          version: number
+          changed_by?: string | null
+          changed_at?: string
+        }
+        Update: {
+          id?: string
+          node_id?: string
+          impl_status?: string | null
+          qa_status?: string | null
+          notes?: string | null
+          version?: number
+          changed_by?: string | null
+          changed_at?: string
+        }
+        Relationships: []
+      }
+      journey_pins: {
+        Row: {
+          id: string
+          node_id: string
+          selector: string
+          expected_behavior: string
+          mode: string
+          training_step_order: number | null
+          linked_story_ref: string | null
+          last_rel_x: number | null
+          last_rel_y: number | null
+          last_rel_width: number | null
+          last_rel_height: number | null
+          last_position_update: string | null
+          selector_broken: boolean
+          created_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          node_id: string
+          selector: string
+          expected_behavior: string
+          mode: string
+          training_step_order?: number | null
+          linked_story_ref?: string | null
+          last_rel_x?: number | null
+          last_rel_y?: number | null
+          last_rel_width?: number | null
+          last_rel_height?: number | null
+          last_position_update?: string | null
+          selector_broken?: boolean
+          created_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          node_id?: string
+          selector?: string
+          expected_behavior?: string
+          mode?: string
+          training_step_order?: number | null
+          linked_story_ref?: string | null
+          last_rel_x?: number | null
+          last_rel_y?: number | null
+          last_rel_width?: number | null
+          last_rel_height?: number | null
+          last_position_update?: string | null
+          selector_broken?: boolean
+          created_by?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      journey_verifications: {
+        Row: {
+          id: string
+          pin_id: string
+          node_id: string
+          result: string
+          note: string | null
+          attachment_urls: Json | null
+          tested_by: string | null
+          tested_at: string
+        }
+        Insert: {
+          id?: string
+          pin_id: string
+          node_id: string
+          result: string
+          note?: string | null
+          attachment_urls?: Json | null
+          tested_by?: string | null
+          tested_at?: string
+        }
+        Update: {
+          id?: string
+          pin_id?: string
+          node_id?: string
+          result?: string
+          note?: string | null
+          attachment_urls?: Json | null
+          tested_by?: string | null
+          tested_at?: string
         }
         Relationships: []
       }
@@ -2367,6 +2700,27 @@ export type Database = {
           created_by?: string | null
           created_at?: string | null
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      payment_types: {
+        Row: {
+          code: string
+          name_ru: string
+          depends_on_country: boolean
+          depends_on_certificate: boolean
+        }
+        Insert: {
+          code: string
+          name_ru: string
+          depends_on_country?: boolean
+          depends_on_certificate?: boolean
+        }
+        Update: {
+          code?: string
+          name_ru?: string
+          depends_on_country?: boolean
+          depends_on_certificate?: boolean
         }
         Relationships: []
       }
@@ -3693,6 +4047,9 @@ export type Database = {
           import_ban_reason: string | null
           composition_selected_invoice_id: string | null
           name_en: string | null
+          country_of_origin_oksm: number | null
+          has_origin_certificate: boolean
+          has_fta_certificate: boolean
         }
         Insert: {
           id?: string
@@ -3765,6 +4122,9 @@ export type Database = {
           import_ban_reason?: string | null
           composition_selected_invoice_id?: string | null
           name_en?: string | null
+          country_of_origin_oksm?: number | null
+          has_origin_certificate?: boolean
+          has_fta_certificate?: boolean
         }
         Update: {
           id?: string
@@ -3837,6 +4197,9 @@ export type Database = {
           import_ban_reason?: string | null
           composition_selected_invoice_id?: string | null
           name_en?: string | null
+          country_of_origin_oksm?: number | null
+          has_origin_certificate?: boolean
+          has_fta_certificate?: boolean
         }
         Relationships: []
       }
@@ -5162,6 +5525,7 @@ export type Database = {
           created_by: string | null
           registration_number: string | null
           notes: string | null
+          country_code: string | null
         }
         Insert: {
           id?: string
@@ -5182,6 +5546,7 @@ export type Database = {
           created_by?: string | null
           registration_number?: string | null
           notes?: string | null
+          country_code?: string | null
         }
         Update: {
           id?: string
@@ -5202,6 +5567,7 @@ export type Database = {
           created_by?: string | null
           registration_number?: string | null
           notes?: string | null
+          country_code?: string | null
         }
         Relationships: []
       }
@@ -5313,6 +5679,222 @@ export type Database = {
         }
         Relationships: []
       }
+      tnved_apu_cache: {
+        Row: {
+          id: string
+          query_text: string
+          payload_id: string | null
+          response_json: Json
+          last_used_at: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          query_text: string
+          payload_id?: string | null
+          response_json: Json
+          last_used_at?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          query_text?: string
+          payload_id?: string | null
+          response_json?: Json
+          last_used_at?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      tnved_classification_log: {
+        Row: {
+          id: string
+          quote_item_id: string | null
+          method: string
+          input_text: string
+          suggested_codes: Json
+          chosen_code: string | null
+          user_id: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          quote_item_id?: string | null
+          method: string
+          input_text: string
+          suggested_codes: Json
+          chosen_code?: string | null
+          user_id?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          quote_item_id?: string | null
+          method?: string
+          input_text?: string
+          suggested_codes?: Json
+          chosen_code?: string | null
+          user_id?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      tnved_codes: {
+        Row: {
+          code: string
+          parent_code: string | null
+          description: string
+          prim: string | null
+          fetched_from: string
+          fetched_at: string
+        }
+        Insert: {
+          code: string
+          parent_code?: string | null
+          description: string
+          prim?: string | null
+          fetched_from?: string
+          fetched_at?: string
+        }
+        Update: {
+          code?: string
+          parent_code?: string | null
+          description?: string
+          prim?: string | null
+          fetched_from?: string
+          fetched_at?: string
+        }
+        Relationships: []
+      }
+      tnved_non_tariff_measures: {
+        Row: {
+          id: string
+          tnved_code: string
+          country_or_areal: string | null
+          measure_type: string
+          name: string
+          description: string | null
+          document_basis: string | null
+          document_link: string | null
+          valid_from: string | null
+          valid_to: string | null
+          source: string
+          source_fetched_at: string
+        }
+        Insert: {
+          id?: string
+          tnved_code: string
+          country_or_areal?: string | null
+          measure_type: string
+          name: string
+          description?: string | null
+          document_basis?: string | null
+          document_link?: string | null
+          valid_from?: string | null
+          valid_to?: string | null
+          source: string
+          source_fetched_at?: string
+        }
+        Update: {
+          id?: string
+          tnved_code?: string
+          country_or_areal?: string | null
+          measure_type?: string
+          name?: string
+          description?: string | null
+          document_basis?: string | null
+          document_link?: string | null
+          valid_from?: string | null
+          valid_to?: string | null
+          source?: string
+          source_fetched_at?: string
+        }
+        Relationships: []
+      }
+      tnved_rates: {
+        Row: {
+          id: string
+          tnved_code: string
+          payment_type: string
+          country_or_areal: string | null
+          valid_from: string
+          valid_to: string | null
+          value_1_number: number | null
+          value_1_unit: string | null
+          value_1_currency: string | null
+          value_2_number: number | null
+          value_2_unit: string | null
+          value_2_currency: string | null
+          sign_1: string | null
+          value_3_number: number | null
+          value_3_unit: string | null
+          value_3_currency: string | null
+          sign_2: string | null
+          raw_value_string: string | null
+          certificate_required: boolean
+          sp_certificate_required: boolean
+          source: string
+          source_fetched_at: string
+          last_used_at: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          tnved_code: string
+          payment_type: string
+          country_or_areal?: string | null
+          valid_from: string
+          valid_to?: string | null
+          value_1_number?: number | null
+          value_1_unit?: string | null
+          value_1_currency?: string | null
+          value_2_number?: number | null
+          value_2_unit?: string | null
+          value_2_currency?: string | null
+          sign_1?: string | null
+          value_3_number?: number | null
+          value_3_unit?: string | null
+          value_3_currency?: string | null
+          sign_2?: string | null
+          raw_value_string?: string | null
+          certificate_required?: boolean
+          sp_certificate_required?: boolean
+          source: string
+          source_fetched_at?: string
+          last_used_at?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          tnved_code?: string
+          payment_type?: string
+          country_or_areal?: string | null
+          valid_from?: string
+          valid_to?: string | null
+          value_1_number?: number | null
+          value_1_unit?: string | null
+          value_1_currency?: string | null
+          value_2_number?: number | null
+          value_2_unit?: string | null
+          value_2_currency?: string | null
+          sign_1?: string | null
+          value_3_number?: number | null
+          value_3_unit?: string | null
+          value_3_currency?: string | null
+          sign_2?: string | null
+          raw_value_string?: string | null
+          certificate_required?: boolean
+          sp_certificate_required?: boolean
+          source?: string
+          source_fetched_at?: string
+          last_used_at?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       training_videos: {
         Row: {
           id: string
@@ -5382,6 +5964,7 @@ export type Database = {
           clickup_task_id: string | null
           updated_at: string | null
           screenshot_url: string | null
+          node_id: string | null
         }
         Insert: {
           id?: string
@@ -5403,6 +5986,7 @@ export type Database = {
           clickup_task_id?: string | null
           updated_at?: string | null
           screenshot_url?: string | null
+          node_id?: string | null
         }
         Update: {
           id?: string
@@ -5424,6 +6008,7 @@ export type Database = {
           clickup_task_id?: string | null
           updated_at?: string | null
           screenshot_url?: string | null
+          node_id?: string | null
         }
         Relationships: []
       }
