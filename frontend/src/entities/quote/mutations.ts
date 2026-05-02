@@ -210,9 +210,55 @@ export async function sendQuoteComment(
 ) {
   const supabase = createClient();
 
+  // Pre-allocate the comment UUID. This lets us link documents BEFORE the
+  // comment INSERT — eliminating a Realtime race where receivers were told
+  // about a new comment whose ``documents.comment_id`` was still NULL,
+  // which made attachments invisible on their side until a manual reload
+  // (МОЗ Тест 2026-05-01 fail #39, #42, #43). For senders, the result
+  // also includes resolved attachment metadata so the optimistic-reconcile
+  // path can render the bubble with its files immediately.
+  const commentId = crypto.randomUUID();
+
+  let attachments: Array<{
+    id: string;
+    original_filename: string;
+    storage_path: string;
+    mime_type: string | null;
+    file_size_bytes: number | null;
+  }> = [];
+
+  // Step 1 (BEFORE insert): link documents to the not-yet-existing comment id.
+  // Documents already carry parent_quote_id from useChatAttachments — this
+  // step only flips comment_id from NULL → commentId. By the time the
+  // ``quote_comments`` INSERT broadcast reaches other users, the link is
+  // already in place, so ``resolveAttachments`` on their side returns rows.
+  if (attachmentDocumentIds && attachmentDocumentIds.length > 0) {
+    const { error: linkError } = await supabase
+      .from("documents")
+      .update({ comment_id: commentId })
+      .in("id", attachmentDocumentIds);
+    if (linkError) throw linkError;
+
+    const { data: docs } = await supabase
+      .from("documents")
+      .select(
+        "id, original_filename, storage_path, mime_type, file_size_bytes"
+      )
+      .in("id", attachmentDocumentIds);
+    attachments = (docs ?? []).map((d) => ({
+      id: d.id,
+      original_filename: d.original_filename,
+      storage_path: d.storage_path,
+      mime_type: d.mime_type,
+      file_size_bytes: d.file_size_bytes,
+    }));
+  }
+
+  // Step 2: insert the comment with the pre-allocated id.
   const { data, error } = await supabase
     .from("quote_comments")
     .insert({
+      id: commentId,
       quote_id: quoteId,
       user_id: userId,
       body,
@@ -221,20 +267,20 @@ export async function sendQuoteComment(
     .select()
     .single();
 
-  if (error) throw error;
-
-  // Link uploaded attachments to this comment. Documents were inserted
-  // earlier by useChatAttachments with comment_id=null; we set it here so
-  // they can be queried as chat media on the documents tab.
-  if (attachmentDocumentIds && attachmentDocumentIds.length > 0) {
-    const { error: linkError } = await supabase
-      .from("documents")
-      .update({ comment_id: data.id })
-      .in("id", attachmentDocumentIds);
-    if (linkError) throw linkError;
+  if (error) {
+    // Roll back the document link so orphan rows don't pile up if the
+    // comment INSERT failed (e.g., RLS reject, constraint violation).
+    if (attachmentDocumentIds && attachmentDocumentIds.length > 0) {
+      await supabase
+        .from("documents")
+        .update({ comment_id: null })
+        .in("id", attachmentDocumentIds)
+        .then(undefined, () => {}); // best-effort
+    }
+    throw error;
   }
 
-  return data;
+  return { ...data, attachments };
 }
 
 export async function updateQuoteItem(
