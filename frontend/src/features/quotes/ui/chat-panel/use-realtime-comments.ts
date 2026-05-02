@@ -150,6 +150,7 @@ export function useRealtimeComments(
         mentions: mentionIds ?? null,
         created_at: new Date().toISOString(),
         user_profile: null, // Will be resolved when realtime event arrives
+        attachments: [],
       };
 
       setMessages((prev) => [...prev, optimisticMessage]);
@@ -169,7 +170,9 @@ export function useRealtimeComments(
         // by the attachment-link step), a message with result.id is already
         // in state — in that case we just drop the optimistic entry to
         // avoid a duplicate-key warning. Otherwise, replace the optimistic
-        // message in place.
+        // message in place. ``result.attachments`` carries the linked
+        // document metadata so the bubble renders files immediately
+        // without waiting for a follow-up fetch (МОЗ Тест fail #39, #42).
         setMessages((prev) => {
           const alreadyHasServerMsg = prev.some(
             (m) => m.id === result.id && m.id !== optimisticId
@@ -183,6 +186,7 @@ export function useRealtimeComments(
                   ...result,
                   mentions: (result.mentions ?? null) as string[] | null,
                   user_profile: m.user_profile,
+                  attachments: result.attachments ?? [],
                 }
               : m
           );
