@@ -29,7 +29,10 @@ interface ProcurementItemsEditorProps {
    * joined via invoice_item_coverage. Read-only in the handsontable.
    * Optional — empty map disables the columns gracefully.
    */
-  salesByItemId?: Record<string, { product_code: string; product_name: string }>;
+  salesByItemId?: Record<
+    string,
+    { product_code: string; product_name: string; unit: string }
+  >;
   /**
    * Per-row eligibility for the inline split action. Map key is the
    * invoice_item.id; value carries the source quote_item info needed to
@@ -79,6 +82,9 @@ interface ProcurementItemsEditorProps {
   onMergeRow?: (invoiceItemId: string) => void;
   /** Fired when the user clicks the row's undo-merge icon. */
   onUndoMergeRow?: (invoiceItemId: string) => void;
+  /** Fired after a successful mutation so the parent can bump its
+   * client-side refresh key. See ``ProcurementHandsontable.onMutated``. */
+  onMutated?: () => void;
 }
 
 export function ProcurementItemsEditor({
@@ -94,6 +100,7 @@ export function ProcurementItemsEditor({
   onUndoSplitRow,
   onMergeRow,
   onUndoMergeRow,
+  onMutated,
 }: ProcurementItemsEditorProps) {
   return (
     <ProcurementHandsontable
@@ -109,6 +116,7 @@ export function ProcurementItemsEditor({
       onUndoSplitRow={onUndoSplitRow}
       onMergeRow={onMergeRow}
       onUndoMergeRow={onUndoMergeRow}
+      onMutated={onMutated}
     />
   );
 }

@@ -75,6 +75,8 @@ interface RowData {
   // alongside their own supplier-side fields.
   sales_product_code: string;
   sales_product_name: string;
+  /** Unit of measure (Ед. Изм) joined from quote_items.unit. Read-only. */
+  sales_unit: string;
   supplier_sku: string;
   product_name: string;
   quantity: number | null;
@@ -125,7 +127,9 @@ function parseDimensions(
  */
 function itemToRow(
   item: ProcurementEditorItem,
-  sales: { product_code: string; product_name: string } | undefined
+  sales:
+    | { product_code: string; product_name: string; unit: string }
+    | undefined
 ): RowData {
   // Manufacturer-substitution semantics: "Артикул производителя" /
   // "Наименование производителя" are filled by procurement ONLY when the
@@ -155,6 +159,7 @@ function itemToRow(
     brand: item.brand ?? "",
     sales_product_code: sales?.product_code ?? "",
     sales_product_name: sales?.product_name ?? "",
+    sales_unit: sales?.unit ?? "",
     supplier_sku: supplierSku,
     product_name: supplierProductName,
     quantity: item.quantity,
@@ -175,7 +180,10 @@ interface ProcurementHandsontableProps {
   items: ProcurementEditorItem[];
   invoiceId: string;
   procurementCompleted: boolean;
-  salesByItemId?: Record<string, { product_code: string; product_name: string }>;
+  salesByItemId?: Record<
+    string,
+    { product_code: string; product_name: string; unit: string }
+  >;
   /**
    * Per-row eligibility for the inline split action. Indexed by
    * invoice_item.id. Rows present in this map render a "↧" split icon next
@@ -225,6 +233,15 @@ interface ProcurementHandsontableProps {
   onMergeRow?: (invoiceItemId: string) => void;
   /** Fired when the user clicks the row's undo-merge icon. */
   onUndoMergeRow?: (invoiceItemId: string) => void;
+  /**
+   * Fired after a successful inline edit / unassign. The parent invoice-card
+   * uses this to bump its local refreshKey so the supabase-backed
+   * ``invoice_items`` useEffect re-fires — ``router.refresh()`` alone
+   * does not retrigger client-side effects keyed on stable
+   * ``invoice.id``. См. МОЗ Тест 2026-05-01 fail #91 + Notes 92, 128,
+   * 140-142 (one cluster of "изменения только после reload" symptoms).
+   */
+  onMutated?: () => void;
 }
 
 export function ProcurementHandsontable({
@@ -239,6 +256,7 @@ export function ProcurementHandsontable({
   onUndoSplitRow,
   onMergeRow,
   onUndoMergeRow,
+  onMutated,
 }: ProcurementHandsontableProps) {
   const router = useRouter();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -272,6 +290,8 @@ export function ProcurementHandsontable({
   onUndoSplitRowRef.current = onUndoSplitRow;
   onMergeRowRef.current = onMergeRow;
   onUndoMergeRowRef.current = onUndoMergeRow;
+  const onMutatedRef = useRef(onMutated);
+  onMutatedRef.current = onMutated;
 
   // Refs are read imperatively at cell-render time, but Handsontable doesn't
   // re-render cells just because the React parent re-rendered. Tell it to
@@ -448,6 +468,7 @@ export function ProcurementHandsontable({
             .then(() => {
               toast.success("Позиция убрана из КП");
               router.refresh();
+              onMutatedRef.current?.();
             })
             .catch((err) => {
               console.error(
@@ -537,7 +558,11 @@ export function ProcurementHandsontable({
         // Sales-side display columns are read-only; never persisted to
         // invoice_items. Defensive skip in case handsontable surfaces a
         // synthetic change (e.g., bulk paste over read-only cells).
-        if (field === "sales_product_code" || field === "sales_product_name") {
+        if (
+          field === "sales_product_code" ||
+          field === "sales_product_name" ||
+          field === "sales_unit"
+        ) {
           continue;
         }
 
@@ -583,7 +608,10 @@ export function ProcurementHandsontable({
         pendingOps.current.add(lockKey);
 
         updateInvoiceItem(rowId, updates)
-          .then(() => router.refresh())
+          .then(() => {
+            router.refresh();
+            onMutatedRef.current?.();
+          })
           .catch((err) => {
             console.error("[procurement-handsontable] update failed:", err);
             toast.error(extractErrorMessage(err) ?? "Не удалось сохранить");
@@ -605,6 +633,7 @@ export function ProcurementHandsontable({
     "supplier_sku",
     "product_name",
     "quantity",
+    "sales_unit",
     "minimum_order_quantity",
     "purchase_price_original",
     "production_time_days",
@@ -669,6 +698,7 @@ export function ProcurementHandsontable({
           "Артикул производителя",
           "Наименование производителя",
           "Кол",
+          "Ед. Изм",
           "Мин. заказ",
           "Цена",
           "Срок, к.дн",
@@ -690,6 +720,10 @@ export function ProcurementHandsontable({
           },
           { data: "product_name", type: "text", width: 140, readOnly: procurementCompleted },
           { data: "quantity", type: "numeric", width: 35, readOnly: true },
+          // Ед. Изм — joined from quote_items.unit; read-only because the
+          // unit is set on the customer side and shouldn't be edited from the
+          // supplier КП. Test-fail H.107.
+          { data: "sales_unit", type: "text", width: 50, readOnly: true },
           {
             data: "minimum_order_quantity",
             type: "numeric",

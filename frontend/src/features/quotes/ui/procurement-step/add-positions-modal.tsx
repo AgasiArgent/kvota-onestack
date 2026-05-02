@@ -48,6 +48,15 @@ interface AddPositionsModalProps {
   onClose: () => void;
   invoiceId: string;
   quoteId: string;
+  /**
+   * Optional client-side refresh trigger. ``router.refresh()`` re-runs the
+   * server component but does not re-fire the parent invoice-card's
+   * client-side ``useEffect`` that loads ``invoice_items`` (its dep array
+   * keys on ``invoice.id`` which stays stable). Without bumping this key,
+   * the user sees no new rows until they manually reload — МОЗ Тест
+   * 2026-05-01 fail #91 ("изменения только после reload").
+   */
+  onAdded?: () => void;
 }
 
 const qtyFmt = new Intl.NumberFormat("ru-RU", {
@@ -163,6 +172,7 @@ export function AddPositionsModal({
   onClose,
   invoiceId,
   quoteId,
+  onAdded,
 }: AddPositionsModalProps) {
   const router = useRouter();
   const [candidates, setCandidates] = useState<CandidateItem[]>([]);
@@ -276,6 +286,11 @@ export function AddPositionsModal({
       toast.success(`${selectedIds.size} поз. добавлено в КП`);
       onClose();
       router.refresh();
+      // Bump the parent's local refreshKey — invoice-card's invoice_items
+      // useEffect keys on invoice.id (stable) and won't re-fire on
+      // router.refresh alone. See MoZ Тест fail #91 / Notes #92, #128,
+      // #140-142 (same root cause across the procurement step).
+      onAdded?.();
     } catch (err) {
       console.error("[add-positions-modal] assign failed:", err);
       toast.error(
