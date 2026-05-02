@@ -451,7 +451,7 @@ class AltaClient:
                 parsed = self._parse_response(xml_text)
                 self._log_packet_left(parsed.get("packet_left"))
                 return self._extract_rates(
-                    parsed["root"], tncode, country,
+                    parsed["root"], tncode,
                     certificate, sp_certificate,
                 )
 
@@ -485,7 +485,7 @@ class AltaClient:
                 parsed = self._parse_response(xml_text)
                 self._log_packet_left(parsed.get("packet_left"))
                 return self._extract_measures(
-                    parsed["root"], tncode, country,
+                    parsed["root"], tncode,
                 )
 
         return await self._with_retries(_do_call)
@@ -644,11 +644,15 @@ class AltaClient:
         self,
         root: ET.Element,
         tncode: str,
-        country: int,
         certificate: bool,
         sp_certificate: bool,
     ) -> list[Rate]:
-        """Extract Rate dataclasses from a Такса response XML root."""
+        """Extract Rate dataclasses from a Такса response XML root.
+
+        country_or_areal is read from the XML response (Alta echoes
+        which country/areal the rate applies to). Caller's `country`
+        parameter only flows into the request URL — see get_rates().
+        """
         rates: list[Rate] = []
         # Alta Такса response shape: <rates><rate>...</rate>...</rates>
         rates_container = root.find("rates")
@@ -708,7 +712,6 @@ class AltaClient:
         self,
         root: ET.Element,
         tncode: str,
-        country: int,
     ) -> list[Measure]:
         measures: list[Measure] = []
         container = root.find("measures") or root.find("response")
