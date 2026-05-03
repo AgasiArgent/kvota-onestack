@@ -65,9 +65,18 @@ _VALID_SIGN_TOKENS: frozenset[str] = frozenset({"+", ">"})
 
 HTTP_TIMEOUT_SECONDS: float = 30.0
 
-# Polling — Phase 0 calibrated values (1 initial + 5 retries × 2.0s)
+# Polling — Phase 0 calibrated values for Такса/xml_nodes/АПУ (which rarely
+# queue — most respond on the first request).
 POLL_MAX_ATTEMPTS: int = 6
 POLL_DELAY_SECONDS: float = 2.0
+
+# Express needs more headroom: cold ML batches frequently sit in the queue
+# for 20-40 seconds before the classifier returns. 6×2s caps at 12s, which
+# reliably 503'd on cold-cache shaybas in prod (2026-05-03 verification).
+# Repeated polls on the same request_id are FREE (Alta caches by request
+# id for ~24h), so we can spend many attempts without burning packets.
+EXPRESS_POLL_MAX_ATTEMPTS: int = 15
+EXPRESS_POLL_DELAY_SECONDS: float = 3.0
 
 # Network retry policy (REQ-2 AC#12)
 NETWORK_RETRY_MAX_ATTEMPTS: int = 2
@@ -762,7 +771,7 @@ class AltaClient:
             async with httpx.AsyncClient(
                 timeout=self._http_timeout
             ) as client:
-                for attempt in range(POLL_MAX_ATTEMPTS):
+                for attempt in range(EXPRESS_POLL_MAX_ATTEMPTS):
                     resp = await client.post(
                         ALTA_EXPRESS_URL, content=body, headers=headers,
                     )
@@ -780,9 +789,9 @@ class AltaClient:
                             packet_used=parsed.get("packet_used"),
                         )
                     last_message = parsed["message"]
-                    if attempt >= POLL_MAX_ATTEMPTS - 1:
+                    if attempt >= EXPRESS_POLL_MAX_ATTEMPTS - 1:
                         break
-                    await asyncio.sleep(POLL_DELAY_SECONDS)
+                    await asyncio.sleep(EXPRESS_POLL_DELAY_SECONDS)
 
             raise RuntimeError(
                 f"Alta Express polling exhausted for "
