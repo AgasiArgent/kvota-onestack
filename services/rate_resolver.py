@@ -254,7 +254,7 @@ async def resolve_rate(
         fetched = await alta_client.get_rates(
             tncode=tnved_code,
             country=country_oksm,
-            date=target_date,
+            date_=target_date,
             certificate=has_certificate,
             sp_certificate=has_sp_certificate,
         )

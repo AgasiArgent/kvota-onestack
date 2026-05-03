@@ -34,11 +34,18 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-ALTA_BASE_URL = "https://www2.alta.ru"
-ALTA_TAKSA_URL = f"{ALTA_BASE_URL}/tnved/xml/"
-ALTA_NODES_URL = f"{ALTA_BASE_URL}/tnved/xml_nodes/"
-ALTA_APU_URL = f"{ALTA_BASE_URL}/tnved/xml_apu/"
-ALTA_EXPRESS_URL = f"{ALTA_BASE_URL}/tools/autotnved/v2/"
+# Alta exposes two distinct subdomains:
+#   - www.alta.ru  for Такса / xml_nodes / АПУ (verified 2026-05-03 via curl probe — www2 404s on these)
+#   - www2.alta.ru for Express batch classifier
+# Conflating them broke production after the customs Phase 1 deploy:
+# /api/customs/non-tariff-measures returned 404, /api/customs/resolve-rates
+# would have too once the date_ kwarg fix landed.
+ALTA_TAKSA_BASE = "https://www.alta.ru"
+ALTA_EXPRESS_BASE = "https://www2.alta.ru"
+ALTA_TAKSA_URL = f"{ALTA_TAKSA_BASE}/tnved/xml/"
+ALTA_NODES_URL = f"{ALTA_TAKSA_BASE}/tnved/xml_nodes/"
+ALTA_APU_URL = f"{ALTA_TAKSA_BASE}/tnved/xml_apu/"
+ALTA_EXPRESS_URL = f"{ALTA_EXPRESS_BASE}/tools/autotnved/v2/"
 
 # Rate.source provenance (mirrors kvota.tnved_rates.source CHECK constraint).
 RateSource = Literal['alta-live', 'alta-revalidate', 'manual']
