@@ -1340,6 +1340,45 @@ def transition_quote_status(
                 from_status=current_status
             )
 
+    # REQ-8 + Q4: Customs freeze hook — fires BEFORE status update so
+    # a Tier 3 abort can block the transition without leaving the quote
+    # in an inconsistent state. Tier 1/2 results are stashed and
+    # persisted to quote_versions AFTER the status update succeeds.
+    pending_customs_snapshot = None
+    if to_status_enum == WorkflowStatus.APPROVED:
+        try:
+            from services import customs_freeze_service
+            from services.alta_client import get_alta_client
+            import asyncio
+
+            snapshot_result = asyncio.run(
+                customs_freeze_service.build_snapshot(
+                    quote_id, alta_client=get_alta_client()
+                )
+            )
+            if snapshot_result.status == "abort":
+                # Q4 Tier 3 — block transition. Telegram alert was
+                # already emitted inside build_snapshot.
+                return TransitionResult(
+                    success=False,
+                    error_message=snapshot_result.message
+                                   or "Не удалось зафиксировать таможенные ставки",
+                    quote_id=quote_id,
+                    from_status=current_status,
+                )
+            pending_customs_snapshot = snapshot_result
+        except Exception as e:
+            # Defensive: customs_freeze_service is new code. If it
+            # crashes unexpectedly, log but don't block legitimate
+            # APPROVED transitions in production while we observe.
+            # Convert to a soft warning that surfaces via the workflow
+            # transition's audit log later.
+            logger.warning(
+                "Customs freeze hook crashed for quote %s: %s — proceeding without snapshot",
+                quote_id, e,
+            )
+            pending_customs_snapshot = None
+
     # Step 4: Update the quote's workflow_status
     try:
         update_response = supabase.table("quotes") \
@@ -1365,6 +1404,51 @@ def transition_quote_status(
             quote_id=quote_id,
             from_status=current_status
         )
+
+    # REQ-8 + Q7: Persist the customs snapshot we built pre-commit.
+    # We MERGE into the latest existing quote_versions row's
+    # input_variables JSONB rather than creating a new version —
+    # because the version was already created by the most recent
+    # /api/quotes/{id}/calculate, and "freeze" is about preserving
+    # whatever customs rates are current at APPROVED-transition time
+    # (not introducing a new calc cycle).
+    #
+    # Re-freeze (POST /api/quotes/{id}/refresh-customs-snapshot) does
+    # the same merge — a deliberate re-freeze just overwrites the
+    # customs_rates JSONB key. Q5 audit-log is deferred:
+    # services/changelog_service.py turned out to be a markdown reader,
+    # not an event log; a dedicated customs_audit_log table is the
+    # follow-up scope.
+    if pending_customs_snapshot is not None and pending_customs_snapshot.items:
+        try:
+            latest_version_resp = (
+                supabase.table("quote_versions")
+                        .select("id, input_variables")
+                        .eq("quote_id", quote_id)
+                        .order("version", desc=True)
+                        .limit(1)
+                        .execute()
+            )
+            latest = latest_version_resp.data[0] if latest_version_resp.data else None
+            if latest is not None:
+                merged_iv = dict(latest.get("input_variables") or {})
+                merged_iv["customs_rates"] = pending_customs_snapshot.items
+                merged_iv["source_at_freeze"] = pending_customs_snapshot.source_at_freeze
+                supabase.table("quote_versions") \
+                        .update({"input_variables": merged_iv}) \
+                        .eq("id", latest["id"]) \
+                        .execute()
+            else:
+                logger.warning(
+                    "Customs snapshot built for quote %s but no quote_versions row "
+                    "exists to merge into — snapshot discarded",
+                    quote_id,
+                )
+        except Exception as e:
+            logger.warning(
+                "Failed to persist customs snapshot for quote %s: %s",
+                quote_id, e,
+            )
 
     # Step 5: Log the transition in workflow_transitions
     # Determine actor's primary role for this transition

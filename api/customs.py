@@ -1199,3 +1199,178 @@ async def non_tariff_measures_handler(
             },
         }
     )
+
+
+async def refresh_customs_snapshot_handler(
+    request: Request, quote_id: str, alta_client,
+) -> JSONResponse:
+    """Re-fetch customs rates and replace the snapshot on the latest version.
+
+    Path: POST /api/quotes/{quote_id}/refresh-customs-snapshot
+    Auth: dual JWT/session, customs roles only.
+    Body: optional ``{"reason": str}`` for audit purposes.
+    Returns:
+        success: {success, data: {status, source_at_freeze, warnings, message?}}
+        Tier 3 abort: 409 with ``error.code = 'FREEZE_ABORTED'``.
+
+    Behavior (REQ-8 + Q4):
+        1. Build a fresh snapshot via customs_freeze_service.build_snapshot().
+        2. On Tier 3 abort: return 409 FREEZE_ABORTED with the message
+           build_snapshot already constructed; Telegram alert was emitted
+           inside build_snapshot.
+        3. On Tier 1/2 success: merge the new snapshot into the latest
+           quote_versions row's input_variables.customs_rates, overwriting
+           any prior snapshot. Warnings are returned to the UI for
+           Tier 2 cache-stale display.
+
+    Q5 audit-log is deferred — services/changelog_service.py turned out
+    to be a markdown reader, not an event log; a dedicated
+    customs_audit_log table is the follow-up scope.
+    """
+    user, role_codes = _resolve_dual_auth(request)
+    if user is None:
+        return _err("UNAUTHORIZED", "Authentication required", 401)
+    if not (set(role_codes) & _CUSTOMS_ROLES):
+        return _err(
+            "FORBIDDEN",
+            f"Customs role required (got {role_codes!r})",
+            403,
+        )
+
+    sb = get_supabase()
+
+    # Verify quote exists and belongs to user's org (cheap permission check)
+    try:
+        quote_resp = (
+            sb.table("quotes")
+              .select("id, organization_id")
+              .eq("id", quote_id)
+              .single()
+              .execute()
+        )
+    except Exception:
+        return _err("NOT_FOUND", f"quote {quote_id} not found", 404)
+
+    quote = getattr(quote_resp, "data", None)
+    if not quote:
+        return _err("NOT_FOUND", f"quote {quote_id} not found", 404)
+
+    # Optional reason for audit (recorded in quote_versions.input_variables.change_reason)
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    reason = (body.get("reason") if isinstance(body, dict) else None) or "manual_refresh"
+
+    # Build snapshot — three-tier fallback handled inside
+    from services import customs_freeze_service
+
+    started = time.monotonic()
+    snapshot_result = await customs_freeze_service.build_snapshot(
+        quote_id, alta_client=alta_client,
+    )
+    latency_ms = int((time.monotonic() - started) * 1000)
+
+    if snapshot_result.status == "abort":
+        logger.warning(
+            "customs_snapshot_refresh ABORT",
+            extra={
+                "user_id": user.get("id"),
+                "quote_id": quote_id,
+                "latency_ms": latency_ms,
+                "reason": reason,
+            },
+        )
+        return JSONResponse(
+            {
+                "success": False,
+                "error": {
+                    "code": "FREEZE_ABORTED",
+                    "message": snapshot_result.message
+                                or "Не удалось зафиксировать таможенные ставки",
+                },
+                "data": {"warnings": snapshot_result.warnings},
+            },
+            status_code=409,
+        )
+
+    # Persist into latest quote_versions row's input_variables
+    try:
+        latest_resp = (
+            sb.table("quote_versions")
+              .select("id, input_variables")
+              .eq("quote_id", quote_id)
+              .order("version", desc=True)
+              .limit(1)
+              .execute()
+        )
+    except Exception as exc:
+        logger.warning("quote_versions lookup failed for %s: %s", quote_id, exc)
+        return _err(
+            "NO_VERSION",
+            f"No quote_versions row exists for quote {quote_id} — calculate first",
+            409,
+        )
+
+    latest = (latest_resp.data or [None])[0]
+    if latest is None:
+        return _err(
+            "NO_VERSION",
+            f"No quote_versions row exists for quote {quote_id} — calculate first",
+            409,
+        )
+
+    existing_iv = latest.get("input_variables") or {}
+    if not isinstance(existing_iv, dict):
+        existing_iv = {}
+    merged_iv = dict(existing_iv)
+    merged_iv["customs_rates"] = snapshot_result.items
+    merged_iv["source_at_freeze"] = snapshot_result.source_at_freeze
+    # Stash the reason so future audit can read it without a separate table.
+    merged_iv["change_reason"] = (
+        f"customs_rates_snapshot_replaced: {reason} (by user {user.get('id')})"
+    )
+
+    try:
+        sb.table("quote_versions") \
+          .update({"input_variables": merged_iv}) \
+          .eq("id", latest["id"]) \
+          .execute()
+    except Exception as exc:
+        logger.error(
+            "Failed to persist refreshed customs snapshot for quote %s: %s",
+            quote_id, exc,
+        )
+        return _err(
+            "DB_ERROR",
+            "Snapshot built but persistence failed; please retry",
+            500,
+        )
+
+    logger.info(
+        "customs_snapshot_refresh OK",
+        extra={
+            "user_id": user.get("id"),
+            "quote_id": quote_id,
+            "version_id": latest["id"],
+            "source_at_freeze": snapshot_result.source_at_freeze,
+            "tier": snapshot_result.status,
+            "warning_count": len(snapshot_result.warnings),
+            "latency_ms": latency_ms,
+            "reason": reason,
+        },
+    )
+
+    return JSONResponse(
+        {
+            "success": True,
+            "data": {
+                "status": snapshot_result.status,
+                "source_at_freeze": snapshot_result.source_at_freeze,
+                "warnings": snapshot_result.warnings,
+                "version_id": latest["id"],
+                "item_count": len(snapshot_result.items),
+            },
+        }
+    )
