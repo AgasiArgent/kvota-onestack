@@ -188,8 +188,9 @@ export function MessagesInbox({
         return;
       }
 
-      // Batch-resolve user profiles
+      // Batch-resolve user profiles + roles + attachments in parallel.
       const userIds = [...new Set(data.map((c) => c.user_id))];
+      const commentIds = data.map((c) => c.id);
 
       // Role lookup goes through ``user_roles`` (the actual mapping table)
       // rather than ``organization_members.roles!inner(slug)`` — the
@@ -197,7 +198,13 @@ export function MessagesInbox({
       // migration 255, so the embedded join silently returned an empty
       // map, which the chat then rendered as "unknown" for every sender.
       // МОЗ Тест 2026-05-01 fail #35.
-      const [profilesRes, rolesRes] = await Promise.all([
+      //
+      // Attachments live in ``kvota.documents`` linked via ``comment_id``.
+      // Without this query the chat list (/messages page) renders bubbles
+      // with empty ``attachments`` arrays even when the DB rows are present —
+      // the file appeared transiently from the optimistic-send path but
+      // vanished on reload (МОП Тест 2026-05-03 follow-up to M9–M13).
+      const [profilesRes, rolesRes, attachmentsRes] = await Promise.all([
         supabase
           .from("user_profiles")
           .select("user_id, full_name")
@@ -206,6 +213,12 @@ export function MessagesInbox({
           .from("user_roles")
           .select("user_id, roles!inner(slug)")
           .in("user_id", userIds),
+        supabase
+          .from("documents")
+          .select(
+            "id, comment_id, original_filename, storage_path, mime_type, file_size_bytes"
+          )
+          .in("comment_id", commentIds),
       ]);
 
       if (cancelled) return;
@@ -225,6 +238,24 @@ export function MessagesInbox({
         }
       }
 
+      // Group attachments by comment_id so each comment gets its files.
+      const attachmentsByComment = new Map<
+        string,
+        NonNullable<QuoteComment["attachments"]>
+      >();
+      for (const doc of attachmentsRes.data ?? []) {
+        if (!doc.comment_id) continue;
+        const list = attachmentsByComment.get(doc.comment_id) ?? [];
+        list.push({
+          id: doc.id,
+          original_filename: doc.original_filename,
+          storage_path: doc.storage_path,
+          mime_type: doc.mime_type,
+          file_size_bytes: doc.file_size_bytes,
+        });
+        attachmentsByComment.set(doc.comment_id, list);
+      }
+
       const resolved: QuoteComment[] = data.map((c) => {
         const profile = profileMap.get(c.user_id);
         return {
@@ -237,6 +268,7 @@ export function MessagesInbox({
                 role_slug: roleMap.get(c.user_id) ?? "unknown",
               }
             : null,
+          attachments: attachmentsByComment.get(c.id) ?? [],
         };
       });
 
