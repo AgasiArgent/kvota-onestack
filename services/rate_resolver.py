@@ -497,10 +497,9 @@ def _lookup_db(
               .lte("valid_from", target_date.isoformat())
               .gte("source_fetched_at", cutoff)
         )
-        if country_or_areal is None:
-            q = q.is_("country_or_areal", "null")
-        else:
-            q = q.eq("country_or_areal", country_or_areal)
+        # Migration 302: NULL replaced by '__base__' sentinel so uq_tnved_rates_v2
+        # actually enforces uniqueness for all-country rates.
+        q = q.eq("country_or_areal", country_or_areal or "__base__")
         # Default variant wins ties (migration 301): a льготная row with
         # is_default=false (e.g., NDS 0% медизделия) must NOT override the
         # стандартная rate (NDS 22% Прочие, is_default=true) — that was the
@@ -568,10 +567,9 @@ def _lookup_all_variants(
               .lte("valid_from", target_date.isoformat())
               .gte("source_fetched_at", cutoff)
         )
-        if country_or_areal is None:
-            q = q.is_("country_or_areal", "null")
-        else:
-            q = q.eq("country_or_areal", country_or_areal)
+        # Migration 302: NULL replaced by '__base__' sentinel so uq_tnved_rates_v2
+        # actually enforces uniqueness for all-country rates.
+        q = q.eq("country_or_areal", country_or_areal or "__base__")
         q = q.order("is_default", desc=True).order("valid_from", desc=True)
         resp = q.execute()
         rows = getattr(resp, "data", []) or []

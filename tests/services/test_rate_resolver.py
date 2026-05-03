@@ -318,9 +318,9 @@ async def test_tier_3_base_rate_when_no_country_no_areal(mock_sb, alta_client_mo
     mock_sb.tables["country_areals"] = countries_table
 
     call_seq = iter([
-        [],                                  # Tier 1 — C:643 miss
-        [],                                  # country_areals empty
-        [_row(country_or_areal=None)],      # Tier 3 — base hit
+        [],                                          # Tier 1 — C:643 miss
+        [],                                          # country_areals empty
+        [_row(country_or_areal="__base__")],         # Tier 3 — base hit
     ])
 
     def execute_side_effect():
@@ -346,9 +346,10 @@ async def test_tier_3_base_rate_when_no_country_no_areal(mock_sb, alta_client_mo
 
     assert result.outcome == ResolveOutcome.FOUND
     assert result.rate is not None
-    assert result.rate.country_or_areal is None
-    # is_("country_or_areal", "null") was used for base lookup
-    assert ("country_or_areal", "null") in rates_table.is_filters
+    # Migration 302: '__base__' replaced NULL — uq_tnved_rates_v2 now actually
+    # enforces uniqueness for all-country rates.
+    assert result.rate.country_or_areal == "__base__"
+    assert ("country_or_areal", "__base__") in rates_table.eq_filters
 
 
 # ---------------------------------------------------------------------------

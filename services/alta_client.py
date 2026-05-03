@@ -53,9 +53,12 @@ _VALID_RATE_SOURCES: frozenset[str] = frozenset(
     {'alta-live', 'alta-revalidate', 'manual'}
 )
 
-# country_or_areal regex (mirrors migration 298 CHECK constraint).
+# country_or_areal regex (mirrors migration 298+302 CHECK constraint).
+# Migration 302 added '__base__' sentinel for "applies to all countries"
+# (replacing prior NULL which broke uq_tnved_rates_v2).
 _COUNTRY_PATTERN = re.compile(r"^C:\d+$")
 _AREAL_PATTERN = re.compile(r"^A:\w+$")
+_BASE_RATE_SENTINEL = "__base__"
 
 # Allowed sign tokens between adjacent value slots (matches schema CHECK).
 _VALID_SIGN_TOKENS: frozenset[str] = frozenset({"+", ">"})
@@ -146,12 +149,13 @@ class Rate:
         # 1. country_or_areal format
         if self.country_or_areal is not None:
             if not (
-                _COUNTRY_PATTERN.match(self.country_or_areal)
+                self.country_or_areal == _BASE_RATE_SENTINEL
+                or _COUNTRY_PATTERN.match(self.country_or_areal)
                 or _AREAL_PATTERN.match(self.country_or_areal)
             ):
                 raise ValueError(
                     f"Rate invariant violated: country_or_areal must be "
-                    f"None, 'C:<digits>', or 'A:<token>', got "
+                    f"None, '__base__', 'C:<digits>', or 'A:<token>', got "
                     f"{self.country_or_areal!r}"
                 )
 
@@ -939,7 +943,7 @@ class AltaClient:
                     Rate(
                         tnved_code=tncode,
                         payment_type=payment_type,
-                        country_or_areal=None,
+                        country_or_areal="__base__",
                         valid_from=date.today(),
                         valid_to=None,
                         value_1_number=v1_number,
