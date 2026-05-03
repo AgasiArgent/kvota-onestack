@@ -88,6 +88,10 @@ export function useRealtimeComments(
             // Fetch attachments for the new message (if any). The realtime
             // payload only contains the comment row — attachments live in
             // the documents table and are linked async by sendQuoteComment.
+            // Race: the INSERT broadcast can arrive before the sender's
+            // documents.UPDATE lands, so this fetch may return empty. The
+            // documents UPDATE listener below catches that case by patching
+            // attachments in once the link materializes.
             resolveAttachments(supabase, newRow.id).then((attachments) => {
               if (attachments.length === 0) return;
               setMessages((current) =>
@@ -111,6 +115,63 @@ export function useRealtimeComments(
               },
             ];
           });
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "kvota",
+          table: "documents",
+          filter: `entity_id=eq.${quoteId}`,
+        },
+        (payload) => {
+          // Closes the receiver-side realtime race introduced by PR #88's
+          // reverse-order send (INSERT comment → UPDATE documents.comment_id).
+          // When the link UPDATE lands, the sender broadcasts a documents
+          // UPDATE event that carries the now-set comment_id. We patch the
+          // matching message's attachments in place, so receivers no longer
+          // need a manual reload to see freshly attached files
+          // (МОП Тест 2026-05-03 fail M9–M13 follow-up to PR #87/#88/#89).
+          const newRow = payload.new as {
+            id: string;
+            comment_id: string | null;
+            entity_id: string | null;
+            entity_type: string | null;
+            original_filename: string;
+            storage_path: string;
+            mime_type: string | null;
+            file_size_bytes: number | null;
+          };
+          const oldRow = payload.old as { comment_id?: string | null };
+
+          // Only react to the NULL → value transition. Other UPDATEs (e.g.
+          // description edits) on already-linked docs would otherwise
+          // duplicate the attachment in state.
+          const justLinked =
+            !oldRow?.comment_id && newRow.comment_id;
+          if (!justLinked) return;
+
+          setMessages((current) =>
+            current.map((m) => {
+              if (m.id !== newRow.comment_id) return m;
+              const existing = m.attachments ?? [];
+              if (existing.some((a) => a.id === newRow.id)) return m;
+              return {
+                ...m,
+                attachments: [
+                  ...existing,
+                  {
+                    id: newRow.id,
+                    original_filename: newRow.original_filename,
+                    storage_path: newRow.storage_path,
+                    mime_type: newRow.mime_type,
+                    file_size_bytes: newRow.file_size_bytes,
+                  },
+                ],
+              };
+            })
+          );
         }
       )
       .subscribe((status, _err) => {
