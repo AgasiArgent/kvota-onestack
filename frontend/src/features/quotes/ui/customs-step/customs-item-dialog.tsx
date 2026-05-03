@@ -38,6 +38,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { updateQuoteItem } from "@/entities/quote/mutations";
 import type { QuoteItemRow } from "@/entities/quote/queries";
 
+import { ClassifyButton } from "@/features/customs-classify";
 import { CustomsCountryDropdown } from "@/features/customs-country-dropdown";
 import {
   AutoResolveButton,
@@ -324,12 +325,22 @@ export function CustomsItemDialog({
           {/* Core customs classification */}
           <section className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Код ТН ВЭД">
-              <Input
-                value={form.hs_code}
-                onChange={(e) => update("hs_code", e.target.value)}
-                disabled={readOnly || saving}
-                placeholder="0000000000"
-              />
+              <div className="flex gap-2">
+                <Input
+                  value={form.hs_code}
+                  onChange={(e) => update("hs_code", e.target.value)}
+                  disabled={readOnly || saving}
+                  placeholder="0000000000"
+                  className="flex-1"
+                />
+                <ClassifyButton
+                  quoteItemId={item.id}
+                  initialName={item.product_name ?? ""}
+                  initialBrand={item.brand ?? undefined}
+                  onSelected={(code) => update("hs_code", code)}
+                  disabled={readOnly || saving}
+                />
+              </div>
             </Field>
 
             <Field label="Пошлина">
