@@ -27,6 +27,12 @@ services:
       - INTERNAL_API_KEY=${INTERNAL_API_KEY:-}
       - SENTRY_DSN=${SENTRY_DSN:-}
       - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-production}
+      # Alta-Soft customs API credentials (REQ-2 customs Phase 1).
+      # Required by services/alta_client.py:get_alta_client() factory.
+      # Without these, /api/customs/resolve-rates and the weekly
+      # revalidate-rates cron will fail with KeyError at first call.
+      - ALTA_LOGIN=${ALTA_LOGIN:-}
+      - ALTA_PASSWORD=${ALTA_PASSWORD:-}
       - TZ=Europe/Moscow
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/api/health')"]
