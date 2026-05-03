@@ -40,6 +40,7 @@ import type { QuoteItemRow } from "@/entities/quote/queries";
 
 import { ClassifyButton } from "@/features/customs-classify";
 import { CustomsCountryDropdown } from "@/features/customs-country-dropdown";
+import { ALTA_FEATURES_ENABLED } from "@/shared/lib/feature-flags";
 import {
   AutoResolveButton,
   RateBreakdown,
@@ -333,13 +334,15 @@ export function CustomsItemDialog({
                   placeholder="0000000000"
                   className="flex-1"
                 />
-                <ClassifyButton
-                  quoteItemId={item.id}
-                  initialName={item.product_name ?? ""}
-                  initialBrand={item.brand ?? undefined}
-                  onSelected={(code) => update("hs_code", code)}
-                  disabled={readOnly || saving}
-                />
+                {ALTA_FEATURES_ENABLED && (
+                  <ClassifyButton
+                    quoteItemId={item.id}
+                    initialName={item.product_name ?? ""}
+                    initialBrand={item.brand ?? undefined}
+                    onSelected={(code) => update("hs_code", code)}
+                    disabled={readOnly || saving}
+                  />
+                )}
               </div>
             </Field>
 
@@ -462,7 +465,9 @@ export function CustomsItemDialog({
           {/* REQ-7 customs-phase-1 — country of origin + cert flags + auto-resolve */}
           <section className="space-y-3 rounded-md border border-border bg-muted/20 p-3">
             <div className="text-sm font-medium text-foreground">
-              Страна происхождения и автоподбор ставок
+              {ALTA_FEATURES_ENABLED
+                ? "Страна происхождения и автоподбор ставок"
+                : "Страна происхождения"}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -501,25 +506,27 @@ export function CustomsItemDialog({
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <AutoResolveButton
-                tnvedCode={form.hs_code}
-                countryOksm={form.country_of_origin_oksm}
-                hasOriginCertificate={form.has_origin_certificate}
-                hasFtaCertificate={form.has_fta_certificate}
-                quoteItemId={item.id}
-                onResolved={handleResolved}
-                onError={handleResolveError}
-                disabled={readOnly}
-              />
-              {resolveResult && (
-                <span className="text-xs text-muted-foreground">
-                  Получено {resolveResult.rates.length} ставок
-                </span>
-              )}
-            </div>
+            {ALTA_FEATURES_ENABLED && (
+              <div className="flex flex-wrap items-center gap-2">
+                <AutoResolveButton
+                  tnvedCode={form.hs_code}
+                  countryOksm={form.country_of_origin_oksm}
+                  hasOriginCertificate={form.has_origin_certificate}
+                  hasFtaCertificate={form.has_fta_certificate}
+                  quoteItemId={item.id}
+                  onResolved={handleResolved}
+                  onError={handleResolveError}
+                  disabled={readOnly}
+                />
+                {resolveResult && (
+                  <span className="text-xs text-muted-foreground">
+                    Получено {resolveResult.rates.length} ставок
+                  </span>
+                )}
+              </div>
+            )}
 
-            {resolveResult && (
+            {ALTA_FEATURES_ENABLED && resolveResult && (
               <div className="flex flex-col gap-2">
                 <RateBreakdown
                   rates={resolveResult.rates}
@@ -577,10 +584,12 @@ export function CustomsItemDialog({
               </div>
             )}
 
-            <MeasuresList
-              tnvedCode={form.hs_code}
-              countryOksm={form.country_of_origin_oksm}
-            />
+            {ALTA_FEATURES_ENABLED && (
+              <MeasuresList
+                tnvedCode={form.hs_code}
+                countryOksm={form.country_of_origin_oksm}
+              />
+            )}
           </section>
 
           {/* Import ban */}
