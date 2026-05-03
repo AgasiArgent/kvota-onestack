@@ -300,6 +300,105 @@ async def resolve_rate(
     return ResolveResult(ResolveOutcome.NOT_FOUND, None)
 
 
+async def resolve_rate_variants(
+    tnved_code: str,
+    payment_type: str,
+    country_oksm: int,
+    target_date: date,
+    has_certificate: bool = False,
+    has_sp_certificate: bool = False,
+    *,
+    alta_client: AltaClient,
+    quote_item_id: str | None = None,
+) -> tuple[ResolveOutcome, list[ResolvedRate]]:
+    """Resolve ALL variants of a rate (migration 301 multi-variant flow).
+
+    Where ``resolve_rate`` returns one default-winning variant for the
+    calc engine, this function returns every льготная + стандартная row
+    so the UI can render a selector. The customs-specialist picks the
+    one applicable to the actual product (medical / "прочее" / etc.).
+
+    Returns ``(outcome, rates)`` where ``rates`` is empty unless
+    ``outcome == FOUND``. Variants are ordered with ``is_default=true``
+    first (the safe pre-selected option), then by valid_from desc.
+
+    Lazy-fetch behavior matches ``resolve_rate``: cache miss triggers an
+    Alta call, which populates the cache before re-querying.
+
+    Snapshot branch (``quote_item_id`` provided + quote frozen): returns
+    the single saved variant wrapped in a list so the UI surface stays
+    uniform. Frozen quotes only carry one chosen rate per payment_type.
+    """
+    sb = get_supabase()
+
+    if quote_item_id is not None:
+        snapshot_rate = _lookup_snapshot(sb, quote_item_id, payment_type)
+        if snapshot_rate is not None:
+            return ResolveOutcome.FOUND, [snapshot_rate]
+
+    variants = _lookup_all_variants(
+        sb,
+        tnved_code=tnved_code,
+        payment_type=payment_type,
+        country_oksm=country_oksm,
+        target_date=target_date,
+        has_certificate=has_certificate,
+        has_sp_certificate=has_sp_certificate,
+    )
+    if variants:
+        for v in variants:
+            if v.id is not None:
+                _touch_last_used_at(sb, v.id)
+        return ResolveOutcome.FOUND, variants
+
+    # Lazy-fetch from Alta on full miss
+    try:
+        fetched = await alta_client.get_rates(
+            tncode=tnved_code,
+            country=country_oksm,
+            date_=target_date,
+            certificate=has_certificate,
+            sp_certificate=has_sp_certificate,
+        )
+    except AltaApiError as e:
+        logger.error(
+            "rate_resolver: Alta error %s for tnved_code=%s country=%s — "
+            "returning ALTA_ERROR (variants flow)",
+            e.code, tnved_code, country_oksm,
+        )
+        return ResolveOutcome.ALTA_ERROR, []
+    except Exception as e:
+        logger.error(
+            "rate_resolver: Alta call failed for tnved_code=%s country=%s "
+            "(variants flow): %s",
+            tnved_code, country_oksm, e,
+        )
+        return ResolveOutcome.ALTA_ERROR, []
+
+    if not fetched:
+        return ResolveOutcome.NOT_FOUND, []
+
+    _bulk_upsert(sb, fetched, source="alta-live")
+
+    variants = _lookup_all_variants(
+        sb,
+        tnved_code=tnved_code,
+        payment_type=payment_type,
+        country_oksm=country_oksm,
+        target_date=target_date,
+        has_certificate=has_certificate,
+        has_sp_certificate=has_sp_certificate,
+    )
+    if variants:
+        for v in variants:
+            if v.id is not None:
+                _touch_last_used_at(sb, v.id)
+        return ResolveOutcome.FOUND, variants
+
+    # Alta returned rates but none matched the requested payment_type/certs.
+    return ResolveOutcome.NOT_FOUND, []
+
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
@@ -402,8 +501,13 @@ def _lookup_db(
             q = q.is_("country_or_areal", "null")
         else:
             q = q.eq("country_or_areal", country_or_areal)
-        # Newest-effective row wins (matches the index ordering)
-        q = q.order("valid_from", desc=True).limit(1)
+        # Default variant wins ties (migration 301): a льготная row with
+        # is_default=false (e.g., NDS 0% медизделия) must NOT override the
+        # стандартная rate (NDS 22% Прочие, is_default=true) — that was the
+        # whole reason production showed "НДС 0%" for shaybas.
+        q = (q.order("is_default", desc=True)
+              .order("valid_from", desc=True)
+              .limit(1))
         resp = q.execute()
         rows = getattr(resp, "data", []) or []
         if not rows:
@@ -426,6 +530,71 @@ def _lookup_db(
         hit = _fetch_for_key(f"A:{areal}")
         if hit is not None:
             return hit
+
+    # Tier 3 — base rate
+    return _fetch_for_key(None)
+
+
+def _lookup_all_variants(
+    sb: Any,
+    *,
+    tnved_code: str,
+    payment_type: str,
+    country_oksm: int,
+    target_date: date,
+    has_certificate: bool,
+    has_sp_certificate: bool,
+) -> list[ResolvedRate]:
+    """Three-tier cache lookup that returns ALL variants for the FIRST
+    matching tier (rather than the single default-winning row).
+
+    Migration 301 multi-variant flow: the API endpoint exposes every
+    льготная row so customs-specialist sees full context. Tier order is
+    the same as ``_lookup_db`` (exact country → areals → base) but each
+    tier returns the full set when ANY row matches.
+
+    Returns [] when the cache misses on every tier (caller will lazy-fetch).
+    """
+    cutoff = (datetime.now(timezone.utc) - CACHE_TTL).isoformat()
+
+    def _fetch_for_key(country_or_areal: str | None) -> list[ResolvedRate]:
+        q = (
+            sb.table("tnved_rates")
+              .select("*")
+              .eq("tnved_code", tnved_code)
+              .eq("payment_type", payment_type)
+              .eq("certificate_required", has_certificate)
+              .eq("sp_certificate_required", has_sp_certificate)
+              .lte("valid_from", target_date.isoformat())
+              .gte("source_fetched_at", cutoff)
+        )
+        if country_or_areal is None:
+            q = q.is_("country_or_areal", "null")
+        else:
+            q = q.eq("country_or_areal", country_or_areal)
+        q = q.order("is_default", desc=True).order("valid_from", desc=True)
+        resp = q.execute()
+        rows = getattr(resp, "data", []) or []
+        kept: list[ResolvedRate] = []
+        for row in rows:
+            valid_to_text = row.get("valid_to")
+            if valid_to_text:
+                valid_to = date.fromisoformat(valid_to_text)
+                if valid_to <= target_date:
+                    continue
+            kept.append(_row_to_resolved(row))
+        return kept
+
+    # Tier 1 — exact country
+    hits = _fetch_for_key(f"C:{country_oksm}")
+    if hits:
+        return hits
+
+    # Tier 2 — areals
+    for areal in _areals_for_country(sb, country_oksm):
+        hits = _fetch_for_key(f"A:{areal}")
+        if hits:
+            return hits
 
     # Tier 3 — base rate
     return _fetch_for_key(None)
@@ -479,12 +648,16 @@ def _bulk_upsert(sb: Any, rates: list[Rate], source: str) -> None:
     ).execute()
 
     # 2. Now safe to upsert the rates themselves.
+    # uq_tnved_rates_v2 (migration 301) includes category_code so льготные
+    # variants coexist with стандартная rate. category_code is NOT NULL with
+    # default '' — convert None at the boundary.
     now = datetime.now(timezone.utc).isoformat()
     payload = [_rate_to_row(r, source=source, now_iso=now) for r in rates]
     sb.table("tnved_rates").upsert(
         payload,
         on_conflict="tnved_code,payment_type,country_or_areal,valid_from,"
-                    "certificate_required,sp_certificate_required",
+                    "certificate_required,sp_certificate_required,"
+                    "category_code",
     ).execute()
 
 
@@ -559,6 +732,14 @@ def _row_to_resolved(row: dict[str, Any]) -> ResolvedRate:
         raw_value_string=row.get("raw_value_string"),
         certificate_required=bool(row.get("certificate_required", False)),
         sp_certificate_required=bool(row.get("sp_certificate_required", False)),
+        description=row.get("description"),
+        category_code=row.get("category_code"),
+        category_ru=row.get("category_ru"),
+        condition_text=row.get("condition_text"),
+        legal_document=row.get("legal_document"),
+        legal_link=row.get("legal_link"),
+        order_ref=row.get("order_ref"),
+        is_default=bool(row.get("is_default", False)),
         source=row["source"],
     )
     return ResolvedRate(
@@ -592,6 +773,17 @@ def _rate_to_row(rate: Rate, *, source: str, now_iso: str) -> dict[str, Any]:
         "raw_value_string": rate.raw_value_string,
         "certificate_required": rate.certificate_required,
         "sp_certificate_required": rate.sp_certificate_required,
+        # Variant metadata (migration 301). category_code is NOT NULL in DB
+        # with default '' — coerce None at the boundary so the unique key
+        # uq_tnved_rates_v2 distinguishes "no category" from "category X".
+        "description": rate.description,
+        "category_code": rate.category_code or "",
+        "category_ru": rate.category_ru,
+        "condition_text": rate.condition_text,
+        "legal_document": rate.legal_document,
+        "legal_link": rate.legal_link,
+        "order_ref": rate.order_ref,
+        "is_default": rate.is_default,
         "source": source,
         "source_fetched_at": now_iso,
         "last_used_at": now_iso,

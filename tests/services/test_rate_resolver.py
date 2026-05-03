@@ -641,9 +641,12 @@ async def test_bulk_upsert_targets_unique_constraint_columns(mock_sb, alta_clien
             alta_client=alta_client_mock,
         )
 
+    # Migration 301 added category_code to the unique key so льготные
+    # variants (NDS 10% медтехника) coexist with the стандартная rate.
     assert captured_kwargs.get("on_conflict") == (
         "tnved_code,payment_type,country_or_areal,valid_from,"
-        "certificate_required,sp_certificate_required"
+        "certificate_required,sp_certificate_required,"
+        "category_code"
     )
 
 

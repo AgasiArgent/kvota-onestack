@@ -736,3 +736,191 @@ async def test_notify_admin_no_sentry_module_does_not_raise(monkeypatch):
 
     # ImportError of `import sentry_sdk` must not propagate
     await notify_admin("alert without sentry")
+
+
+# ---------------------------------------------------------------------------
+# Migration 301 — _extract_rates variant metadata capture
+# ---------------------------------------------------------------------------
+
+
+def _multivariant_taksa_xml() -> bytes:
+    """Trimmed real Alta response (HS=7326909807 × 156, probed 2026-05-03).
+
+    Covers two IMP variants (one льготная "Беспошлинно", one "прочее" 7.5%)
+    and three NDS variants (0% льготная медтехника, 10% медизделия, 22%
+    стандарт). The parser must produce one Rate per variant with category /
+    description / legal-doc populated and is_default set on the catch-all rows.
+    """
+    xml = (
+        '<?xml version="1.0" encoding="utf-8"?>'
+        '<GoodInfo><Code>7326909807</Code>'
+        '<Importlist>'
+        '<Import>'
+        '<Value>Беспошлинно</Value>'
+        '<ValueDetail><ValueCount>0</ValueCount><ValueUnit>%</ValueUnit></ValueDetail>'
+        '<Prim>- зажимное устройство</Prim>'
+        '<Order>09b00130</Order>'
+        '<OrderCond>Льгота по уплате ввозных таможенных пошлин предоставляется</OrderCond>'
+        '<Link>https://www.alta.ru/tamdoc/09b00130/</Link>'
+        '</Import>'
+        '<Import>'
+        '<Value>7.5%</Value>'
+        '<ValueDetail><ValueCount>7.5</ValueCount><ValueUnit>%</ValueUnit></ValueDetail>'
+        '<Prim>- прочее</Prim>'
+        '<Order>09b00130</Order>'
+        '<OrderCond>НЕТ льготы</OrderCond>'
+        '<Link>https://www.alta.ru/tamdoc/09b00130/</Link>'
+        '</Import>'
+        '</Importlist>'
+        '<Exciselist/>'
+        '<VATlist>'
+        '<VAT>'
+        '<Value>0%</Value>'
+        '<ValueDetail><ValueCount>0</ValueCount><ValueUnit>%</ValueUnit></ValueDetail>'
+        '<Directory><RuName>Технические средства для инвалидов</RuName>'
+        '<EnName>nds_inv</EnName></Directory>'
+        '<MainCondition>Изделия прочие из черных металлов (НДС):</MainCondition>'
+        '<Condition>- 29. Специальные средства для самообслуживания</Condition>'
+        '<Document>Постановление 1042 от 30.09.2015 Правительства РФ</Document>'
+        '<Link>https://www.alta.ru/tamdoc/15ps1042/</Link>'
+        '</VAT>'
+        '<VAT>'
+        '<Value>10%</Value>'
+        '<ValueDetail><ValueCount>10</ValueCount><ValueUnit>%</ValueUnit></ValueDetail>'
+        '<Directory><RuName>Жизненно необходимая медтехника</RuName>'
+        '<EnName>nds_lecr</EnName></Directory>'
+        '<MainCondition>Изделия прочие из черных металлов (НДС Медизделия):</MainCondition>'
+        '<Condition>- Медизделия (Регистрационное удостоверение)</Condition>'
+        '<Document>Постановление 688 от 15.09.2008 Правительства РФ</Document>'
+        '<Link>https://www.alta.ru/tamdoc/08ps0688/</Link>'
+        '</VAT>'
+        '<VAT>'
+        '<Value>22%</Value>'
+        '<ValueDetail><ValueCount>22</ValueCount><ValueUnit>%</ValueUnit></ValueDetail>'
+        '<Directory><RuName>Жизненно необходимая медтехника</RuName>'
+        '<EnName>nds_lecr</EnName></Directory>'
+        '<MainCondition>Изделия прочие из черных металлов (НДС Медизделия):</MainCondition>'
+        '<Condition>- Прочие</Condition>'
+        '<Document>Постановление 688 от 15.09.2008 Правительства РФ</Document>'
+        '<Link>https://www.alta.ru/tamdoc/08ps0688/</Link>'
+        '</VAT>'
+        '</VATlist>'
+        '</GoodInfo>'
+    )
+    return xml.encode("utf-8")
+
+
+@pytest.mark.asyncio
+async def test_get_rates_captures_imp_variant_metadata():
+    """IMP variant should preserve <Prim>/<Order>/<OrderCond>/<Link>.
+
+    Default-variant detection picks the "прочее" row (НЕТ льготы) — that's
+    the rate that applies when no льгота classification matches. The
+    "зажимное устройство" льготная must NOT be marked default.
+    """
+    client = AltaClient(login="testlogin", password="testpw")
+
+    fake_resp = _make_response(_multivariant_taksa_xml(), charset="utf-8")
+    with patch("httpx.AsyncClient") as mock_client_cls:
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.__aexit__.return_value = None
+        mock_client.get.return_value = fake_resp
+        mock_client_cls.return_value = mock_client
+
+        rates = await client.get_rates(
+            "7326909807", 156, date(2026, 5, 3),
+        )
+
+    imp_rates = [r for r in rates if r.payment_type == "IMP"]
+    assert len(imp_rates) == 2
+
+    by_desc = {r.description: r for r in imp_rates}
+    assert "- зажимное устройство" in by_desc
+    assert "- прочее" in by_desc
+
+    lgota = by_desc["- зажимное устройство"]
+    assert lgota.value_1_number == 0
+    assert lgota.is_default is False  # льготная — not default
+    assert lgota.condition_text and "предоставляется" in lgota.condition_text
+    assert lgota.order_ref == "09b00130"
+    # IMP fallback: category_code = order_ref when no <Directory>
+    assert lgota.category_code == "09b00130"
+    assert lgota.legal_link == "https://www.alta.ru/tamdoc/09b00130/"
+    assert lgota.legal_document is None  # IMP responses use Order, not Document
+
+    default = by_desc["- прочее"]
+    assert default.value_1_number == 7.5
+    assert default.is_default is True   # "прочее" → default
+    assert default.condition_text == "НЕТ льготы"
+
+
+@pytest.mark.asyncio
+async def test_get_rates_captures_nds_directory_metadata():
+    """NDS variant should preserve <Directory>/<MainCondition>/<Condition>/
+    <Document>/<Link>. Default-variant detection picks "- Прочие".
+    """
+    client = AltaClient(login="testlogin", password="testpw")
+
+    fake_resp = _make_response(_multivariant_taksa_xml(), charset="utf-8")
+    with patch("httpx.AsyncClient") as mock_client_cls:
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.__aexit__.return_value = None
+        mock_client.get.return_value = fake_resp
+        mock_client_cls.return_value = mock_client
+
+        rates = await client.get_rates(
+            "7326909807", 156, date(2026, 5, 3),
+        )
+
+    nds_rates = [r for r in rates if r.payment_type == "NDS"]
+    assert len(nds_rates) == 3
+
+    by_value = {r.value_1_number: r for r in nds_rates}
+    nds_zero = by_value[0]
+    assert nds_zero.category_code == "nds_inv"
+    assert nds_zero.category_ru == "Технические средства для инвалидов"
+    assert nds_zero.is_default is False
+    assert (
+        nds_zero.legal_document
+        == "Постановление 1042 от 30.09.2015 Правительства РФ"
+    )
+    assert nds_zero.legal_link == "https://www.alta.ru/tamdoc/15ps1042/"
+
+    nds_ten = by_value[10]
+    assert nds_ten.category_code == "nds_lecr"
+    assert nds_ten.is_default is False  # specific категория, not default
+
+    nds_default = by_value[22]
+    assert nds_default.category_code == "nds_lecr"  # has Directory
+    assert nds_default.is_default is True  # "- Прочие" — catch-all
+    assert nds_default.description == "- Прочие"
+
+
+@pytest.mark.asyncio
+async def test_get_rates_emits_one_row_per_alta_variant():
+    """Probe of HS=7326909807 returns 5 rows (2 IMP + 3 NDS), each emitted
+    as its own Rate. The previous parser collapsed them — the resolver
+    then arbitrarily picked НДС 0% even for shaybas. This is the tracer
+    test that distinguishes "all variants captured" from "first wins".
+    """
+    client = AltaClient(login="testlogin", password="testpw")
+
+    fake_resp = _make_response(_multivariant_taksa_xml(), charset="utf-8")
+    with patch("httpx.AsyncClient") as mock_client_cls:
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.__aexit__.return_value = None
+        mock_client.get.return_value = fake_resp
+        mock_client_cls.return_value = mock_client
+
+        rates = await client.get_rates(
+            "7326909807", 156, date(2026, 5, 3),
+        )
+
+    assert len(rates) == 5
+    payment_counts: dict[str, int] = {}
+    for r in rates:
+        payment_counts[r.payment_type] = payment_counts.get(r.payment_type, 0) + 1
+    assert payment_counts == {"IMP": 2, "NDS": 3}

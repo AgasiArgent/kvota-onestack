@@ -118,6 +118,19 @@ class Rate:
     certificate_required: bool = False
     sp_certificate_required: bool = False
 
+    # Variant metadata (migration 301). Populated by `_extract_rates` from
+    # Alta XML: <Directory>, <Condition>, <MainCondition>, <Document>,
+    # <Link>, <Prim>, <OrderCond>, <Order>. Lets the resolver expose every
+    # variant per (code, payment_type) instead of arbitrarily picking one.
+    description: str | None = None
+    category_code: str | None = None
+    category_ru: str | None = None
+    condition_text: str | None = None
+    legal_document: str | None = None
+    legal_link: str | None = None
+    order_ref: str | None = None
+    is_default: bool = False
+
     # Provenance for the customs_calc adapter switch (REQ-4 / decisions Q1).
     # Populated when reading from `kvota.tnved_rates.source` ('alta-live' |
     # 'alta-revalidate' | 'manual'). The Alta XML response itself does not
@@ -787,49 +800,54 @@ class AltaClient:
     ) -> list[Rate]:
         """Extract Rate dataclasses from a Такса <GoodInfo> response.
 
-        Alta Такса real schema (verified 2026-05-03 against live response):
-            <GoodInfo>
-              <Code>...</Code>
-              <Importlist>
-                <Import>
-                  <Value>10%, но не менее 0,04 евро/кг</Value>
-                  <ValueDetail>
-                    <ValueCount>10</ValueCount>
-                    <ValueUnit>%</ValueUnit>
-                  </ValueDetail>
-                  <ValueDetailAdd>          <!-- combined-rate 2nd part -->
-                    <ValueCount>0.04</ValueCount>
-                    <ValueUnit>евро/кг</ValueUnit>
-                    <ValueCurrency>EUR</ValueCurrency>
-                  </ValueDetailAdd>
-                  ...
-                </Import>
-              </Importlist>
-              <Exciselist>
-                <Excise>...</Excise>
-              </Exciselist>
-              <VATlist>
-                <VAT>...</VAT>
-              </VATlist>
-            </GoodInfo>
+        Alta Такса real schema (verified 2026-05-03 against live response,
+        HS=7326909807 × Китай — 5 IMP + 8 NDS variants):
 
-        Phase-1 minimal mapping:
-          - <Importlist><Import>     → payment_type='IMP'
-          - <Exciselist><Excise>     → payment_type='AKC'
-          - <VATlist><VAT>           → payment_type='NDS'
+            <Importlist>
+              <Import>
+                <Value>7.5%</Value>
+                <ValueDetail>...</ValueDetail>
+                <Prim>- прочее</Prim>           <!-- variant comment -->
+                <Order>09b00130</Order>          <!-- decision id -->
+                <OrderCond>НЕТ льготы</OrderCond>
+                <Link>https://www.alta.ru/tamdoc/09b00130/</Link>
+              </Import>
+            </Importlist>
+            <VATlist>
+              <VAT>
+                <Value>10%</Value>
+                <ValueDetail>...</ValueDetail>
+                <Directory>
+                  <RuName>Жизненно необходимая медтехника</RuName>
+                  <EnName>nds_lecr</EnName>
+                </Directory>
+                <MainCondition>Изделия прочие из черных металлов (НДС Медизделия):</MainCondition>
+                <Condition>- Медизделия (Регистрационное удостоверение)</Condition>
+                <Document>Постановление 688 от 15.09.2008 ...</Document>
+                <Link>https://www.alta.ru/tamdoc/08ps0688/</Link>
+              </VAT>
+            </VATlist>
 
-        Slot extraction:
+        Each <Import>/<VAT>/<Excise> is emitted as a SEPARATE Rate row —
+        the resolver returns all variants and the UI renders them with
+        descriptions so customs-specialist picks the one applicable to
+        the actual product (medical / light-industry / "прочие" / etc.).
+
+        Variant identity (migration 301 schema):
+          - category_code:  <Directory><EnName> (NDS/AKC) or <Order> (IMP)
+          - category_ru:    <Directory><RuName>
+          - description:    <Prim> (IMP) or <Condition> (NDS/AKC)
+          - condition_text: <OrderCond> (IMP) or <MainCondition> (NDS/AKC)
+          - legal_document: <Document>
+          - legal_link:     <Link>
+          - order_ref:      <Order> (IMP only)
+          - is_default:     true if description suggests "default/прочие"
+
+        Slot extraction (unchanged from initial Phase 1):
           - value_1_*  ← <ValueDetail>
-          - value_2_*  ← <ValueDetailAdd> when present
-          - sign_1     ← '>' (Alta combined-rate semantics: "не менее" → max)
-          - country_or_areal: NOT echoed by Alta on Такса, kept None.
-          - raw_value_string ← <Value> verbatim.
-
-        Edge cases (Phase 2 follow-up — see TODO):
-          - Multiple Import alternatives (preferences vs base) — we take all.
-          - <ValueDetail2>/<ValueDetail3> "не менее"/"не более" subblocks.
-          - Excise with <Condition> (alcohol strength etc.) — currently flat.
-          - VAT <Directory> for льготные ставки.
+          - value_2_*  ← <ValueDetailAdd>
+          - sign_1     ← '>' for combined rates ("не менее")
+          - country_or_areal: NOT echoed by Alta on Такса — kept None.
         """
         rates: list[Rate] = []
 
@@ -849,6 +867,30 @@ class AltaClient:
             currency = currency_text or None
             return number, unit, currency
 
+        def _is_default_variant(payment_type: str, description: str | None,
+                                condition_text: str | None) -> bool:
+            """Identify the "default" variant — applies when no льгота matches.
+
+            For IMP: <Prim> contains "прочее" OR <OrderCond> says "НЕТ льготы"
+            OR <Prim> is empty (truly base rate with no variant comment).
+            For NDS/AKC: <Condition> contains "Прочие" (с большой Х) — Alta's
+            convention for the catch-all variant.
+            """
+            desc_lower = (description or "").lower()
+            cond_lower = (condition_text or "").lower()
+            if payment_type == "IMP":
+                if not description:
+                    return True
+                if "прочее" in desc_lower:
+                    return True
+                if "нет льгот" in cond_lower:
+                    return True
+                return False
+            # NDS / AKC
+            if "прочие" in desc_lower:
+                return True
+            return False
+
         def _emit(elem: ET.Element, payment_type: str):
             v1_number, v1_unit, v1_currency = _slot_from(elem.find("ValueDetail"))
             v2_number, v2_unit, v2_currency = _slot_from(elem.find("ValueDetailAdd"))
@@ -856,13 +898,41 @@ class AltaClient:
             raw = _text(elem.find("Value")) or None
 
             # Rate.__post_init__ rejects percent + currency together.
-            # Some Alta responses set ValueCurrency on a percent value
-            # (e.g., "% от стоимости в EUR" rendered with currency=EUR);
-            # strip it for percent units to satisfy the invariant.
             if v1_unit == "percent":
                 v1_currency = None
             if v2_unit == "percent":
                 v2_currency = None
+
+            # Variant metadata extraction differs slightly per payment type.
+            directory_el = elem.find("Directory")
+            if directory_el is not None:
+                category_code = _text(directory_el.find("EnName")) or None
+                category_ru = _text(directory_el.find("RuName")) or None
+            else:
+                category_code = None
+                category_ru = None
+
+            order_ref = _text(elem.find("Order")) or None
+
+            if payment_type == "IMP":
+                description = _text(elem.find("Prim")) or None
+                condition_text = _text(elem.find("OrderCond")) or None
+                # IMP rarely has <Directory>; fall back to <Order> for
+                # category_code so льготные decisions don't collide.
+                if category_code is None and order_ref is not None:
+                    category_code = order_ref
+            else:
+                # NDS / AKC use <Condition> for variant description and
+                # <MainCondition> for the scope statement.
+                description = _text(elem.find("Condition")) or None
+                condition_text = _text(elem.find("MainCondition")) or None
+
+            legal_document = _text(elem.find("Document")) or None
+            legal_link = _text(elem.find("Link")) or None
+
+            is_default = _is_default_variant(
+                payment_type, description, condition_text
+            )
 
             try:
                 rates.append(
@@ -882,6 +952,14 @@ class AltaClient:
                         raw_value_string=raw,
                         certificate_required=certificate,
                         sp_certificate_required=sp_certificate,
+                        description=description,
+                        category_code=category_code,
+                        category_ru=category_ru,
+                        condition_text=condition_text,
+                        legal_document=legal_document,
+                        legal_link=legal_link,
+                        order_ref=order_ref,
+                        is_default=is_default,
                     )
                 )
             except ValueError as exc:

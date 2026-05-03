@@ -139,6 +139,26 @@ def _alta_error() -> ResolveResult:
     return ResolveResult(ResolveOutcome.ALTA_ERROR, None)
 
 
+# Variants flow (migration 301): the resolve-rates handler calls
+# ``resolve_rate_variants`` which returns ``(outcome, [ResolvedRate, ...])``.
+# These helpers mirror the singular helpers above for the multi-variant
+# return shape.
+def _found_variants(rates: list[ResolvedRate] | None = None) -> tuple:
+    """FOUND outcome with list of ResolvedRate variants."""
+    return (
+        ResolveOutcome.FOUND,
+        rates if rates is not None else [_make_resolved_rate()],
+    )
+
+
+def _not_found_variants() -> tuple:
+    return (ResolveOutcome.NOT_FOUND, [])
+
+
+def _alta_error_variants() -> tuple:
+    return (ResolveOutcome.ALTA_ERROR, [])
+
+
 def _make_measure(
     *,
     measure_type: str = "certification",
@@ -340,26 +360,34 @@ class TestResolveRatesHandler:
         mock_sb, _ = _patch_country_lookup_ok()
         mock_get_sb.return_value = mock_sb
 
-        # First call returns IMP rate, others return NOT_FOUND (the resolver
-        # now returns a ResolveResult — FOUND/NOT_FOUND/ALTA_ERROR — instead
-        # of a bare ResolvedRate or None per M4 review fix).
+        # Migration 301: handler now calls resolve_rate_variants which
+        # returns (outcome, list[ResolvedRate]) — IMP yields one variant,
+        # NDS two (a льготная 10% and the стандартная 22%) so the response
+        # carries 3 rates total.
         async def _resolve(*args, **kwargs):
             payment_type = kwargs.get("payment_type")
             if payment_type == "IMP":
-                return _found(_make_resolved_rate(payment_type="IMP"))
+                return _found_variants(
+                    [_make_resolved_rate(payment_type="IMP")]
+                )
             if payment_type == "NDS":
-                return _found(
+                return _found_variants([
                     _make_resolved_rate(
                         payment_type="NDS",
-                        value_1_number=20.0,
-                        raw_value_string="20%",
-                    )
-                )
-            return _not_found()
+                        value_1_number=10.0,
+                        raw_value_string="10%",
+                    ),
+                    _make_resolved_rate(
+                        payment_type="NDS",
+                        value_1_number=22.0,
+                        raw_value_string="22%",
+                    ),
+                ])
+            return _not_found_variants()
 
         # Re-export so api.customs.rate_resolver.ResolveOutcome lookups work
         mock_rate_resolver.ResolveOutcome = ResolveOutcome
-        mock_rate_resolver.resolve_rate = AsyncMock(side_effect=_resolve)
+        mock_rate_resolver.resolve_rate_variants = AsyncMock(side_effect=_resolve)
 
         req = _make_request(
             body={"tnved_code": "8409910008", "country_oksm": 156}
@@ -372,9 +400,10 @@ class TestResolveRatesHandler:
         assert "rates" in body["data"]
         assert "source" in body["data"]
         assert "fetched_at" in body["data"]
-        assert len(body["data"]["rates"]) >= 1
-        # Resolver called for at least IMP and NDS
-        assert mock_rate_resolver.resolve_rate.await_count >= 2
+        # 1 IMP + 2 NDS variants = 3 rates emitted
+        assert len(body["data"]["rates"]) == 3
+        # Resolver called once per requested payment_type
+        assert mock_rate_resolver.resolve_rate_variants.await_count >= 2
         # Partial flag should be set since some payment_types came back NOT_FOUND
         assert body.get("meta", {}).get("partial") is True
 
@@ -393,7 +422,9 @@ class TestResolveRatesHandler:
         mock_sb, _ = _patch_country_lookup_ok()
         mock_get_sb.return_value = mock_sb
         mock_rate_resolver.ResolveOutcome = ResolveOutcome
-        mock_rate_resolver.resolve_rate = AsyncMock(return_value=_alta_error())
+        mock_rate_resolver.resolve_rate_variants = AsyncMock(
+            return_value=_alta_error_variants()
+        )
 
         req = _make_request(
             body={"tnved_code": "8409910008", "country_oksm": 156}
@@ -419,7 +450,9 @@ class TestResolveRatesHandler:
         mock_sb, _ = _patch_country_lookup_ok()
         mock_get_sb.return_value = mock_sb
         mock_rate_resolver.ResolveOutcome = ResolveOutcome
-        mock_rate_resolver.resolve_rate = AsyncMock(return_value=_not_found())
+        mock_rate_resolver.resolve_rate_variants = AsyncMock(
+            return_value=_not_found_variants()
+        )
 
         req = _make_request(
             body={"tnved_code": "8409910008", "country_oksm": 156}
@@ -455,10 +488,10 @@ class TestResolveRatesHandler:
         # Mix: IMP errored on Alta, NDS not found, others NOT_FOUND
         async def _resolve(*args, **kwargs):
             if kwargs.get("payment_type") == "IMP":
-                return _alta_error()
-            return _not_found()
+                return _alta_error_variants()
+            return _not_found_variants()
 
-        mock_rate_resolver.resolve_rate = AsyncMock(side_effect=_resolve)
+        mock_rate_resolver.resolve_rate_variants = AsyncMock(side_effect=_resolve)
 
         req = _make_request(
             body={"tnved_code": "8409910008", "country_oksm": 156}
@@ -491,12 +524,14 @@ class TestResolveRatesHandler:
         async def _resolve(*args, **kwargs):
             pt = kwargs.get("payment_type")
             if pt == "IMP":
-                return _found(_make_resolved_rate(payment_type="IMP"))
+                return _found_variants(
+                    [_make_resolved_rate(payment_type="IMP")]
+                )
             if pt == "NDS":
-                return _not_found()
-            return _not_found()
+                return _not_found_variants()
+            return _not_found_variants()
 
-        mock_rate_resolver.resolve_rate = AsyncMock(side_effect=_resolve)
+        mock_rate_resolver.resolve_rate_variants = AsyncMock(side_effect=_resolve)
 
         req = _make_request(
             body={"tnved_code": "8409910008", "country_oksm": 156}
@@ -527,7 +562,9 @@ class TestResolveRatesHandler:
         mock_sb, item_chain = _patch_country_lookup_ok()
         mock_get_sb.return_value = mock_sb
         mock_rate_resolver.ResolveOutcome = ResolveOutcome
-        mock_rate_resolver.resolve_rate = AsyncMock(return_value=_found())
+        mock_rate_resolver.resolve_rate_variants = AsyncMock(
+            return_value=_found_variants()
+        )
 
         req = _make_request(
             body={
@@ -558,7 +595,9 @@ class TestResolveRatesHandler:
         mock_sb, _ = _patch_country_lookup_ok()
         mock_get_sb.return_value = mock_sb
         mock_rate_resolver.ResolveOutcome = ResolveOutcome
-        mock_rate_resolver.resolve_rate = AsyncMock(return_value=_found())
+        mock_rate_resolver.resolve_rate_variants = AsyncMock(
+            return_value=_found_variants()
+        )
 
         req = _make_request(
             body={"tnved_code": "8409910008", "country_oksm": 156}

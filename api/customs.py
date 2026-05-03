@@ -842,9 +842,10 @@ def _parse_target_date(raw: str | None) -> tuple[date | None, JSONResponse | Non
 def _serialize_rate(resolved) -> dict:
     """Project a ResolvedRate into the JSON envelope shape consumed by Next.js.
 
-    Keeps the field names aligned with ``kvota.tnved_rates`` so frontend code
-    can reuse generated DB types.
+    Includes Migration 301 variant metadata (``description``, ``category_*``,
+    ``is_default``, etc.) so the UI can render a льготная-aware selector.
     """
+    inner = resolved.rate
     return {
         "payment_type": resolved.payment_type,
         "value_1_number": (
@@ -861,6 +862,17 @@ def _serialize_rate(resolved) -> dict:
         "value_2_currency": resolved.value_2_currency,
         "sign_1": resolved.sign_1,
         "raw_value_string": resolved.raw_value_string,
+        # Variant metadata (migration 301) — let UI render льготные options
+        # with full context: which products this rate applies to, and the
+        # legal document backing it.
+        "description": inner.description,
+        "category_code": inner.category_code,
+        "category_ru": inner.category_ru,
+        "condition_text": inner.condition_text,
+        "legal_document": inner.legal_document,
+        "legal_link": inner.legal_link,
+        "order_ref": inner.order_ref,
+        "is_default": inner.is_default,
         # Phase 1 returns rates for inspection only — see docstring of
         # resolve_rates_handler. Caller-supplied customs_value/weight/quantity
         # would let us call services.customs_calc.calculate_duty here.
@@ -988,7 +1000,7 @@ async def resolve_rates_handler(request: Request, alta_client) -> JSONResponse:
     fetched_at: datetime | None = None
     for payment_type in payment_types:
         try:
-            result = await rate_resolver.resolve_rate(
+            outcome, variants = await rate_resolver.resolve_rate_variants(
                 tnved_code=tnved_code,
                 payment_type=payment_type,
                 country_oksm=country_oksm,
@@ -996,7 +1008,6 @@ async def resolve_rates_handler(request: Request, alta_client) -> JSONResponse:
                 has_certificate=has_certificate,
                 has_sp_certificate=has_sp_certificate,
                 alta_client=alta_client,
-                quote_item_id=quote_item_id,
             )
         except Exception as exc:
             # Resolver itself crashed (defensive — should not normally happen
@@ -1010,33 +1021,29 @@ async def resolve_rates_handler(request: Request, alta_client) -> JSONResponse:
             saw_alta_error = True
             continue
 
-        outcomes_by_payment_type[payment_type] = result.outcome.name
+        outcomes_by_payment_type[payment_type] = outcome.name
 
-        if result.outcome == rate_resolver.ResolveOutcome.ALTA_ERROR:
+        if outcome == rate_resolver.ResolveOutcome.ALTA_ERROR:
             saw_alta_error = True
             continue
-        if result.outcome == rate_resolver.ResolveOutcome.NOT_FOUND:
+        if outcome == rate_resolver.ResolveOutcome.NOT_FOUND:
             saw_not_found = True
             continue
 
-        # FOUND
-        r = result.rate
-        resolved_rates.append(r)
-        sources.add(r.source)
-        # cache_hit = served from cache (anything not freshly fetched live).
-        # The resolver populates Rate.source from the DB row's source column;
-        # an Alta-live row served from the same call counts as a fetch (not
-        # a hit), but we have no separate signal here, so approximate via
-        # the rate's age relative to the request start.
-        if (
-            r.source_fetched_at is not None
-            and (datetime.now(timezone.utc) - r.source_fetched_at).total_seconds() > 5
-        ):
-            cache_hit_count += 1
-        if fetched_at is None or (
-            r.source_fetched_at is not None and r.source_fetched_at > fetched_at
-        ):
-            fetched_at = r.source_fetched_at
+        # FOUND — emit every variant for this payment_type. UI shows them
+        # as a льготная-aware selector pre-seeded to is_default=true.
+        for r in variants:
+            resolved_rates.append(r)
+            sources.add(r.source)
+            if (
+                r.source_fetched_at is not None
+                and (datetime.now(timezone.utc) - r.source_fetched_at).total_seconds() > 5
+            ):
+                cache_hit_count += 1
+            if fetched_at is None or (
+                r.source_fetched_at is not None and r.source_fetched_at > fetched_at
+            ):
+                fetched_at = r.source_fetched_at
 
     if not resolved_rates:
         # M4 review fix (PR #83): distinguish "Alta down" (retry-worthy, 503)
