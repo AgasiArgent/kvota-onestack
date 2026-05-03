@@ -906,6 +906,10 @@ async def request_approvals(
                 quote_id=quote_id,
                 approval_reason=reason,
                 requested_by_user_id=requested_by,
+                # Mirror role_codes used for INSERT — telegram dispatch must
+                # target the same users who got approval rows, not legacy
+                # top_manager/admin defaults.
+                recipient_role_slugs=role_codes,
             )
             notifications_sent = notification_result.get('telegram_sent', 0)
         except Exception:
