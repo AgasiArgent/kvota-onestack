@@ -34,9 +34,9 @@ Public API:
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, datetime, timezone
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, Union
 
 from services.alta_client import notify_admin
 from services.database import get_supabase
@@ -53,16 +53,71 @@ SourceAtFreeze = Literal["alta-live", "cache-stale", "abort"]
 
 
 @dataclass(frozen=True)
-class FreezeSnapshotResult:
-    """Outcome of build_snapshot. Carries a full per-item snapshot dict
-    plus per-tier metadata so the caller (workflow hook or re-freeze
-    endpoint) can decide how to surface success/warnings/abort to the UI.
-    """
-    status: SnapshotStatus
+class OkSnapshot:
+    """Tier 1 outcome — every item resolved via live Alta. UI is silent."""
     items: dict[str, dict[str, Any]]   # quote_item_id → snapshot entry
-    source_at_freeze: SourceAtFreeze
-    warnings: list[str] = field(default_factory=list)
-    message: str | None = None         # set when status == 'abort'
+
+    @property
+    def status(self) -> Literal["ok"]:
+        return "ok"
+
+    @property
+    def source_at_freeze(self) -> Literal["alta-live"]:
+        return "alta-live"
+
+    @property
+    def warnings(self) -> list[str]:
+        return []
+
+    @property
+    def message(self) -> None:
+        return None
+
+
+@dataclass(frozen=True)
+class CacheStaleSnapshot:
+    """Tier 2 outcome — at least one item used <30d cache because Alta
+    was unavailable. UI shows non-blocking yellow toast with warnings.
+    """
+    items: dict[str, dict[str, Any]]
+    warnings: list[str]
+
+    @property
+    def status(self) -> Literal["cache-stale"]:
+        return "cache-stale"
+
+    @property
+    def source_at_freeze(self) -> Literal["cache-stale"]:
+        return "cache-stale"
+
+    @property
+    def message(self) -> None:
+        return None
+
+
+@dataclass(frozen=True)
+class AbortSnapshot:
+    """Tier 3 outcome — at least one item had neither live nor fresh
+    cache. The workflow transition fails; UI shows red modal with
+    `message` and any per-item warnings.
+    """
+    items: dict[str, dict[str, Any]]
+    warnings: list[str]
+    message: str
+
+    @property
+    def status(self) -> Literal["abort"]:
+        return "abort"
+
+    @property
+    def source_at_freeze(self) -> Literal["abort"]:
+        return "abort"
+
+
+# Discriminated union — callers pattern-match on `.status` (Literal) or
+# isinstance(). Backwards-compat: `.items`, `.warnings`, `.message`,
+# `.source_at_freeze` remain readable on every variant.
+FreezeSnapshotResult = Union[OkSnapshot, CacheStaleSnapshot, AbortSnapshot]
 
 
 # Standard payment_types we capture per item — same set the API
@@ -107,15 +162,10 @@ async def build_snapshot(
     if not items:
         # No items → trivially ok with empty snapshot. The workflow
         # transition is allowed to proceed.
-        return FreezeSnapshotResult(
-            status="ok",
-            items={},
-            source_at_freeze="alta-live",
-        )
+        return OkSnapshot(items={})
 
     today = date.today()
     aggregate_status: SnapshotStatus = "ok"
-    aggregate_source: SourceAtFreeze = "alta-live"
     snapshot_items: dict[str, dict[str, Any]] = {}
     warnings: list[str] = []
     abort_messages: list[str] = []
@@ -141,16 +191,16 @@ async def build_snapshot(
             )
         )
 
-        # Aggregate the worst tier we've hit so far
+        # Aggregate the worst tier we've hit so far. The OkSnapshot /
+        # CacheStaleSnapshot / AbortSnapshot constructors below derive
+        # source_at_freeze from this status — no need to track it here.
         if item_status == "abort":
             aggregate_status = "abort"
-            aggregate_source = "abort"
             abort_messages.append(
                 item_abort_msg or f"item={item_id}: rates unavailable"
             )
         elif item_status == "cache-stale" and aggregate_status == "ok":
             aggregate_status = "cache-stale"
-            aggregate_source = "cache-stale"
 
         warnings.extend(item_warnings)
 
@@ -173,20 +223,19 @@ async def build_snapshot(
             )
         except Exception as e:
             logger.warning("Failed to send Telegram alert for freeze abort: %s", e)
-        return FreezeSnapshotResult(
-            status="abort",
+        return AbortSnapshot(
             items=snapshot_items,
-            source_at_freeze="abort",
             warnings=warnings,
             message=message,
         )
 
-    return FreezeSnapshotResult(
-        status=aggregate_status,
-        items=snapshot_items,
-        source_at_freeze=aggregate_source,
-        warnings=warnings,
-    )
+    if aggregate_status == "cache-stale":
+        return CacheStaleSnapshot(
+            items=snapshot_items,
+            warnings=warnings,
+        )
+
+    return OkSnapshot(items=snapshot_items)
 
 
 async def _capture_item(
@@ -288,40 +337,64 @@ def _lookup_stale_cache(
     Tries exact-country first, falls back to areal, then base. Cap is
     hard 30 days even in Tier 2 — older than that, we abort rather
     than serve genuinely stale data.
+
+    Each supabase query is isolated with try/except: if the network
+    blips or RLS regresses, we treat the lookup as a miss and let the
+    next tier (or the abort path) decide. Bubbling exceptions here
+    would silently kill freeze when combined with the broad except in
+    workflow_service's freeze hook.
     """
     cutoff = (datetime.now(timezone.utc) - CACHE_TTL).isoformat()
 
     def _try(country_or_areal: str | None) -> dict[str, Any] | None:
-        q = (
-            sb.table("tnved_rates")
-              .select("*")
-              .eq("tnved_code", tnved_code)
-              .eq("payment_type", payment_type)
-              .eq("certificate_required", has_certificate)
-              .eq("sp_certificate_required", has_sp_certificate)
-              .lte("valid_from", target_date.isoformat())
-              .gte("source_fetched_at", cutoff)
-        )
-        if country_or_areal is None:
-            q = q.is_("country_or_areal", "null")
-        else:
-            q = q.eq("country_or_areal", country_or_areal)
-        q = q.order("valid_from", desc=True).limit(1)
-        rows = getattr(q.execute(), "data", []) or []
-        return rows[0] if rows else None
+        try:
+            q = (
+                sb.table("tnved_rates")
+                  .select("*")
+                  .eq("tnved_code", tnved_code)
+                  .eq("payment_type", payment_type)
+                  .eq("certificate_required", has_certificate)
+                  .eq("sp_certificate_required", has_sp_certificate)
+                  .lte("valid_from", target_date.isoformat())
+                  .gte("source_fetched_at", cutoff)
+            )
+            if country_or_areal is None:
+                q = q.is_("country_or_areal", "null")
+            else:
+                q = q.eq("country_or_areal", country_or_areal)
+            q = q.order("valid_from", desc=True).limit(1)
+            rows = getattr(q.execute(), "data", []) or []
+            return rows[0] if rows else None
+        except Exception as exc:
+            logger.warning(
+                "freeze: stale-cache lookup failed for %s/%s/%s "
+                "(country_or_areal=%s): %s",
+                tnved_code, country_oksm, payment_type, country_or_areal, exc,
+            )
+            return None
 
     row = _try(f"C:{country_oksm}")
     if row is not None:
         return _row_to_snapshot_dict(row)
 
     # Areal tier — load areals for this country
-    areals_resp = (
-        sb.table("country_areals")
-          .select("areal_code")
-          .eq("country_oksm", country_oksm)
-          .execute()
-    )
-    for areal_row in getattr(areals_resp, "data", []) or []:
+    try:
+        areals_resp = (
+            sb.table("country_areals")
+              .select("areal_code")
+              .eq("country_oksm", country_oksm)
+              .execute()
+        )
+        areals = getattr(areals_resp, "data", []) or []
+    except Exception as exc:
+        logger.warning(
+            "freeze: stale-cache lookup failed for %s/%s/%s "
+            "(country_areals lookup): %s",
+            tnved_code, country_oksm, payment_type, exc,
+        )
+        areals = []
+
+    for areal_row in areals:
         row = _try(f"A:{areal_row['areal_code']}")
         if row is not None:
             return _row_to_snapshot_dict(row)

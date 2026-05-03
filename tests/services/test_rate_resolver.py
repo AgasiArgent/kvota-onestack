@@ -681,7 +681,7 @@ async def test_snapshot_lookup_hits_for_approved_quote(mock_sb, alta_client_mock
     quote_items_table = _MockTable("quote_items", mock_sb.recorder)
     quote_items_table.set_select([{
         "quote_id": "quote-uuid-1",
-        "quotes": {"status": "APPROVED"},
+        "quotes": {"workflow_status": "approved"},
     }])
     mock_sb.tables["quote_items"] = quote_items_table
 
@@ -739,7 +739,7 @@ async def test_snapshot_skipped_for_unfrozen_quote_falls_through_to_live(
     quote_items_table = _MockTable("quote_items", mock_sb.recorder)
     quote_items_table.set_select([{
         "quote_id": "quote-uuid-1",
-        "quotes": {"status": "DRAFT"},  # NOT in FROZEN_STATUSES
+        "quotes": {"workflow_status": "draft"},  # NOT in FROZEN_STATUSES
     }])
     mock_sb.tables["quote_items"] = quote_items_table
 
@@ -773,7 +773,7 @@ async def test_snapshot_skipped_when_payment_type_not_in_snapshot(
     quote_items_table = _MockTable("quote_items", mock_sb.recorder)
     quote_items_table.set_select([{
         "quote_id": "quote-uuid-1",
-        "quotes": {"status": "DEAL"},  # frozen
+        "quotes": {"workflow_status": "deal"},  # frozen
     }])
     mock_sb.tables["quote_items"] = quote_items_table
 
@@ -842,16 +842,21 @@ def test_frozen_statuses_covers_workflow_boundary():
     """REQ-8: all post-APPROVED workflow statuses must trigger snapshot
     lookup. Sanity check the set we maintain locally to avoid a
     workflow_service circular import.
+
+    Values match the lowercase WorkflowStatus enum values stored on
+    kvota.quotes.workflow_status (see services/workflow_service.py).
+    Drift detector in test_workflow_status_drift.py catches enum
+    renames at unit-test time.
     """
     expected = {
-        "APPROVED",
-        "SENT_TO_CLIENT",
-        "CLIENT_NEGOTIATION",
-        "PENDING_SPEC_CONTROL",
-        "PENDING_SIGNATURE",
-        "DEAL",
-        "REJECTED",
-        "CANCELLED",
+        "approved",
+        "sent_to_client",
+        "client_negotiation",
+        "pending_spec_control",
+        "pending_signature",
+        "deal",
+        "rejected",
+        "cancelled",
     }
     assert FROZEN_STATUSES == expected
 

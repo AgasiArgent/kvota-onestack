@@ -16,7 +16,10 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from services.customs_freeze_service import (
+    AbortSnapshot,
+    CacheStaleSnapshot,
     FreezeSnapshotResult,
+    OkSnapshot,
     build_snapshot,
 )
 from services.rate_resolver import ResolvedRate
@@ -434,15 +437,52 @@ async def test_aggregate_worst_tier_one_abort_makes_all_abort(mock_alta_client):
 # ---------------------------------------------------------------------------
 
 
-def test_freeze_snapshot_result_dataclass_shape():
-    """Sanity-check the public dataclass shape so callers (workflow_service
-    + refresh-customs-snapshot endpoint) can rely on these field names."""
-    r = FreezeSnapshotResult(
-        status="ok",
-        items={"x": {"rates": []}},
-        source_at_freeze="alta-live",
-    )
+def test_ok_snapshot_shape():
+    """OkSnapshot — Tier 1 outcome. Live Alta for every item."""
+    r = OkSnapshot(items={"x": {"rates": []}})
     assert r.status == "ok"
+    assert r.source_at_freeze == "alta-live"
     assert r.warnings == []
     assert r.message is None
-    assert r.source_at_freeze == "alta-live"
+    assert r.items == {"x": {"rates": []}}
+
+
+def test_cache_stale_snapshot_shape():
+    """CacheStaleSnapshot — Tier 2 outcome. Cache fallback used."""
+    warnings = ["8409910008/156/IMP: использован кэш (Alta недоступна)"]
+    r = CacheStaleSnapshot(items={"x": {"rates": []}}, warnings=warnings)
+    assert r.status == "cache-stale"
+    assert r.source_at_freeze == "cache-stale"
+    assert r.warnings == warnings
+    assert r.message is None
+
+
+def test_abort_snapshot_shape():
+    """AbortSnapshot — Tier 3 outcome. Carries a user-facing message."""
+    msg = "Не удалось получить актуальные ставки для freeze."
+    warnings = ["item failure"]
+    r = AbortSnapshot(items={}, warnings=warnings, message=msg)
+    assert r.status == "abort"
+    assert r.source_at_freeze == "abort"
+    assert r.warnings == warnings
+    assert r.message == msg
+
+
+def test_freeze_snapshot_result_is_union_of_three_variants():
+    """FreezeSnapshotResult must accept any of the three variant types
+    (typing.Union annotation), preserving backwards-compat for callers
+    that read .status / .warnings / .message generically.
+    """
+    variants: list[FreezeSnapshotResult] = [
+        OkSnapshot(items={}),
+        CacheStaleSnapshot(items={}, warnings=["w"]),
+        AbortSnapshot(items={}, warnings=[], message="m"),
+    ]
+    statuses = {v.status for v in variants}
+    assert statuses == {"ok", "cache-stale", "abort"}
+    # Every variant exposes the same attribute surface
+    for v in variants:
+        assert hasattr(v, "items")
+        assert hasattr(v, "warnings")
+        assert hasattr(v, "message")
+        assert hasattr(v, "source_at_freeze")

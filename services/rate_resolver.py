@@ -48,19 +48,27 @@ logger = logging.getLogger(__name__)
 # Cache freshness window. Older entries are treated as cache misses.
 CACHE_TTL = timedelta(days=30)
 
+# Rolling counter for last_used_at update failures. Crossing thresholds
+# escalates the log level so a flaky / RLS-broken UPDATE shows up in
+# alerts instead of silently degrading the cron's top-1000 ranking.
+_touch_failure_count: int = 0
+_TOUCH_FAILURE_THRESHOLDS = (10, 100, 1000)
+
 # Workflow statuses where the customs snapshot must be honored over a
 # live resolve. Mirrors services/workflow_service.WorkflowStatus values
 # from the freeze boundary (REQ-8). Kept here as plain strings to avoid
 # a circular import with workflow_service.
+# Drift detector lives in tests/services/test_workflow_status_drift.py —
+# update it (and this set) if WorkflowStatus enum values are renamed.
 FROZEN_STATUSES = frozenset({
-    "APPROVED",
-    "SENT_TO_CLIENT",
-    "CLIENT_NEGOTIATION",
-    "PENDING_SPEC_CONTROL",
-    "PENDING_SIGNATURE",
-    "DEAL",
-    "REJECTED",
-    "CANCELLED",
+    "approved",
+    "sent_to_client",
+    "client_negotiation",
+    "pending_spec_control",
+    "pending_signature",
+    "deal",
+    "rejected",
+    "cancelled",
 })
 
 
@@ -81,17 +89,37 @@ class ResolvedRate:
     (``services.calculation_helpers.build_calculation_inputs``) uses to
     decide between the legacy combined-rate formula and the new
     ``services.customs_calc.calculate_duty()`` path (Q1 decision).
+
+    Invariant (enforced in __post_init__):
+        snapshot=True  ⇔ id is None
+        snapshot=False ⇔ id is a non-None DB uuid.
+
+    Snapshot rates live in JSONB (``quote_versions.input_variables``),
+    have no DB row, and carry id=None to make accidental UPDATEs against
+    a synthesized pseudo-id impossible.
     """
-    id: str                                # uuid as string per Supabase convention
+    id: str | None                         # uuid as string for live rows; None for snapshot
     rate: Rate                             # immutable XML-derived shape
     source: str                            # 'alta-live' | 'alta-revalidate' | 'manual'
     source_fetched_at: datetime
     last_used_at: datetime
     snapshot: bool = False                 # True = read from quote_versions, not live cache
 
-    # Convenience pass-throughs so adapter code can write `r.value_1_number`
-    # without `.rate.` indirection. Kept narrow — only the fields the
-    # downstream calc actually reads.
+    def __post_init__(self) -> None:
+        if self.snapshot and self.id is not None:
+            raise ValueError(
+                "snapshot ResolvedRate must have id=None "
+                f"(got id={self.id!r})"
+            )
+        if not self.snapshot and self.id is None:
+            raise ValueError(
+                "non-snapshot ResolvedRate must have a non-None DB id"
+            )
+
+    # DEPRECATED — use `.rate.<field>` directly; will remove in Phase 2.
+    # Pass-through accessors so adapter code can write `r.value_1_number`
+    # without `.rate.` indirection. Risk of silent None on a missed
+    # forwarding mapping, so prefer reading `.rate.<field>` in new code.
     @property
     def tnved_code(self) -> str: return self.rate.tnved_code
     @property
@@ -231,10 +259,12 @@ def _lookup_snapshot(
     snapshot doesn't carry rates for this item OR no rate of the
     requested payment_type is in the snapshot.
     """
-    # Look up quote_id + status from the quote_item
+    # Look up quote_id + workflow_status from the quote_item.
+    # Column name is `workflow_status` on kvota.quotes — `status` does not
+    # exist; the join key in the resulting dict mirrors the column name.
     item_resp = (
         sb.table("quote_items")
-          .select("quote_id, quotes(status)")
+          .select("quote_id, quotes(workflow_status)")
           .eq("id", quote_item_id)
           .single()
           .execute()
@@ -244,7 +274,7 @@ def _lookup_snapshot(
         return None
 
     quote = item_row.get("quotes") or {}
-    quote_status = quote.get("status")
+    quote_status = quote.get("workflow_status")
     if quote_status not in FROZEN_STATUSES:
         return None
 
@@ -377,7 +407,17 @@ def _touch_last_used_at(sb: Any, rate_id: str) -> None:
     """Fire-and-forget update; suppresses errors so a flaky write doesn't
     break the resolve. The cron uses last_used_at to pick the top-1000;
     losing a stray write here just defers a row's revalidation by a week.
+
+    Snapshot rates carry no DB id (id=None) — the early return prevents
+    a wasteful UPDATE and a potential RLS error against a synthesized id.
+
+    Failures accumulate in ``_touch_failure_count``; crossing an alert
+    threshold (10/100/1000) escalates to logger.error so a systematic
+    regression (e.g. RLS policy break) becomes visible.
     """
+    if rate_id is None:
+        return
+    global _touch_failure_count
     try:
         (
             sb.table("tnved_rates")
@@ -386,10 +426,19 @@ def _touch_last_used_at(sb: Any, rate_id: str) -> None:
               .execute()
         )
     except Exception as e:
-        logger.warning(
-            "rate_resolver: failed to update last_used_at for %s: %s",
-            rate_id, e,
-        )
+        _touch_failure_count += 1
+        if _touch_failure_count in _TOUCH_FAILURE_THRESHOLDS:
+            logger.error(
+                "rate_resolver: last_used_at update failure threshold reached "
+                "(%d failures since process start). Latest rate_id=%s err=%s",
+                _touch_failure_count, rate_id, e,
+            )
+        else:
+            logger.warning(
+                "rate_resolver: failed to update last_used_at for %s: %s "
+                "(rolling failure count=%d)",
+                rate_id, e, _touch_failure_count,
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -471,10 +520,11 @@ def _build_resolved_from_snapshot(
     """Hydrate a snapshot entry (subset of kvota.tnved_rates fields written
     by services/customs_freeze_service.py) into a ResolvedRate.
 
-    Snapshot rates carry no DB id (they live in JSONB) — we synthesize
-    a stable pseudo-id from quote_versions row + payment_type so the
-    consumer can still distinguish ResolvedRate instances. ``Rate.source``
-    is populated so the calc adapter sees the right discriminator.
+    Snapshot rates carry no DB id — they live in JSONB inside
+    ``quote_versions.input_variables.customs_rates``. We pass id=None
+    explicitly; the ResolvedRate invariant guards against accidentally
+    issuing an UPDATE against a non-existent row. ``Rate.source`` is
+    populated so the calc adapter sees the right discriminator.
     """
     snapshot_source = snapshot_entry.get("source", "alta-live")
     rate = Rate(
@@ -498,7 +548,7 @@ def _build_resolved_from_snapshot(
         source=snapshot_source,
     )
     return ResolvedRate(
-        id=f"snapshot:{snapshot_entry['payment_type']}",
+        id=None,
         rate=rate,
         source=snapshot_source,
         source_fetched_at=fetched_at,
