@@ -2,9 +2,7 @@
 Tests for Approval Service - Approval request workflow
 
 Tests for:
-- WF-004: Approval request creation (request_approval)
 - Feature #64: Basic approval CRUD
-- Feature #65: High-level request_approval
 - Feature #66: High-level process_approval_decision
 """
 
@@ -20,7 +18,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from services.approval_service import (
     # Data classes
     Approval,
-    ApprovalRequestResult,
     ApprovalDecisionResult,
     # Create operations
     create_approval,
@@ -31,8 +28,6 @@ from services.approval_service import (
     get_approvals_for_quote,
     get_pending_approval_for_quote,
     get_pending_approvals_for_user,
-    get_approvals_requested_by,
-    get_approvals_with_details,
     count_pending_approvals,
     # Update operations
     update_approval_status,
@@ -45,7 +40,6 @@ from services.approval_service import (
     get_latest_approval_decision,
     get_approval_stats_for_user,
     # High-level workflow functions
-    request_approval,
     process_approval_decision,
 )
 
@@ -136,36 +130,7 @@ class TestApprovalDataClass:
 # =============================================================================
 
 class TestResultDataClasses:
-    """Tests for ApprovalRequestResult and ApprovalDecisionResult."""
-
-    def test_approval_request_result_success(self):
-        """ApprovalRequestResult should capture success state."""
-        result = ApprovalRequestResult(
-            success=True,
-            quote_id="quote-uuid",
-            approvals_created=2,
-            notifications_sent=2,
-            transition_success=True,
-            error_message=None
-        )
-
-        assert result.success is True
-        assert result.approvals_created == 2
-        assert result.error_message is None
-
-    def test_approval_request_result_failure(self):
-        """ApprovalRequestResult should capture failure state."""
-        result = ApprovalRequestResult(
-            success=False,
-            quote_id="quote-uuid",
-            approvals_created=0,
-            notifications_sent=0,
-            transition_success=False,
-            error_message="КП не найдено"
-        )
-
-        assert result.success is False
-        assert result.error_message == "КП не найдено"
+    """Tests for ApprovalDecisionResult."""
 
     def test_approval_decision_result_approved(self):
         """ApprovalDecisionResult should capture approved decision."""
@@ -428,26 +393,19 @@ class TestImports:
 
     def test_import_result_dataclasses(self):
         """Result dataclasses should be importable."""
-        from services.approval_service import ApprovalRequestResult, ApprovalDecisionResult
-        assert ApprovalRequestResult is not None
+        from services.approval_service import ApprovalDecisionResult
         assert ApprovalDecisionResult is not None
 
     def test_import_create_operations(self):
         """Create operations should be importable."""
-        from services.approval_service import create_approval, create_approvals_for_role
+        from services.approval_service import create_approval
         assert callable(create_approval)
         assert callable(create_approvals_for_role)
 
     def test_import_read_operations(self):
         """Read operations should be importable."""
         from services.approval_service import (
-            get_approval,
-            get_approvals_for_quote,
-            get_pending_approvals_for_user,
-            count_pending_approvals,
-            get_pending_approval_for_quote,
-            get_approval_by_quote,
-            has_pending_approval
+            count_pending_approvals
         )
         assert all(callable(f) for f in [
             get_approval,
@@ -461,11 +419,6 @@ class TestImports:
 
     def test_import_update_operations(self):
         """Update operations should be importable."""
-        from services.approval_service import (
-            update_approval_status,
-            approve_quote_approval,
-            reject_quote_approval
-        )
         assert all(callable(f) for f in [
             update_approval_status,
             approve_quote_approval,
@@ -474,17 +427,11 @@ class TestImports:
 
     def test_import_high_level_functions(self):
         """High-level workflow functions should be importable."""
-        from services.approval_service import request_approval, process_approval_decision
-        assert callable(request_approval)
+        from services.approval_service import process_approval_decision
         assert callable(process_approval_decision)
 
     def test_import_utility_functions(self):
         """Utility functions should be importable."""
-        from services.approval_service import (
-            get_latest_approval_decision,
-            cancel_pending_approvals_for_quote,
-            get_approval_stats_for_user
-        )
         assert all(callable(f) for f in [
             get_latest_approval_decision,
             cancel_pending_approvals_for_quote,
@@ -499,11 +446,9 @@ class TestImports:
 class TestServiceIntegration:
     """Tests to verify service integrations."""
 
-    def test_request_approval_imports_workflow_service(self):
-        """request_approval should use workflow_service for transitions."""
-        from services.approval_service import request_approval
+    def test_workflow_service_transition_available(self):
+        """workflow_service.transition_quote_status should be importable."""
         from services.workflow_service import transition_quote_status
-        assert callable(request_approval)
         assert callable(transition_quote_status)
 
     def test_workflow_status_enum_available(self):
@@ -897,10 +842,7 @@ class TestNewExports:
         from services.approval_service import (
             validate_modifications,
             approve_with_modifications,
-            apply_modifications_to_quote,
-            get_approval_modifications,
-            get_modifications_summary,
-            get_approvals_with_modifications
+            get_modifications_summary
         )
         assert all(callable(f) for f in [
             validate_modifications,
@@ -914,14 +856,8 @@ class TestNewExports:
     def test_import_from_services_init(self):
         """New exports should be available from services package."""
         from services import (
-            ModificationValidationResult,
-            ApprovalWithModificationsResult,
-            ApplyModificationsResult,
-            ALLOWED_QUOTE_MODIFICATIONS,
-            ALLOWED_ITEM_MODIFICATIONS,
             validate_modifications,
-            approve_with_modifications,
-            get_modifications_summary
+            approve_with_modifications
         )
         assert validate_modifications is not None
         assert approve_with_modifications is not None

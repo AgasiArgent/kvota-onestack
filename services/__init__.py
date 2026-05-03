@@ -123,7 +123,6 @@ from .workflow_service import (
 from .approval_service import (
     # Data classes
     Approval,
-    ApprovalRequestResult,
     ApprovalDecisionResult,
     RequestApprovalsResult,
     ModificationValidationResult,
@@ -153,8 +152,7 @@ from .approval_service import (
     has_pending_approval,
     get_latest_approval_decision,
     get_approval_stats_for_user,
-    # High-level workflow functions (Feature #65, #66)
-    request_approval,
+    # High-level workflow functions (Feature #66)
     process_approval_decision,
     # WF-005: Approval with modifications (v3.0)
     ALLOWED_QUOTE_MODIFICATIONS,
@@ -996,9 +994,7 @@ __all__ = [
     "has_pending_approval",
     "get_latest_approval_decision",
     "get_approval_stats_for_user",
-    # High-level workflow functions (Feature #65, #66)
-    "ApprovalRequestResult",
-    "request_approval",
+    # High-level workflow functions (Feature #66)
     "ApprovalDecisionResult",
     "process_approval_decision",
     # Universal approval wrapper (INSERT + Telegram notify atomically)

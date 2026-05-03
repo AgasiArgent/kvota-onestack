@@ -141,12 +141,41 @@ export async function fetchDistributionData(
 }
 
 /**
- * Count of quotes currently shown on the distribution page for the sidebar
- * badge. Derived from the same source-of-truth as `fetchDistributionData`
- * (pending_procurement quotes with at least one unassigned, available item)
- * so the sidebar badge and the page header always agree.
+ * Distribution metrics shared by the sidebar badge, the page header, and the
+ * kanban "Распределение" column. Derived from the single source-of-truth
+ * `fetchDistributionData` so all three surfaces always agree.
+ *
+ * Units:
+ *   - quoteCount:      unique quotes (заявки) — UX-friendly aggregate
+ *   - brandSliceCount: distinct (quote × brand) pairs — matches the cards
+ *                      rendered on the distribution page AND the kanban
+ *                      "Распределение" column count (1 card = 1 brand slice)
+ *   - itemCount:       total unassigned, available positions across all quotes
+ */
+export async function fetchDistributionMetrics(orgId: string): Promise<{
+  quoteCount: number;
+  brandSliceCount: number;
+  itemCount: number;
+}> {
+  const quotes = await fetchDistributionData(orgId);
+  const brandSliceCount = quotes.reduce(
+    (sum, q) => sum + q.brandGroups.length,
+    0
+  );
+  const itemCount = quotes.reduce(
+    (sum, q) => sum + q.brandGroups.reduce((s, bg) => s + bg.itemCount, 0),
+    0
+  );
+  return { quoteCount: quotes.length, brandSliceCount, itemCount };
+}
+
+/**
+ * Sidebar badge count for "Распределение". Returns the brand-slice count
+ * (= cards on the distribution page = kanban "Распределение" column count)
+ * so the sidebar, page header, and kanban column never diverge when a quote
+ * has 2+ brands at the distribution stage.
  */
 export async function fetchUnassignedItemCount(orgId: string): Promise<number> {
-  const quotes = await fetchDistributionData(orgId);
-  return quotes.length;
+  const { brandSliceCount } = await fetchDistributionMetrics(orgId);
+  return brandSliceCount;
 }
