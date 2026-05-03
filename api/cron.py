@@ -428,10 +428,23 @@ REVALIDATE_LOG_EVERY = 100
 # false-firing on a handful of bad TNVED codes (M8 review fix).
 REVALIDATE_FAILURE_RATIO_THRESHOLD = 0.5
 
-# Throttle for cron-level Telegram alerts. Same 1/hour pattern as
-# AltaClient packet warnings, but isolated by key so the truncation
-# alert and the failure-ratio alert don't suppress each other.
+# Poison-pill backoff (M9 review fix):
+#   - Skip pairs whose consecutive failure count >= POISON_PILL_FAILURE_THRESHOLD
+#     while their last failure is more recent than POISON_PILL_BACKOFF.
+#   - After the backoff window expires, retry once: if Alta has restored
+#     the code, the success branch resets the counter; if it fails again,
+#     the count keeps climbing and the next backoff starts from now().
+#   - When the *current run* leaves >= POISON_PILL_ALERT_COUNT pairs in
+#     this state, fire one Telegram alert (throttled 1/day).
+POISON_PILL_FAILURE_THRESHOLD = 3
+POISON_PILL_BACKOFF = timedelta(days=7)
+POISON_PILL_ALERT_COUNT = 10
+
+# Throttle for cron-level Telegram alerts. Truncation, failure-ratio,
+# and poison-pill alerts each get their own key so they don't suppress
+# one another.
 _CRON_ALERT_THROTTLE = timedelta(hours=1)
+_POISON_PILL_ALERT_THROTTLE = timedelta(hours=24)
 _cron_last_alert_at: dict[str, datetime] = {}
 
 
@@ -520,14 +533,20 @@ async def cron_revalidate_rates(request, alta_client) -> JSONResponse:
         return err
 
     sb = get_supabase()
+    now_dt = datetime.now(timezone.utc)
 
     # Fetch stale rows (bounded). PostgREST has no MAX() aggregation in
     # select so we group/sort in Python — bounded by REVALIDATE_MAX_FETCH
-    # so memory stays predictable even for cold caches.
-    cutoff = (datetime.now(timezone.utc) - REVALIDATE_STALE_WINDOW).isoformat()
+    # so memory stays predictable even for cold caches. Pull the
+    # poison-pill columns too so we can filter chronically-failing pairs
+    # without an extra round-trip (M9 review fix).
+    cutoff = (now_dt - REVALIDATE_STALE_WINDOW).isoformat()
     resp = (
         sb.table("tnved_rates")
-        .select("tnved_code, country_or_areal, last_used_at")
+        .select(
+            "tnved_code, country_or_areal, last_used_at, "
+            "revalidate_failure_count, revalidate_failed_at"
+        )
         .lt("source_fetched_at", cutoff)
         .execute()
     )
@@ -540,6 +559,16 @@ async def cron_revalidate_rates(request, alta_client) -> JSONResponse:
         original_count = len(stale_rows)
         stale_rows = stale_rows[:REVALIDATE_MAX_FETCH]
         await _maybe_alert_truncation(original_count)
+
+    # Drop poison-pill rows BEFORE ranking — a chronically-failing pair
+    # otherwise keeps burning Alta packet quota every weekly cron run
+    # (M9 review fix). Backoff expires after 7 days so we re-try in case
+    # Alta has restored the code.
+    poison_cutoff = (now_dt - POISON_PILL_BACKOFF).isoformat()
+    stale_rows = [
+        row for row in stale_rows
+        if not _is_poison_pill(row, poison_cutoff_iso=poison_cutoff)
+    ]
 
     pairs = _rank_revalidation_pairs(stale_rows, limit=REVALIDATE_BATCH_SIZE)
 
@@ -561,12 +590,6 @@ async def cron_revalidate_rates(request, alta_client) -> JSONResponse:
             # when a user-driven resolve hits them.
             continue
 
-        # TODO: poison-pill threshold — a (tnved, country) pair that
-        # consistently fails will keep retrying every cron run. Proper
-        # fix needs a per-pair failure counter persisted in DB (e.g.
-        # `tnved_rates.revalidate_failure_count` column) so we can skip
-        # pairs above N consecutive failures. Deferred — out of scope
-        # for the M9 review fix because it requires a schema migration.
         try:
             new_rates = await alta_client.get_rates(
                 tncode=tnved_code,
@@ -592,6 +615,7 @@ async def cron_revalidate_rates(request, alta_client) -> JSONResponse:
                 "country=%s — skipping",
                 exc.code, tnved_code, oksm,
             )
+            _record_poison_pill_failure(sb, tnved_code, country_or_areal)
             continue
         except Exception as exc:
             stats["failures"] += 1
@@ -600,6 +624,7 @@ async def cron_revalidate_rates(request, alta_client) -> JSONResponse:
                 "country=%s: %s",
                 tnved_code, oksm, exc,
             )
+            _record_poison_pill_failure(sb, tnved_code, country_or_areal)
             continue
 
         # Pragmatic upsert (REQ-6 AC#3): the UNIQUE constraint
@@ -622,8 +647,13 @@ async def cron_revalidate_rates(request, alta_client) -> JSONResponse:
                 "country=%s: %s",
                 tnved_code, oksm, exc,
             )
+            _record_poison_pill_failure(sb, tnved_code, country_or_areal)
             continue
 
+        # Success path — clear any prior poison-pill state for this pair
+        # (M9 review fix). Reset is per-pair (matches all valid_from
+        # generations) because the poison-pill signal is pair-level.
+        _reset_poison_pill_failure(sb, tnved_code, country_or_areal)
         stats["processed"] += 1
 
         # Periodic progress log
@@ -663,6 +693,10 @@ async def cron_revalidate_rates(request, alta_client) -> JSONResponse:
     await _maybe_alert_failure_ratio(
         processed=stats["processed"], failures=stats["failures"]
     )
+    # Poison-pill alert: count how many pairs are currently parked under
+    # the failure-threshold backoff. Fires once if the count crosses
+    # POISON_PILL_ALERT_COUNT, throttled to 1/day (M9 review fix).
+    await _maybe_alert_poison_pill_count(sb)
     return JSONResponse({"success": True, "data": stats})
 
 
@@ -725,3 +759,149 @@ def _country_or_areal_to_oksm(value: str | None) -> int | None:
         except ValueError:
             return None
     return None
+
+
+# ----------------------------------------------------------------------------
+# Poison-pill helpers (M9 review fix)
+# ----------------------------------------------------------------------------
+
+
+def _is_poison_pill(row: dict[str, Any], *, poison_cutoff_iso: str) -> bool:
+    """Return True if the row should be skipped under poison-pill backoff.
+
+    A row is poison-pilled when:
+      - revalidate_failure_count >= POISON_PILL_FAILURE_THRESHOLD, AND
+      - revalidate_failed_at is more recent than (now - POISON_PILL_BACKOFF).
+
+    After the backoff window expires, the row is re-tried; success will
+    reset the counter via ``_reset_poison_pill_failure``, another failure
+    will bump it via ``_record_poison_pill_failure``.
+    """
+    count = row.get("revalidate_failure_count") or 0
+    if count < POISON_PILL_FAILURE_THRESHOLD:
+        return False
+    failed_at = row.get("revalidate_failed_at")
+    if not failed_at:
+        # No timestamp — treat as expired backoff and let the loop retry.
+        # A retry with another failure will set both columns coherently.
+        return False
+    return str(failed_at) >= poison_cutoff_iso
+
+
+def _record_poison_pill_failure(
+    sb: Any, tnved_code: str, country_or_areal: str | None
+) -> None:
+    """Bump revalidate_failure_count and stamp revalidate_failed_at for the
+    pair. Per-pair update (matches all valid_from generations) so the
+    poison-pill signal stays coherent across rate revisions.
+
+    Failures here are non-critical — log and swallow so a flaky write
+    doesn't abort the whole cron run.
+    """
+    try:
+        # PostgREST UPDATE doesn't support ``column = column + 1`` directly
+        # via the python client; read-then-write is acceptable because the
+        # cron handler is the sole writer of these columns and runs at
+        # most once a week.
+        resp = (
+            sb.table("tnved_rates")
+            .select("id, revalidate_failure_count")
+            .eq("tnved_code", tnved_code)
+            .eq("country_or_areal", country_or_areal)
+            .execute()
+        )
+        rows = list(getattr(resp, "data", None) or [])
+        now_iso = datetime.now(timezone.utc).isoformat()
+        for row in rows:
+            row_id = row.get("id")
+            if not row_id:
+                continue
+            current = row.get("revalidate_failure_count") or 0
+            (
+                sb.table("tnved_rates")
+                .update({
+                    "revalidate_failure_count": current + 1,
+                    "revalidate_failed_at": now_iso,
+                })
+                .eq("id", row_id)
+                .execute()
+            )
+    except Exception as exc:  # noqa: BLE001 — non-critical fire-and-forget
+        logger.warning(
+            "Cron revalidate-rates: failed to record poison-pill failure "
+            "for tnved=%s country=%s: %s",
+            tnved_code, country_or_areal, exc,
+        )
+
+
+def _reset_poison_pill_failure(
+    sb: Any, tnved_code: str, country_or_areal: str | None
+) -> None:
+    """Clear poison-pill state for the pair after a successful Alta fetch.
+
+    Idempotent — a no-op write against rows that were already at zero.
+    """
+    try:
+        (
+            sb.table("tnved_rates")
+            .update({
+                "revalidate_failure_count": 0,
+                "revalidate_failed_at": None,
+            })
+            .eq("tnved_code", tnved_code)
+            .eq("country_or_areal", country_or_areal)
+            .execute()
+        )
+    except Exception as exc:  # noqa: BLE001 — non-critical fire-and-forget
+        logger.warning(
+            "Cron revalidate-rates: failed to reset poison-pill state "
+            "for tnved=%s country=%s: %s",
+            tnved_code, country_or_areal, exc,
+        )
+
+
+async def _maybe_alert_poison_pill_count(sb: Any) -> None:
+    """Telegram-alert when too many pairs are parked under poison-pill backoff.
+
+    Fires once when the count of currently-poisoned pairs (failure_count
+    >= threshold AND failed_at within backoff window) crosses
+    POISON_PILL_ALERT_COUNT. Throttled to 1/day so a persistent state
+    doesn't spam ops every cron run.
+    """
+    try:
+        cutoff = (
+            datetime.now(timezone.utc) - POISON_PILL_BACKOFF
+        ).isoformat()
+        resp = (
+            sb.table("tnved_rates")
+            .select("id")
+            .gte("revalidate_failure_count", POISON_PILL_FAILURE_THRESHOLD)
+            .gte("revalidate_failed_at", cutoff)
+            .execute()
+        )
+        rows = list(getattr(resp, "data", None) or [])
+        count = len(rows)
+    except Exception as exc:  # noqa: BLE001 — diagnostic alert is best-effort
+        logger.warning(
+            "Cron revalidate-rates: poison-pill count query failed: %s", exc
+        )
+        return
+
+    if count < POISON_PILL_ALERT_COUNT:
+        return
+
+    key = "poison_pill"
+    now = datetime.now(timezone.utc)
+    last = _cron_last_alert_at.get(key)
+    if last is not None and (now - last) < _POISON_PILL_ALERT_THROTTLE:
+        return
+    _cron_last_alert_at[key] = now
+
+    message = (
+        f"⚠️ cron_revalidate_rates: {count} pairs in poison-pill state — "
+        f"Alta may have schema-changed or these codes are retired. "
+        f"Threshold: {POISON_PILL_FAILURE_THRESHOLD} consecutive failures, "
+        f"backoff: {POISON_PILL_BACKOFF.days}d."
+    )
+    logger.warning(message)
+    await notify_admin(message)

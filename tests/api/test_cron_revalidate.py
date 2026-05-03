@@ -45,8 +45,9 @@ class _StubQuery:
     """Chainable query emulating supabase-py for the subset used here.
 
     Supports:
-      table(...).select(...).lt(col, val).execute()         → fetch stale rows
+      table(...).select(...).lt|gte|eq(col, val).execute()  → fetch rows
       table(...).upsert([rows...], on_conflict=...).execute() → bulk write
+      table(...).update({...}).eq(col, val).execute()       → row update
     """
 
     def __init__(self, client: "_StubSupabase", table_name: str) -> None:
@@ -54,6 +55,7 @@ class _StubQuery:
         self._table = table_name
         self._filters: list[tuple[str, Any, Any]] = []
         self._upsert_payload: list[dict] | None = None
+        self._update_payload: dict | None = None
 
     def select(self, *_args: Any, **_kwargs: Any) -> "_StubQuery":
         return self
@@ -62,11 +64,48 @@ class _StubQuery:
         self._filters.append(("lt", col, val))
         return self
 
+    def gte(self, col: str, val: Any) -> "_StubQuery":
+        self._filters.append(("gte", col, val))
+        return self
+
+    def eq(self, col: str, val: Any) -> "_StubQuery":
+        self._filters.append(("eq", col, val))
+        return self
+
     def upsert(
         self, payload: list[dict], *, on_conflict: str | None = None
     ) -> "_StubQuery":
         self._upsert_payload = payload
         return self
+
+    def update(self, payload: dict) -> "_StubQuery":
+        self._update_payload = payload
+        return self
+
+    @staticmethod
+    def _matches(row: dict, op: str, col: str, val: Any) -> bool:
+        cell = row.get(col)
+        if op == "lt":
+            return (cell or "") < val
+        if op == "gte":
+            # String/ISO-timestamp comparison: None never satisfies >= cutoff.
+            if cell is None:
+                return False
+            # Numeric vs string handled uniformly via Python's mixed-type
+            # gracefully degrades — both sides come from same column type.
+            try:
+                return cell >= val
+            except TypeError:
+                return False
+        if op == "eq":
+            return cell == val
+        return True
+
+    def _filtered_rows(self) -> list[dict]:
+        rows = list(self._client.tables.get(self._table, []))
+        for op, col, val in self._filters:
+            rows = [r for r in rows if self._matches(r, op, col, val)]
+        return rows
 
     def execute(self) -> Any:
         if self._upsert_payload is not None:
@@ -75,18 +114,26 @@ class _StubQuery:
             )
             return MagicMock(data=self._upsert_payload)
 
-        rows = list(self._client.tables.get(self._table, []))
-        for op, col, val in self._filters:
-            if op == "lt":
-                # ISO-string comparison works for timestamp fields used here
-                rows = [r for r in rows if (r.get(col) or "") < val]
-        return MagicMock(data=rows)
+        if self._update_payload is not None:
+            matched = self._filtered_rows()
+            for row in matched:
+                row.update(self._update_payload)
+            self._client.update_calls.append({
+                "table": self._table,
+                "payload": dict(self._update_payload),
+                "filters": list(self._filters),
+                "matched_count": len(matched),
+            })
+            return MagicMock(data=matched)
+
+        return MagicMock(data=self._filtered_rows())
 
 
 class _StubSupabase:
     def __init__(self) -> None:
         self.tables: dict[str, list[dict]] = {}
         self.upsert_calls: list[dict] = []
+        self.update_calls: list[dict] = []
 
     def table(self, name: str) -> _StubQuery:
         return _StubQuery(self, name)
@@ -184,6 +231,8 @@ def _seed_rate_row(
     last_used_at: str,
     source_fetched_at: str,
     payment_type: str = "IMP",
+    revalidate_failure_count: int = 0,
+    revalidate_failed_at: str | None = None,
 ) -> None:
     sb.tables.setdefault("tnved_rates", []).append({
         "id": f"row-{len(sb.tables.get('tnved_rates', []))}",
@@ -193,6 +242,8 @@ def _seed_rate_row(
         "last_used_at": last_used_at,
         "source_fetched_at": source_fetched_at,
         "valid_from": "2025-01-01",
+        "revalidate_failure_count": revalidate_failure_count,
+        "revalidate_failed_at": revalidate_failed_at,
     })
 
 
@@ -768,4 +819,300 @@ class TestFailureRatioAlert:
         assert not any(
             "failure ratio" in str(m).lower()
             for m in alert_messages
+        )
+
+
+# ===========================================================================
+# M9 — poison-pill backoff for chronically-failing pairs
+# ===========================================================================
+
+
+def _yesterday_iso() -> str:
+    return (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+
+
+def _eight_days_ago_iso() -> str:
+    return (datetime.now(timezone.utc) - timedelta(days=8)).isoformat()
+
+
+class TestPoisonPillSkip:
+    """Pairs with revalidate_failure_count >= 3 within the 7d backoff are skipped."""
+
+    @pytest.fixture(autouse=True)
+    def _clean_throttle(self):
+        cron_module._cron_last_alert_at.clear()
+        yield
+        cron_module._cron_last_alert_at.clear()
+
+    def test_skips_poison_pill_pairs_within_backoff(
+        self,
+        subapp_client: TestClient,
+        cron_secret: str,
+        stub_sb: _StubSupabase,
+        alta_client_mock: MagicMock,
+        patched_cron,
+    ) -> None:
+        # 5 stale rows total: 2 are poison-pilled (failure_count=3,
+        # failed_at=yesterday → still inside 7d backoff window).
+        for i, code in enumerate(("1111111111", "2222222222", "3333333333")):
+            _seed_rate_row(
+                stub_sb,
+                tnved_code=code,
+                country_or_areal=f"C:{100 + i}",
+                last_used_at=_stale_iso(8 - i),
+                source_fetched_at=_stale_iso(10),
+            )
+        for i, code in enumerate(("9990000001", "9990000002")):
+            _seed_rate_row(
+                stub_sb,
+                tnved_code=code,
+                country_or_areal=f"C:{200 + i}",
+                last_used_at=_stale_iso(7 - i),
+                source_fetched_at=_stale_iso(10),
+                revalidate_failure_count=3,
+                revalidate_failed_at=_yesterday_iso(),
+            )
+        alta_client_mock.get_rates.return_value = [_make_rate()]
+
+        r = subapp_client.post(
+            "/cron/revalidate-rates", headers={"X-Cron-Secret": cron_secret}
+        )
+        assert r.status_code == 200, r.text
+        # Only the 3 non-poison pairs hit Alta — the 2 poison-pilled ones skipped
+        assert alta_client_mock.get_rates.await_count == 3
+        called_codes = {
+            call.kwargs["tncode"]
+            for call in alta_client_mock.get_rates.await_args_list
+        }
+        assert "9990000001" not in called_codes
+        assert "9990000002" not in called_codes
+
+    def test_retries_poison_pill_pairs_after_7_day_backoff(
+        self,
+        subapp_client: TestClient,
+        cron_secret: str,
+        stub_sb: _StubSupabase,
+        alta_client_mock: MagicMock,
+        patched_cron,
+    ) -> None:
+        # 5 stale rows total: 2 are poison-pilled but failed_at=8 days ago
+        # → backoff has expired, they MUST be retried.
+        for i, code in enumerate(("1111111111", "2222222222", "3333333333")):
+            _seed_rate_row(
+                stub_sb,
+                tnved_code=code,
+                country_or_areal=f"C:{100 + i}",
+                last_used_at=_stale_iso(8 - i),
+                source_fetched_at=_stale_iso(10),
+            )
+        for i, code in enumerate(("9990000001", "9990000002")):
+            _seed_rate_row(
+                stub_sb,
+                tnved_code=code,
+                country_or_areal=f"C:{200 + i}",
+                last_used_at=_stale_iso(7 - i),
+                source_fetched_at=_stale_iso(10),
+                revalidate_failure_count=3,
+                revalidate_failed_at=_eight_days_ago_iso(),
+            )
+        alta_client_mock.get_rates.return_value = [_make_rate()]
+
+        r = subapp_client.post(
+            "/cron/revalidate-rates", headers={"X-Cron-Secret": cron_secret}
+        )
+        assert r.status_code == 200, r.text
+        # All 5 pairs are retried — backoff expired
+        assert alta_client_mock.get_rates.await_count == 5
+        called_codes = {
+            call.kwargs["tncode"]
+            for call in alta_client_mock.get_rates.await_args_list
+        }
+        assert "9990000001" in called_codes
+        assert "9990000002" in called_codes
+
+
+class TestPoisonPillCounterUpdates:
+    """Per-pair UPDATEs are issued on success and Alta failure."""
+
+    @pytest.fixture(autouse=True)
+    def _clean_throttle(self):
+        cron_module._cron_last_alert_at.clear()
+        yield
+        cron_module._cron_last_alert_at.clear()
+
+    def test_increments_failure_count_on_alta_error(
+        self,
+        subapp_client: TestClient,
+        cron_secret: str,
+        stub_sb: _StubSupabase,
+        alta_client_mock: MagicMock,
+        patched_cron,
+    ) -> None:
+        _seed_rate_row(
+            stub_sb,
+            tnved_code="1234567890",
+            country_or_areal="C:643",
+            last_used_at=_stale_iso(8),
+            source_fetched_at=_stale_iso(10),
+            revalidate_failure_count=1,
+        )
+        alta_client_mock.get_rates.side_effect = AltaApiError(120, "bad code")
+
+        r = subapp_client.post(
+            "/cron/revalidate-rates", headers={"X-Cron-Secret": cron_secret}
+        )
+        assert r.status_code == 200, r.text
+
+        # Find the increment UPDATE for our pair
+        increments = [
+            c for c in stub_sb.update_calls
+            if c["payload"].get("revalidate_failed_at") is not None
+            and c["payload"].get("revalidate_failure_count") is not None
+        ]
+        assert len(increments) >= 1, (
+            f"Expected at least one increment UPDATE; got: {stub_sb.update_calls!r}"
+        )
+        # New count = previous (1) + 1 = 2
+        target = next(
+            (c for c in increments if c["payload"].get("revalidate_failure_count") == 2),
+            None,
+        )
+        assert target is not None, (
+            f"No UPDATE setting failure_count=2 (prev=1+1); calls: {stub_sb.update_calls!r}"
+        )
+        # And revalidate_failed_at was set (non-None)
+        assert target["payload"].get("revalidate_failed_at")
+
+    def test_resets_failure_count_on_success(
+        self,
+        subapp_client: TestClient,
+        cron_secret: str,
+        stub_sb: _StubSupabase,
+        alta_client_mock: MagicMock,
+        patched_cron,
+    ) -> None:
+        _seed_rate_row(
+            stub_sb,
+            tnved_code="1234567890",
+            country_or_areal="C:643",
+            last_used_at=_stale_iso(8),
+            source_fetched_at=_stale_iso(10),
+            revalidate_failure_count=2,
+            revalidate_failed_at=_yesterday_iso(),
+        )
+        alta_client_mock.get_rates.return_value = [
+            _make_rate(tnved_code="1234567890")
+        ]
+
+        r = subapp_client.post(
+            "/cron/revalidate-rates", headers={"X-Cron-Secret": cron_secret}
+        )
+        assert r.status_code == 200, r.text
+
+        # Verify a reset UPDATE was issued
+        resets = [
+            c for c in stub_sb.update_calls
+            if c["payload"].get("revalidate_failure_count") == 0
+            and c["payload"].get("revalidate_failed_at") is None
+        ]
+        assert len(resets) >= 1, (
+            f"Expected reset UPDATE; got: {stub_sb.update_calls!r}"
+        )
+        # Filter must target the pair (tnved_code + country_or_areal)
+        target = resets[0]
+        filter_cols = {f[1]: f[2] for f in target["filters"] if f[0] == "eq"}
+        assert filter_cols.get("tnved_code") == "1234567890"
+        assert filter_cols.get("country_or_areal") == "C:643"
+
+
+class TestPoisonPillTelegramAlert:
+    """End-of-run alert when many pairs are parked under poison-pill backoff."""
+
+    @pytest.fixture(autouse=True)
+    def _clean_throttle(self):
+        cron_module._cron_last_alert_at.clear()
+        yield
+        cron_module._cron_last_alert_at.clear()
+
+    def test_telegram_alert_when_10_pairs_in_poison_state(
+        self,
+        subapp_client: TestClient,
+        cron_secret: str,
+        stub_sb: _StubSupabase,
+        alta_client_mock: MagicMock,
+        notify_admin_mock: AsyncMock,
+        patched_cron,
+    ) -> None:
+        # Seed 12 currently-poisoned rows (failure_count=3, failed_at=yesterday)
+        # so the post-loop count query returns >= POISON_PILL_ALERT_COUNT.
+        for i in range(12):
+            _seed_rate_row(
+                stub_sb,
+                tnved_code=f"99900000{i:02d}",
+                country_or_areal=f"C:{700 + i}",
+                last_used_at=_stale_iso(8),
+                source_fetched_at=_stale_iso(10),
+                revalidate_failure_count=3,
+                revalidate_failed_at=_yesterday_iso(),
+            )
+
+        r = subapp_client.post(
+            "/cron/revalidate-rates", headers={"X-Cron-Secret": cron_secret}
+        )
+        assert r.status_code == 200, r.text
+
+        alert_messages = [
+            (call.args[0] if call.args else call.kwargs.get("message", ""))
+            for call in notify_admin_mock.call_args_list
+        ]
+        # Exactly one poison-pill alert in the messages
+        poison_alerts = [
+            m for m in alert_messages if "poison-pill" in str(m).lower()
+        ]
+        assert len(poison_alerts) == 1, (
+            f"Expected exactly one poison-pill alert; got: {alert_messages!r}"
+        )
+
+    def test_telegram_alert_throttled_1_per_day(
+        self,
+        subapp_client: TestClient,
+        cron_secret: str,
+        stub_sb: _StubSupabase,
+        alta_client_mock: MagicMock,
+        notify_admin_mock: AsyncMock,
+        patched_cron,
+    ) -> None:
+        # Same scenario as above — but invoked twice within 24h.
+        # Throttle key 'poison_pill' must suppress the second alert.
+        for i in range(12):
+            _seed_rate_row(
+                stub_sb,
+                tnved_code=f"99900000{i:02d}",
+                country_or_areal=f"C:{700 + i}",
+                last_used_at=_stale_iso(8),
+                source_fetched_at=_stale_iso(10),
+                revalidate_failure_count=3,
+                revalidate_failed_at=_yesterday_iso(),
+            )
+
+        # First run — alert fires
+        r1 = subapp_client.post(
+            "/cron/revalidate-rates", headers={"X-Cron-Secret": cron_secret}
+        )
+        assert r1.status_code == 200, r1.text
+        # Second run within the same hour — alert MUST be throttled
+        r2 = subapp_client.post(
+            "/cron/revalidate-rates", headers={"X-Cron-Secret": cron_secret}
+        )
+        assert r2.status_code == 200, r2.text
+
+        alert_messages = [
+            (call.args[0] if call.args else call.kwargs.get("message", ""))
+            for call in notify_admin_mock.call_args_list
+        ]
+        poison_alerts = [
+            m for m in alert_messages if "poison-pill" in str(m).lower()
+        ]
+        assert len(poison_alerts) == 1, (
+            f"Expected throttled to 1; got {len(poison_alerts)}: {alert_messages!r}"
         )
