@@ -479,9 +479,14 @@ class TestUpsertSource:
             "/cron/revalidate-rates", headers={"X-Cron-Secret": cron_secret}
         )
         assert r.status_code == 200, r.text
-        # Inspect upsert payload
-        assert len(stub_sb.upsert_calls) >= 1
-        payload = stub_sb.upsert_calls[0]["payload"]
+        # Inspect upsert payload — _bulk_upsert now writes to `tnved_codes`
+        # first (FK prerequisite for unseen leaf codes) before the
+        # `tnved_rates` upsert. Filter by table.
+        rates_upserts = [
+            c for c in stub_sb.upsert_calls if c["table"] == "tnved_rates"
+        ]
+        assert len(rates_upserts) >= 1
+        payload = rates_upserts[0]["payload"]
         assert all(row["source"] == "alta-revalidate" for row in payload)
 
 
