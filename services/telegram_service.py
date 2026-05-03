@@ -2474,7 +2474,7 @@ async def send_approval_notification_for_quote(
 
         # Get quote details
         quote_response = supabase.table("quotes").select(
-            "id, idn, organization_id, total_client_price, currency, payment_condition_prepayment, customer:customers(name)"
+            "id, idn, organization_id, total_amount_quote, currency, payment_terms, customer:customers(name)"
         ).eq("id", quote_id).execute()
 
         if not quote_response.data or len(quote_response.data) == 0:
@@ -2486,28 +2486,27 @@ async def send_approval_notification_for_quote(
         quote = quote_response.data[0]
         organization_id = quote.get("organization_id")
         quote_idn = quote.get("idn", "N/A")
-        customer = quote.get("customer", {})
-        customer_name = customer.get("name", "N/A") if customer else "N/A"
+        customer = (quote.get("customer") or {})
+        customer_name = customer.get("name", "N/A")
 
         # Format total amount
-        total_price = quote.get("total_client_price", 0) or 0
+        total_price = quote.get("total_amount_quote", 0) or 0
         currency = quote.get("currency", "USD")
         total_amount = f"{total_price:,.0f} {currency}".replace(",", " ")
 
-        # Get markup (calculate from quote_calculation_variables or default)
-        # For now, use payment condition as payment_terms
-        prepayment = quote.get("payment_condition_prepayment", 100)
-        payment_terms = f"{prepayment}% предоплата"
+        # Payment terms (text on modern schema, was prepayment % integer pre-rename)
+        payment_terms = quote.get("payment_terms") or "—"
 
-        # Get requester name
+        # Get requester name from user_profiles (kvota.profiles was renamed)
         requested_by = "Система"
         if requested_by_user_id:
-            profile_response = supabase.table("profiles").select(
-                "full_name, email"
-            ).eq("id", requested_by_user_id).execute()
+            profile_response = supabase.table("user_profiles").select(
+                "full_name"
+            ).eq("user_id", requested_by_user_id).limit(1).execute()
             if profile_response.data and len(profile_response.data) > 0:
-                profile = profile_response.data[0]
-                requested_by = profile.get("full_name") or profile.get("email", "Система")
+                full_name = profile_response.data[0].get("full_name")
+                if full_name:
+                    requested_by = full_name
 
         # Try to get markup from calculation variables
         markup_percent = "N/A"
