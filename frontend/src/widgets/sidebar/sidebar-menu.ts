@@ -69,7 +69,7 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
     },
   ];
 
-  if (hasRole("sales", "sales_manager")) {
+  if (hasRole("sales", "sales_manager", "head_of_sales")) {
     mainItems.push({
       icon: PlusCircle,
       label: "Новый КП",

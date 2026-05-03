@@ -36,6 +36,12 @@ interface QuotesTableClientProps {
   userRoles: string[];
   userId: string;
   orgId: string;
+  /**
+   * Sales group of the current user. Forwarded to CreateQuoteDialog so its
+   * customer typeahead applies the same head_of_sales group-visibility rule
+   * the /customers list uses. null/undefined for non-sales users.
+   */
+  salesGroupId?: string | null;
   actionStatuses: string[];
 }
 
@@ -98,6 +104,7 @@ export function QuotesTableClient({
   userRoles,
   userId,
   orgId,
+  salesGroupId,
   actionStatuses,
 }: QuotesTableClientProps) {
   const router = useRouter();
@@ -371,6 +378,8 @@ export function QuotesTableClient({
         <CreateQuoteDialog
           orgId={orgId}
           userId={userId}
+          userRoles={userRoles}
+          salesGroupId={salesGroupId}
           open={createDialogOpen}
           onOpenChange={setCreateDialogOpen}
         />

@@ -54,6 +54,19 @@ const DELIVERY_METHODS = [
 interface CreateQuoteDialogProps {
   orgId: string;
   userId: string;
+  /**
+   * Role slugs of the current user. Used by `searchCustomers` to gate the
+   * customer typeahead the same way the /customers list is gated — without
+   * this, sales-only users would see every customer in the org from the
+   * modal even though /customers correctly hides them.
+   */
+  userRoles: string[];
+  /**
+   * Sales group of the current user. Resolved server-side via
+   * `fetchUserSalesGroupId` and only meaningful for head_of_sales (drives
+   * group-wide visibility). Pass null/undefined for non-sales users.
+   */
+  salesGroupId?: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   preselectedCustomer?: { id: string; name: string } | null;
@@ -62,6 +75,8 @@ interface CreateQuoteDialogProps {
 export function CreateQuoteDialog({
   orgId,
   userId,
+  userRoles,
+  salesGroupId,
   open,
   onOpenChange,
   preselectedCustomer,
@@ -166,7 +181,12 @@ export function CreateQuoteDialog({
       if (debounceRef.current) clearTimeout(debounceRef.current);
       abortRef.current?.abort();
 
-      if (value.length < 2) {
+      // Trim leading/trailing whitespace for both the DB search and the
+      // DaData INN lookup. Without this, a stray leading space (" 7707083893")
+      // silently bypassed the DB ilike + drove a duplicate-creation suggestion
+      // for an existing customer (МОЗ Тест 2026-05-03 fail #4).
+      const trimmed = value.trim();
+      if (trimmed.length < 2) {
         setCustomerResults([]);
         setShowDropdown(false);
         return;
@@ -177,18 +197,23 @@ export function CreateQuoteDialog({
         const controller = new AbortController();
         abortRef.current = controller;
         try {
-          const results = await searchCustomers(value, orgId);
+          const results = await searchCustomers(trimmed, {
+            id: userId,
+            roles: userRoles,
+            salesGroupId,
+            orgId,
+          });
           setCustomerResults(results);
           setShowDropdown(true);
 
           // If no DB results and query looks like INN, look up in DaData
-          if (results.length === 0 && isInnQuery(value)) {
+          if (results.length === 0 && isInnQuery(trimmed)) {
             setLookingUpDadata(true);
             try {
               const res = await fetch("/proxy/dadata", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ inn: value.replace(/\D/g, "") }),
+                body: JSON.stringify({ inn: trimmed.replace(/\D/g, "") }),
                 signal: controller.signal,
               });
               if (res.ok) {
@@ -220,7 +245,7 @@ export function CreateQuoteDialog({
         }
       }, 300);
     },
-    [orgId]
+    [orgId, userId, userRoles, salesGroupId]
   );
 
   async function handleCreateFromDadata() {

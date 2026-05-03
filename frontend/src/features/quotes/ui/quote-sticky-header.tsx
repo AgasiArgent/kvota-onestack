@@ -42,6 +42,15 @@ interface QuoteStickyHeaderProps {
    * "sales" when not provided (legacy callers).
    */
   defaultStep?: QuoteStep;
+  /**
+   * Step the user came from before opening a side-panel step (documents /
+   * plan-fact). Sourced from `?from=...` in the page URL by the parent.
+   * When the user closes documents, we navigate back to this step instead
+   * of the workflow-derived `defaultStep` — that way clicking the paperclip
+   * from "Закупки" returns the user to "Закупки" on close, not "Заявка"
+   * (МОП fail QP5).
+   */
+  fromStep?: QuoteStep | null;
   userRoles?: string[];
   isContextOpen: boolean;
   onToggleContext: () => void;
@@ -52,6 +61,7 @@ export function QuoteStickyHeader({
   documentCount,
   activeStep,
   defaultStep = "sales",
+  fromStep = null,
   userRoles = [],
   isContextOpen,
   onToggleContext,
@@ -59,6 +69,19 @@ export function QuoteStickyHeader({
   const [cancelOpen, setCancelOpen] = useState(false);
   const isDocumentsActive = activeStep === "documents";
   const isPlanFactActive = activeStep === "plan-fact";
+  // The step we should return to when the user closes documents/plan-fact.
+  // Priority:
+  //   1. If we're currently NOT inside a side panel, the active step is the
+  //      origin — record it as `from=` when opening a panel.
+  //   2. If we're already inside the panel (re-render after navigate or
+  //      page refresh), use the URL's `from` propagated via props.
+  //   3. Fall back to the workflow-derived defaultStep.
+  const currentNonPanelStep =
+    activeStep && activeStep !== "documents" && activeStep !== "plan-fact"
+      ? activeStep
+      : null;
+  const closeStep: QuoteStep =
+    currentNonPanelStep ?? fromStep ?? defaultStep;
   const showPlanFact = userRoles.some((r) => PLAN_FACT_ROLES.includes(r));
   const workflowStatus = quote.workflow_status ?? "draft";
   const statusStyle =
@@ -166,8 +189,10 @@ export function QuoteStickyHeader({
               <Link
                 href={
                   isPlanFactActive
-                    ? `/quotes/${quote.id}?step=${defaultStep}`
-                    : `/quotes/${quote.id}?step=plan-fact`
+                    ? `/quotes/${quote.id}?step=${closeStep}`
+                    : `/quotes/${quote.id}?step=plan-fact${
+                        currentNonPanelStep ? `&from=${currentNonPanelStep}` : ""
+                      }`
                 }
                 className={cn(
                   "relative inline-flex items-center gap-1 text-sm transition-colors rounded-md px-2 py-1",
@@ -185,8 +210,10 @@ export function QuoteStickyHeader({
             <Link
               href={
                 isDocumentsActive
-                  ? `/quotes/${quote.id}?step=${defaultStep}`
-                  : `/quotes/${quote.id}?step=documents`
+                  ? `/quotes/${quote.id}?step=${closeStep}`
+                  : `/quotes/${quote.id}?step=documents${
+                      currentNonPanelStep ? `&from=${currentNonPanelStep}` : ""
+                    }`
               }
               className={cn(
                 "relative inline-flex items-center gap-1 text-sm transition-colors rounded-md px-2 py-1",

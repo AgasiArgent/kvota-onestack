@@ -96,6 +96,7 @@ export default async function QuotesPage({ searchParams }: Props) {
         userRoles={user.roles}
         userId={user.id}
         orgId={user.orgId}
+        salesGroupId={salesGroupId}
         actionStatuses={actionStatuses}
       />
     </div>

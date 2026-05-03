@@ -6,4 +6,4 @@ export {
   serializeSortString,
   cycleSortState,
 } from "./filter-serialize";
-export { useTableState } from "./use-table-state";
+export { useTableState, columnsDefaultVisible } from "./use-table-state";

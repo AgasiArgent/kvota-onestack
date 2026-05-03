@@ -1,6 +1,15 @@
 import { createClient } from "@/shared/lib/supabase/client";
 import { escapePostgrestFilter } from "@/shared/lib/supabase/escape-filter";
 import { findCountryByName } from "@/shared/ui/geo";
+import { isSalesOnly } from "@/shared/lib/roles";
+import { getAssignedCustomerIds } from "@/shared/lib/access";
+
+// Sentinel UUID used to force a query to return zero rows when a sales-only
+// user has no customer assignments. Postgres .in() with an empty array is
+// a no-op (no filter applied), which would leak rows; using a dummy ID
+// guarantees empty results. Mirrors the same pattern in
+// entities/customer/queries.ts so list and modal stay in lock-step.
+const EMPTY_RESULT_UUID = "00000000-0000-0000-0000-000000000000";
 
 // ---------------------------------------------------------------------------
 // Workflow transition via Python API (handles validation, audit log, timestamps)
@@ -120,19 +129,60 @@ export async function createQuote(
   throw lastError ?? new Error("Failed to generate unique IDN");
 }
 
+/**
+ * Customer typeahead for the "Новый КП" modal.
+ *
+ * Sales gating mirrors `fetchCustomersList` (entities/customer/queries.ts):
+ * sales-only users (sales / head_of_sales without other roles) see only the
+ * customers in their assigned set — direct assignment via customer_assignees
+ * for regular sales, group-member assignments for head_of_sales. Other roles
+ * see every customer in the organization. Without this filter the modal
+ * leaked the full org list to МОПы while their /customers page correctly
+ * showed only the assigned subset.
+ *
+ * Whitespace handling: input is trimmed BEFORE building the .ilike filter so
+ * that " 7707083893" matches the same INN as "7707083893" (Postgres ilike
+ * does not strip leading spaces) and so a whitespace-only query returns
+ * zero rows instead of every customer in the org.
+ */
 export async function searchCustomers(
   query: string,
-  orgId: string
+  user: {
+    id: string;
+    roles: string[];
+    salesGroupId?: string | null;
+    orgId: string;
+  }
 ): Promise<Array<{ id: string; name: string; inn: string | null }>> {
+  const trimmed = query.trim();
+  if (trimmed.length === 0) return [];
+
   const supabase = createClient();
 
-  const { data, error } = await supabase
+  let queryBuilder = supabase
     .from("customers")
     .select("id, name, inn")
-    .eq("organization_id", orgId)
-    .or(`name.ilike.%${escapePostgrestFilter(query)}%,inn.ilike.%${escapePostgrestFilter(query)}%`)
+    .eq("organization_id", user.orgId)
+    .or(
+      `name.ilike.%${escapePostgrestFilter(trimmed)}%,inn.ilike.%${escapePostgrestFilter(trimmed)}%`
+    )
     .order("name")
     .limit(10);
+
+  if (isSalesOnly(user.roles)) {
+    const assignedIds = await getAssignedCustomerIds(supabase, {
+      id: user.id,
+      roles: user.roles,
+      salesGroupId: user.salesGroupId,
+      orgId: user.orgId,
+    });
+    queryBuilder = queryBuilder.in(
+      "id",
+      assignedIds.length > 0 ? assignedIds : [EMPTY_RESULT_UUID]
+    );
+  }
+
+  const { data, error } = await queryBuilder;
 
   if (error) throw error;
 

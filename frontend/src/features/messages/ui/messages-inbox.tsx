@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { MessageSquare, ArrowLeft, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -8,31 +8,13 @@ import { ChatInput } from "@/features/quotes/ui/chat-panel/chat-input";
 import { MessagesList } from "@/features/quotes/ui/chat-panel/messages-list";
 import type { OrgMember } from "@/features/quotes/ui/chat-panel/chat-input";
 import { useRealtimeComments } from "@/features/quotes/ui/chat-panel/use-realtime-comments";
+import { formatChatListTimestamp } from "@/shared/lib/format-date";
 import type { ChatListItem } from "../queries";
 import type { QuoteComment } from "@/entities/quote/types";
 
 // ---------------------------------------------------------------------------
-// Relative time formatter
+// Helpers
 // ---------------------------------------------------------------------------
-function formatRelativeTime(dateStr: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMin = Math.floor(diffMs / 60_000);
-  const diffHours = Math.floor(diffMs / 3_600_000);
-  const diffDays = Math.floor(diffMs / 86_400_000);
-
-  if (diffMin < 1) return "только что";
-  if (diffMin < 60) return `${diffMin} мин`;
-  if (diffHours < 24) return `${diffHours} ч`;
-  if (diffDays === 1) return "вчера";
-  if (diffDays < 7) return `${diffDays} дн`;
-
-  return date.toLocaleDateString("ru-RU", {
-    day: "numeric",
-    month: "short",
-  });
-}
 
 function truncate(text: string, maxLen: number): string {
   if (text.length <= maxLen) return text;
@@ -97,13 +79,6 @@ function ActiveChat({
     initialRenderRef.current = true;
   }, [quoteId]);
 
-  const handleSend = useCallback(
-    async (body: string, mentions?: string[]) => {
-      await sendMessage(body, mentions);
-    },
-    [sendMessage]
-  );
-
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -142,9 +117,14 @@ function ActiveChat({
         )}
       </div>
 
-      {/* Input */}
+      {/* Input — pass `sendMessage` directly so the third argument
+          (`attachmentDocumentIds`) reaches `useRealtimeComments`. The previous
+          `handleSend` wrapper dropped that argument, which silently discarded
+          file uploads from `/messages` — paperclip / drag-drop appeared to
+          succeed locally but never linked to the comment row, so the file
+          vanished on send (МОП Тест 2026-05-03 fail M9–M13). */}
       <ChatInput
-        onSend={handleSend}
+        onSend={sendMessage}
         orgMembers={orgMembers}
         quoteId={quoteId}
         orgId={orgId}
@@ -331,22 +311,30 @@ export function MessagesInbox({
                   selectedQuoteId === chat.quoteId && "bg-muted"
                 )}
               >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-medium text-foreground">
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <span className="text-sm font-medium text-foreground truncate min-w-0">
                     {chat.idnQuote}
                   </span>
-                  <span className="text-[11px] text-muted-foreground">
-                    {chat.lastMessageAt
-                      ? formatRelativeTime(chat.lastMessageAt)
-                      : ""}
+                  <span className="text-[11px] text-muted-foreground whitespace-nowrap flex-shrink-0">
+                    {formatChatListTimestamp(chat.lastMessageAt)}
                   </span>
                 </div>
                 {chat.customerName && (
-                  <p className="text-xs text-muted-foreground mb-1 truncate">
+                  <p
+                    className="text-xs text-muted-foreground mb-1 truncate"
+                    title={chat.customerName}
+                  >
                     {chat.customerName}
                   </p>
                 )}
-                <p className="text-xs text-muted-foreground/80 truncate italic">
+                <p
+                  className="text-xs text-muted-foreground/80 truncate italic"
+                  title={
+                    chat.lastMessageUserName
+                      ? `${chat.lastMessageUserName}: ${chat.lastMessageBody}`
+                      : undefined
+                  }
+                >
                   {chat.commentCount === 0 ? (
                     <span className="text-muted-foreground/60">
                       Нет сообщений

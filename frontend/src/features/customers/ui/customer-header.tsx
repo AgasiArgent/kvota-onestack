@@ -12,9 +12,17 @@ interface Props {
   customer: Customer;
   orgId: string;
   userId: string;
+  userRoles: string[];
+  salesGroupId?: string | null;
 }
 
-export function CustomerHeader({ customer, orgId, userId }: Props) {
+export function CustomerHeader({
+  customer,
+  orgId,
+  userId,
+  userRoles,
+  salesGroupId,
+}: Props) {
   const [createQuoteOpen, setCreateQuoteOpen] = useState(false);
 
   return (
@@ -45,6 +53,8 @@ export function CustomerHeader({ customer, orgId, userId }: Props) {
       <CreateQuoteDialog
         orgId={orgId}
         userId={userId}
+        userRoles={userRoles}
+        salesGroupId={salesGroupId}
         open={createQuoteOpen}
         onOpenChange={setCreateQuoteOpen}
         preselectedCustomer={{ id: customer.id, name: customer.name }}
