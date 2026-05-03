@@ -202,39 +202,35 @@ def test_calculate_duty_combined_addition():
 
 
 def test_calculate_duty_unknown_sign_raises():
-    """Unknown combined sign (e.g. '*') → ValueError mentioning sign_1."""
-    rate = _make_rate(
-        value_1_number=10.0,
-        value_1_unit="percent",
-        value_2_number=0.04,
-        value_2_unit="166",
-        value_2_currency="EUR",
-        sign_1="*",
-    )
+    """Unknown combined sign (e.g. '*') → ValueError mentioning sign_1.
+
+    Invariant moved upstream: Rate.__post_init__ now rejects illegal
+    combinations at construction (per PR #83 review TD-1). The
+    enforcement layer changed but the user-visible contract is the
+    same — bad data raises ValueError before any calc happens.
+    """
     with pytest.raises(ValueError, match="sign_1"):
-        calculate_duty(
-            rate=rate,
-            customs_value_rub=Decimal("100000"),
-            weight_kg=Decimal("500"),
-            quantity=Decimal("0"),
-            currency_rates={"EUR": Decimal("100")},
+        _make_rate(
+            value_1_number=10.0,
+            value_1_unit="percent",
+            value_2_number=0.04,
+            value_2_unit="166",
+            value_2_currency="EUR",
+            sign_1="*",
         )
 
 
 def test_calculate_duty_inconsistent_rate_raises():
-    """Percent rate with a currency set is inconsistent → ValueError."""
-    rate = _make_rate(
-        value_1_number=10.0,
-        value_1_unit="percent",
-        value_1_currency="EUR",  # incompatible with percent
-    )
+    """Percent rate with a currency set is inconsistent → ValueError.
+
+    Same invariant-relocation as above. Rate.__post_init__ catches it
+    at construction time now (TD-1).
+    """
     with pytest.raises(ValueError) as excinfo:
-        calculate_duty(
-            rate=rate,
-            customs_value_rub=Decimal("100000"),
-            weight_kg=Decimal("0"),
-            quantity=Decimal("0"),
-            currency_rates={"EUR": Decimal("100")},
+        _make_rate(
+            value_1_number=10.0,
+            value_1_unit="percent",
+            value_1_currency="EUR",  # incompatible with percent
         )
     msg = str(excinfo.value)
     assert "value_1_currency" in msg or "percent" in msg

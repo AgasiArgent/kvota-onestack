@@ -18,7 +18,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from postgrest.exceptions import APIError as PostgrestAPIError
 
 from api.customs import refresh_customs_snapshot_handler
-from services.customs_freeze_service import FreezeSnapshotResult
+from services.customs_freeze_service import (
+    AbortSnapshot,
+    CacheStaleSnapshot,
+    OkSnapshot,
+)
 
 
 def _make_request(json_body: dict | None, *, user_id: str | None = "user-1",
@@ -152,10 +156,8 @@ async def test_tier_3_abort_returns_409_freeze_aborted():
             .single.return_value
             .execute.return_value) = quote_resp
 
-    abort_result = FreezeSnapshotResult(
-        status="abort",
+    abort_result = AbortSnapshot(
         items={},
-        source_at_freeze="abort",
         warnings=[],
         message="Не удалось зафиксировать ставки. Обратитесь к администратору.",
     )
@@ -208,13 +210,10 @@ async def test_happy_path_persists_snapshot_and_returns_version_id():
 
     mock_sb.table.side_effect = table_router
 
-    snapshot_result = FreezeSnapshotResult(
-        status="ok",
+    snapshot_result = OkSnapshot(
         items={
             "item-1": {"rates": [{"payment_type": "IMP"}], "fetched_at": "now"},
         },
-        source_at_freeze="alta-live",
-        warnings=[],
     )
 
     with _patch_dual_auth(role_codes=["customs"]), \
@@ -272,10 +271,8 @@ async def test_tier_2_cache_stale_returns_warnings_to_caller():
         return chain
     mock_sb.table.side_effect = table_router
 
-    snapshot_result = FreezeSnapshotResult(
-        status="cache-stale",
+    snapshot_result = CacheStaleSnapshot(
         items={"item-1": {"rates": [], "fetched_at": "old"}},
-        source_at_freeze="cache-stale",
         warnings=[
             "8409910008/156/IMP: использован кэш (Alta недоступна)",
         ],
@@ -316,10 +313,8 @@ async def test_no_quote_version_returns_409_no_version():
         return chain
     mock_sb.table.side_effect = table_router
 
-    snapshot_result = FreezeSnapshotResult(
-        status="ok",
+    snapshot_result = OkSnapshot(
         items={"item-1": {"rates": []}},
-        source_at_freeze="alta-live",
     )
 
     with _patch_dual_auth(role_codes=["admin"]), \
