@@ -12,7 +12,7 @@ Based on app_spec.xml workflow_statuses section.
 
 from enum import Enum
 from typing import List, Dict, Set, Optional, Tuple
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 class WorkflowStatus(str, Enum):
@@ -1219,6 +1219,9 @@ class TransitionResult:
         from_status: Previous status
         to_status: New status
         transition_id: UUID of the workflow_transitions record created
+        warnings: Non-fatal advisory messages (e.g. customs freeze used
+            cache fallback rather than live Alta — REQ-8 Q4 Tier 2; or
+            freeze persistence partially failed — UI surfaces yellow toast).
     """
     success: bool
     error_message: Optional[str] = None
@@ -1226,6 +1229,71 @@ class TransitionResult:
     from_status: Optional[str] = None
     to_status: Optional[str] = None
     transition_id: Optional[str] = None
+    warnings: List[str] = field(default_factory=list)
+
+
+def _build_freeze_snapshot_in_thread(quote_id: str):
+    """Run ``customs_freeze_service.build_snapshot()`` in a fresh thread.
+
+    The freeze service is async (httpx.AsyncClient), but
+    ``transition_quote_status`` is sync and called from BOTH sync paths
+    (background tasks, telegram bot, approval_service) AND async
+    FastAPI handlers. Calling ``asyncio.run()`` from inside an
+    already-running event loop raises
+    ``RuntimeError: This event loop is already running`` — defeating
+    the freeze hook in production.
+
+    This thread bridge is the project-local solution: spawn a daemon
+    thread, give it its own event loop via ``asyncio.run()``, and block
+    the calling thread until done. Works in both sync and async
+    contexts, no third-party deps (``nest_asyncio``, ``asgiref``).
+
+    Returns ``(snapshot_result, exception)`` — exactly one of the two
+    is ``None``. The caller (``transition_quote_status``) decides
+    whether to surface the exception, propagate as a warning, or abort
+    the transition based on the snapshot status.
+    """
+    import asyncio
+    import threading
+
+    # Lazy import to avoid circulars and to keep workflow_service
+    # importable when customs_freeze_service is broken.
+    try:
+        from services import customs_freeze_service
+        from services.alta_client import get_alta_client
+    except Exception as import_exc:
+        return (None, import_exc)
+
+    result_holder: list = []
+    exc_holder: list = []
+
+    def runner():
+        try:
+            result_holder.append(
+                asyncio.run(
+                    customs_freeze_service.build_snapshot(
+                        quote_id, alta_client=get_alta_client()
+                    )
+                )
+            )
+        except BaseException as e:  # noqa: BLE001 — surface to caller
+            exc_holder.append(e)
+
+    t = threading.Thread(target=runner, daemon=True, name=f"freeze-{quote_id[:8]}")
+    t.start()
+    # Hard cap: 2 minutes is generous for ~30 items × ~3s each via Alta.
+    t.join(timeout=120)
+    if t.is_alive():
+        return (
+            None,
+            TimeoutError(
+                f"customs_freeze_service.build_snapshot exceeded 2-minute "
+                f"timeout for quote {quote_id}"
+            ),
+        )
+    if exc_holder:
+        return (None, exc_holder[0])
+    return (result_holder[0] if result_holder else None, None)
 
 
 def transition_quote_status(
@@ -1344,40 +1412,55 @@ def transition_quote_status(
     # a Tier 3 abort can block the transition without leaving the quote
     # in an inconsistent state. Tier 1/2 results are stashed and
     # persisted to quote_versions AFTER the status update succeeds.
+    #
+    # NB: this function is sync but build_snapshot() is async (uses
+    # httpx.AsyncClient). We're called from BOTH sync paths (background
+    # tasks, telegram bot, approval_service) AND async FastAPI handlers.
+    # asyncio.run() inside an already-running event loop raises
+    # `RuntimeError: This event loop is already running`. Bridge: run
+    # the coroutine inside a fresh thread that has its own event loop,
+    # block the calling thread until done. Works in both contexts.
     pending_customs_snapshot = None
+    pending_customs_warnings: List[str] = []
     if to_status_enum == WorkflowStatus.APPROVED:
-        try:
-            from services import customs_freeze_service
-            from services.alta_client import get_alta_client
-            import asyncio
-
-            snapshot_result = asyncio.run(
-                customs_freeze_service.build_snapshot(
-                    quote_id, alta_client=get_alta_client()
+        snapshot_result, freeze_failure = _build_freeze_snapshot_in_thread(
+            quote_id
+        )
+        if freeze_failure is not None:
+            # Narrow exception class — programming errors propagate
+            # rather than silently bypass the freeze. The acceptable
+            # bypass cases (Alta API down, freeze service raising) are
+            # already handled inside build_snapshot itself by returning
+            # a CacheStaleSnapshot or AbortSnapshot result. Anything
+            # that surfaces HERE is unexpected and should fail loud.
+            from services.alta_client import AltaApiError
+            if isinstance(freeze_failure, AltaApiError):
+                logger.warning(
+                    "Customs freeze for quote %s aborted on AltaApiError %s — proceeding without snapshot",
+                    quote_id, freeze_failure.code,
                 )
+                pending_customs_warnings.append(
+                    f"Freeze: Alta API error {freeze_failure.code} — snapshot skipped"
+                )
+            else:
+                # Re-raise unexpected exception types so they get caught
+                # by the FastAPI middleware / Sentry rather than vanishing.
+                raise freeze_failure
+        elif snapshot_result is not None and snapshot_result.status == "abort":
+            # Q4 Tier 3 — block transition. Telegram alert was already
+            # emitted inside build_snapshot.
+            return TransitionResult(
+                success=False,
+                error_message=snapshot_result.message
+                              or "Не удалось зафиксировать таможенные ставки",
+                quote_id=quote_id,
+                from_status=current_status,
+                warnings=list(snapshot_result.warnings),
             )
-            if snapshot_result.status == "abort":
-                # Q4 Tier 3 — block transition. Telegram alert was
-                # already emitted inside build_snapshot.
-                return TransitionResult(
-                    success=False,
-                    error_message=snapshot_result.message
-                                   or "Не удалось зафиксировать таможенные ставки",
-                    quote_id=quote_id,
-                    from_status=current_status,
-                )
+        else:
             pending_customs_snapshot = snapshot_result
-        except Exception as e:
-            # Defensive: customs_freeze_service is new code. If it
-            # crashes unexpectedly, log but don't block legitimate
-            # APPROVED transitions in production while we observe.
-            # Convert to a soft warning that surfaces via the workflow
-            # transition's audit log later.
-            logger.warning(
-                "Customs freeze hook crashed for quote %s: %s — proceeding without snapshot",
-                quote_id, e,
-            )
-            pending_customs_snapshot = None
+            if snapshot_result is not None:
+                pending_customs_warnings.extend(snapshot_result.warnings)
 
     # Step 4: Update the quote's workflow_status
     try:
@@ -1439,15 +1522,33 @@ def transition_quote_status(
                         .eq("id", latest["id"]) \
                         .execute()
             else:
+                # No quote_version row yet — happens when the quote was
+                # approved without a prior /calculate. Surface as a
+                # warning so UI / ops know the snapshot is gone.
+                msg = (
+                    "Snapshot не сохранён: для quote ещё не было /calculate. "
+                    "Запустите расчёт и нажмите «Пересчитать по текущим ставкам»."
+                )
                 logger.warning(
                     "Customs snapshot built for quote %s but no quote_versions row "
-                    "exists to merge into — snapshot discarded",
+                    "exists to merge into — snapshot discarded; user advised to re-freeze",
                     quote_id,
                 )
+                pending_customs_warnings.append(msg)
         except Exception as e:
+            # Persistence failed AFTER status update committed. The
+            # quote is now in APPROVED state with no snapshot. Surface
+            # the dataloss as a warning on TransitionResult so callers
+            # propagate to UI (toast / modal). Re-freeze endpoint is
+            # the recovery path.
             logger.warning(
                 "Failed to persist customs snapshot for quote %s: %s",
                 quote_id, e,
+            )
+            pending_customs_warnings.append(
+                "Snapshot не сохранён из-за ошибки БД. "
+                "Нажмите «Пересчитать по текущим ставкам» в карточке quote, "
+                "чтобы зафиксировать ставки повторно."
             )
 
     # Step 5: Log the transition in workflow_transitions
@@ -1490,7 +1591,8 @@ def transition_quote_status(
             quote_id=quote_id,
             from_status=current_status,
             to_status=to_status_enum.value,
-            transition_id=None
+            transition_id=None,
+            warnings=pending_customs_warnings,
         )
 
     return TransitionResult(
@@ -1499,7 +1601,8 @@ def transition_quote_status(
         quote_id=quote_id,
         from_status=current_status,
         to_status=to_status_enum.value,
-        transition_id=transition_id
+        transition_id=transition_id,
+        warnings=pending_customs_warnings,
     )
 
 
