@@ -1490,3 +1490,266 @@ async def refresh_customs_snapshot_handler(
             },
         }
     )
+
+
+# ===========================================================================
+# Phase 2 — TN ВЭД classification by product name (Alta Express)
+# ===========================================================================
+# Two endpoints:
+#   POST /api/customs/classify         — single or batch classification
+#   POST /api/customs/classify/select  — record the customs-specialist's pick
+
+
+def _serialize_candidate(c) -> dict:
+    return {
+        "code": c.code,
+        "probability": c.probability,
+        "code_weight": c.code_weight,
+        "description": c.description,
+    }
+
+
+def _serialize_classify_result(r) -> dict:
+    return {
+        "input_idx": r.input_idx,
+        "name": r.name,
+        "quote_item_id": r.quote_item_id,
+        "candidates": [_serialize_candidate(c) for c in r.candidates],
+        "error": r.error,
+    }
+
+
+async def classify_handler(request: Request, alta_client) -> JSONResponse:
+    """Classify product descriptions to TN ВЭД codes via Alta Express.
+
+    Path: POST /api/customs/classify
+    Auth: dual — JWT (Next.js) or legacy session (FastHTML).
+    Params (JSON body):
+        items: list[{name: str, brand?: str, description?: str,
+                     quote_item_id?: uuid}]  (required, non-empty)
+    Returns:
+        Success (200): {success: true, data: {results, packet_left,
+            packet_used, request_id}}
+        Errors:
+            - 400 BAD_REQUEST — empty items list, malformed JSON
+            - 401 UNAUTHORIZED — no auth
+            - 403 FORBIDDEN — non-customs role
+            - 429 PACKET_EXHAUSTED — Alta packet quota too low to spend
+              on classification (cron revalidation budget protected)
+            - 503 ALTA_UNAVAILABLE — Alta API errored or unreachable
+
+    Side Effects:
+        - Burns 1 Alta Express packet per batch (idempotent on same-day
+          retries via stable request_id).
+        - Writes one audit row per item to kvota.tnved_classification_log
+          (method='express'). chosen_code is filled by /select later.
+    Roles: customs, admin, head_of_customs.
+    """
+    user, role_codes = _resolve_dual_auth(request)
+    if not user or not user.get("org_id"):
+        return _err("UNAUTHORIZED", "Not authenticated", 401)
+    if not (set(role_codes) & _CUSTOMS_ROLES):
+        return _err("FORBIDDEN", "Forbidden", 403)
+
+    try:
+        body = await request.json()
+    except Exception:
+        return _err("BAD_REQUEST", "Invalid JSON", 400)
+    if not isinstance(body, dict):
+        return _err("BAD_REQUEST", "body must be a JSON object", 400)
+
+    raw_items = body.get("items")
+    if not isinstance(raw_items, list) or not raw_items:
+        return _err(
+            "BAD_REQUEST",
+            "items must be a non-empty list of {name, brand?, description?, quote_item_id?}",
+            400,
+        )
+
+    from services.classifier import (
+        ClassifierError,
+        ClassifyInput,
+        classify_items,
+    )
+
+    inputs: list = []
+    for idx, raw in enumerate(raw_items):
+        if not isinstance(raw, dict):
+            return _err(
+                "BAD_REQUEST",
+                f"items[{idx}] must be an object",
+                400,
+            )
+        name = (raw.get("name") or "").strip()
+        if not name:
+            return _err(
+                "BAD_REQUEST",
+                f"items[{idx}].name must be a non-empty string",
+                400,
+            )
+        inputs.append(
+            ClassifyInput(
+                name=name,
+                brand=(raw.get("brand") or None),
+                description=(raw.get("description") or None),
+                quote_item_id=(raw.get("quote_item_id") or None),
+            )
+        )
+
+    try:
+        outcome = await classify_items(
+            inputs,
+            alta_client=alta_client,
+            user_id=user.get("id"),
+        )
+    except ClassifierError as e:
+        # Map service-level error codes to HTTP status.
+        status = {
+            "BAD_REQUEST": 400,
+            "PACKET_EXHAUSTED": 429,
+            "ALTA_UNAVAILABLE": 503,
+        }.get(e.code, 500)
+        return _err(e.code, e.message, status)
+    except Exception as e:
+        logger.error("classify_handler: unexpected error: %s", e)
+        return _err("INTERNAL", "Classification failed", 500)
+
+    logger.info(
+        "customs_classify",
+        extra={
+            "user_id": user.get("id"),
+            "item_count": len(inputs),
+            "request_id": outcome.request_id,
+            "packet_left": outcome.packet_left,
+        },
+    )
+
+    return JSONResponse({
+        "success": True,
+        "data": {
+            "results": [_serialize_classify_result(r) for r in outcome.results],
+            "packet_left": outcome.packet_left,
+            "packet_used": outcome.packet_used,
+            "request_id": outcome.request_id,
+        },
+    })
+
+
+async def classify_select_handler(request: Request) -> JSONResponse:
+    """Record the customs-specialist's chosen code and write hs_code.
+
+    Path: POST /api/customs/classify/select
+    Auth: dual — JWT (Next.js) or legacy session (FastHTML).
+    Params (JSON body):
+        quote_item_id:    str (uuid, required)
+        chosen_code:      str (10 digits, required)
+        candidates_shown: list[{code, probability, code_weight}]
+                          (optional — for audit completeness)
+        input_text:       str (optional — what user typed when classifying)
+    Returns:
+        Success (200): {success: true, data: {quote_item_id, hs_code}}
+        Errors:
+            - 400 INVALID_TNVED_CODE / BAD_REQUEST
+            - 401 UNAUTHORIZED / 403 FORBIDDEN
+            - 404 NOT_FOUND — quote_item_id doesn't exist
+            - 500 DB_ERROR — write failure
+    Side Effects:
+        - UPDATE kvota.quote_items SET hs_code = chosen_code WHERE id=...
+        - INSERT into kvota.tnved_classification_log with chosen_code set.
+    Roles: customs, admin, head_of_customs.
+    """
+    user, role_codes = _resolve_dual_auth(request)
+    if not user or not user.get("org_id"):
+        return _err("UNAUTHORIZED", "Not authenticated", 401)
+    if not (set(role_codes) & _CUSTOMS_ROLES):
+        return _err("FORBIDDEN", "Forbidden", 403)
+
+    try:
+        body = await request.json()
+    except Exception:
+        return _err("BAD_REQUEST", "Invalid JSON", 400)
+    if not isinstance(body, dict):
+        return _err("BAD_REQUEST", "body must be a JSON object", 400)
+
+    quote_item_id = (body.get("quote_item_id") or "").strip()
+    if not quote_item_id:
+        return _err("BAD_REQUEST", "quote_item_id is required", 400)
+
+    chosen_code = (body.get("chosen_code") or "").strip()
+    if not _TNVED_RE.match(chosen_code):
+        return _err(
+            "INVALID_TNVED_CODE",
+            f"chosen_code must be a 10-digit ТН ВЭД code (got {chosen_code!r})",
+            400,
+        )
+
+    raw_candidates = body.get("candidates_shown") or []
+    if not isinstance(raw_candidates, list):
+        return _err("BAD_REQUEST", "candidates_shown must be a list", 400)
+    input_text = (body.get("input_text") or "").strip()
+
+    from services.classifier import Candidate, log_classification_choice
+
+    candidates: list[Candidate] = []
+    for raw in raw_candidates:
+        if not isinstance(raw, dict):
+            continue
+        try:
+            candidates.append(
+                Candidate(
+                    code=str(raw.get("code") or "").strip(),
+                    probability=float(raw.get("probability") or 0.0),
+                    code_weight=int(raw.get("code_weight") or 0),
+                    description=raw.get("description"),
+                )
+            )
+        except (TypeError, ValueError):
+            continue  # skip malformed audit entries — don't block save
+
+    sb = get_supabase()
+    try:
+        update_resp = (
+            sb.table("quote_items")
+              .update({"hs_code": chosen_code})
+              .eq("id", quote_item_id)
+              .execute()
+        )
+        if not getattr(update_resp, "data", None):
+            return _err(
+                "NOT_FOUND",
+                f"Quote item {quote_item_id} not found",
+                404,
+            )
+    except Exception as e:
+        logger.error(
+            "classify_select: failed to update quote_items.hs_code for %s: %s",
+            quote_item_id, e,
+        )
+        return _err("DB_ERROR", "Failed to save hs_code", 500)
+
+    log_classification_choice(
+        quote_item_id=quote_item_id,
+        chosen_code=chosen_code,
+        candidates=candidates,
+        user_id=user.get("id"),
+        method="express",
+        input_text=input_text,
+    )
+
+    logger.info(
+        "customs_classify_select",
+        extra={
+            "user_id": user.get("id"),
+            "quote_item_id": quote_item_id,
+            "chosen_code": chosen_code,
+            "candidate_count": len(candidates),
+        },
+    )
+
+    return JSONResponse({
+        "success": True,
+        "data": {
+            "quote_item_id": quote_item_id,
+            "hs_code": chosen_code,
+        },
+    })

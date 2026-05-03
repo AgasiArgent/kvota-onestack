@@ -10,6 +10,8 @@ from starlette.responses import JSONResponse
 from api.customs import (
     autofill_handler as _autofill_handler,
     bulk_update_items as _bulk_update_items,
+    classify_handler as _classify_handler,
+    classify_select_handler as _classify_select_handler,
     create_item_expense as _create_item_expense,
     create_quote_expense as _create_quote_expense,
     delete_item_expense as _delete_item_expense,
@@ -79,3 +81,21 @@ async def post_non_tariff_measures(
 ) -> JSONResponse:
     """Fetch non-tariff regulation measures — see non_tariff_measures_handler."""
     return await _non_tariff_measures_handler(request, alta_client)
+
+
+# Phase 2 — TN ВЭД classification by product name (Alta Express)
+
+
+@router.post("/classify")
+async def post_classify(
+    request: Request,
+    alta_client: AltaClient = Depends(get_alta_client),
+) -> JSONResponse:
+    """Classify product names → TN ВЭД codes — see classify_handler."""
+    return await _classify_handler(request, alta_client)
+
+
+@router.post("/classify/select")
+async def post_classify_select(request: Request) -> JSONResponse:
+    """Record customs-specialist's chosen code — see classify_select_handler."""
+    return await _classify_select_handler(request)
