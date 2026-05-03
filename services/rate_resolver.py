@@ -398,7 +398,13 @@ def _touch_last_used_at(sb: Any, rate_id: str) -> None:
 
 
 def _row_to_resolved(row: dict[str, Any]) -> ResolvedRate:
-    """Hydrate a kvota.tnved_rates row into a ResolvedRate."""
+    """Hydrate a kvota.tnved_rates row into a ResolvedRate.
+
+    Populates ``Rate.source`` from the DB column too, so the calc-engine
+    adapter (services/calculation_helpers.py:_resolve_import_tariff_pct)
+    can read ``.source`` whether the caller passes the wrapping
+    ``ResolvedRate`` or just unwraps to the inner ``Rate``.
+    """
     rate = Rate(
         tnved_code=row["tnved_code"],
         payment_type=row["payment_type"],
@@ -419,6 +425,7 @@ def _row_to_resolved(row: dict[str, Any]) -> ResolvedRate:
         raw_value_string=row.get("raw_value_string"),
         certificate_required=bool(row.get("certificate_required", False)),
         sp_certificate_required=bool(row.get("sp_certificate_required", False)),
+        source=row["source"],
     )
     return ResolvedRate(
         id=row["id"],
@@ -466,8 +473,10 @@ def _build_resolved_from_snapshot(
 
     Snapshot rates carry no DB id (they live in JSONB) — we synthesize
     a stable pseudo-id from quote_versions row + payment_type so the
-    consumer can still distinguish ResolvedRate instances.
+    consumer can still distinguish ResolvedRate instances. ``Rate.source``
+    is populated so the calc adapter sees the right discriminator.
     """
+    snapshot_source = snapshot_entry.get("source", "alta-live")
     rate = Rate(
         tnved_code=snapshot_entry.get("tnved_code", ""),
         payment_type=snapshot_entry["payment_type"],
@@ -486,11 +495,12 @@ def _build_resolved_from_snapshot(
         raw_value_string=snapshot_entry.get("raw_value_string"),
         certificate_required=bool(snapshot_entry.get("certificate_required", False)),
         sp_certificate_required=bool(snapshot_entry.get("sp_certificate_required", False)),
+        source=snapshot_source,
     )
     return ResolvedRate(
         id=f"snapshot:{snapshot_entry['payment_type']}",
         rate=rate,
-        source=snapshot_entry.get("source", "alta-live"),
+        source=snapshot_source,
         source_fetched_at=fetched_at,
         last_used_at=fetched_at,
         snapshot=True,
