@@ -260,15 +260,6 @@ export async function sendQuoteComment(
 ) {
   const supabase = createClient();
 
-  // Pre-allocate the comment UUID. This lets us link documents BEFORE the
-  // comment INSERT — eliminating a Realtime race where receivers were told
-  // about a new comment whose ``documents.comment_id`` was still NULL,
-  // which made attachments invisible on their side until a manual reload
-  // (МОЗ Тест 2026-05-01 fail #39, #42, #43). For senders, the result
-  // also includes resolved attachment metadata so the optimistic-reconcile
-  // path can render the bubble with its files immediately.
-  const commentId = crypto.randomUUID();
-
   let attachments: Array<{
     id: string;
     original_filename: string;
@@ -277,17 +268,46 @@ export async function sendQuoteComment(
     file_size_bytes: number | null;
   }> = [];
 
-  // Step 1 (BEFORE insert): link documents to the not-yet-existing comment id.
-  // Documents already carry parent_quote_id from useChatAttachments — this
-  // step only flips comment_id from NULL → commentId. By the time the
-  // ``quote_comments`` INSERT broadcast reaches other users, the link is
-  // already in place, so ``resolveAttachments`` on their side returns rows.
+  // Step 1: insert the comment row first so its primary key exists.
+  // The previous "pre-allocate UUID + link before insert" approach (МОЗ Тест
+  // 2026-05-01 fix for realtime race #39/#42/#43) violated
+  // ``documents_comment_id_fkey`` (kvota.documents.comment_id → quote_comments.id)
+  // because the FK is not DEFERRABLE — the link UPDATE could not name a
+  // comment id that did not yet exist. PostgREST returned 23503/409 and the
+  // entire send aborted, so file uploads in /messages and quote chats failed
+  // (МОП Тест 2026-05-03 fail M9–M13, РОП Тест RPQ12–13). Receiver-side
+  // attachment-after-realtime race is handled by useRealtimeComments
+  // re-fetching on documents UPDATE events.
+  const { data, error } = await supabase
+    .from("quote_comments")
+    .insert({
+      quote_id: quoteId,
+      user_id: userId,
+      body,
+      mentions: mentions ?? [],
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  // Step 2: link documents to the freshly-inserted comment id.
   if (attachmentDocumentIds && attachmentDocumentIds.length > 0) {
     const { error: linkError } = await supabase
       .from("documents")
-      .update({ comment_id: commentId })
+      .update({ comment_id: data.id })
       .in("id", attachmentDocumentIds);
-    if (linkError) throw linkError;
+    if (linkError) {
+      // Best-effort cleanup: remove the comment so we don't leave it without
+      // its attachments. If even that fails (RLS, constraints), the comment
+      // is left in place — the user re-sees it on refresh and can resend.
+      await supabase
+        .from("quote_comments")
+        .delete()
+        .eq("id", data.id)
+        .then(undefined, () => {});
+      throw linkError;
+    }
 
     const { data: docs } = await supabase
       .from("documents")
@@ -302,32 +322,6 @@ export async function sendQuoteComment(
       mime_type: d.mime_type,
       file_size_bytes: d.file_size_bytes,
     }));
-  }
-
-  // Step 2: insert the comment with the pre-allocated id.
-  const { data, error } = await supabase
-    .from("quote_comments")
-    .insert({
-      id: commentId,
-      quote_id: quoteId,
-      user_id: userId,
-      body,
-      mentions: mentions ?? [],
-    })
-    .select()
-    .single();
-
-  if (error) {
-    // Roll back the document link so orphan rows don't pile up if the
-    // comment INSERT failed (e.g., RLS reject, constraint violation).
-    if (attachmentDocumentIds && attachmentDocumentIds.length > 0) {
-      await supabase
-        .from("documents")
-        .update({ comment_id: null })
-        .in("id", attachmentDocumentIds)
-        .then(undefined, () => {}); // best-effort
-    }
-    throw error;
   }
 
   return { ...data, attachments };
