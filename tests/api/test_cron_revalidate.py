@@ -553,3 +553,219 @@ class TestResponseShape:
         data = body["data"]
         for key in ("processed", "hits", "updates", "failures"):
             assert key in data, f"Missing key {key!r} in response data"
+
+
+# ===========================================================================
+# M6 — REVALIDATE_MAX_FETCH truncation alert
+# ===========================================================================
+
+
+class TestMaxFetchTruncationAlert:
+    """When stale-row count >= REVALIDATE_MAX_FETCH, ops gets a Telegram alert."""
+
+    @pytest.fixture(autouse=True)
+    def _clean_throttle(self):
+        """Throttle dict in cron module persists across tests — clear it."""
+        cron_module._cron_last_alert_at.clear()
+        yield
+        cron_module._cron_last_alert_at.clear()
+
+    def test_alert_fires_when_max_fetch_cap_hit(
+        self,
+        subapp_client: TestClient,
+        cron_secret: str,
+        stub_sb: _StubSupabase,
+        alta_client_mock: MagicMock,
+        notify_admin_mock: AsyncMock,
+        patched_cron,
+    ) -> None:
+        # Lower cap so the test stays fast and deterministic
+        with patch.object(cron_module, "REVALIDATE_MAX_FETCH", 5):
+            # Seed exactly the cap — the >= comparison in the handler
+            # must trigger the alert.
+            for i in range(5):
+                _seed_rate_row(
+                    stub_sb,
+                    tnved_code=f"99999999{i:02d}",
+                    country_or_areal="C:643",
+                    last_used_at=_stale_iso(8),
+                    source_fetched_at=_stale_iso(10),
+                )
+            r = subapp_client.post(
+                "/cron/revalidate-rates",
+                headers={"X-Cron-Secret": cron_secret},
+            )
+
+        assert r.status_code == 200, r.text
+        # The truncation alert is one of the notify_admin calls.
+        alert_messages = [
+            (call.args[0] if call.args else call.kwargs.get("message", ""))
+            for call in notify_admin_mock.call_args_list
+        ]
+        assert any(
+            "hard cap" in str(m) or "REVALIDATE_MAX_FETCH" in str(m)
+            for m in alert_messages
+        ), f"No truncation alert in: {alert_messages!r}"
+
+    def test_no_alert_when_below_cap(
+        self,
+        subapp_client: TestClient,
+        cron_secret: str,
+        stub_sb: _StubSupabase,
+        alta_client_mock: MagicMock,
+        notify_admin_mock: AsyncMock,
+        patched_cron,
+    ) -> None:
+        with patch.object(cron_module, "REVALIDATE_MAX_FETCH", 100):
+            _seed_rate_row(
+                stub_sb,
+                tnved_code="1111111111",
+                country_or_areal="C:643",
+                last_used_at=_stale_iso(8),
+                source_fetched_at=_stale_iso(10),
+            )
+            r = subapp_client.post(
+                "/cron/revalidate-rates",
+                headers={"X-Cron-Secret": cron_secret},
+            )
+
+        assert r.status_code == 200, r.text
+        alert_messages = [
+            (call.args[0] if call.args else call.kwargs.get("message", ""))
+            for call in notify_admin_mock.call_args_list
+        ]
+        # No truncation alert when row count stays below cap
+        assert not any(
+            "hard cap" in str(m) or "REVALIDATE_MAX_FETCH" in str(m)
+            for m in alert_messages
+        )
+
+
+# ===========================================================================
+# M8 — high failure-ratio alert
+# ===========================================================================
+
+
+class TestFailureRatioAlert:
+    """When > 50% of Alta calls fail, end-of-run alert fires."""
+
+    @pytest.fixture(autouse=True)
+    def _clean_throttle(self):
+        cron_module._cron_last_alert_at.clear()
+        yield
+        cron_module._cron_last_alert_at.clear()
+
+    def test_alert_when_majority_fail(
+        self,
+        subapp_client: TestClient,
+        cron_secret: str,
+        stub_sb: _StubSupabase,
+        alta_client_mock: MagicMock,
+        notify_admin_mock: AsyncMock,
+        patched_cron,
+    ) -> None:
+        # 4 stale pairs — 3 will fail, 1 succeeds → 75% failure ratio
+        for i, code in enumerate(
+            ("1111111111", "2222222222", "3333333333", "4444444444")
+        ):
+            _seed_rate_row(
+                stub_sb,
+                tnved_code=code,
+                country_or_areal=f"C:{100 + i}",
+                last_used_at=_stale_iso(8 - i),
+                source_fetched_at=_stale_iso(10),
+            )
+
+        call_seq = {"n": 0}
+
+        async def _fail_three_succeed_one(*args, **kwargs):
+            call_seq["n"] += 1
+            if call_seq["n"] <= 3:
+                raise RuntimeError(f"alta error #{call_seq['n']}")
+            return [_make_rate(tnved_code=kwargs.get("tncode", "x"))]
+
+        alta_client_mock.get_rates.side_effect = _fail_three_succeed_one
+
+        r = subapp_client.post(
+            "/cron/revalidate-rates",
+            headers={"X-Cron-Secret": cron_secret},
+        )
+        assert r.status_code == 200, r.text
+        # Alert message references high failure ratio
+        alert_messages = [
+            (call.args[0] if call.args else call.kwargs.get("message", ""))
+            for call in notify_admin_mock.call_args_list
+        ]
+        assert any(
+            "failure" in str(m).lower() and "%" in str(m)
+            for m in alert_messages
+        ), f"No failure-ratio alert in: {alert_messages!r}"
+
+    def test_no_alert_when_failures_under_threshold(
+        self,
+        subapp_client: TestClient,
+        cron_secret: str,
+        stub_sb: _StubSupabase,
+        alta_client_mock: MagicMock,
+        notify_admin_mock: AsyncMock,
+        patched_cron,
+    ) -> None:
+        # 4 stale pairs — 1 fails, 3 succeed → 25% failure ratio
+        for i, code in enumerate(
+            ("1111111111", "2222222222", "3333333333", "4444444444")
+        ):
+            _seed_rate_row(
+                stub_sb,
+                tnved_code=code,
+                country_or_areal=f"C:{100 + i}",
+                last_used_at=_stale_iso(8 - i),
+                source_fetched_at=_stale_iso(10),
+            )
+
+        call_seq = {"n": 0}
+
+        async def _fail_one_succeed_three(*args, **kwargs):
+            call_seq["n"] += 1
+            if call_seq["n"] == 1:
+                raise RuntimeError("alta transient error")
+            return [_make_rate(tnved_code=kwargs.get("tncode", "x"))]
+
+        alta_client_mock.get_rates.side_effect = _fail_one_succeed_three
+
+        r = subapp_client.post(
+            "/cron/revalidate-rates",
+            headers={"X-Cron-Secret": cron_secret},
+        )
+        assert r.status_code == 200, r.text
+        alert_messages = [
+            (call.args[0] if call.args else call.kwargs.get("message", ""))
+            for call in notify_admin_mock.call_args_list
+        ]
+        assert not any(
+            "failure ratio" in str(m).lower()
+            for m in alert_messages
+        ), f"Unexpected failure-ratio alert at 25%: {alert_messages!r}"
+
+    def test_no_alert_when_processed_zero(
+        self,
+        subapp_client: TestClient,
+        cron_secret: str,
+        stub_sb: _StubSupabase,
+        alta_client_mock: MagicMock,
+        notify_admin_mock: AsyncMock,
+        patched_cron,
+    ) -> None:
+        # No stale rows → processed=0 → no division-by-zero, no alert
+        r = subapp_client.post(
+            "/cron/revalidate-rates",
+            headers={"X-Cron-Secret": cron_secret},
+        )
+        assert r.status_code == 200, r.text
+        alert_messages = [
+            (call.args[0] if call.args else call.kwargs.get("message", ""))
+            for call in notify_admin_mock.call_args_list
+        ]
+        assert not any(
+            "failure ratio" in str(m).lower()
+            for m in alert_messages
+        )

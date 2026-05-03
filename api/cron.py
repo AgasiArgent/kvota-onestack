@@ -423,6 +423,72 @@ REVALIDATE_PACKET_FLOOR = 50
 # Periodic progress logging frequency (every Nth processed pair).
 REVALIDATE_LOG_EVERY = 100
 
+# Failure-ratio threshold above which an admin alert fires at end of run.
+# Tuned to catch the "Alta partially up — most calls error" case without
+# false-firing on a handful of bad TNVED codes (M8 review fix).
+REVALIDATE_FAILURE_RATIO_THRESHOLD = 0.5
+
+# Throttle for cron-level Telegram alerts. Same 1/hour pattern as
+# AltaClient packet warnings, but isolated by key so the truncation
+# alert and the failure-ratio alert don't suppress each other.
+_CRON_ALERT_THROTTLE = timedelta(hours=1)
+_cron_last_alert_at: dict[str, datetime] = {}
+
+
+async def _maybe_alert_truncation(stale_row_count: int) -> None:
+    """Telegram-alert when REVALIDATE_MAX_FETCH cap was hit (M6).
+
+    Throttled to at most one alert per hour per cron host. Uses a
+    dedicated throttle key so it doesn't compete with the failure-ratio
+    alert (M8) on the same hourly bucket.
+    """
+    key = "revalidate_truncation"
+    now = datetime.now(timezone.utc)
+    last = _cron_last_alert_at.get(key)
+    if last is not None and (now - last) < _CRON_ALERT_THROTTLE:
+        return
+    _cron_last_alert_at[key] = now
+
+    message = (
+        f"⚠️ cron_revalidate_rates: stale-row count hit hard cap "
+        f"{REVALIDATE_MAX_FETCH} (fetched {stale_row_count}) — coverage "
+        f"may be incomplete; consider raising REVALIDATE_MAX_FETCH or "
+        f"running revalidate more frequently."
+    )
+    logger.warning(message)
+    await notify_admin(message)
+
+
+async def _maybe_alert_failure_ratio(
+    processed: int, failures: int
+) -> None:
+    """Telegram-alert when failure ratio crosses threshold at end of run (M8).
+
+    Catches the case where Alta is partially up (random 5xx, schema
+    drift, etc.) — the loop didn't trigger the AltaApiError(140) abort,
+    yet most rows fail anyway.
+    """
+    if processed <= 0:
+        return
+    ratio = failures / processed
+    if ratio <= REVALIDATE_FAILURE_RATIO_THRESHOLD:
+        return
+
+    key = "revalidate_failure_ratio"
+    now = datetime.now(timezone.utc)
+    last = _cron_last_alert_at.get(key)
+    if last is not None and (now - last) < _CRON_ALERT_THROTTLE:
+        return
+    _cron_last_alert_at[key] = now
+
+    message = (
+        f"⚠️ cron_revalidate_rates: high failure ratio "
+        f"{ratio * 100:.0f}% ({failures}/{processed}) — possible Alta "
+        f"outage or schema drift."
+    )
+    logger.warning(message)
+    await notify_admin(message)
+
 
 async def cron_revalidate_rates(request, alta_client) -> JSONResponse:
     """POST /api/cron/revalidate-rates
@@ -466,10 +532,14 @@ async def cron_revalidate_rates(request, alta_client) -> JSONResponse:
         .execute()
     )
     stale_rows: list[dict[str, Any]] = list(getattr(resp, "data", None) or [])
-    if len(stale_rows) > REVALIDATE_MAX_FETCH:
+    if len(stale_rows) >= REVALIDATE_MAX_FETCH:
         # Defensive: should never happen in practice for a 7-day window
-        # since the cache is bounded by user activity.
+        # since the cache is bounded by user activity. When it does, ops
+        # need to know — top-1000 ranking only sees the truncated slice
+        # and stale-coverage may be incomplete (M6 review fix).
+        original_count = len(stale_rows)
         stale_rows = stale_rows[:REVALIDATE_MAX_FETCH]
+        await _maybe_alert_truncation(original_count)
 
     pairs = _rank_revalidation_pairs(stale_rows, limit=REVALIDATE_BATCH_SIZE)
 
@@ -491,6 +561,12 @@ async def cron_revalidate_rates(request, alta_client) -> JSONResponse:
             # when a user-driven resolve hits them.
             continue
 
+        # TODO: poison-pill threshold — a (tnved, country) pair that
+        # consistently fails will keep retrying every cron run. Proper
+        # fix needs a per-pair failure counter persisted in DB (e.g.
+        # `tnved_rates.revalidate_failure_count` column) so we can skip
+        # pairs above N consecutive failures. Deferred — out of scope
+        # for the M9 review fix because it requires a schema migration.
         try:
             new_rates = await alta_client.get_rates(
                 tncode=tnved_code,
@@ -581,6 +657,11 @@ async def cron_revalidate_rates(request, alta_client) -> JSONResponse:
     logger.info(
         "Cron revalidate-rates: %s",
         ", ".join(f"{k}={v}" for k, v in stats.items()),
+    )
+    # Failure-ratio alert: catches partial-Alta-outage where most calls
+    # fail but no single error triggered the abort path (M8 review fix).
+    await _maybe_alert_failure_ratio(
+        processed=stats["processed"], failures=stats["failures"]
     )
     return JSONResponse({"success": True, "data": stats})
 

@@ -16,7 +16,9 @@ from services import alta_client as alta_client_module
 from services.alta_client import (
     AltaApiError,
     AltaClient,
+    Rate,
     get_alta_client,
+    notify_admin,
 )
 
 
@@ -537,3 +539,200 @@ async def test_no_retry_on_alta_api_error():
 
     assert exc_info.value.code == 100
     assert call_count["n"] == 1  # No retry
+
+
+# ---------------------------------------------------------------------------
+# Rate dataclass invariants (TD-1, TD-3 review fixes)
+# ---------------------------------------------------------------------------
+
+
+def _valid_rate_kwargs(**overrides: object) -> dict:
+    """Minimal-valid Rate kwargs that satisfy all __post_init__ checks."""
+    base = {
+        "tnved_code": "1234567890",
+        "payment_type": "IMP",
+        "country_or_areal": "C:643",
+        "valid_from": date(2025, 1, 1),
+        "value_1_number": 10.0,
+        "value_1_unit": "percent",
+    }
+    base.update(overrides)
+    return base
+
+
+class TestRateInvariants:
+    """__post_init__ enforces schema CHECK constraints from migration 298."""
+
+    def test_valid_rate_constructs(self):
+        Rate(**_valid_rate_kwargs())  # Must not raise
+
+    def test_country_or_areal_none_allowed(self):
+        Rate(**_valid_rate_kwargs(country_or_areal=None))
+
+    def test_country_or_areal_country_format(self):
+        Rate(**_valid_rate_kwargs(country_or_areal="C:643"))
+        Rate(**_valid_rate_kwargs(country_or_areal="C:156"))
+
+    def test_country_or_areal_areal_format(self):
+        Rate(**_valid_rate_kwargs(country_or_areal="A:EAEU"))
+        Rate(**_valid_rate_kwargs(country_or_areal="A:CIS"))
+
+    @pytest.mark.parametrize("bad", [
+        "643",         # missing prefix
+        "C:abc",       # non-digit country
+        "C:",          # empty digits
+        "country-643", # arbitrary string
+        "A:",          # empty areal token
+        "X:643",       # wrong prefix
+    ])
+    def test_country_or_areal_rejects_bad_format(self, bad):
+        with pytest.raises(ValueError, match="country_or_areal"):
+            Rate(**_valid_rate_kwargs(country_or_areal=bad))
+
+    def test_sign_1_required_when_value_2_set(self):
+        with pytest.raises(ValueError, match="sign_1"):
+            Rate(**_valid_rate_kwargs(
+                value_2_number=5.0,
+                value_2_unit="166",
+                sign_1=None,
+            ))
+
+    @pytest.mark.parametrize("bad_sign", ["*", "-", "<", "x"])
+    def test_sign_1_rejects_invalid_token(self, bad_sign):
+        with pytest.raises(ValueError, match="sign_1"):
+            Rate(**_valid_rate_kwargs(
+                value_2_number=5.0,
+                value_2_unit="166",
+                sign_1=bad_sign,
+            ))
+
+    @pytest.mark.parametrize("good_sign", ["+", ">"])
+    def test_sign_1_accepts_valid_tokens(self, good_sign):
+        Rate(**_valid_rate_kwargs(
+            value_2_number=5.0,
+            value_2_unit="166",
+            sign_1=good_sign,
+        ))
+
+    def test_sign_2_required_when_value_3_set(self):
+        with pytest.raises(ValueError, match="sign_2"):
+            Rate(**_valid_rate_kwargs(
+                value_2_number=5.0,
+                value_2_unit="166",
+                sign_1="+",
+                value_3_number=2.0,
+                value_3_unit="166",
+                sign_2=None,
+            ))
+
+    def test_percent_unit_with_currency_rejected(self):
+        with pytest.raises(ValueError, match="value_1_currency"):
+            Rate(**_valid_rate_kwargs(
+                value_1_unit="percent",
+                value_1_currency="USD",
+            ))
+
+    def test_percent_unit_no_currency_accepted(self):
+        Rate(**_valid_rate_kwargs(
+            value_1_unit="percent",
+            value_1_currency=None,
+        ))
+
+    def test_okei_unit_with_currency_accepted(self):
+        # value_1_unit='166' (kg) with EUR currency = 5 EUR/kg — legal
+        Rate(**_valid_rate_kwargs(
+            value_1_unit="166",
+            value_1_currency="EUR",
+        ))
+
+    def test_percent_in_slot_2_with_currency_rejected(self):
+        with pytest.raises(ValueError, match="value_2_currency"):
+            Rate(**_valid_rate_kwargs(
+                value_2_number=5.0,
+                value_2_unit="percent",
+                value_2_currency="USD",
+                sign_1="+",
+            ))
+
+    def test_source_rejects_unknown_string(self):
+        with pytest.raises(ValueError, match="source"):
+            Rate(**_valid_rate_kwargs(source="bogus-source"))
+
+    @pytest.mark.parametrize(
+        "good_source", ["alta-live", "alta-revalidate", "manual"]
+    )
+    def test_source_accepts_known_values(self, good_source):
+        Rate(**_valid_rate_kwargs(source=good_source))
+
+    def test_source_none_accepted(self):
+        Rate(**_valid_rate_kwargs(source=None))
+
+
+# ---------------------------------------------------------------------------
+# notify_admin Sentry fallback (M10 review fix)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_notify_admin_falls_back_to_sentry_when_telegram_unavailable(
+    monkeypatch,
+):
+    """When Telegram raises, the alert should still reach Sentry."""
+    # Force the Telegram path to fail
+    fake_service = MagicMock()
+    fake_service.get_bot.side_effect = RuntimeError("telegram down")
+
+    fake_sentry = MagicMock()
+    captured: list[dict] = []
+
+    def _capture_message(msg, level=None):
+        captured.append({"msg": msg, "level": level})
+
+    fake_sentry.capture_message = _capture_message
+
+    import sys
+    monkeypatch.setitem(sys.modules, "services.telegram_service", fake_service)
+    monkeypatch.setitem(sys.modules, "sentry_sdk", fake_sentry)
+
+    await notify_admin("test alert payload")
+
+    assert len(captured) == 1
+    assert "test alert payload" in captured[0]["msg"]
+    assert captured[0]["level"] == "warning"
+
+
+@pytest.mark.asyncio
+async def test_notify_admin_no_chat_id_falls_back_to_sentry(monkeypatch):
+    """When ADMIN_TELEGRAM_CHAT_ID is unset, Sentry still gets the alert."""
+    fake_bot = MagicMock()
+    fake_service = MagicMock()
+    fake_service.get_bot.return_value = fake_bot
+
+    fake_sentry = MagicMock()
+    captured: list[str] = []
+    fake_sentry.capture_message = lambda msg, level=None: captured.append(msg)
+
+    import sys
+    monkeypatch.setitem(sys.modules, "services.telegram_service", fake_service)
+    monkeypatch.setitem(sys.modules, "sentry_sdk", fake_sentry)
+    monkeypatch.delenv("ADMIN_TELEGRAM_CHAT_ID", raising=False)
+
+    await notify_admin("alert without chat id")
+
+    assert any("alert without chat id" in m for m in captured)
+
+
+@pytest.mark.asyncio
+async def test_notify_admin_no_sentry_module_does_not_raise(monkeypatch):
+    """When sentry_sdk is not installed, notify_admin must still complete."""
+    fake_service = MagicMock()
+    fake_service.get_bot.side_effect = RuntimeError("telegram down")
+
+    import sys
+    monkeypatch.setitem(sys.modules, "services.telegram_service", fake_service)
+    # Force the import to fail by setting sentry_sdk to None and using a
+    # finder that raises ImportError for that name.
+    monkeypatch.setitem(sys.modules, "sentry_sdk", None)
+
+    # ImportError of `import sentry_sdk` must not propagate
+    await notify_admin("alert without sentry")

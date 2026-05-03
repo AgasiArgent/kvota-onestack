@@ -40,6 +40,19 @@ ALTA_NODES_URL = f"{ALTA_BASE_URL}/tnved/xml_nodes/"
 ALTA_APU_URL = f"{ALTA_BASE_URL}/tnved/xml_apu/"
 ALTA_EXPRESS_URL = f"{ALTA_BASE_URL}/tools/autotnved/v2/"
 
+# Rate.source provenance (mirrors kvota.tnved_rates.source CHECK constraint).
+RateSource = Literal['alta-live', 'alta-revalidate', 'manual']
+_VALID_RATE_SOURCES: frozenset[str] = frozenset(
+    {'alta-live', 'alta-revalidate', 'manual'}
+)
+
+# country_or_areal regex (mirrors migration 298 CHECK constraint).
+_COUNTRY_PATTERN = re.compile(r"^C:\d+$")
+_AREAL_PATTERN = re.compile(r"^A:\w+$")
+
+# Allowed sign tokens between adjacent value slots (matches schema CHECK).
+_VALID_SIGN_TOKENS: frozenset[str] = frozenset({"+", ">"})
+
 HTTP_TIMEOUT_SECONDS: float = 30.0
 
 # Polling — Phase 0 calibrated values (1 initial + 5 retries × 2.0s)
@@ -102,7 +115,71 @@ class Rate:
     # Populated when reading from `kvota.tnved_rates.source` ('alta-live' |
     # 'alta-revalidate' | 'manual'). The Alta XML response itself does not
     # carry this field — it is set by the persistence layer on read/upsert.
-    source: str | None = None
+    source: RateSource | None = None
+
+    def __post_init__(self) -> None:
+        """Enforce schema CHECK invariants at construction time.
+
+        Mirrors the constraints in migration 298 — a Rate that the DB
+        would reject must not be constructable in memory either.
+        """
+        # 1. country_or_areal format
+        if self.country_or_areal is not None:
+            if not (
+                _COUNTRY_PATTERN.match(self.country_or_areal)
+                or _AREAL_PATTERN.match(self.country_or_areal)
+            ):
+                raise ValueError(
+                    f"Rate invariant violated: country_or_areal must be "
+                    f"None, 'C:<digits>', or 'A:<token>', got "
+                    f"{self.country_or_areal!r}"
+                )
+
+        # 2. Sign-vs-slot consistency: sign_1 connects slots 1 and 2, so
+        # slot 2 must be populated whenever sign_1 is set; mirror for
+        # sign_2 / slot 3. Conversely, when slot 2 (or 3) is populated
+        # the corresponding sign must be one of the allowed tokens.
+        if self.value_2_number is not None:
+            if self.sign_1 not in _VALID_SIGN_TOKENS:
+                raise ValueError(
+                    f"Rate invariant violated: sign_1 must be one of "
+                    f"{sorted(_VALID_SIGN_TOKENS)} when value_2_number "
+                    f"is set, got {self.sign_1!r}"
+                )
+        if self.value_3_number is not None:
+            if self.sign_2 not in _VALID_SIGN_TOKENS:
+                raise ValueError(
+                    f"Rate invariant violated: sign_2 must be one of "
+                    f"{sorted(_VALID_SIGN_TOKENS)} when value_3_number "
+                    f"is set, got {self.sign_2!r}"
+                )
+
+        # 3. Percent-vs-currency exclusion: percent units never carry a
+        # currency (% is dimensionless). OKEI-coded units MAY carry one.
+        for slot, unit, currency in (
+            (1, self.value_1_unit, self.value_1_currency),
+            (2, self.value_2_unit, self.value_2_currency),
+            (3, self.value_3_unit, self.value_3_currency),
+        ):
+            if unit == "percent" and currency is not None:
+                raise ValueError(
+                    f"Rate invariant violated: value_{slot}_currency "
+                    f"must be None when value_{slot}_unit='percent', "
+                    f"got {currency!r}"
+                )
+
+        # 4. source provenance — mirror Literal at runtime so values
+        # constructed from JSONB / DB rows (where Literal isn't enforced)
+        # still get caught.
+        if (
+            self.source is not None
+            and self.source not in _VALID_RATE_SOURCES
+        ):
+            raise ValueError(
+                f"Rate invariant violated: source must be one of "
+                f"{sorted(_VALID_RATE_SOURCES)} or None, got "
+                f"{self.source!r}"
+            )
 
 
 @dataclass(frozen=True)
@@ -187,7 +264,8 @@ async def notify_admin(message: str) -> None:
     """Send an admin alert via the existing Telegram service.
 
     Module-level wrapper so tests can patch a single symbol. Uses
-    `services.telegram_service` if configured; otherwise logs only.
+    `services.telegram_service` if configured; otherwise falls back to
+    Sentry capture so ops still has a second observability channel.
     """
     try:
         from services import telegram_service
@@ -201,6 +279,20 @@ async def notify_admin(message: str) -> None:
     except Exception as exc:  # pragma: no cover — alerting must never crash callers
         logger.error("Failed to send AltaClient admin alert: %s", exc)
     logger.warning("AltaClient admin alert (telegram unavailable): %s", message)
+    # Sentry fallback — keeps the alert visible to ops even when Telegram
+    # is down or ADMIN_TELEGRAM_CHAT_ID is unset. Wrapped defensively so
+    # telemetry never breaks the caller (M10 review fix).
+    try:
+        import sentry_sdk
+
+        sentry_sdk.capture_message(
+            f"customs admin alert (Telegram unavailable): {message}",
+            level="warning",
+        )
+    except ImportError:
+        pass  # Sentry not installed in this environment
+    except Exception:
+        pass  # never break the caller on telemetry
 
 
 # ---------------------------------------------------------------------------
