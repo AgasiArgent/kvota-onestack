@@ -10,24 +10,31 @@ export async function fetchDistributionData(
 ): Promise<QuoteWithBrandGroups[]> {
   const supabase = createAdminClient();
 
-  // 1. Get all quotes for this org (not deleted)
+  // 1. Get pending_procurement quotes for this org (not deleted).
+  //    Aligned with kanban + sidebar badge: distribution is only meaningful
+  //    while the quote is in procurement. Quotes that already moved past
+  //    procurement (e.g. pending_logistics_and_customs) may still have stale
+  //    unassigned items, but they are not actionable from this screen.
   const { data: quoteRows } = await supabase
     .from("quotes")
     .select("id, idn_quote, customer_id, created_by_user_id, created_at")
     .eq("organization_id", orgId)
-    .is("deleted_at", null)
-    .not("workflow_status", "in", "(cancelled,rejected,draft)");
+    .eq("workflow_status", "pending_procurement")
+    .is("deleted_at", null);
 
   if (!quoteRows || quoteRows.length === 0) return [];
 
   const quoteIds = quoteRows.map((q) => q.id);
 
-  // 2. Get unassigned items across all quotes
+  // 2. Get unassigned, available items across all quotes. Mirrors the kanban
+  //    drag-guard (`countUnassignedItems`): unavailable items don't need МОЗ
+  //    assignment, so they shouldn't gate distribution either.
   const { data: items } = await supabase
     .from("quote_items")
     .select("id, quote_id, brand, product_name, quantity, created_at")
     .in("quote_id", quoteIds)
-    .is("assigned_procurement_user", null);
+    .is("assigned_procurement_user", null)
+    .neq("is_unavailable", true);
 
   if (!items || items.length === 0) return [];
 
@@ -134,22 +141,41 @@ export async function fetchDistributionData(
 }
 
 /**
- * Count of brand-slices currently in the `distributing` substatus for the
- * sidebar badge. Mirrors the kanban's "Распределение" column exactly: one
- * row per (quote, brand) slice where the quote is alive + pending_procurement
- * + in the user's org. Replaces the old item-level count so the sidebar and
- * kanban agree on the unit of work.
+ * Distribution metrics shared by the sidebar badge, the page header, and the
+ * kanban "Распределение" column. Derived from the single source-of-truth
+ * `fetchDistributionData` so all three surfaces always agree.
+ *
+ * Units:
+ *   - quoteCount:      unique quotes (заявки) — UX-friendly aggregate
+ *   - brandSliceCount: distinct (quote × brand) pairs — matches the cards
+ *                      rendered on the distribution page AND the kanban
+ *                      "Распределение" column count (1 card = 1 brand slice)
+ *   - itemCount:       total unassigned, available positions across all quotes
+ */
+export async function fetchDistributionMetrics(orgId: string): Promise<{
+  quoteCount: number;
+  brandSliceCount: number;
+  itemCount: number;
+}> {
+  const quotes = await fetchDistributionData(orgId);
+  const brandSliceCount = quotes.reduce(
+    (sum, q) => sum + q.brandGroups.length,
+    0
+  );
+  const itemCount = quotes.reduce(
+    (sum, q) => sum + q.brandGroups.reduce((s, bg) => s + bg.itemCount, 0),
+    0
+  );
+  return { quoteCount: quotes.length, brandSliceCount, itemCount };
+}
+
+/**
+ * Sidebar badge count for "Распределение". Returns the brand-slice count
+ * (= cards on the distribution page = kanban "Распределение" column count)
+ * so the sidebar, page header, and kanban column never diverge when a quote
+ * has 2+ brands at the distribution stage.
  */
 export async function fetchUnassignedItemCount(orgId: string): Promise<number> {
-  const supabase = createAdminClient();
-
-  const { count } = await supabase
-    .from("quote_brand_substates")
-    .select("quote_id, quotes!inner(id)", { count: "exact", head: true })
-    .eq("substatus", "distributing")
-    .eq("quotes.workflow_status", "pending_procurement")
-    .eq("quotes.organization_id", orgId)
-    .is("quotes.deleted_at", null);
-
-  return count ?? 0;
+  const { brandSliceCount } = await fetchDistributionMetrics(orgId);
+  return brandSliceCount;
 }

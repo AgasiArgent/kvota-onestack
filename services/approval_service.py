@@ -7,10 +7,13 @@ Handles approval requests from quote controllers to top managers.
 Feature #64 from features.json
 """
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional, List
 from .database import get_supabase
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
@@ -841,182 +844,93 @@ def process_approval_decision(
 
 
 # ============================================================================
-# High-Level Approval Request Function (Feature #65)
+# Universal Approval Request Wrapper
 # ============================================================================
 
 @dataclass
-class ApprovalRequestResult:
-    """Result of a request_approval operation."""
+class RequestApprovalsResult:
+    """Generic result for batch approval requests via request_approvals()."""
     success: bool
     quote_id: str
     approvals_created: int
     notifications_sent: int
-    transition_success: bool
+    approvals: List[Approval]
     error_message: Optional[str] = None
 
 
-def request_approval(
+async def request_approvals(
     quote_id: str,
     requested_by: str,
     reason: str,
     organization_id: str,
-    actor_roles: List[str],
-    quote_idn: Optional[str] = None,
-    customer_name: Optional[str] = None,
-    total_amount: Optional[float] = None,
-    markup_percent: Optional[float] = None,
-    payment_terms: Optional[str] = None,
+    role_codes: List[str],
+    approval_type: str,
     send_notifications: bool = True
-) -> ApprovalRequestResult:
-    """
-    Request approval for a quote from top managers.
+) -> RequestApprovalsResult:
+    """Universal approval-request wrapper: INSERT approval rows + send Telegram notifications.
 
-    This function performs the complete approval request workflow:
-    1. Validates the quote is in the correct status (pending_quote_control)
-    2. Transitions the quote to pending_approval status
-    3. Creates approval records for all top_manager/admin users
-    4. Sends Telegram notifications to approvers (optional)
+    Use this for ALL approval flows — guarantees notifications fire so approvers
+    actually see the request. Direct callers of `create_approvals_for_role()` should
+    migrate to this function unless they explicitly want INSERT-only behavior.
 
-    Args:
-        quote_id: ID of the quote requiring approval
-        requested_by: User ID of who is requesting approval (usually quote_controller)
-        reason: Reason why approval is needed (e.g., "RUB currency, markup below minimum")
-        organization_id: ID of the organization
-        actor_roles: Roles of the user making the request
-        quote_idn: Quote identifier for notifications (optional, fetched if not provided)
-        customer_name: Customer name for notifications (optional, fetched if not provided)
-        total_amount: Total amount for notifications (optional)
-        markup_percent: Markup percentage for notifications (optional)
-        payment_terms: Payment terms for notifications (optional)
+    Path: services-internal
+    Params:
+        quote_id: ID of the quote requiring approval (notifications use it to load context)
+        requested_by: User ID of who is requesting approval
+        reason: Reason why approval is needed (shown in approval UI + Telegram message)
+        organization_id: Organization scope for the approver lookup
+        role_codes: Roles whose users will receive approval requests
+        approval_type: Type of approval (e.g. 'top_manager', 'edit_completed_procurement')
         send_notifications: Whether to send Telegram notifications (default: True)
-
     Returns:
-        ApprovalRequestResult with success status and details
-
-    Example:
-        result = request_approval(
-            quote_id='abc-123',
-            requested_by='user-456',
-            reason='RUB currency, markup below 15%',
-            organization_id='org-789',
-            actor_roles=['quote_controller'],
-            quote_idn='KP-2025-001',
-            customer_name='ООО Клиент'
-        )
-        if result.success:
-            print(f"Created {result.approvals_created} approvals")
+        RequestApprovalsResult with counts of rows inserted and notifications sent.
+    Side Effects:
+        - Inserts rows into kvota.approvals (one per matching user, except requester)
+        - Sends Telegram messages with inline approval buttons to each approver
     """
-    from .workflow_service import (
-        transition_quote_status,
-        WorkflowStatus,
-        get_quote_workflow_status
-    )
     from .telegram_service import send_approval_notification_for_quote
 
-    supabase = get_supabase()
-
-    # Step 1: Validate current quote status
-    current_status = get_quote_workflow_status(quote_id)
-
-    if current_status is None:
-        return ApprovalRequestResult(
-            success=False,
-            quote_id=quote_id,
-            approvals_created=0,
-            notifications_sent=0,
-            transition_success=False,
-            error_message="КП не найдено"
-        )
-
-    if current_status != WorkflowStatus.PENDING_QUOTE_CONTROL:
-        return ApprovalRequestResult(
-            success=False,
-            quote_id=quote_id,
-            approvals_created=0,
-            notifications_sent=0,
-            transition_success=False,
-            error_message=f"КП не в статусе проверки. Текущий статус: {current_status.value}"
-        )
-
-    # Step 2: Fetch quote details if not provided
-    if not quote_idn or not customer_name:
-        try:
-            quote_result = supabase.table('quotes').select(
-                'idn, customer_name, total_amount, currency'
-            ).eq('id', quote_id).execute()
-
-            if quote_result.data:
-                quote_data = quote_result.data[0]
-                quote_idn = quote_idn or quote_data.get('idn', 'N/A')
-                customer_name = customer_name or quote_data.get('customer_name', 'Не указан')
-                total_amount = total_amount or quote_data.get('total_amount')
-        except Exception as e:
-            print(f"Error fetching quote details: {e}")
-
-    # Step 3: Transition quote to pending_approval
-    transition_result = transition_quote_status(
-        quote_id=quote_id,
-        to_status=WorkflowStatus.PENDING_APPROVAL,
-        actor_id=requested_by,
-        actor_roles=actor_roles,
-        comment=reason
-    )
-
-    if not transition_result.success:
-        return ApprovalRequestResult(
-            success=False,
-            quote_id=quote_id,
-            approvals_created=0,
-            notifications_sent=0,
-            transition_success=False,
-            error_message=f"Не удалось перевести КП в статус ожидания согласования: {transition_result.error_message}"
-        )
-
-    # Step 4: Create approval records for all top_manager/admin users
     approvals = create_approvals_for_role(
         quote_id=quote_id,
         organization_id=organization_id,
         requested_by=requested_by,
         reason=reason,
-        role_codes=['top_manager', 'admin'],
-        approval_type='top_manager'
+        role_codes=role_codes,
+        approval_type=approval_type,
     )
 
-    approvals_created = len(approvals)
-
-    # Step 5: Send Telegram notifications (optional)
     notifications_sent = 0
-    if send_notifications and approvals_created > 0:
-        import asyncio
-
+    if send_notifications and approvals:
         try:
-            # Run async notification in sync context
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-
-            notification_result = loop.run_until_complete(
-                send_approval_notification_for_quote(
-                    quote_id=quote_id,
-                    approval_reason=reason,
-                    requester_id=requested_by
-                )
+            notification_result = await send_approval_notification_for_quote(
+                quote_id=quote_id,
+                approval_reason=reason,
+                requested_by_user_id=requested_by,
+            )
+            notifications_sent = notification_result.get('telegram_sent', 0)
+        except Exception:
+            logger.exception(
+                "Approval created but Telegram dispatch failed for quote %s "
+                "(approval_type=%s, approvals_created=%d)",
+                quote_id, approval_type, len(approvals)
+            )
+            # Surface partial failure to caller — they got DB rows but no telegram
+            return RequestApprovalsResult(
+                success=True,
+                quote_id=quote_id,
+                approvals_created=len(approvals),
+                notifications_sent=0,
+                approvals=approvals,
+                error_message="Approvals created, but Telegram notifications failed (see logs)"
             )
 
-            notifications_sent = notification_result.get('telegram_sent', 0)
-        except Exception as e:
-            print(f"Error sending approval notifications: {e}")
-            # Continue - notification failure shouldn't fail the overall request
-
-    return ApprovalRequestResult(
+    return RequestApprovalsResult(
         success=True,
         quote_id=quote_id,
-        approvals_created=approvals_created,
+        approvals_created=len(approvals),
         notifications_sent=notifications_sent,
-        transition_success=True,
-        error_message=None
+        approvals=approvals,
+        error_message=None,
     )
 
 

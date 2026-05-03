@@ -15,6 +15,7 @@ export {
   ROLE_EDITABLE_STEPS,
   STATUS_TO_STEP,
 } from "./types";
+export { getDefaultStep } from "./default-step";
 export {
   fetchQuotesList,
   fetchFilterOptions,

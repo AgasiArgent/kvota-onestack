@@ -2,6 +2,7 @@ import { createAdminClient, createClient } from "@/shared/lib/supabase/server";
 import { escapePostgrestFilter } from "@/shared/lib/supabase/escape-filter";
 import { isProcurementOnly } from "@/shared/lib/roles";
 import { getAssignedSupplierIds } from "@/shared/lib/access";
+import { fetchActiveAuthUserIds } from "@/entities/user";
 import type {
   SupplierListItem,
   SupplierDetail,
@@ -358,10 +359,16 @@ export async function fetchProcurementUsers(
   const userIds = [...new Set((roleUsers ?? []).map((r) => r.user_id))];
   if (userIds.length === 0) return [];
 
+  // Drop fired/deleted users (banned_until in the future or deleted_at set in
+  // auth.users) so РОЗ cannot assign suppliers to уволенных закупщиков.
+  const activeIds = await fetchActiveAuthUserIds(supabase, userIds);
+  const filteredIds = userIds.filter((id) => activeIds.has(id));
+  if (filteredIds.length === 0) return [];
+
   const { data: profiles } = await supabase
     .from("user_profiles")
     .select("user_id, full_name")
-    .in("user_id", userIds)
+    .in("user_id", filteredIds)
     .order("full_name");
 
   return (profiles ?? []).map((p) => ({
