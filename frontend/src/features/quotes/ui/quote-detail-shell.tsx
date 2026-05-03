@@ -49,6 +49,13 @@ interface QuoteDetailShellProps {
    * step matching the quote's current stage instead of always «Заявка».
    */
   defaultStep: QuoteStep;
+  /**
+   * Originating step propagated via the URL `?from=` parameter. Used when
+   * the user is already inside a side-panel step (documents/plan-fact) and
+   * we need to remember where they came from across re-renders. Forwarded
+   * to the sticky header (МОП fail QP5).
+   */
+  fromStep: QuoteStep | null;
   userRoles: string[];
   contextData: QuoteContextData;
   stepContent: ReactNode;
@@ -68,6 +75,7 @@ export function QuoteDetailShell({
   documentCount,
   activeStep,
   defaultStep,
+  fromStep,
   userRoles,
   contextData,
   stepContent,
@@ -104,6 +112,7 @@ export function QuoteDetailShell({
         documentCount={documentCount}
         activeStep={activeStep}
         defaultStep={defaultStep}
+        fromStep={fromStep}
         userRoles={userRoles}
         isContextOpen={isContextOpen}
         onToggleContext={handleToggleContext}

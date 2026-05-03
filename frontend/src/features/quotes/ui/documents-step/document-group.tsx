@@ -71,23 +71,32 @@ export function DocumentGroup({
     setDownloadingId(doc.id);
     try {
       const supabase = createClient();
-      // Pass `download: <filename>` so Supabase appends `Content-Disposition:
-      // attachment` to the signed URL — clicking the button now triggers a
-      // browser download instead of opening the file inline (МОЗ Тест fail
-      // #71). Anchor click + revoke avoids opening a blank tab.
+      // Pass `download: <filename>` so Supabase Storage serves the URL with
+      // Content-Disposition: attachment. The HTML `download` attribute alone
+      // is ignored on cross-origin URLs, so we additionally fetch the bytes
+      // and trigger a real blob download. This guarantees the file is saved
+      // to disk instead of opening as a PDF/image preview in a new tab
+      // (МОП fail QP4).
       const { data, error } = await supabase.storage
         .from("kvota-documents")
         .createSignedUrl(doc.storage_path, 3600, {
           download: doc.original_filename,
         });
-      if (error) throw error;
+      if (error || !data?.signedUrl) throw error ?? new Error("No URL");
+
+      const response = await fetch(data.signedUrl);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = data.signedUrl;
+      a.href = blobUrl;
       a.download = doc.original_filename;
       a.rel = "noopener";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
+      // Defer revoke so the browser has time to start the download.
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
     } catch {
       toast.error("Не удалось получить ссылку для скачивания");
     } finally {
@@ -104,16 +113,35 @@ export function DocumentGroup({
     setDeletingId(doc.id);
     try {
       const supabase = createClient();
+
+      // Delete the DB row first and ask PostgREST to return the affected
+      // row(s) via `.select()`. RLS-blocked DELETEs return success with an
+      // empty array (PostgREST does not surface this as an error), so we
+      // must check the row count to detect silent permission failures.
+      // documents_delete_policy (migration 143) restricts delete to admin /
+      // sales_manager / quote_controller / finance — for any other role
+      // (e.g. МОП = sales) the previous handler appeared to "do nothing"
+      // because the empty success was treated as success (МОП fail QP3).
+      const { data: deletedRows, error: dbError } = await supabase
+        .from("documents")
+        .delete()
+        .eq("id", doc.id)
+        .select("id");
+      if (dbError) throw dbError;
+      if (!deletedRows || deletedRows.length === 0) {
+        toast.error("Недостаточно прав для удаления файла");
+        return;
+      }
+
+      // Storage cleanup is best-effort — if it fails the DB row is already
+      // gone so the file disappears from the UI; the orphan blob can be
+      // cleaned up by a janitor job.
       const { error: storageError } = await supabase.storage
         .from("kvota-documents")
         .remove([doc.storage_path]);
-      if (storageError) throw storageError;
-
-      const { error: dbError } = await supabase
-        .from("documents")
-        .delete()
-        .eq("id", doc.id);
-      if (dbError) throw dbError;
+      if (storageError) {
+        console.warn("Storage delete failed (orphan blob):", storageError);
+      }
 
       toast.success("Файл удалён");
       onDeleted();

@@ -35,6 +35,13 @@ export function DocumentUpload({
   const [description, setDescription] = useState("");
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Drag counter handles enter/leave on nested children correctly. Native
+  // `dragleave` fires every time the cursor crosses from the wrapper into
+  // any child (Button, Input, Select), which would falsely reset
+  // `dragActive` and break the dotted-zone visual feedback. Tracking a
+  // counter (enter +1, leave −1) flips off only when the cursor leaves
+  // the wrapper subtree entirely (counter back to 0). МОП fail QP2.
+  const dragDepthRef = useRef(0);
 
   async function uploadFile(file: File) {
     setUploading(true);
@@ -95,22 +102,34 @@ export function DocumentUpload({
     if (file) void uploadFile(file);
   }
 
-  function handleDragOver(e: React.DragEvent<HTMLDivElement>) {
+  function handleDragEnter(e: React.DragEvent<HTMLDivElement>) {
     e.preventDefault();
     e.stopPropagation();
+    dragDepthRef.current += 1;
+    if (!dragActive) setDragActive(true);
+  }
+
+  function handleDragOver(e: React.DragEvent<HTMLDivElement>) {
+    // Mandatory preventDefault so the browser treats the wrapper as a valid
+    // drop target. Without this, Chrome/Firefox refuse to fire the
+    // subsequent `drop` event and silently open the file in a new tab.
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
     if (!dragActive) setDragActive(true);
   }
 
   function handleDragLeave(e: React.DragEvent<HTMLDivElement>) {
     e.preventDefault();
     e.stopPropagation();
-    // Only reset when leaving the wrapper itself, not when crossing a child.
-    if (e.currentTarget === e.target) setDragActive(false);
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) setDragActive(false);
   }
 
   function handleDrop(e: React.DragEvent<HTMLDivElement>) {
     e.preventDefault();
     e.stopPropagation();
+    dragDepthRef.current = 0;
     setDragActive(false);
     const file = e.dataTransfer.files?.[0];
     if (file) void uploadFile(file);
@@ -122,6 +141,7 @@ export function DocumentUpload({
         "border-2 border-dashed rounded-lg p-4 space-y-3 transition-colors",
         dragActive ? "border-primary bg-primary/5" : "border-border"
       )}
+      onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}

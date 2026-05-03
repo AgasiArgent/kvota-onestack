@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Pagination } from "@/shared/ui/pagination";
-import { useTableState } from "@/shared/lib/data-table";
+import { useTableState, columnsDefaultVisible } from "@/shared/lib/data-table";
 import { useColumnWidths } from "@/shared/lib/data-table/use-column-widths";
 import type { TableView } from "@/entities/table-view";
 
@@ -259,8 +259,12 @@ export function DataTable<T>({
   );
 
   const handleClearView = useCallback(() => {
+    // "Все" preset: reset to the full default column set, not the previously
+    // active view's subset. Without this, switching from a saved view back to
+    // "Все" leaves visibleColumns stuck on the saved view's selection (Q3/RQ3).
+    state.setVisibleColumns(columnsDefaultVisible(untypedColumns));
     state.setView(null);
-  }, [state]);
+  }, [untypedColumns, state]);
 
   const hasActiveFilters = Object.keys(state.filters).length > 0;
   const showClearFilters = hasActiveFilters || state.search.length > 0;

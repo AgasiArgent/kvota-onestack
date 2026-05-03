@@ -118,10 +118,13 @@ export function ChatMessage({ comment, isOwn }: ChatMessageProps) {
       </div>
 
       {/* Content */}
-      <div className={cn("flex flex-col max-w-[260px]", isOwn && "items-end")}>
+      <div className={cn("flex flex-col max-w-[260px] min-w-0", isOwn && "items-end")}>
         {/* Name + Role + Time */}
-        <div className="flex items-center gap-1.5 mb-0.5">
-          <span className="text-xs font-medium text-foreground truncate max-w-[120px]">
+        <div className="flex items-center gap-1.5 mb-0.5 min-w-0 max-w-full">
+          <span
+            className="text-xs font-medium text-foreground truncate min-w-0"
+            title={fullName}
+          >
             {fullName}
           </span>
           <span

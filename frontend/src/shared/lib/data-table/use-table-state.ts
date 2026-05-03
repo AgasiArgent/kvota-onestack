@@ -84,7 +84,7 @@ function writeVisibilityToStorage(tableKey: string, keys: readonly string[]): vo
  * Default visible columns from the column config: all columns whose
  * `defaultVisible` is not explicitly false.
  */
-function columnsDefaultVisible(
+export function columnsDefaultVisible(
   columns: readonly DataTableColumn<unknown>[]
 ): readonly string[] {
   return columns.filter((c) => c.defaultVisible !== false).map((c) => c.key);

@@ -30,12 +30,12 @@ import { CUSTOMS_TABLE_KEY } from "@/features/quotes/ui/customs-step/customs-col
 
 interface Props {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ step?: string }>;
+  searchParams: Promise<{ step?: string; from?: string }>;
 }
 
 export default async function QuoteDetailPage({ params, searchParams }: Props) {
   const { id } = await params;
-  const { step } = await searchParams;
+  const { step, from } = await searchParams;
 
   const user = await getSessionUser();
   if (!user?.orgId) redirect("/login");
@@ -118,6 +118,20 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
       ? requestedStep
       : defaultStep;
 
+  // `?from=` is propagated when the user opens documents/plan-fact from a
+  // non-panel step. The sticky header's "close" link uses it to navigate
+  // back to the originating step instead of always landing on the workflow
+  // default. Honour permission filtering — if the user can't access the
+  // requested origin step, treat it as absent (МОП fail QP5).
+  const requestedFrom = from as QuoteStep | undefined;
+  const fromStep: QuoteStep | null =
+    requestedFrom &&
+    allowedSteps.includes(requestedFrom) &&
+    requestedFrom !== "documents" &&
+    requestedFrom !== "plan-fact"
+      ? requestedFrom
+      : null;
+
   // Determine if this step is read-only for the user (can view but not edit)
   const editableSteps = isAdmin
     ? allowedSteps
@@ -136,6 +150,7 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
         documentCount={documentCount}
         activeStep={activeStep}
         defaultStep={defaultStep}
+        fromStep={fromStep}
         userRoles={userRoles}
         contextData={contextData}
         stepContent={

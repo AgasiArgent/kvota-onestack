@@ -13,7 +13,8 @@ import {
   fetchOrgUsers,
 } from "@/entities/customer";
 import type { Customer } from "@/entities/customer";
-import { getSessionUser } from "@/entities/user";
+import { getSessionUser, fetchUserSalesGroupId } from "@/entities/user";
+import { isSalesOnly } from "@/shared/lib/roles";
 import { fetchEntityNotes } from "@/entities/entity-note/queries";
 import { EntityNotesPanel } from "@/entities/entity-note";
 import { CustomerHeader } from "@/features/customers/ui/customer-header";
@@ -36,15 +37,27 @@ export default async function CustomerDetailPage({ params, searchParams }: Props
   const user = await getSessionUser();
   if (!user?.orgId) redirect("/login");
 
-  const [customer, hasAccess] = await Promise.all([
+  // Resolve salesGroupId only for sales-only users (non-sales users don't
+  // need it — their typeahead bypasses the assigned-customers gate). Done
+  // in parallel with the customer + access fetch to keep the page snappy.
+  const [customer, hasAccess, salesGroupId] = await Promise.all([
     fetchCustomerDetail(id, user.orgId),
     canAccessCustomer(id, { id: user.id, roles: user.roles, orgId: user.orgId }),
+    isSalesOnly(user.roles)
+      ? fetchUserSalesGroupId(user.id, user.orgId)
+      : Promise.resolve(null),
   ]);
   if (!customer || !hasAccess) notFound();
 
   return (
     <div>
-      <CustomerHeader customer={customer} orgId={user.orgId} userId={user.id} />
+      <CustomerHeader
+        customer={customer}
+        orgId={user.orgId}
+        userId={user.id}
+        userRoles={user.roles}
+        salesGroupId={salesGroupId}
+      />
       <CustomerTabs customerId={id} activeTab={tab}>
         {tab === "overview" && (
           <OverviewContent
