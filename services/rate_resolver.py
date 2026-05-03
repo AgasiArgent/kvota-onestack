@@ -646,16 +646,16 @@ def _bulk_upsert(sb: Any, rates: list[Rate], source: str) -> None:
     ).execute()
 
     # 2. Now safe to upsert the rates themselves.
-    # uq_tnved_rates_v2 (migration 301) includes category_code so льготные
-    # variants coexist with стандартная rate. category_code is NOT NULL with
-    # default '' — convert None at the boundary.
+    # uq_tnved_rates_v3 (migration 303) includes description so льготные
+    # variants WITHIN a category (e.g., nds_inv "- 29..." vs "- 31...")
+    # coexist instead of colliding on ON CONFLICT.
     now = datetime.now(timezone.utc).isoformat()
     payload = [_rate_to_row(r, source=source, now_iso=now) for r in rates]
     sb.table("tnved_rates").upsert(
         payload,
         on_conflict="tnved_code,payment_type,country_or_areal,valid_from,"
                     "certificate_required,sp_certificate_required,"
-                    "category_code",
+                    "category_code,description",
     ).execute()
 
 
@@ -771,10 +771,11 @@ def _rate_to_row(rate: Rate, *, source: str, now_iso: str) -> dict[str, Any]:
         "raw_value_string": rate.raw_value_string,
         "certificate_required": rate.certificate_required,
         "sp_certificate_required": rate.sp_certificate_required,
-        # Variant metadata (migration 301). category_code is NOT NULL in DB
-        # with default '' — coerce None at the boundary so the unique key
-        # uq_tnved_rates_v2 distinguishes "no category" from "category X".
-        "description": rate.description,
+        # Variant metadata (migrations 301-303). category_code AND description
+        # are NOT NULL in DB with default '' — coerce None at the boundary so
+        # the unique key uq_tnved_rates_v3 actually distinguishes льготные
+        # variants from each other within a single category.
+        "description": rate.description or "",
         "category_code": rate.category_code or "",
         "category_ru": rate.category_ru,
         "condition_text": rate.condition_text,
