@@ -396,6 +396,25 @@ class AltaClient:
         included when present.
         """
         root = ET.fromstring(xml_text)
+
+        # Такса / xml_nodes / АПУ return errors as <Error>...</Error>
+        # rather than the Express <response><handled>false> envelope.
+        # Detect the Такса error format first (root tag is "Error") and
+        # raise AltaApiError so callers see the same exception path
+        # regardless of which Alta endpoint failed.
+        if root.tag == "Error":
+            err_code_text = _text(root.find("ErrorCode"))
+            err_descr = _text(root.find("ErrorDescr")) or "<no description>"
+            try:
+                code = int(err_code_text)
+            except ValueError:
+                code = 0
+            raise AltaApiError(
+                code or -1,
+                err_descr if code in DOCUMENTED_ERROR_CODES
+                          else f"Alta error {err_code_text!r}: {err_descr}",
+            )
+
         handled = _text(root.find("handled")).lower() == "true"
         message = _text(root.find("message"))
 
@@ -545,14 +564,19 @@ class AltaClient:
 
         Endpoint: Alta Такса `/tnved/xml/`. Response is windows-1251.
         """
+        # Param names per Alta Такса spec (verified 2026-05-03 against the
+        # `<Error><ErrorCode>101</ErrorCode>` returned in production):
+        #   tncode (NOT tnved), login (NOT slogin), secret (NOT hash).
+        # Phase 0 used Express-style names which DIFFER from Такса/АПУ —
+        # the rename to AltaClient kept Express names everywhere.
         params = {
-            "tnved": tncode,
+            "tncode": tncode,
             "country": country,
             "date": date_.isoformat(),
             "certificate": "1" if certificate else "0",
             "sp_certificate": "1" if sp_certificate else "0",
-            "slogin": self._login,
-            "hash": self._sign(tncode),
+            "login": self._login,
+            "secret": self._sign(tncode),
         }
 
         async def _do_call() -> list[Rate]:
@@ -582,11 +606,11 @@ class AltaClient:
         Endpoint: `/tnved/xml_nodes/`.
         """
         params = {
-            "tnved": tncode,
+            "tncode": tncode,
             "country": country,
             "mode": mode,
-            "slogin": self._login,
-            "hash": self._sign(tncode),
+            "login": self._login,
+            "secret": self._sign(tncode),
         }
 
         async def _do_call() -> list[Measure]:
@@ -612,8 +636,8 @@ class AltaClient:
             "action": "suggest",
             "q": query,
             "limit": limit,
-            "slogin": self._login,
-            "hash": self._sign(query),
+            "login": self._login,
+            "secret": self._sign(query),
         }
 
         async def _do_call() -> ApuSuggestResponse:
@@ -648,8 +672,8 @@ class AltaClient:
             "action": "codes",
             "payload_id": payload_id,
             "limit": limit,
-            "slogin": self._login,
-            "hash": self._sign(payload_id),
+            "login": self._login,
+            "secret": self._sign(payload_id),
         }
 
         async def _do_call() -> list[ApuCode]:
@@ -761,98 +785,170 @@ class AltaClient:
         certificate: bool,
         sp_certificate: bool,
     ) -> list[Rate]:
-        """Extract Rate dataclasses from a Такса response XML root.
+        """Extract Rate dataclasses from a Такса <GoodInfo> response.
 
-        country_or_areal is read from the XML response (Alta echoes
-        which country/areal the rate applies to). Caller's `country`
-        parameter only flows into the request URL — see get_rates().
+        Alta Такса real schema (verified 2026-05-03 against live response):
+            <GoodInfo>
+              <Code>...</Code>
+              <Importlist>
+                <Import>
+                  <Value>10%, но не менее 0,04 евро/кг</Value>
+                  <ValueDetail>
+                    <ValueCount>10</ValueCount>
+                    <ValueUnit>%</ValueUnit>
+                  </ValueDetail>
+                  <ValueDetailAdd>          <!-- combined-rate 2nd part -->
+                    <ValueCount>0.04</ValueCount>
+                    <ValueUnit>евро/кг</ValueUnit>
+                    <ValueCurrency>EUR</ValueCurrency>
+                  </ValueDetailAdd>
+                  ...
+                </Import>
+              </Importlist>
+              <Exciselist>
+                <Excise>...</Excise>
+              </Exciselist>
+              <VATlist>
+                <VAT>...</VAT>
+              </VATlist>
+            </GoodInfo>
+
+        Phase-1 minimal mapping:
+          - <Importlist><Import>     → payment_type='IMP'
+          - <Exciselist><Excise>     → payment_type='AKC'
+          - <VATlist><VAT>           → payment_type='NDS'
+
+        Slot extraction:
+          - value_1_*  ← <ValueDetail>
+          - value_2_*  ← <ValueDetailAdd> when present
+          - sign_1     ← '>' (Alta combined-rate semantics: "не менее" → max)
+          - country_or_areal: NOT echoed by Alta on Такса, kept None.
+          - raw_value_string ← <Value> verbatim.
+
+        Edge cases (Phase 2 follow-up — see TODO):
+          - Multiple Import alternatives (preferences vs base) — we take all.
+          - <ValueDetail2>/<ValueDetail3> "не менее"/"не более" subblocks.
+          - Excise with <Condition> (alcohol strength etc.) — currently flat.
+          - VAT <Directory> for льготные ставки.
         """
         rates: list[Rate] = []
-        # Alta Такса response shape: <rates><rate>...</rate>...</rates>
-        rates_container = root.find("rates")
-        if rates_container is None:
-            return rates
 
-        for rate_el in rates_container.findall("rate"):
-            payment_type = _text(rate_el.find("payment_type")) or _text(
-                rate_el.find("type")
-            )
-            country_or_areal = _text(rate_el.find("country_or_areal")) or None
+        def _slot_from(detail_el: ET.Element | None):
+            """Map <ValueCount>/<ValueUnit>/<ValueCurrency> → (number, unit, currency)."""
+            if detail_el is None:
+                return None, None, None
+            count_text = _text(detail_el.find("ValueCount"))
+            unit_text = _text(detail_el.find("ValueUnit"))
+            currency_text = _text(detail_el.find("ValueCurrency"))
+            try:
+                # Alta uses both '.' and ',' as decimal separator.
+                number = float(count_text.replace(",", ".")) if count_text else None
+            except (ValueError, AttributeError):
+                number = None
+            unit = self._normalize_unit(unit_text) if unit_text else None
+            currency = currency_text or None
+            return number, unit, currency
 
-            valid_from_text = _text(rate_el.find("valid_from"))
-            valid_from = (
-                date.fromisoformat(valid_from_text)
-                if valid_from_text else date.today()
-            )
-            valid_to_text = _text(rate_el.find("valid_to"))
-            valid_to = (
-                date.fromisoformat(valid_to_text) if valid_to_text else None
-            )
+        def _emit(elem: ET.Element, payment_type: str):
+            v1_number, v1_unit, v1_currency = _slot_from(elem.find("ValueDetail"))
+            v2_number, v2_unit, v2_currency = _slot_from(elem.find("ValueDetailAdd"))
+            sign_1 = ">" if v2_number is not None else None
+            raw = _text(elem.find("Value")) or None
 
-            def _slot_number(tag: str) -> float | None:
-                txt = _text(rate_el.find(tag))
-                return float(txt) if txt else None
+            # Rate.__post_init__ rejects percent + currency together.
+            # Some Alta responses set ValueCurrency on a percent value
+            # (e.g., "% от стоимости в EUR" rendered with currency=EUR);
+            # strip it for percent units to satisfy the invariant.
+            if v1_unit == "percent":
+                v1_currency = None
+            if v2_unit == "percent":
+                v2_currency = None
 
-            def _slot_str(tag: str) -> str | None:
-                txt = _text(rate_el.find(tag))
-                return txt or None
-
-            rates.append(
-                Rate(
-                    tnved_code=tncode,
-                    payment_type=payment_type,
-                    country_or_areal=country_or_areal,
-                    valid_from=valid_from,
-                    valid_to=valid_to,
-                    value_1_number=_slot_number("value_1_number"),
-                    value_1_unit=_slot_str("value_1_unit"),
-                    value_1_currency=_slot_str("value_1_currency"),
-                    value_2_number=_slot_number("value_2_number"),
-                    value_2_unit=_slot_str("value_2_unit"),
-                    value_2_currency=_slot_str("value_2_currency"),
-                    sign_1=_slot_str("sign_1"),
-                    value_3_number=_slot_number("value_3_number"),
-                    value_3_unit=_slot_str("value_3_unit"),
-                    value_3_currency=_slot_str("value_3_currency"),
-                    sign_2=_slot_str("sign_2"),
-                    raw_value_string=_slot_str("raw_value_string"),
-                    certificate_required=certificate,
-                    sp_certificate_required=sp_certificate,
+            try:
+                rates.append(
+                    Rate(
+                        tnved_code=tncode,
+                        payment_type=payment_type,
+                        country_or_areal=None,
+                        valid_from=date.today(),
+                        valid_to=None,
+                        value_1_number=v1_number,
+                        value_1_unit=v1_unit,
+                        value_1_currency=v1_currency,
+                        value_2_number=v2_number,
+                        value_2_unit=v2_unit,
+                        value_2_currency=v2_currency,
+                        sign_1=sign_1,
+                        raw_value_string=raw,
+                        certificate_required=certificate,
+                        sp_certificate_required=sp_certificate,
+                    )
                 )
-            )
+            except ValueError as exc:
+                # Invariant violation — log and skip rather than fail the
+                # whole fetch. The user sees the rest of the rates.
+                logger.warning(
+                    "Skipping unparseable %s rate for %s: %s (raw=%r)",
+                    payment_type, tncode, exc, raw,
+                )
+
+        for el in root.findall("Importlist/Import"):
+            _emit(el, "IMP")
+        for el in root.findall("Exciselist/Excise"):
+            _emit(el, "AKC")
+        for el in root.findall("VATlist/VAT"):
+            _emit(el, "NDS")
+
         return rates
+
+    @staticmethod
+    def _normalize_unit(unit_text: str) -> str:
+        """Coerce Alta's free-text unit to our canonical form.
+
+        Alta uses Russian unit strings (%, евро/кг, руб/шт, etc.); we
+        normalize to the schema's CHECK constraint vocabulary:
+          '%'        → 'percent'
+          *кг*       → '166' (OKEI kg)
+          *л* (litre)→ '111'
+          *шт*       → '796'
+          unknown    → return verbatim (Rate.__post_init__ will reject if
+                       paired with currency, but the user sees raw_value
+                       so the data isn't lost).
+        """
+        u = (unit_text or "").lower().strip()
+        if "%" in u:
+            return "percent"
+        if "кг" in u:
+            return "166"
+        if "лит" in u or "л " in u or u == "л":
+            return "111"
+        if "шт" in u:
+            return "796"
+        return unit_text  # passthrough for unmapped units
 
     def _extract_measures(
         self,
         root: ET.Element,
         tncode: str,
     ) -> list[Measure]:
-        measures: list[Measure] = []
-        container = root.find("measures") or root.find("response")
-        if container is None:
-            return measures
+        """Extract Measure dataclasses from a xml_nodes <GoodInfo> response.
 
-        for el in container.findall("measure"):
-            country_or_areal = _text(el.find("country_or_areal")) or None
-            valid_from_text = _text(el.find("valid_from"))
-            valid_to_text = _text(el.find("valid_to"))
+        Real schema: ``<GoodInfo><Notes><Note>...</Note></Notes></GoodInfo>``
+        Each Note carries Type/Name/Description/Document/Link (subset).
+        """
+        measures: list[Measure] = []
+        for el in root.findall("Notes/Note"):
             measures.append(
                 Measure(
                     tnved_code=tncode,
-                    country_or_areal=country_or_areal,
-                    measure_type=_text(el.find("measure_type")) or "unknown",
-                    name=_text(el.find("name")),
-                    description=_text(el.find("description")) or None,
-                    document_basis=_text(el.find("document_basis")) or None,
-                    document_link=_text(el.find("document_link")) or None,
-                    valid_from=(
-                        date.fromisoformat(valid_from_text)
-                        if valid_from_text else None
-                    ),
-                    valid_to=(
-                        date.fromisoformat(valid_to_text)
-                        if valid_to_text else None
-                    ),
+                    country_or_areal=None,
+                    measure_type=_text(el.find("Type")) or "unknown",
+                    name=_text(el.find("Name")) or "",
+                    description=_text(el.find("Description")) or None,
+                    document_basis=_text(el.find("Document")) or None,
+                    document_link=_text(el.find("Link")) or None,
+                    valid_from=None,
+                    valid_to=None,
                 )
             )
         return measures
