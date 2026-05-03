@@ -21,6 +21,8 @@ from services.rate_resolver import (
     CACHE_TTL,
     FROZEN_STATUSES,
     ResolvedRate,
+    ResolveOutcome,
+    ResolveResult,
     resolve_rate,
 )
 
@@ -226,9 +228,10 @@ async def test_tier_1_exact_country_match_returns_rate(mock_sb, alta_client_mock
             alta_client=alta_client_mock,
         )
 
-    assert result is not None
-    assert result.country_or_areal == "C:156"
-    assert result.source == "alta-live"
+    assert result.outcome == ResolveOutcome.FOUND
+    assert result.rate is not None
+    assert result.rate.country_or_areal == "C:156"
+    assert result.rate.source == "alta-live"
     alta_client_mock.get_rates.assert_not_called()
 
 
@@ -296,8 +299,9 @@ async def test_tier_2_areal_match_when_no_country_row(mock_sb, alta_client_mock)
             alta_client=alta_client_mock,
         )
 
-    assert result is not None
-    assert result.country_or_areal == "A:EAEU"
+    assert result.outcome == ResolveOutcome.FOUND
+    assert result.rate is not None
+    assert result.rate.country_or_areal == "A:EAEU"
     alta_client_mock.get_rates.assert_not_called()
 
 
@@ -340,8 +344,9 @@ async def test_tier_3_base_rate_when_no_country_no_areal(mock_sb, alta_client_mo
             alta_client=alta_client_mock,
         )
 
-    assert result is not None
-    assert result.country_or_areal is None
+    assert result.outcome == ResolveOutcome.FOUND
+    assert result.rate is not None
+    assert result.rate.country_or_areal is None
     # is_("country_or_areal", "null") was used for base lookup
     assert ("country_or_areal", "null") in rates_table.is_filters
 
@@ -429,8 +434,9 @@ async def test_full_miss_calls_alta_and_upserts_then_re_lookup(
             alta_client=alta_client_mock,
         )
 
-    assert result is not None
-    assert result.country_or_areal == "C:156"
+    assert result.outcome == ResolveOutcome.FOUND
+    assert result.rate is not None
+    assert result.rate.country_or_areal == "C:156"
     alta_client_mock.get_rates.assert_called_once()
     # Bulk upsert with all 3 returned rates in one shot (REQ-3 AC#4)
     assert len(rates_table.upserts) == 1
@@ -438,7 +444,11 @@ async def test_full_miss_calls_alta_and_upserts_then_re_lookup(
 
 
 @pytest.mark.asyncio
-async def test_alta_returns_empty_returns_none(mock_sb, alta_client_mock):
+async def test_resolve_rate_alta_empty_response_returns_not_found(mock_sb, alta_client_mock):
+    """REVIEW M4: Alta call SUCCEEDED with empty list → outcome=NOT_FOUND
+    (the rate genuinely doesn't exist for this code+country). Distinct from
+    ALTA_ERROR — retrying won't help; the user must enter the rate manually.
+    """
     rates_table = _MockTable("tnved_rates", mock_sb.recorder)
     countries_table = _MockTable("country_areals", mock_sb.recorder)
     mock_sb.tables["tnved_rates"] = rates_table
@@ -457,18 +467,23 @@ async def test_alta_returns_empty_returns_none(mock_sb, alta_client_mock):
             alta_client=alta_client_mock,
         )
 
-    assert result is None
+    assert result.outcome == ResolveOutcome.NOT_FOUND
+    assert result.rate is None
     # No upsert when nothing came back
     assert rates_table.upserts == []
 
 
 # ---------------------------------------------------------------------------
-# REQ-3 AC#6 — Alta failure returns None, never raises
+# REQ-3 AC#6 — Alta failure returns ALTA_ERROR (retry-worthy), never raises.
+# REVIEW M4: distinct from NOT_FOUND (terminal — rate doesn't exist).
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_alta_api_error_swallowed_returns_none(mock_sb, alta_client_mock, caplog):
+async def test_resolve_rate_alta_api_error_returns_alta_error(mock_sb, alta_client_mock, caplog):
+    """REVIEW M4: AltaApiError → outcome=ALTA_ERROR (Alta is genuinely
+    down). Caller (handler) should respond 503 — retrying may succeed.
+    """
     rates_table = _MockTable("tnved_rates", mock_sb.recorder)
     countries_table = _MockTable("country_areals", mock_sb.recorder)
     mock_sb.tables["tnved_rates"] = rates_table
@@ -487,12 +502,16 @@ async def test_alta_api_error_swallowed_returns_none(mock_sb, alta_client_mock, 
             alta_client=alta_client_mock,
         )
 
-    assert result is None
+    assert result.outcome == ResolveOutcome.ALTA_ERROR
+    assert result.rate is None
     assert any("Alta error 140" in r.message for r in caplog.records)
 
 
 @pytest.mark.asyncio
-async def test_network_error_swallowed_returns_none(mock_sb, alta_client_mock):
+async def test_resolve_rate_network_error_returns_alta_error(mock_sb, alta_client_mock):
+    """REVIEW M4: network failure → outcome=ALTA_ERROR (transient infra
+    issue). Distinct from NOT_FOUND — retry path is appropriate.
+    """
     rates_table = _MockTable("tnved_rates", mock_sb.recorder)
     countries_table = _MockTable("country_areals", mock_sb.recorder)
     mock_sb.tables["tnved_rates"] = rates_table
@@ -511,7 +530,8 @@ async def test_network_error_swallowed_returns_none(mock_sb, alta_client_mock):
             alta_client=alta_client_mock,
         )
 
-    assert result is None
+    assert result.outcome == ResolveOutcome.ALTA_ERROR
+    assert result.rate is None
 
 
 # ---------------------------------------------------------------------------
@@ -567,7 +587,8 @@ async def test_last_used_at_failure_does_not_break_resolve(mock_sb, alta_client_
         )
 
     rates_table.update = original_update  # restore
-    assert result is not None
+    assert result.outcome == ResolveOutcome.FOUND
+    assert result.rate is not None
     assert any("failed to update last_used_at" in r.message for r in caplog.records)
 
 
@@ -721,10 +742,11 @@ async def test_snapshot_lookup_hits_for_approved_quote(mock_sb, alta_client_mock
             quote_item_id="item-uuid-7",
         )
 
-    assert result is not None
-    assert result.snapshot is True
-    assert result.value_1_number == 12.5
-    assert result.source == "alta-live"
+    assert result.outcome == ResolveOutcome.FOUND
+    assert result.rate is not None
+    assert result.rate.snapshot is True
+    assert result.rate.value_1_number == 12.5
+    assert result.rate.source == "alta-live"
     alta_client_mock.get_rates.assert_not_called()
     # tnved_rates was never queried
     table_names = [t[1] for t in mock_sb.recorder if t[0] == "table"]
@@ -758,9 +780,10 @@ async def test_snapshot_skipped_for_unfrozen_quote_falls_through_to_live(
         )
 
     # Got the live row, not the snapshot
-    assert result is not None
-    assert result.value_1_number == 99.0
-    assert result.snapshot is False
+    assert result.outcome == ResolveOutcome.FOUND
+    assert result.rate is not None
+    assert result.rate.value_1_number == 99.0
+    assert result.rate.snapshot is False
 
 
 @pytest.mark.asyncio
@@ -807,9 +830,10 @@ async def test_snapshot_skipped_when_payment_type_not_in_snapshot(
             quote_item_id="item-uuid-7",
         )
 
-    assert result is not None
-    assert result.snapshot is False
-    assert result.value_1_number == 20.0
+    assert result.outcome == ResolveOutcome.FOUND
+    assert result.rate is not None
+    assert result.rate.snapshot is False
+    assert result.rate.value_1_number == 20.0
 
 
 @pytest.mark.asyncio
@@ -877,3 +901,55 @@ def test_resolved_rate_passthrough_properties():
     assert rr.value_1_unit == "percent"
     assert rr.tnved_code == rate.tnved_code
     assert rr.payment_type == rate.payment_type
+
+
+# ---------------------------------------------------------------------------
+# REVIEW M4 — ResolveResult invariants
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_result_found_requires_rate():
+    """FOUND must carry a non-None ResolvedRate — guarded by __post_init__."""
+    rate = ResolvedRate(
+        id="r-1",
+        rate=_make_rate(),
+        source="alta-live",
+        source_fetched_at=datetime.now(timezone.utc),
+        last_used_at=datetime.now(timezone.utc),
+    )
+    rr = ResolveResult(ResolveOutcome.FOUND, rate)
+    assert rr.outcome == ResolveOutcome.FOUND
+    assert rr.rate is rate
+
+
+def test_resolve_result_found_with_none_rate_raises():
+    """ResolveResult(FOUND, None) is meaningless — must reject."""
+    with pytest.raises(ValueError):
+        ResolveResult(ResolveOutcome.FOUND, None)
+
+
+def test_resolve_result_not_found_requires_no_rate():
+    """NOT_FOUND must carry rate=None — invariant."""
+    rr = ResolveResult(ResolveOutcome.NOT_FOUND, None)
+    assert rr.outcome == ResolveOutcome.NOT_FOUND
+    assert rr.rate is None
+
+
+def test_resolve_result_alta_error_requires_no_rate():
+    """ALTA_ERROR must carry rate=None — invariant."""
+    rr = ResolveResult(ResolveOutcome.ALTA_ERROR, None)
+    assert rr.outcome == ResolveOutcome.ALTA_ERROR
+    assert rr.rate is None
+
+
+def test_resolve_result_not_found_with_rate_raises():
+    """ResolveResult(NOT_FOUND, <rate>) is contradictory — must reject."""
+    rate = ResolvedRate(
+        id="r-1",
+        rate=_make_rate(),
+        source="alta-live",
+        source_fetched_at=datetime.now(timezone.utc),
+        last_used_at=datetime.now(timezone.utc),
+    )
+    with pytest.raises(ValueError):
+        ResolveResult(ResolveOutcome.NOT_FOUND, rate)

@@ -1,6 +1,10 @@
 """Customs rate resolver — three-tier priority lookup with Alta lazy-fetch.
 
-Public API: ``resolve_rate(...)`` returns a ``ResolvedRate`` (or None).
+Public API: ``resolve_rate(...)`` returns a ``ResolveResult`` carrying both
+an outcome discriminator (FOUND / NOT_FOUND / ALTA_ERROR) and an optional
+``ResolvedRate``. Callers MUST inspect ``.outcome`` to distinguish
+"Alta is genuinely down" (retry-worthy → 503) from "rate doesn't exist
+for this code+country" (terminal → 404 RATE_NOT_FOUND).
 
 Priority (REQ-3 AC#1):
     1. Exact country  — kvota.tnved_rates.country_or_areal = 'C:{oksm}'
@@ -35,6 +39,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
+from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 from services.alta_client import AltaApiError, Rate
@@ -146,6 +151,41 @@ class ResolvedRate:
     def raw_value_string(self) -> str | None: return self.rate.raw_value_string
 
 
+class ResolveOutcome(Enum):
+    """Why ``resolve_rate`` returned what it did. Use this to distinguish
+    "Alta is down" (retry-worthy) from "rate genuinely doesn't exist"
+    (terminal — the user must enter the rate manually).
+
+    Review fix M4 (PR #83): both states used to collapse into ``None``,
+    so the API handler's 503 ALTA_UNAVAILABLE response would tell users
+    to retry forever for codes that simply have no Alta data.
+    """
+    FOUND = "found"           # rate is the matched ResolvedRate (DB cache or snapshot or Alta-fetched)
+    NOT_FOUND = "not_found"   # cache empty AND Alta call SUCCEEDED with empty list
+    ALTA_ERROR = "alta_error" # AltaApiError | network failure | parse failure (cache also missed)
+
+
+@dataclass(frozen=True)
+class ResolveResult:
+    """Discriminated result for ``resolve_rate``.
+
+    Pattern-match by reading ``.outcome`` (a ``ResolveOutcome``); the
+    ``.rate`` is only populated when ``outcome == FOUND``. Using a
+    typed dataclass instead of a 2-tuple keeps callsites self-documenting
+    and reserves room for future fields (e.g. cache-age signal).
+    """
+    outcome: ResolveOutcome
+    rate: ResolvedRate | None
+
+    def __post_init__(self) -> None:
+        if self.outcome == ResolveOutcome.FOUND and self.rate is None:
+            raise ValueError("ResolveResult(FOUND, None) is invalid — must carry a rate")
+        if self.outcome != ResolveOutcome.FOUND and self.rate is not None:
+            raise ValueError(
+                f"ResolveResult({self.outcome.name}, ...) must carry rate=None"
+            )
+
+
 # ---------------------------------------------------------------------------
 # Public function
 # ---------------------------------------------------------------------------
@@ -161,12 +201,21 @@ async def resolve_rate(
     *,
     alta_client: AltaClient,
     quote_item_id: str | None = None,
-) -> ResolvedRate | None:
+) -> ResolveResult:
     """Resolve a single customs rate.
 
-    Returns the highest-priority matching rate from cache, lazy-fetching
-    from Alta on full cache miss. Returns None if Alta is unavailable
-    and no usable cache exists.
+    Returns a ``ResolveResult`` with one of three outcomes:
+
+    * ``FOUND``      — the highest-priority cache or freshly-fetched rate
+                       matched. ``result.rate`` is a ``ResolvedRate``.
+    * ``NOT_FOUND``  — Alta call succeeded but returned no rates for this
+                       (tnved_code, country) pair. The user must enter the
+                       rate manually. Retrying won't help.
+    * ``ALTA_ERROR`` — AltaApiError / network failure / parse failure AND
+                       no cache row was usable. Retrying may succeed.
+
+    Review fix M4 (PR #83): previously returned ``None`` for both
+    NOT_FOUND and ALTA_ERROR, which the API handler couldn't distinguish.
 
     Args:
         tnved_code: 10-digit ТН ВЭД code.
@@ -184,7 +233,7 @@ async def resolve_rate(
     if quote_item_id is not None:
         snapshot_rate = _lookup_snapshot(sb, quote_item_id, payment_type)
         if snapshot_rate is not None:
-            return snapshot_rate
+            return ResolveResult(ResolveOutcome.FOUND, snapshot_rate)
 
     # 2. Live cache lookup, three tiers
     rate = _lookup_db(
@@ -198,7 +247,7 @@ async def resolve_rate(
     )
     if rate is not None:
         _touch_last_used_at(sb, rate.id)
-        return rate
+        return ResolveResult(ResolveOutcome.FOUND, rate)
 
     # 3. Lazy-fetch from Alta on full miss
     try:
@@ -211,19 +260,21 @@ async def resolve_rate(
         )
     except AltaApiError as e:
         logger.error(
-            "rate_resolver: Alta error %s for tnved_code=%s country=%s — returning None",
+            "rate_resolver: Alta error %s for tnved_code=%s country=%s — returning ALTA_ERROR",
             e.code, tnved_code, country_oksm,
         )
-        return None
+        return ResolveResult(ResolveOutcome.ALTA_ERROR, None)
     except Exception as e:  # network errors, parse failures
         logger.error(
             "rate_resolver: Alta call failed for tnved_code=%s country=%s: %s",
             tnved_code, country_oksm, e,
         )
-        return None
+        return ResolveResult(ResolveOutcome.ALTA_ERROR, None)
 
     if not fetched:
-        return None
+        # Alta call SUCCEEDED but returned no rates for this code+country.
+        # Distinct from ALTA_ERROR — retrying won't help; user must enter manually.
+        return ResolveResult(ResolveOutcome.NOT_FOUND, None)
 
     # 4. Bulk upsert all returned rates (REQ-3 AC#4 — comprehensive response)
     _bulk_upsert(sb, fetched, source="alta-live")
@@ -240,7 +291,13 @@ async def resolve_rate(
     )
     if rate is not None:
         _touch_last_used_at(sb, rate.id)
-    return rate
+        return ResolveResult(ResolveOutcome.FOUND, rate)
+
+    # Defensive: Alta returned rates but the re-lookup missed (e.g. the
+    # returned rates didn't include the requested payment_type, or
+    # certificate flags didn't match). Treat as NOT_FOUND — Alta did
+    # respond, just without the specific slot we asked for.
+    return ResolveResult(ResolveOutcome.NOT_FOUND, None)
 
 
 # ---------------------------------------------------------------------------

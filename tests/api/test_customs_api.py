@@ -24,7 +24,11 @@ sys.path.insert(
 )
 
 from services.alta_client import AltaApiError, Measure, Rate  # noqa: E402
-from services.rate_resolver import ResolvedRate  # noqa: E402
+from services.rate_resolver import (  # noqa: E402
+    ResolvedRate,
+    ResolveOutcome,
+    ResolveResult,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -114,6 +118,25 @@ def _make_resolved_rate(
         source_fetched_at=fetched,
         last_used_at=fetched,
     )
+
+
+def _found(resolved: ResolvedRate | None = None) -> ResolveResult:
+    """Wrap a ResolvedRate in a FOUND ResolveResult — the new resolver
+    return shape (M4 review fix). Pass None to use a default rate.
+    """
+    return ResolveResult(
+        ResolveOutcome.FOUND, resolved if resolved is not None else _make_resolved_rate()
+    )
+
+
+def _not_found() -> ResolveResult:
+    """ResolveResult signaling Alta succeeded with no rates."""
+    return ResolveResult(ResolveOutcome.NOT_FOUND, None)
+
+
+def _alta_error() -> ResolveResult:
+    """ResolveResult signaling Alta API/network failure."""
+    return ResolveResult(ResolveOutcome.ALTA_ERROR, None)
 
 
 def _make_measure(
@@ -317,19 +340,25 @@ class TestResolveRatesHandler:
         mock_sb, _ = _patch_country_lookup_ok()
         mock_get_sb.return_value = mock_sb
 
-        # First call returns IMP rate, others return None
+        # First call returns IMP rate, others return NOT_FOUND (the resolver
+        # now returns a ResolveResult — FOUND/NOT_FOUND/ALTA_ERROR — instead
+        # of a bare ResolvedRate or None per M4 review fix).
         async def _resolve(*args, **kwargs):
             payment_type = kwargs.get("payment_type")
             if payment_type == "IMP":
-                return _make_resolved_rate(payment_type="IMP")
+                return _found(_make_resolved_rate(payment_type="IMP"))
             if payment_type == "NDS":
-                return _make_resolved_rate(
-                    payment_type="NDS",
-                    value_1_number=20.0,
-                    raw_value_string="20%",
+                return _found(
+                    _make_resolved_rate(
+                        payment_type="NDS",
+                        value_1_number=20.0,
+                        raw_value_string="20%",
+                    )
                 )
-            return None
+            return _not_found()
 
+        # Re-export so api.customs.rate_resolver.ResolveOutcome lookups work
+        mock_rate_resolver.ResolveOutcome = ResolveOutcome
         mock_rate_resolver.resolve_rate = AsyncMock(side_effect=_resolve)
 
         req = _make_request(
@@ -346,20 +375,25 @@ class TestResolveRatesHandler:
         assert len(body["data"]["rates"]) >= 1
         # Resolver called for at least IMP and NDS
         assert mock_rate_resolver.resolve_rate.await_count >= 2
+        # Partial flag should be set since some payment_types came back NOT_FOUND
+        assert body.get("meta", {}).get("partial") is True
 
     @patch("api.customs.rate_resolver")
     @patch("api.customs.get_supabase")
     @patch("api.customs.get_user_role_codes")
-    def test_503_when_alta_unavailable(
+    def test_resolve_rates_503_when_alta_genuinely_unavailable(
         self, mock_roles, mock_get_sb, mock_rate_resolver
     ):
-        """Resolver returns None for ALL payment_types → 503 ALTA_UNAVAILABLE."""
+        """REVIEW M4: when Alta errored on EVERY payment_type
+        (outcome=ALTA_ERROR) → 503 ALTA_UNAVAILABLE. Retrying may succeed.
+        """
         from api.customs import resolve_rates_handler
 
         mock_roles.return_value = ["customs"]
         mock_sb, _ = _patch_country_lookup_ok()
         mock_get_sb.return_value = mock_sb
-        mock_rate_resolver.resolve_rate = AsyncMock(return_value=None)
+        mock_rate_resolver.ResolveOutcome = ResolveOutcome
+        mock_rate_resolver.resolve_rate = AsyncMock(return_value=_alta_error())
 
         req = _make_request(
             body={"tnved_code": "8409910008", "country_oksm": 156}
@@ -368,6 +402,117 @@ class TestResolveRatesHandler:
         resp = _run(resolve_rates_handler(req, alta_client))
         assert resp.status_code == 503
         assert _body(resp)["error"]["code"] == "ALTA_UNAVAILABLE"
+
+    @patch("api.customs.rate_resolver")
+    @patch("api.customs.get_supabase")
+    @patch("api.customs.get_user_role_codes")
+    def test_resolve_rates_404_when_no_rate_exists(
+        self, mock_roles, mock_get_sb, mock_rate_resolver
+    ):
+        """REVIEW M4: when Alta succeeded but reported no rates for EVERY
+        payment_type (outcome=NOT_FOUND) → 404 RATE_NOT_FOUND. The user
+        must enter the rate manually — retrying won't help.
+        """
+        from api.customs import resolve_rates_handler
+
+        mock_roles.return_value = ["customs"]
+        mock_sb, _ = _patch_country_lookup_ok()
+        mock_get_sb.return_value = mock_sb
+        mock_rate_resolver.ResolveOutcome = ResolveOutcome
+        mock_rate_resolver.resolve_rate = AsyncMock(return_value=_not_found())
+
+        req = _make_request(
+            body={"tnved_code": "8409910008", "country_oksm": 156}
+        )
+        alta_client = MagicMock()
+        resp = _run(resolve_rates_handler(req, alta_client))
+        assert resp.status_code == 404
+        body = _body(resp)
+        assert body["error"]["code"] == "RATE_NOT_FOUND"
+        # Message should hint at manual entry
+        msg = body["error"]["message"]
+        assert "8409910008" in msg
+        assert "156" in msg
+        assert "ручного" in msg or "вручную" in msg.lower()
+
+    @patch("api.customs.rate_resolver")
+    @patch("api.customs.get_supabase")
+    @patch("api.customs.get_user_role_codes")
+    def test_resolve_rates_503_when_mixed_alta_error_and_not_found(
+        self, mock_roles, mock_get_sb, mock_rate_resolver
+    ):
+        """REVIEW M4 precedence: any ALTA_ERROR seen → 503 (could be
+        transient on the missing payment types). Don't return 404 unless
+        all outcomes were NOT_FOUND.
+        """
+        from api.customs import resolve_rates_handler
+
+        mock_roles.return_value = ["customs"]
+        mock_sb, _ = _patch_country_lookup_ok()
+        mock_get_sb.return_value = mock_sb
+        mock_rate_resolver.ResolveOutcome = ResolveOutcome
+
+        # Mix: IMP errored on Alta, NDS not found, others NOT_FOUND
+        async def _resolve(*args, **kwargs):
+            if kwargs.get("payment_type") == "IMP":
+                return _alta_error()
+            return _not_found()
+
+        mock_rate_resolver.resolve_rate = AsyncMock(side_effect=_resolve)
+
+        req = _make_request(
+            body={"tnved_code": "8409910008", "country_oksm": 156}
+        )
+        alta_client = MagicMock()
+        resp = _run(resolve_rates_handler(req, alta_client))
+        # Mixed = retry-worthy. Don't tell user the rate doesn't exist
+        # if Alta errored on the primary payment type.
+        assert resp.status_code == 503
+        assert _body(resp)["error"]["code"] == "ALTA_UNAVAILABLE"
+
+    @patch("api.customs.rate_resolver")
+    @patch("api.customs.get_supabase")
+    @patch("api.customs.get_user_role_codes")
+    def test_resolve_rates_200_partial_when_some_found(
+        self, mock_roles, mock_get_sb, mock_rate_resolver
+    ):
+        """REVIEW M4: when at least one payment_type FOUND a rate, return
+        200 with the partial data. meta.partial = True signals that some
+        types were missing (NOT_FOUND or ALTA_ERROR) so the UI can nudge
+        the user about the missing ones without blocking them.
+        """
+        from api.customs import resolve_rates_handler
+
+        mock_roles.return_value = ["customs"]
+        mock_sb, _ = _patch_country_lookup_ok()
+        mock_get_sb.return_value = mock_sb
+        mock_rate_resolver.ResolveOutcome = ResolveOutcome
+
+        async def _resolve(*args, **kwargs):
+            pt = kwargs.get("payment_type")
+            if pt == "IMP":
+                return _found(_make_resolved_rate(payment_type="IMP"))
+            if pt == "NDS":
+                return _not_found()
+            return _not_found()
+
+        mock_rate_resolver.resolve_rate = AsyncMock(side_effect=_resolve)
+
+        req = _make_request(
+            body={"tnved_code": "8409910008", "country_oksm": 156}
+        )
+        alta_client = MagicMock()
+        resp = _run(resolve_rates_handler(req, alta_client))
+        assert resp.status_code == 200
+        body = _body(resp)
+        assert body["success"] is True
+        # IMP only — others NOT_FOUND skipped
+        assert len(body["data"]["rates"]) == 1
+        assert body["meta"]["partial"] is True
+        # outcome map shows what each payment_type resolved to
+        outcomes = body["meta"]["outcomes"]
+        assert outcomes["IMP"] == "FOUND"
+        assert outcomes["NDS"] == "NOT_FOUND"
 
     @patch("api.customs.rate_resolver")
     @patch("api.customs.get_supabase")
@@ -381,9 +526,8 @@ class TestResolveRatesHandler:
         mock_roles.return_value = ["customs"]
         mock_sb, item_chain = _patch_country_lookup_ok()
         mock_get_sb.return_value = mock_sb
-        mock_rate_resolver.resolve_rate = AsyncMock(
-            return_value=_make_resolved_rate()
-        )
+        mock_rate_resolver.ResolveOutcome = ResolveOutcome
+        mock_rate_resolver.resolve_rate = AsyncMock(return_value=_found())
 
         req = _make_request(
             body={
@@ -413,9 +557,8 @@ class TestResolveRatesHandler:
         mock_roles.return_value = ["customs"]
         mock_sb, _ = _patch_country_lookup_ok()
         mock_get_sb.return_value = mock_sb
-        mock_rate_resolver.resolve_rate = AsyncMock(
-            return_value=_make_resolved_rate()
-        )
+        mock_rate_resolver.ResolveOutcome = ResolveOutcome
+        mock_rate_resolver.resolve_rate = AsyncMock(return_value=_found())
 
         req = _make_request(
             body={"tnved_code": "8409910008", "country_oksm": 156}
@@ -685,10 +828,9 @@ class TestAutofillForceLive:
         mock_sb.table.return_value.select.return_value.eq.return_value.eq.return_value.not_.is_.return_value.eq.return_value.order.return_value.limit.return_value.execute.return_value = empty_exec
         mock_get_sb.return_value = mock_sb
 
-        # Resolver yields a rate
-        mock_rate_resolver.resolve_rate = AsyncMock(
-            return_value=_make_resolved_rate()
-        )
+        # Resolver yields a FOUND rate (M4: resolver now returns ResolveResult)
+        mock_rate_resolver.ResolveOutcome = ResolveOutcome
+        mock_rate_resolver.resolve_rate = AsyncMock(return_value=_found())
 
         req = _make_request(
             body={

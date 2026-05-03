@@ -40,7 +40,7 @@ from typing import TYPE_CHECKING, Any, Literal, Union
 
 from services.alta_client import notify_admin
 from services.database import get_supabase
-from services.rate_resolver import CACHE_TTL, resolve_rate
+from services.rate_resolver import CACHE_TTL, ResolveOutcome, resolve_rate
 
 if TYPE_CHECKING:
     from services.alta_client import AltaClient
@@ -251,10 +251,14 @@ async def _capture_item(
     """Three-tier capture for one item. Returns (status, source, rates, warnings, abort_msg).
 
     Tier 1: ``rate_resolver.resolve_rate(...)`` — uses live Alta path
-            via the resolver's lazy-fetch.
-    Tier 2: if Tier 1 returned None for a payment_type, query
-            ``kvota.tnved_rates`` directly with no TTL filter (allow
-            stale entries up to 30 days old) for a last-resort cache hit.
+            via the resolver's lazy-fetch. ``outcome == FOUND`` means
+            a rate was returned (snapshot, cache, or Alta-live).
+    Tier 2: ONLY when ``outcome == ALTA_ERROR`` — Alta is genuinely
+            unavailable and we fall back to ``kvota.tnved_rates`` with
+            no TTL filter (stale rows up to 30 days old). When
+            ``outcome == NOT_FOUND`` we skip Tier 2 entirely — Alta
+            said the rate doesn't exist, so serving a stale cached
+            value (if any) would be wrong.
     Tier 3: if no rate found by either tier for ANY payment_type we'd
             normally expect AND at least one was attempted, mark the
             item as abort.
@@ -264,6 +268,10 @@ async def _capture_item(
     (only ~2-3 typically apply per code), so absence is NOT abort —
     abort fires only when the *requested-and-found-elsewhere* type is
     missing now.
+
+    Review fix M4 (PR #83): the resolver now distinguishes
+    NOT_FOUND from ALTA_ERROR; only ALTA_ERROR triggers the stale-cache
+    fallback (Tier 2). NOT_FOUND simply skips that payment_type.
     """
     rates: list[dict[str, Any]] = []
     warnings: list[str] = []
@@ -272,7 +280,7 @@ async def _capture_item(
 
     for payment_type in _DEFAULT_PAYMENT_TYPES:
         # Tier 1
-        live = await resolve_rate(
+        result = await resolve_rate(
             tnved_code=tnved_code,
             payment_type=payment_type,
             country_oksm=country_oksm,
@@ -282,12 +290,18 @@ async def _capture_item(
             alta_client=alta_client,
         )
 
-        if live is not None:
+        if result.outcome == ResolveOutcome.FOUND:
             saw_any = True
-            rates.append(_resolved_to_snapshot_dict(live))
+            rates.append(_resolved_to_snapshot_dict(result.rate))
             continue
 
-        # Tier 2 — last-resort cache hit (allow rows older than 30 days)
+        if result.outcome == ResolveOutcome.NOT_FOUND:
+            # Alta SUCCEEDED but said no rate for this payment_type.
+            # Skip — don't fall back to stale cache (would serve wrong data).
+            continue
+
+        # Tier 2 — last-resort cache hit (allow rows older than 30 days).
+        # Only reached on ALTA_ERROR (network / API failure).
         stale = _lookup_stale_cache(
             sb=sb,
             tnved_code=tnved_code,

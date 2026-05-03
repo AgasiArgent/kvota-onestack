@@ -493,7 +493,7 @@ async def _append_resolver_suggestions(
             continue
 
         try:
-            resolved = await rate_resolver.resolve_rate(
+            result = await rate_resolver.resolve_rate(
                 tnved_code=tnved_code,
                 payment_type="IMP",
                 country_oksm=country_oksm_int,
@@ -507,8 +507,11 @@ async def _append_resolver_suggestions(
                 item_id, exc,
             )
             continue
-        if resolved is None:
+        # Autofill is best-effort — both NOT_FOUND and ALTA_ERROR mean
+        # we have no suggestion to emit. Skip silently either way.
+        if result.outcome != rate_resolver.ResolveOutcome.FOUND:
             continue
+        resolved = result.rate
 
         # Best-effort customs_duty extraction from a percent slot 1.
         customs_duty = None
@@ -883,8 +886,20 @@ async def resolve_rates_handler(request: Request, alta_client) -> JSONResponse:
         include_payment_types: list[str] (optional) — defaults to
             (IMP, NDS, AKC, IMPCOMP, IMPDEMP, IMPTMP, IMPDOP).
     Returns:
-        {success: true, data: {rates, total_rub, source, fetched_at}}
-        or {success: false, error: {code, message}}.
+        Success (200): {success: true, data: {rates, total_rub, source,
+            fetched_at}, meta: {partial: bool, outcomes: dict}}
+        Errors:
+            - 503 ALTA_UNAVAILABLE — Alta API errored on EVERY requested
+              payment_type AND no cache. Retry-worthy.
+            - 404 RATE_NOT_FOUND — Alta succeeded but reported no rates
+              for this (tnved_code, country_oksm). Terminal — user must
+              enter the rate manually. (Review fix M4 PR #83.)
+            - 400 INVALID_TNVED_CODE / INVALID_OKSM / BAD_REQUEST.
+
+        ``meta.partial`` is True when at least one payment_type came back
+        empty/errored but at least one other payment_type FOUND a rate.
+        ``meta.outcomes`` is per-payment_type {FOUND, NOT_FOUND, ALTA_ERROR}
+        for UI nudges.
 
         Phase 1 caveat: rates are returned for inspection only —
         ``calculated_amount_rub`` is None per rate and ``total_rub`` is None
@@ -961,14 +976,19 @@ async def resolve_rates_handler(request: Request, alta_client) -> JSONResponse:
     if country_err is not None:
         return country_err
 
-    # Resolve each requested payment_type
+    # Resolve each requested payment_type. Track per-payment_type outcomes
+    # (M4 review fix) so we can distinguish "Alta down" from "rate doesn't
+    # exist" in the all-empty case.
     resolved_rates: list = []
+    outcomes_by_payment_type: dict[str, str] = {}  # debug/meta only
+    saw_alta_error = False
+    saw_not_found = False
     sources: set[str] = set()
     cache_hit_count = 0
     fetched_at: datetime | None = None
     for payment_type in payment_types:
         try:
-            r = await rate_resolver.resolve_rate(
+            result = await rate_resolver.resolve_rate(
                 tnved_code=tnved_code,
                 payment_type=payment_type,
                 country_oksm=country_oksm,
@@ -979,13 +999,28 @@ async def resolve_rates_handler(request: Request, alta_client) -> JSONResponse:
                 quote_item_id=quote_item_id,
             )
         except Exception as exc:
+            # Resolver itself crashed (defensive — should not normally happen
+            # since the resolver swallows AltaApiError internally). Treat as
+            # ALTA_ERROR for outcome aggregation purposes.
             logger.warning(
                 "resolve_rates: resolver crashed for payment_type=%s: %s",
                 payment_type, exc,
             )
+            outcomes_by_payment_type[payment_type] = "ALTA_ERROR"
+            saw_alta_error = True
             continue
-        if r is None:
+
+        outcomes_by_payment_type[payment_type] = result.outcome.name
+
+        if result.outcome == rate_resolver.ResolveOutcome.ALTA_ERROR:
+            saw_alta_error = True
             continue
+        if result.outcome == rate_resolver.ResolveOutcome.NOT_FOUND:
+            saw_not_found = True
+            continue
+
+        # FOUND
+        r = result.rate
         resolved_rates.append(r)
         sources.add(r.source)
         # cache_hit = served from cache (anything not freshly fetched live).
@@ -1004,20 +1039,28 @@ async def resolve_rates_handler(request: Request, alta_client) -> JSONResponse:
             fetched_at = r.source_fetched_at
 
     if not resolved_rates:
-        # All payment types missing — ideally we'd distinguish "Alta down"
-        # (503 ALTA_UNAVAILABLE) from "rate genuinely doesn't exist for this
-        # combination" (404 RATE_NOT_FOUND). Currently rate_resolver.resolve_rate
-        # returns None for BOTH cases — Alta errors, network errors, AND empty
-        # rate lookups all collapse into the same null. To split them we'd need
-        # the resolver to surface a distinct sentinel (e.g. a RateNotFound
-        # marker vs None) — that touches services/rate_resolver.py which is
-        # owned by another agent. Deferred to Phase 2 per review fix M4.
-        # Pragmatic stop-gap: treat all-empty as 503 with a message that
-        # acknowledges both possibilities so users don't infinitely retry.
+        # M4 review fix (PR #83): distinguish "Alta down" (retry-worthy, 503)
+        # from "rate genuinely doesn't exist for this code+country" (terminal,
+        # 404). The resolver now reports outcome per call so we can route
+        # accurately. Precedence rule: any ALTA_ERROR seen → 503 (could be
+        # transient; user should retry). Otherwise all NOT_FOUND → 404 with
+        # actionable message ("enter manually").
+        if saw_alta_error:
+            return _err(
+                "ALTA_UNAVAILABLE",
+                "Alta API недоступен. Попробуйте позже.",
+                503,
+            )
+        # All requested payment_types resolved to NOT_FOUND — Alta succeeded
+        # but has no data for this combination. No amount of retrying will
+        # change that; the user must enter the rate manually.
         return _err(
-            "ALTA_UNAVAILABLE",
-            "Alta API недоступен или ставки не найдены. Попробуйте позже.",
-            503,
+            "RATE_NOT_FOUND",
+            (
+                f"Ставки для {tnved_code} с {country_oksm} не найдены в Alta — "
+                "возможно, код требует ручного ввода"
+            ),
+            404,
         )
 
     # Optional side-effect: UPDATE quote_items with country + cert flags.
@@ -1043,6 +1086,10 @@ async def resolve_rates_handler(request: Request, alta_client) -> JSONResponse:
     source_label = (
         "cache" if cache_hit else (sorted(sources)[0] if sources else "unknown")
     )
+    # Partial = some payment_types resolved, others didn't (NOT_FOUND or
+    # ALTA_ERROR). Surface this so the UI can decide whether to nudge the
+    # user about specific missing types (e.g. NDS) without blocking them.
+    partial = saw_not_found or saw_alta_error
     latency_ms = int((time.monotonic() - started) * 1000)
 
     logger.info(
@@ -1054,6 +1101,7 @@ async def resolve_rates_handler(request: Request, alta_client) -> JSONResponse:
             "source": source_label,
             "latency_ms": latency_ms,
             "cache_hit": cache_hit,
+            "partial": partial,
         },
     )
 
@@ -1067,6 +1115,10 @@ async def resolve_rates_handler(request: Request, alta_client) -> JSONResponse:
                 "fetched_at": (
                     fetched_at.isoformat() if fetched_at else None
                 ),
+            },
+            "meta": {
+                "partial": partial,
+                "outcomes": outcomes_by_payment_type,
             },
         }
     )
