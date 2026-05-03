@@ -448,11 +448,39 @@ def _bulk_upsert(sb: Any, rates: list[Rate], source: str) -> None:
 
     The Supabase Python client's ``upsert(..., on_conflict='<col,col,...>')``
     targets the UNIQUE constraint name's columns (uq_tnved_rates).
+
+    Foreign-key prep: the migration only seeds 99 two-digit chapter roots
+    in ``kvota.tnved_codes``; leaf codes (e.g., 7326909807) accrue
+    organically as Alta returns them. Before inserting rates, ensure
+    every unique tnved_code is present in ``tnved_codes`` — without this,
+    the FK constraint ``tnved_rates_tnved_code_fkey`` rejects the upsert
+    and the resolver crashes (verified on prod 2026-05-03 with HTTP 503
+    return on every /api/customs/resolve-rates call for an unknown code).
     """
+    if not rates:
+        return
+
+    # 1. Ensure parent codes exist in tnved_codes (FK prerequisite).
+    unique_codes = {r.tnved_code for r in rates}
+    code_payload = [
+        {
+            "code": code,
+            # Parent = first 2 digits (chapter root, seeded by migration 298).
+            # Falls back to NULL when caller passes a sub-2-digit value
+            # (shouldn't happen for ТН ВЭД but defensive).
+            "parent_code": code[:2] if len(code) > 2 else None,
+            "description": f"Auto-inserted from Alta resolve ({source})",
+            "fetched_from": "alta",
+        }
+        for code in unique_codes
+    ]
+    sb.table("tnved_codes").upsert(
+        code_payload, on_conflict="code"
+    ).execute()
+
+    # 2. Now safe to upsert the rates themselves.
     now = datetime.now(timezone.utc).isoformat()
     payload = [_rate_to_row(r, source=source, now_iso=now) for r in rates]
-    if not payload:
-        return
     sb.table("tnved_rates").upsert(
         payload,
         on_conflict="tnved_code,payment_type,country_or_areal,valid_from,"
