@@ -3,7 +3,7 @@
 Thin wrapper over api.customs handlers. Mounted with prefix="/customs".
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -14,7 +14,10 @@ from api.customs import (
     create_quote_expense as _create_quote_expense,
     delete_item_expense as _delete_item_expense,
     delete_quote_expense as _delete_quote_expense,
+    non_tariff_measures_handler as _non_tariff_measures_handler,
+    resolve_rates_handler as _resolve_rates_handler,
 )
+from services.alta_client import AltaClient, get_alta_client
 
 router = APIRouter(tags=["customs"])
 
@@ -53,3 +56,26 @@ async def post_quote_expense(request: Request, quote_id: str) -> JSONResponse:
 async def delete_quote_expense_route(request: Request, expense_id: str) -> JSONResponse:
     """Delete a per-quote customs overhead expense."""
     return await _delete_quote_expense(request, expense_id)
+
+
+# REQ-5 customs-phase-1 — resolve-rates + non-tariff-measures
+# Both endpoints inject ``services.alta_client.AltaClient`` via ``Depends``
+# so tests can override with ``app.dependency_overrides`` (decisions Q6).
+
+
+@router.post("/resolve-rates")
+async def post_resolve_rates(
+    request: Request,
+    alta_client: AltaClient = Depends(get_alta_client),
+) -> JSONResponse:
+    """Resolve customs rates for a tnved+country+date — see resolve_rates_handler."""
+    return await _resolve_rates_handler(request, alta_client)
+
+
+@router.post("/non-tariff-measures")
+async def post_non_tariff_measures(
+    request: Request,
+    alta_client: AltaClient = Depends(get_alta_client),
+) -> JSONResponse:
+    """Fetch non-tariff regulation measures — see non_tariff_measures_handler."""
+    return await _non_tariff_measures_handler(request, alta_client)

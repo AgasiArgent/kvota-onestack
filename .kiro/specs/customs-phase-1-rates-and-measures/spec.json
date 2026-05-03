@@ -1,0 +1,48 @@
+{
+  "feature_name": "customs-phase-1-rates-and-measures",
+  "created_at": "2026-04-29T13:13:18+00:00",
+  "updated_at": "2026-05-01T17:00:00+00:00",
+  "language": "ru",
+  "phase": "tasks-generated",
+  "approvals": {
+    "requirements": { "generated": true, "approved": true, "approved_at": "2026-05-01" },
+    "design": { "generated": true, "approved": true, "approved_at": "2026-05-01", "generated_at": "2026-05-01" },
+    "tasks": { "generated": true, "approved": false, "generated_at": "2026-05-01" }
+  },
+  "ready_for_implementation": false,
+  "context": {
+    "scope_doc": "docs/plans/2026-04-22-customs-ved-integration-handoff.md",
+    "scope_doc_sections": [
+      "Финальное решение архитектуры (2026-04-24)",
+      "Architectural Decisions",
+      "Target State",
+      "Phase 1 — Foundation + ставки + меры (~3 недели)",
+      "Important gotchas"
+    ],
+    "phase_0_artifact": "/Users/andreynovikov/workspace/tech/projects/kvota/onestack-customs-phase0/scripts/phase0_eval_alta_express.py",
+    "worktree": "/Users/andreynovikov/workspace/tech/projects/kvota/onestack-customs-phase1",
+    "branch": "feature/customs-phase1",
+    "architecture": "Alta-only (H1) — single-provider XML API + smart cache, no TKS, no LLM in MVP",
+    "locked_files": [
+      "calculation_engine.py",
+      "calculation_models.py",
+      "calculation_mapper.py"
+    ],
+    "migration_numbers": [298],
+    "migration_number_note": "Originally planned 296 in handoff doc; bumped to 297 (296_update_vat_rates_by_country.sql merged), then bumped to 298 (297_relax_cargo_places_constraints.sql merged before Task 1 started, verified 2026-05-01 via git pull origin main on worktree)",
+    "gap_analysis_completed": true,
+    "gap_analysis_path": ".kiro/specs/customs-phase-1-rates-and-measures/gap-analysis.md",
+    "decisions_resolved": true,
+    "decisions_path": ".kiro/specs/customs-phase-1-rates-and-measures/decisions.md",
+    "decisions_summary": "Q1=B (parallel formulas, calc_engine locked), Q2=A (Telegram-only), Q3=A (last_used_at column), Q4=C+notifications (3-tier graceful + UI toast/modal), Q5=B (changelog_service), Q6=B (FastAPI Depends), Q7=A (workflow_service hook). KEY ARCH SIMPLIFICATION: drop customs_rates_snapshot columns from quote_items, extend quote_versions.input_variables instead — single snapshot infrastructure.",
+    "deferred_to_phase_2": [
+      "Alta Express batch classification UI",
+      "АПУ interactive picker UI",
+      "POST /api/customs/classify-batch endpoint"
+    ],
+    "deferred_to_phase_3": [
+      "Eval-gate measurement on real МастерБэринг data",
+      "Phase 4A/4B decision (LLM fallback)"
+    ]
+  }
+}

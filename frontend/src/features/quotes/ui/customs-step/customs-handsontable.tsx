@@ -45,6 +45,9 @@ type ItemExtras = {
   license_ss_cost?: number | null;
   license_sgr_required?: boolean | null;
   license_sgr_cost?: number | null;
+  // REQ-7 customs-phase-1 — country of origin (read-only column).
+  // Edits happen through customs-item-dialog (CustomsCountryDropdown).
+  country_of_origin_oksm?: number | null;
 };
 
 /**
@@ -62,6 +65,7 @@ const COLUMN_KEYS = [
   "quantity",
   "supplier_country",
   "hs_code",
+  "country_of_origin_oksm",
   "customs_duty_composite",
   "customs_util_fee",
   "customs_excise",
@@ -91,6 +95,13 @@ interface RowData {
   quantity: number | null;
   supplier_country: string;
   hs_code: string;
+
+  /**
+   * REQ-7 customs-phase-1 — country of origin OKSM digital code, displayed
+   * read-only in the grid. Edits go through customs-item-dialog so the
+   * searchable dropdown standard is preserved (memory feedback_searchable_select).
+   */
+  country_of_origin_oksm: number | null;
 
   /** Composite display value — mode determined by which storage column is set. */
   customs_duty_composite: number | null;
@@ -151,6 +162,7 @@ function itemToRow(
     quantity: item.quantity,
     supplier_country: country,
     hs_code: extras.hs_code ?? "",
+    country_of_origin_oksm: extras.country_of_origin_oksm ?? null,
 
     customs_duty_composite: composite,
     customs_duty: duty,
@@ -218,6 +230,10 @@ const COL_HEADERS: string[] = [
   "Кол-во",
   "Страна",
   "Код ТН ВЭД",
+  headerWithTooltip(
+    "Страна происх.",
+    "ОКСМ страны происхождения. Редактирование — через карточку позиции."
+  ),
   headerWithTooltip("Пошлина", "Процент / ₽ за кг (₽ за шт требует миграции)"),
   headerWithTooltip("Утильсбор", numericTooltip),
   headerWithTooltip("Акциз", numericTooltip),
@@ -418,6 +434,13 @@ const COLUMNS: Handsontable.ColumnSettings[] = [
   { data: "quantity", type: "numeric", width: 55, readOnly: true },
   { data: "supplier_country", type: "text", width: 70, readOnly: true },
   { data: "hs_code", type: "text", width: 90 },
+  {
+    data: "country_of_origin_oksm",
+    type: "numeric",
+    width: 75,
+    readOnly: true,
+    allowEmpty: true,
+  },
   {
     data: "customs_duty_composite",
     type: "numeric",

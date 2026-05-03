@@ -26,12 +26,17 @@ from api.procurement import (
     get_status_history as _get_status_history,
     post_substatus as _post_substatus,
 )
+from api.customs import (
+    refresh_customs_snapshot_handler as _refresh_customs_snapshot,
+)
 from api.quotes import (
     calculate_quote as _calculate_quote,
     cancel_quote as _cancel_quote,
     submit_procurement as _submit_procurement,
     transition_workflow as _transition_workflow,
 )
+from fastapi import Depends
+from services.alta_client import AltaClient, get_alta_client
 from api.soft_delete import (
     restore_quote as _restore_quote,
     soft_delete_quote as _soft_delete_quote,
@@ -124,3 +129,17 @@ async def post_workflow_transition(
 ) -> JSONResponse:
     """Execute a workflow status transition (to_status or action)."""
     return await _transition_workflow(request, quote_id)
+
+
+@router.post("/{quote_id}/refresh-customs-snapshot")
+async def post_refresh_customs_snapshot(
+    request: Request,
+    quote_id: str,
+    alta_client: AltaClient = Depends(get_alta_client),
+) -> JSONResponse:
+    """Re-fetch and replace the customs rate snapshot on the latest quote_version.
+
+    REQ-8 explicit "Пересчитать по текущим ставкам" trigger. Three-tier
+    fallback (Q4): live → 30-day cache → 409 FREEZE_ABORTED. Customs roles only.
+    """
+    return await _refresh_customs_snapshot(request, quote_id, alta_client)

@@ -85,7 +85,9 @@ def create_quote_version(
     results: List[Dict],
     totals: Dict[str, Any],
     change_reason: str = "Calculation",
-    customer_id: Optional[str] = None
+    customer_id: Optional[str] = None,
+    customs_rates: Optional[Dict[str, Any]] = None,
+    source_at_freeze: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Create immutable snapshot of quote state.
@@ -104,6 +106,15 @@ def create_quote_version(
         totals: Quote totals (total_usd, total_no_vat, total_with_vat, etc.)
         change_reason: Reason for creating version
         customer_id: Customer UUID (required by DB schema)
+        customs_rates: Optional. Per-item customs rate snapshot from
+            ``services.customs_freeze_service.build_snapshot()`` — shape:
+            ``{quote_item_id: {rates: [...], fetched_at, source_at_freeze}}``.
+            Persisted under ``input_variables.customs_rates`` so frozen
+            quotes resolve via the snapshot branch in rate_resolver
+            (REQ-8 + Q7 simplification).
+        source_at_freeze: Optional. 'alta-live' | 'cache-stale' — which
+            tier the freeze actually used. Stored alongside customs_rates
+            for UI display ("Snapshot создан из кэша" warning).
 
     Returns:
         Created version record
@@ -145,6 +156,14 @@ def create_quote_version(
         },
         "change_reason": change_reason
     }
+
+    # REQ-8 + Q7: customs rate snapshot lives alongside the calc snapshot
+    # so frozen quotes resolve via rate_resolver's snapshot branch
+    # (services/rate_resolver.py:_lookup_snapshot reads this exact path).
+    if customs_rates is not None:
+        input_variables["customs_rates"] = customs_rates
+    if source_at_freeze is not None:
+        input_variables["source_at_freeze"] = source_at_freeze
 
     # Build version record using actual DB columns
     # Note: status must match quote_versions_status_check constraint (sent, pending, approved, rejected)

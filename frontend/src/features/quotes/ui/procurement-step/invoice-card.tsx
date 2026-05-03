@@ -136,8 +136,12 @@ export function InvoiceCard({
   const [downloadingXls, setDownloadingXls] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
   const [language, setLanguage] = useState<"ru" | "en">("ru");
+  // State shape mirrors what fetchCargoPlaces returns from
+  // kvota.invoice_cargo_places (full row incl. id/invoice_id/created_at,
+  // nullable dimension fields). Narrowing to a form-only shape here was
+  // the root of TS2345 setter-type-mismatches across this file.
   const [cargoPlaces, setCargoPlaces] = useState<
-    Array<{ position: number; weight_kg: number; length_mm: number; width_mm: number; height_mm: number }>
+    Awaited<ReturnType<typeof fetchCargoPlaces>>
   >([]);
   // Invoice-level deferred-fill fields. Initial values from the `invoice`
   // prop; saves go through `updateInvoice` on blur (text/number) or
@@ -552,9 +556,15 @@ export function InvoiceCard({
   const currency = invoice.currency ?? "USD";
   const hasFile = ext<InvoiceExtras>(invoice).invoice_file_url != null;
 
-  const cargoWeight = cargoPlaces.reduce((sum, cp) => sum + cp.weight_kg, 0);
+  // Aggregations treat null (user-not-yet-filled) as 0 — matches the
+  // pre-PR behavior when the state was narrowly typed as non-nullable.
+  const cargoWeight = cargoPlaces.reduce(
+    (sum, cp) => sum + (cp.weight_kg ?? 0),
+    0
+  );
   const cargoVolume = cargoPlaces.reduce(
-    (sum, cp) => sum + (cp.length_mm * cp.width_mm * cp.height_mm) / 1e9,
+    (sum, cp) =>
+      sum + ((cp.length_mm ?? 0) * (cp.width_mm ?? 0) * (cp.height_mm ?? 0)) / 1e9,
     0
   );
   const hasCargoPlaces = cargoPlaces.length > 0;
@@ -1050,7 +1060,7 @@ export function InvoiceCard({
                         step="0.01"
                         min="0"
                         placeholder="Вес, кг"
-                        defaultValue={cp.weight_kg}
+                        defaultValue={cp.weight_kg ?? ""}
                         onBlur={(e) => {
                           const v = parseFloat(e.target.value);
                           if (!Number.isFinite(v) || v === cp.weight_kg) return;
@@ -1075,7 +1085,7 @@ export function InvoiceCard({
                         step="1"
                         min="0"
                         placeholder="Длина"
-                        defaultValue={cp.length_mm}
+                        defaultValue={cp.length_mm ?? ""}
                         onBlur={(e) => {
                           const v = parseInt(e.target.value, 10);
                           if (!Number.isFinite(v) || v === cp.length_mm) return;
@@ -1100,7 +1110,7 @@ export function InvoiceCard({
                         step="1"
                         min="0"
                         placeholder="Ширина"
-                        defaultValue={cp.width_mm}
+                        defaultValue={cp.width_mm ?? ""}
                         onBlur={(e) => {
                           const v = parseInt(e.target.value, 10);
                           if (!Number.isFinite(v) || v === cp.width_mm) return;
@@ -1125,7 +1135,7 @@ export function InvoiceCard({
                         step="1"
                         min="0"
                         placeholder="Высота"
-                        defaultValue={cp.height_mm}
+                        defaultValue={cp.height_mm ?? ""}
                         onBlur={(e) => {
                           const v = parseInt(e.target.value, 10);
                           if (!Number.isFinite(v) || v === cp.height_mm) return;
@@ -1188,7 +1198,7 @@ export function InvoiceCard({
               <div className="space-y-0.5">
                 {cargoPlaces.map((cp) => (
                   <div key={cp.position} className="text-xs text-muted-foreground tabular-nums">
-                    Место {cp.position}: {numberFmt.format(cp.weight_kg)} кг, {cp.length_mm}&times;{cp.width_mm}&times;{cp.height_mm} мм
+                    Место {cp.position}: {cp.weight_kg !== null ? numberFmt.format(cp.weight_kg) : "—"} кг, {cp.length_mm ?? "—"}&times;{cp.width_mm ?? "—"}&times;{cp.height_mm ?? "—"} мм
                   </div>
                 ))}
               </div>
