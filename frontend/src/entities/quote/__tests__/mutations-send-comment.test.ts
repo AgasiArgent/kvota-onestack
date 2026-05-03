@@ -15,10 +15,15 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
  * 2. РОП on quote chat: head_of_sales (and other heads / top_manager)
  *    were missing from kvota.documents RLS allowlist (migration 143),
  *    so the documents.update({comment_id}) step rejected with a 42501
- *    error. Migration 301 widens the policy. The mutation contract is
- *    "if the link UPDATE fails, throw — do NOT insert the comment", so
- *    we verify the order and the rollback.
+ *    error. Migration 301 widens the policy.
  *    (РОП Тест 2026-05-03 fail RPQ11–RPQ17.)
+ *
+ * Order: comment INSERT first, then documents.update. The original "link
+ * before insert" approach (МОЗ #39/#42/#43 realtime-race fix) violated
+ * documents_comment_id_fkey because that FK is NOT deferrable — the link
+ * UPDATE could not reference a comment id that did not yet exist. Receiver-
+ * side race for fresh attachments is now handled by useRealtimeComments
+ * subscribing to documents UPDATE events.
  *
  * The fakeSupabase here mimics the chained PostgREST builder for the
  * three tables sendQuoteComment touches: documents (update + select)
@@ -46,6 +51,8 @@ interface DocumentsUpdateCall {
 }
 
 interface CommentsInsertCall {
+  /** Echoed back as the inserted row id so the mutation can use it. */
+  id: string;
   payload: Record<string, unknown>;
   /** Order in which this call happened relative to documents updates. */
   order: number;
@@ -62,6 +69,8 @@ interface FakeSupabase {
   // Captured operations (in call order)
   documentsUpdates: DocumentsUpdateCall[];
   commentsInserts: CommentsInsertCall[];
+  /** Captured comment IDs that were deleted (best-effort cleanup path). */
+  commentsDeletes: string[];
   /** Monotonic counter so we can assert ordering. */
   callCounter: number;
 
@@ -77,6 +86,7 @@ function makeFakeSupabase(initialDocs: DocumentRow[] = []): FakeSupabase {
     failCommentInsert: false,
     documentsUpdates: [],
     commentsInserts: [],
+    commentsDeletes: [],
     callCounter: 0,
     from(table: string) {
       if (table === "documents") {
@@ -119,7 +129,9 @@ function makeFakeSupabase(initialDocs: DocumentRow[] = []): FakeSupabase {
       if (table === "quote_comments") {
         return {
           insert: (payload: Record<string, unknown>) => {
+            const id = `comment-${state.commentsInserts.length + 1}`;
             state.commentsInserts.push({
+              id,
               payload,
               order: ++state.callCounter,
             });
@@ -132,11 +144,26 @@ function makeFakeSupabase(initialDocs: DocumentRow[] = []): FakeSupabase {
                       error: { message: "insert blocked" },
                     };
                   }
-                  return { data: payload, error: null };
+                  return { data: { id, ...payload }, error: null };
                 },
               }),
             };
           },
+          delete: () => ({
+            eq: (_col: string, id: string) => {
+              state.commentsDeletes.push(id);
+              // Match the mutation's chained `.then(undefined, () => {})`
+              // best-effort signature.
+              return {
+                then: (onFulfilled?: (v: unknown) => unknown) => {
+                  const v = { error: null };
+                  return Promise.resolve(
+                    onFulfilled ? onFulfilled(v) : v
+                  );
+                },
+              };
+            },
+          }),
         };
       }
       throw new Error(`Unexpected table: ${table}`);
@@ -159,26 +186,20 @@ describe("sendQuoteComment — attachment link ordering", () => {
     ]);
   });
 
-  it("links documents BEFORE inserting the comment row", async () => {
+  it("inserts the comment row BEFORE linking documents", async () => {
+    // The FK kvota.documents.comment_id → kvota.quote_comments.id is NOT
+    // deferrable, so any UPDATE that names a comment id that does not yet
+    // exist returns 23503/409 (МОП Тест 2026-05-03 fail M9–M13).
     const { sendQuoteComment } = await import("../mutations");
 
     await sendQuoteComment("q-1", "user-1", "hello", undefined, ["doc-1"]);
 
-    // Both calls happened
     expect(fakeSupabase.documentsUpdates).toHaveLength(1);
     expect(fakeSupabase.commentsInserts).toHaveLength(1);
 
-    // Documents update precedes the comment insert (PR #80 fix — eliminates
-    // the realtime race where receivers saw the comment before the link).
-    expect(fakeSupabase.documentsUpdates[0].order).toBeLessThan(
-      fakeSupabase.commentsInserts[0].order
-    );
-
-    // The link payload sets comment_id to the same UUID as the inserted comment
-    const linkedCommentId =
-      fakeSupabase.documentsUpdates[0].updates.comment_id;
-    expect(linkedCommentId).toEqual(
-      fakeSupabase.commentsInserts[0].payload.id
+    // Comment INSERT precedes documents UPDATE.
+    expect(fakeSupabase.commentsInserts[0].order).toBeLessThan(
+      fakeSupabase.documentsUpdates[0].order
     );
   });
 
@@ -225,10 +246,11 @@ describe("sendQuoteComment — RLS / failure paths", () => {
     ]);
   });
 
-  it("aborts WITHOUT inserting a comment when the documents link UPDATE fails", async () => {
-    // Simulate the pre-migration-301 head_of_sales scenario: documents.update
-    // is rejected by RLS. Mutation must throw and never insert the comment,
-    // otherwise we'd ship a broken bubble (comment but no files).
+  it("rolls back the comment when the documents link UPDATE fails", async () => {
+    // Pre-migration-301 head_of_sales scenario: documents.update is rejected
+    // by RLS. The comment was already inserted (Step 1), so we delete it as
+    // best-effort cleanup so receivers don't see an empty bubble where a
+    // file should be.
     fakeSupabase.failDocumentsUpdate = true;
 
     const { sendQuoteComment } = await import("../mutations");
@@ -237,16 +259,19 @@ describe("sendQuoteComment — RLS / failure paths", () => {
       sendQuoteComment("q-1", "user-1", "hello", undefined, ["doc-1"])
     ).rejects.toBeTruthy();
 
+    expect(fakeSupabase.commentsInserts).toHaveLength(1);
     expect(fakeSupabase.documentsUpdates).toHaveLength(1);
-    // CRITICAL: zero comment inserts on failure (otherwise RPQ11-17 would
-    // ship a comment with NULL comment_id docs — no files in the bubble).
-    expect(fakeSupabase.commentsInserts).toHaveLength(0);
+    // Cleanup ran (best-effort delete of the orphan comment).
+    expect(fakeSupabase.commentsDeletes).toHaveLength(1);
+    expect(fakeSupabase.commentsDeletes[0]).toEqual(
+      fakeSupabase.commentsInserts[0].id
+    );
   });
 
-  it("rolls back the documents link when the comment INSERT fails", async () => {
+  it("does not link or touch documents when the comment INSERT fails", async () => {
     // Simulate a constraint / RLS violation on the comments insert. The
-    // mutation must NULL out comment_id to avoid orphan documents pointing
-    // at a never-created comment.
+    // mutation must throw without touching documents — there's no comment
+    // id to link to.
     fakeSupabase.failCommentInsert = true;
 
     const { sendQuoteComment } = await import("../mutations");
@@ -255,12 +280,8 @@ describe("sendQuoteComment — RLS / failure paths", () => {
       sendQuoteComment("q-1", "user-1", "hello", undefined, ["doc-1"])
     ).rejects.toBeTruthy();
 
-    // Two updates: 1) link (success), 2) rollback (set NULL)
-    expect(fakeSupabase.documentsUpdates).toHaveLength(2);
-    expect(fakeSupabase.documentsUpdates[1].updates).toEqual({
-      comment_id: null,
-    });
-    expect(fakeSupabase.documentsUpdates[1].ids).toEqual(["doc-1"]);
+    expect(fakeSupabase.commentsInserts).toHaveLength(1);
+    expect(fakeSupabase.documentsUpdates).toHaveLength(0);
   });
 });
 
