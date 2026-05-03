@@ -43,6 +43,12 @@ interface QuoteDetailShellProps {
   quote: QuoteDetailRow;
   documentCount: number;
   activeStep: QuoteStep;
+  /**
+   * Workflow-status-aware default step. Used by the sticky header to build
+   * "close" links (e.g. «Закрыть документы») that return the user to the
+   * step matching the quote's current stage instead of always «Заявка».
+   */
+  defaultStep: QuoteStep;
   userRoles: string[];
   contextData: QuoteContextData;
   stepContent: ReactNode;
@@ -61,6 +67,7 @@ export function QuoteDetailShell({
   quote,
   documentCount,
   activeStep,
+  defaultStep,
   userRoles,
   contextData,
   stepContent,
@@ -96,6 +103,7 @@ export function QuoteDetailShell({
         quote={quote}
         documentCount={documentCount}
         activeStep={activeStep}
+        defaultStep={defaultStep}
         userRoles={userRoles}
         isContextOpen={isContextOpen}
         onToggleContext={handleToggleContext}

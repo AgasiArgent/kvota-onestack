@@ -34,6 +34,14 @@ interface QuoteStickyHeaderProps {
   quote: QuoteDetailRow;
   documentCount?: number;
   activeStep?: QuoteStep;
+  /**
+   * Workflow-status-aware default step for the quote (e.g. «Закупки» for
+   * pending_procurement). Used to build "close" links so toggling off
+   * documents/plan-fact returns the user to the step matching the quote's
+   * current stage instead of always landing on «Заявка». Falls back to
+   * "sales" when not provided (legacy callers).
+   */
+  defaultStep?: QuoteStep;
   userRoles?: string[];
   isContextOpen: boolean;
   onToggleContext: () => void;
@@ -43,6 +51,7 @@ export function QuoteStickyHeader({
   quote,
   documentCount,
   activeStep,
+  defaultStep = "sales",
   userRoles = [],
   isContextOpen,
   onToggleContext,
@@ -157,7 +166,7 @@ export function QuoteStickyHeader({
               <Link
                 href={
                   isPlanFactActive
-                    ? `/quotes/${quote.id}`
+                    ? `/quotes/${quote.id}?step=${defaultStep}`
                     : `/quotes/${quote.id}?step=plan-fact`
                 }
                 className={cn(
@@ -176,7 +185,7 @@ export function QuoteStickyHeader({
             <Link
               href={
                 isDocumentsActive
-                  ? `/quotes/${quote.id}`
+                  ? `/quotes/${quote.id}?step=${defaultStep}`
                   : `/quotes/${quote.id}?step=documents`
               }
               className={cn(

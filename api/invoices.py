@@ -456,19 +456,22 @@ async def request_procurement_unlock(request, id: str) -> JSONResponse:
     except Exception:
         pass  # No body is acceptable — reason is optional
 
-    from services.approval_service import create_approvals_for_role
+    from services.approval_service import request_approvals
 
     quote_id = invoice.get("quote_id")
     reason = f"Unlock procurement-completed invoice {id}"
     if user_reason:
         reason = f"{reason}: {user_reason}"
 
-    approvals = create_approvals_for_role(
+    # Use the universal request_approvals wrapper so INSERT + Telegram fire together.
+    # Track F: only head_of_procurement is approver — admins+finance+currency_controller
+    # were too broad and produced spam for procurement edits.
+    result = await request_approvals(
         quote_id=quote_id,
-        organization_id=user["org_id"],
         requested_by=user["id"],
         reason=reason,
-        role_codes=["head_of_procurement", "admin"],
+        organization_id=user["org_id"],
+        role_codes=["head_of_procurement"],
         approval_type="edit_completed_procurement",
     )
 
@@ -476,8 +479,9 @@ async def request_procurement_unlock(request, id: str) -> JSONResponse:
         {
             "success": True,
             "data": {
-                "approvals_created": len(approvals),
-                "approval_ids": [a.id for a in approvals],
+                "approvals_created": result.approvals_created,
+                "notifications_sent": result.notifications_sent,
+                "approval_ids": [a.id for a in result.approvals],
             },
         },
         status_code=201,

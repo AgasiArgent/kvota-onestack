@@ -125,12 +125,15 @@ from .approval_service import (
     Approval,
     ApprovalRequestResult,
     ApprovalDecisionResult,
+    RequestApprovalsResult,
     ModificationValidationResult,
     ApprovalWithModificationsResult,
     ApplyModificationsResult,
     # Create operations
     create_approval,
     create_approvals_for_role,
+    # Universal approval wrapper (INSERT + Telegram notify atomically)
+    request_approvals,
     # Read operations
     get_approval,
     get_approval_by_quote,
@@ -998,6 +1001,9 @@ __all__ = [
     "request_approval",
     "ApprovalDecisionResult",
     "process_approval_decision",
+    # Universal approval wrapper (INSERT + Telegram notify atomically)
+    "RequestApprovalsResult",
+    "request_approvals",
     # Specification service (Feature #73)
     "Specification",
     "SPEC_STATUSES",

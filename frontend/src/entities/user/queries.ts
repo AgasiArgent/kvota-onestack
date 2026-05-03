@@ -2,6 +2,46 @@ import { createClient, createAdminClient } from "@/shared/lib/supabase/server";
 import type { ProcurementUserWorkload } from "@/shared/types/procurement-user";
 import { ROLE_LABELS_RU } from "./types";
 
+/**
+ * Resolve which of the given user ids are still active in auth.users —
+ * i.e., not soft-deleted and not currently banned. auth.users is not
+ * accessible via PostgREST (lives outside the kvota schema), so we use
+ * the Supabase Auth Admin API. Same pattern as admin/queries.ts.
+ *
+ * Banned users (e.g., fired employees) carry a far-future banned_until
+ * timestamp so Supabase blocks their sign-in. We must also hide them
+ * from any user-picker / workload view so RОЗ cannot assign work to a
+ * fired person.
+ */
+export async function fetchActiveAuthUserIds(
+  admin: ReturnType<typeof createAdminClient>,
+  userIds: string[]
+): Promise<Set<string>> {
+  if (userIds.length === 0) return new Set();
+  const { data: authData, error } = await admin.auth.admin.listUsers({
+    perPage: 1000,
+  });
+  if (error) {
+    console.error("[fetchActiveAuthUserIds] auth.admin.listUsers failed:", error);
+    // Fail-open: return all userIds so the procurement picker doesn't blank
+    // on transient auth outages. Cost of false-positive (showing a stale
+    // banned user briefly) < cost of false-negative (entire team disappears).
+    return new Set(userIds);
+  }
+  // TODO: paginate when org > 1000 users — currently silently truncates
+  const authUsers = authData?.users ?? [];
+  const requested = new Set(userIds);
+  const now = Date.now();
+  const active = new Set<string>();
+  for (const u of authUsers) {
+    if (!requested.has(u.id)) continue;
+    if (u.deleted_at) continue;
+    if (u.banned_until && new Date(u.banned_until).getTime() > now) continue;
+    active.add(u.id);
+  }
+  return active;
+}
+
 export async function fetchUserSalesGroupId(
   userId: string,
   orgId: string
@@ -177,7 +217,10 @@ export async function fetchProcurementWorkload(
 
   if (procUserIds.size === 0) return [];
 
-  const userIdArr = [...procUserIds];
+  // 1b. Drop fired/deleted users (banned_until in the future or deleted_at set).
+  const activeIds = await fetchActiveAuthUserIds(supabase, [...procUserIds]);
+  const userIdArr = [...procUserIds].filter((id) => activeIds.has(id));
+  if (userIdArr.length === 0) return [];
 
   // 2. Fetch profiles
   const { data: profiles } = await supabase

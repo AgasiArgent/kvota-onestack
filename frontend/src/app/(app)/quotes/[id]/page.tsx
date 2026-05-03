@@ -10,6 +10,7 @@ import {
   fetchStageDeadline,
   fetchDealIdForQuote,
   canAccessQuote,
+  getDefaultStep,
   ROLE_ALLOWED_STEPS,
   ROLE_EDITABLE_STEPS,
   STATUS_TO_STEP,
@@ -26,14 +27,6 @@ import { fetchQuoteContextData } from "@/features/quotes/ui/context-panel/querie
 import { fetchEntityNotes } from "@/entities/entity-note/queries";
 import { fetchAllAvailableOnServer } from "@/entities/table-view/server-queries";
 import { CUSTOMS_TABLE_KEY } from "@/features/quotes/ui/customs-step/customs-columns";
-
-function getDefaultStep(roles: string[]): QuoteStep {
-  for (const role of roles) {
-    const steps = ROLE_ALLOWED_STEPS[role];
-    if (steps?.length) return steps[0];
-  }
-  return "sales";
-}
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -113,12 +106,17 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
     ? ROLE_ALLOWED_STEPS.admin
     : [...new Set(userRoles.flatMap((r) => ROLE_ALLOWED_STEPS[r] ?? []))];
 
-  // Resolve active step: requested > role-based default
+  // Resolve active step: requested > workflow-status-aware default.
+  // The default mirrors the quote's current stage (e.g. pending_procurement →
+  // "Закупки") so URLs without `?step=` no longer always land on «Заявка».
+  // Permission filtering is honoured — if the mapped step isn't in
+  // `allowedSteps`, we fall back to the user's first allowed step.
+  const defaultStep = getDefaultStep(quote.workflow_status, allowedSteps);
   const requestedStep = step as QuoteStep | undefined;
   const activeStep: QuoteStep =
     requestedStep && allowedSteps.includes(requestedStep)
       ? requestedStep
-      : getDefaultStep(userRoles);
+      : defaultStep;
 
   // Determine if this step is read-only for the user (can view but not edit)
   const editableSteps = isAdmin
@@ -137,6 +135,7 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
         quote={quote}
         documentCount={documentCount}
         activeStep={activeStep}
+        defaultStep={defaultStep}
         userRoles={userRoles}
         contextData={contextData}
         stepContent={

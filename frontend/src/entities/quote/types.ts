@@ -348,7 +348,13 @@ export const ROLE_EDITABLE_STEPS: Record<string, QuoteStep[]> = {
   procurement_senior: ["procurement", "documents"],
 };
 
-// Workflow status to step mapping (for rail highlighting)
+/**
+ * Maps workflow_status → step for RAIL HIGHLIGHTING (which tab is active).
+ *
+ * NOTE: For default landing step (URL without ?step=), use STATUS_DEFAULT_STEP
+ * from `entities/quote/default-step.ts` — that map intentionally differs.
+ * See default-step.ts JSDoc for divergence rationale.
+ */
 export const STATUS_TO_STEP: Record<string, QuoteStep> = {
   draft: "sales",
   pending_procurement: "procurement",

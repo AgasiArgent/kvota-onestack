@@ -55,6 +55,7 @@ export function isHeadOfSales(roles: string[]): boolean {
  * head_of_procurement sees all suppliers (not "procurement only").
  */
 export function isProcurementOnly(roles: string[]): boolean {
+  if (roles.includes("head_of_procurement")) return false; // Match docstring: head sees all
   return (
     roles.some((r) => PROCUREMENT_ROLES.includes(r)) &&
     !roles.some((r) => NON_PROCUREMENT_ROLES.includes(r))
