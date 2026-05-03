@@ -38,6 +38,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { updateQuoteItem } from "@/entities/quote/mutations";
 import type { QuoteItemRow } from "@/entities/quote/queries";
 
+import { CustomsCountryDropdown } from "@/features/customs-country-dropdown";
+import {
+  AutoResolveButton,
+  RateBreakdown,
+  SourceTimestamp,
+  type ApiError,
+  type ResolveRatesData,
+} from "@/features/customs-rate-resolve";
+import { MeasuresList } from "@/features/customs-non-tariff-measures";
+
 import { ItemCustomsExpenses } from "./item-customs-expenses";
 
 function ext<T>(row: unknown): T {
@@ -65,6 +75,10 @@ interface CustomsExtras {
   license_ss_cost?: number | null;
   license_sgr_required?: boolean | null;
   license_sgr_cost?: number | null;
+  // REQ-7 customs-phase-1 — country of origin + certificates
+  country_of_origin_oksm?: number | null;
+  has_origin_certificate?: boolean | null;
+  has_fta_certificate?: boolean | null;
 }
 
 interface FormState {
@@ -86,6 +100,10 @@ interface FormState {
   license_ss_cost: string;
   license_sgr_required: boolean;
   license_sgr_cost: string;
+  // REQ-7 customs-phase-1 — country of origin + certificates
+  country_of_origin_oksm: number | null;
+  has_origin_certificate: boolean;
+  has_fta_certificate: boolean;
 }
 
 function stateFromItem(item: QuoteItemRow): FormState {
@@ -117,6 +135,9 @@ function stateFromItem(item: QuoteItemRow): FormState {
     license_ss_cost: numToStr(extras.license_ss_cost),
     license_sgr_required: Boolean(extras.license_sgr_required),
     license_sgr_cost: numToStr(extras.license_sgr_cost),
+    country_of_origin_oksm: extras.country_of_origin_oksm ?? null,
+    has_origin_certificate: Boolean(extras.has_origin_certificate),
+    has_fta_certificate: Boolean(extras.has_fta_certificate),
   };
 }
 
@@ -160,6 +181,9 @@ function buildUpdates(form: FormState): Record<string, unknown> {
     license_sgr_cost: form.license_sgr_required
       ? parseNumOrNull(form.license_sgr_cost)
       : null,
+    country_of_origin_oksm: form.country_of_origin_oksm,
+    has_origin_certificate: form.has_origin_certificate,
+    has_fta_certificate: form.has_fta_certificate,
   };
 }
 
@@ -185,6 +209,10 @@ export function CustomsItemDialog({
 }: CustomsItemDialogProps) {
   const [form, setForm] = useState<FormState | null>(null);
   const [saving, setSaving] = useState(false);
+  const [resolveResult, setResolveResult] = useState<ResolveRatesData | null>(
+    null
+  );
+  const [refreshing, setRefreshing] = useState(false);
   const canWrite = userRoles.some((r) => CAN_WRITE_ROLES.has(r));
 
   // Re-seed the form whenever a different row is opened. Avoids stale state
@@ -192,6 +220,7 @@ export function CustomsItemDialog({
   useEffect(() => {
     if (open && item) {
       setForm(stateFromItem(item));
+      setResolveResult(null);
     }
   }, [open, item]);
 
@@ -223,6 +252,54 @@ export function CustomsItemDialog({
       toast.error(err instanceof Error ? err.message : "Не удалось сохранить");
     } finally {
       setSaving(false);
+    }
+  }
+
+  function handleResolved(data: ResolveRatesData) {
+    setResolveResult(data);
+    setRefreshing(false);
+    // Q4 freeze warnings UI (forward-compat with Task 8): non-blocking toast
+    // for Tier 2 cache-stale warnings. Currently never populated by Phase 1
+    // resolve-rates, but the wiring is in place for the freeze endpoint.
+    if (data.warnings && data.warnings.length > 0) {
+      for (const w of data.warnings) {
+        toast.warning(w);
+      }
+    }
+    toast.success("Ставки обновлены");
+  }
+
+  function handleResolveError(error: ApiError) {
+    setRefreshing(false);
+    if (error.code === "ALTA_UNAVAILABLE") {
+      toast.error(
+        error.message ||
+          "Alta API недоступен, попробуйте позже",
+        {
+          action: {
+            label: "Повторить",
+            onClick: () => {
+              // Re-trigger the same resolve via a synthetic refresh.
+              setResolveResult(null);
+            },
+          },
+        }
+      );
+    } else if (error.code === "FREEZE_ABORTED") {
+      // Q4 Tier 3 — Task 8 will surface this code; rendered as a blocking
+      // modal-style toast in the meantime.
+      toast.error(
+        error.message ||
+          "Не удалось зафиксировать ставки. Если проблема повторяется — обратитесь к администратору."
+      );
+    } else if (
+      error.code === "INVALID_TNVED_CODE" ||
+      error.code === "INVALID_OKSM" ||
+      error.code === "BAD_REQUEST"
+    ) {
+      toast.error(error.message || "Проверьте введённые данные");
+    } else {
+      toast.error(error.message || "Не удалось получить ставки");
     }
   }
 
@@ -369,6 +446,116 @@ export function CustomsItemDialog({
                 disabled={readOnly || saving}
               />
             </Field>
+          </section>
+
+          {/* REQ-7 customs-phase-1 — country of origin + cert flags + auto-resolve */}
+          <section className="space-y-3 rounded-md border border-border bg-muted/20 p-3">
+            <div className="text-sm font-medium text-foreground">
+              Страна происхождения и автоподбор ставок
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Field label="Страна происхождения">
+                <CustomsCountryDropdown
+                  value={form.country_of_origin_oksm}
+                  onChange={(oksm) => update("country_of_origin_oksm", oksm)}
+                  disabled={readOnly || saving}
+                  ariaLabel="Страна происхождения"
+                />
+              </Field>
+
+              <div className="flex flex-col gap-2 justify-end">
+                <label className="flex items-center gap-2 cursor-pointer text-sm">
+                  <Checkbox
+                    checked={form.has_origin_certificate}
+                    onCheckedChange={(checked) =>
+                      update("has_origin_certificate", checked === true)
+                    }
+                    disabled={readOnly || saving}
+                  />
+                  <span className="text-foreground">
+                    Сертификат происхождения
+                  </span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer text-sm">
+                  <Checkbox
+                    checked={form.has_fta_certificate}
+                    onCheckedChange={(checked) =>
+                      update("has_fta_certificate", checked === true)
+                    }
+                    disabled={readOnly || saving}
+                  />
+                  <span className="text-foreground">Сертификат FTA</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <AutoResolveButton
+                tnvedCode={form.hs_code}
+                countryOksm={form.country_of_origin_oksm}
+                hasOriginCertificate={form.has_origin_certificate}
+                hasFtaCertificate={form.has_fta_certificate}
+                quoteItemId={item.id}
+                onResolved={handleResolved}
+                onError={handleResolveError}
+                disabled={readOnly}
+              />
+              {resolveResult && (
+                <span className="text-xs text-muted-foreground">
+                  Получено {resolveResult.rates.length} ставок
+                </span>
+              )}
+            </div>
+
+            {resolveResult && (
+              <div className="flex flex-col gap-2">
+                <RateBreakdown
+                  rates={resolveResult.rates}
+                  totalRub={resolveResult.total_rub}
+                  source={resolveResult.source}
+                />
+                <SourceTimestamp
+                  fetchedAt={resolveResult.fetched_at}
+                  refreshing={refreshing}
+                  onRefresh={() => {
+                    // Force-live re-fetch — same handler, but with force_live.
+                    // Simulated by re-mounting the AutoResolveButton via state
+                    // is overkill — we manually re-call resolveRates here for
+                    // a clean refresh affordance.
+                    setRefreshing(true);
+                    import("@/features/customs-rate-resolve")
+                      .then(({ resolveRates }) =>
+                        resolveRates({
+                          tnved_code: form.hs_code.trim(),
+                          country_oksm: form.country_of_origin_oksm!,
+                          certificate: form.has_origin_certificate,
+                          sp_certificate: form.has_fta_certificate,
+                          has_fta_certificate: form.has_fta_certificate,
+                          quote_item_id: item.id,
+                          force_live: true,
+                        })
+                      )
+                      .then((res) => {
+                        if (res.success && res.data) {
+                          handleResolved(res.data);
+                        } else if (res.error) {
+                          handleResolveError(res.error);
+                        }
+                      })
+                      .catch(() => {
+                        setRefreshing(false);
+                        toast.error("Не удалось обновить ставки");
+                      });
+                  }}
+                />
+              </div>
+            )}
+
+            <MeasuresList
+              tnvedCode={form.hs_code}
+              countryOksm={form.country_of_origin_oksm}
+            />
           </section>
 
           {/* Import ban */}
