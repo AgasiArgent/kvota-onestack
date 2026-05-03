@@ -268,6 +268,42 @@ class TestResolveRatesHandler:
         assert resp.status_code == 400
         assert _body(resp)["error"]["code"] == "INVALID_OKSM"
 
+    @patch("api.customs.get_supabase")
+    @patch("api.customs.get_user_role_codes")
+    def test_country_lookup_db_failure_returns_503_db_error(
+        self, mock_roles, mock_get_sb
+    ):
+        """countries lookup raises → 503 DB_ERROR, not misleading 400 INVALID_OKSM.
+
+        Review fix M1: a Supabase connectivity failure must not surface as
+        "invalid country" — that's misleading and tells users to fix bad
+        input that was actually fine. 503 DB_ERROR with "please retry"
+        message is the correct signal.
+        """
+        from api.customs import resolve_rates_handler
+
+        mock_roles.return_value = ["customs"]
+
+        # Supabase chain raises on .execute()
+        mock_sb = MagicMock()
+        countries_chain = MagicMock()
+        (
+            countries_chain.select.return_value
+                .eq.return_value
+                .limit.return_value
+                .execute.side_effect
+        ) = ConnectionError("supabase unreachable")
+        mock_sb.table.return_value = countries_chain
+        mock_get_sb.return_value = mock_sb
+
+        req = _make_request(
+            body={"tnved_code": "8409910008", "country_oksm": 156}
+        )
+        alta_client = MagicMock()
+        resp = _run(resolve_rates_handler(req, alta_client))
+        assert resp.status_code == 503
+        assert _body(resp)["error"]["code"] == "DB_ERROR"
+
     @patch("api.customs.rate_resolver")
     @patch("api.customs.get_supabase")
     @patch("api.customs.get_user_role_codes")
@@ -498,6 +534,68 @@ class TestNonTariffMeasuresHandler:
         resp = _run(non_tariff_measures_handler(req, alta_client))
         assert resp.status_code == 400
         assert _body(resp)["error"]["code"] == "INVALID_TNVED_CODE"
+
+    @patch("api.customs.get_supabase")
+    @patch("api.customs.get_user_role_codes")
+    def test_persistence_uses_upsert_with_on_conflict(
+        self, mock_roles, mock_get_sb
+    ):
+        """Persistence must use UPSERT against the migration-299 UNIQUE
+        constraint, not INSERT (review fix M3 — repeated calls used to
+        accumulate duplicate rows).
+        """
+        from api.customs import non_tariff_measures_handler
+
+        mock_roles.return_value = ["customs"]
+
+        # Track the measures-table call so we can assert .upsert was invoked
+        mock_sb = MagicMock()
+
+        countries_exec = MagicMock()
+        countries_exec.data = [{"oksm_digital": 156}]
+        countries_chain = MagicMock()
+        (
+            countries_chain.select.return_value
+                .eq.return_value
+                .limit.return_value
+                .execute.return_value
+        ) = countries_exec
+
+        measures_chain = MagicMock()
+        measures_chain.upsert.return_value.execute.return_value = MagicMock(
+            data=[]
+        )
+
+        def table_router(name: str):
+            if name == "countries":
+                return countries_chain
+            if name == "tnved_non_tariff_measures":
+                return measures_chain
+            return MagicMock()
+
+        mock_sb.table.side_effect = table_router
+        mock_get_sb.return_value = mock_sb
+
+        alta_client = MagicMock()
+        alta_client.get_non_tariff_measures = AsyncMock(
+            return_value=[_make_measure()]
+        )
+
+        req = _make_request(
+            body={"tnved_code": "8409910008", "country_oksm": 156}
+        )
+        resp = _run(non_tariff_measures_handler(req, alta_client))
+        assert resp.status_code == 200
+
+        # upsert called once with the natural-key on_conflict target
+        assert measures_chain.upsert.call_count == 1
+        call_kwargs = measures_chain.upsert.call_args.kwargs
+        assert (
+            call_kwargs.get("on_conflict")
+            == "tnved_code,country_or_areal,measure_type,name,valid_from"
+        )
+        # insert MUST NOT be called — that's the bug we're fixing
+        assert measures_chain.insert.call_count == 0
 
 
 # ===========================================================================

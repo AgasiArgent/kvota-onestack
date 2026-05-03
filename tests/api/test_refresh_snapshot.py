@@ -15,6 +15,8 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
+from postgrest.exceptions import APIError as PostgrestAPIError
+
 from api.customs import refresh_customs_snapshot_handler
 from services.customs_freeze_service import FreezeSnapshotResult
 
@@ -86,12 +88,18 @@ async def test_quote_not_found_returns_404():
     req = _make_request({"reason": "test"})
 
     mock_sb = MagicMock()
-    # quote lookup raises (mimics .single() with no row)
+    # quote lookup raises PostgrestAPIError (mimics .single() with no row —
+    # PGRST116). The handler narrows its except to PostgrestAPIError after
+    # review fix M5: only PostgREST-level errors map to 404, infra errors
+    # surface as 500 DB_ERROR.
     (mock_sb.table.return_value
             .select.return_value
             .eq.return_value
             .single.return_value
-            .execute.side_effect) = Exception("no rows")
+            .execute.side_effect) = PostgrestAPIError(
+                {"code": "PGRST116", "message": "no rows", "hint": None,
+                 "details": None}
+            )
 
     with _patch_dual_auth(role_codes=["customs"]), \
          patch("api.customs.get_supabase", return_value=mock_sb):
@@ -100,6 +108,36 @@ async def test_quote_not_found_returns_404():
         )
 
     assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_quote_lookup_infra_error_returns_500_db_error():
+    """Generic exception in quote lookup → 500 DB_ERROR, not misleading 404.
+
+    Review fix M5: a JSON parse failure / connection drop is *not* "quote not
+    found" — surfacing it as 404 lets users believe the quote vanished and
+    retry never helps. We map non-PostgREST exceptions to 500 DB_ERROR so the
+    UI can show "retry later" instead.
+    """
+    req = _make_request({"reason": "test"})
+
+    mock_sb = MagicMock()
+    (mock_sb.table.return_value
+            .select.return_value
+            .eq.return_value
+            .single.return_value
+            .execute.side_effect) = ConnectionError("network down")
+
+    with _patch_dual_auth(role_codes=["customs"]), \
+         patch("api.customs.get_supabase", return_value=mock_sb):
+        resp = await refresh_customs_snapshot_handler(
+            req, "any-quote", alta_client=MagicMock(),
+        )
+
+    assert resp.status_code == 500
+    body = json.loads(bytes(resp.body).decode())
+    assert body["success"] is False
+    assert body["error"]["code"] == "DB_ERROR"
 
 
 @pytest.mark.asyncio

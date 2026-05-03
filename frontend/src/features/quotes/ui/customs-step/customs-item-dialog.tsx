@@ -524,29 +524,43 @@ export function CustomsItemDialog({
                     // is overkill — we manually re-call resolveRates here for
                     // a clean refresh affordance.
                     setRefreshing(true);
+                    // Two-stage error handling (review fix L1):
+                    //  1. Module-load failure (network drop, chunk hash miss
+                    //     after a deploy) → "перезагрузите страницу"
+                    //  2. resolveRates() rejection (network → caught by the
+                    //     api layer and surfaced as res.error) → generic
+                    //     "не удалось обновить ставки".
                     import("@/features/customs-rate-resolve")
-                      .then(({ resolveRates }) =>
-                        resolveRates({
-                          tnved_code: form.hs_code.trim(),
-                          country_oksm: form.country_of_origin_oksm!,
-                          certificate: form.has_origin_certificate,
-                          sp_certificate: form.has_fta_certificate,
-                          has_fta_certificate: form.has_fta_certificate,
-                          quote_item_id: item.id,
-                          force_live: true,
-                        })
-                      )
-                      .then((res) => {
-                        if (res.success && res.data) {
-                          handleResolved(res.data);
-                        } else if (res.error) {
-                          handleResolveError(res.error);
-                        }
-                      })
-                      .catch(() => {
-                        setRefreshing(false);
-                        toast.error("Не удалось обновить ставки");
-                      });
+                      .then(
+                        ({ resolveRates }) =>
+                          resolveRates({
+                            tnved_code: form.hs_code.trim(),
+                            country_oksm: form.country_of_origin_oksm!,
+                            certificate: form.has_origin_certificate,
+                            sp_certificate: form.has_fta_certificate,
+                            has_fta_certificate: form.has_fta_certificate,
+                            quote_item_id: item.id,
+                            force_live: true,
+                          })
+                            .then((res) => {
+                              if (res.success && res.data) {
+                                handleResolved(res.data);
+                              } else if (res.error) {
+                                handleResolveError(res.error);
+                              }
+                            })
+                            .catch(() => {
+                              setRefreshing(false);
+                              toast.error("Не удалось обновить ставки");
+                            }),
+                        () => {
+                          // Dynamic import itself rejected — module-load error.
+                          setRefreshing(false);
+                          toast.error(
+                            "Не удалось загрузить модуль обновления, попробуйте перезагрузить страницу",
+                          );
+                        },
+                      );
                   }}
                 />
               </div>

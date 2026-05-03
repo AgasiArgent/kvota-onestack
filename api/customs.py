@@ -25,6 +25,8 @@ from datetime import date, datetime, timezone
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+from postgrest.exceptions import APIError as PostgrestAPIError
+
 from services import rate_resolver
 from services.alta_client import AltaApiError
 from services.database import get_supabase
@@ -777,7 +779,12 @@ def _err(code: str, message: str, status: int) -> JSONResponse:
 
 
 def _validate_country_oksm(country_oksm: int) -> JSONResponse | None:
-    """Verify country_oksm exists in kvota.countries; None on success."""
+    """Verify country_oksm exists in kvota.countries; None on success.
+
+    Distinguishes a genuine missing-country (400 INVALID_OKSM) from supabase
+    connectivity / query failures (503 DB_ERROR) so callers can retry on the
+    latter without misleading users that their input is invalid.
+    """
     sb = get_supabase()
     try:
         result = (
@@ -788,8 +795,24 @@ def _validate_country_oksm(country_oksm: int) -> JSONResponse | None:
             .execute()
         )
     except Exception as exc:
+        # Connectivity / RLS / network failure — never treat as bad input.
         logger.warning("countries lookup failed: %s", exc)
-        return _err("INVALID_OKSM", f"Failed to verify country_oksm={country_oksm}", 400)
+        return _err(
+            "DB_ERROR",
+            "Country verification failed; please retry",
+            503,
+        )
+    # `result is None` shouldn't happen on the supabase-py path, but guard
+    # defensively — same DB_ERROR signal as a raised exception.
+    if result is None:
+        logger.warning(
+            "countries lookup returned None for oksm=%s", country_oksm
+        )
+        return _err(
+            "DB_ERROR",
+            "Country verification failed; please retry",
+            503,
+        )
     if not (result.data or []):
         return _err(
             "INVALID_OKSM",
@@ -981,9 +1004,16 @@ async def resolve_rates_handler(request: Request, alta_client) -> JSONResponse:
             fetched_at = r.source_fetched_at
 
     if not resolved_rates:
-        # All payment types missing — distinguish "Alta down" from "no rate exists":
-        # the resolver swallows AltaApiError + network errors (returns None) so
-        # we cannot tell them apart here. Pragmatic: treat all-empty as 503.
+        # All payment types missing — ideally we'd distinguish "Alta down"
+        # (503 ALTA_UNAVAILABLE) from "rate genuinely doesn't exist for this
+        # combination" (404 RATE_NOT_FOUND). Currently rate_resolver.resolve_rate
+        # returns None for BOTH cases — Alta errors, network errors, AND empty
+        # rate lookups all collapse into the same null. To split them we'd need
+        # the resolver to surface a distinct sentinel (e.g. a RateNotFound
+        # marker vs None) — that touches services/rate_resolver.py which is
+        # owned by another agent. Deferred to Phase 2 per review fix M4.
+        # Pragmatic stop-gap: treat all-empty as 503 with a message that
+        # acknowledges both possibilities so users don't infinitely retry.
         return _err(
             "ALTA_UNAVAILABLE",
             "Alta API недоступен или ставки не найдены. Попробуйте позже.",
@@ -1147,6 +1177,10 @@ async def non_tariff_measures_handler(
     # Best-effort persistence to kvota.tnved_non_tariff_measures — never fail
     # the response on upsert errors. Cron + manual ingest already keep this
     # table populated; this is just a freshness hint.
+    #
+    # Use UPSERT against the (tnved_code, country_or_areal, measure_type, name,
+    # valid_from) UNIQUE constraint added in migration 299. Without that
+    # constraint repeated calls would accumulate duplicate rows (review fix M3).
     try:
         sb = get_supabase()
         if measures:
@@ -1167,7 +1201,10 @@ async def non_tariff_measures_handler(
                 }
                 for m in measures
             ]
-            sb.table("tnved_non_tariff_measures").insert(payload).execute()
+            sb.table("tnved_non_tariff_measures").upsert(
+                payload,
+                on_conflict="tnved_code,country_or_areal,measure_type,name,valid_from",
+            ).execute()
     except Exception as exc:
         logger.warning(
             "non_tariff_measures: persistence failed for tnved_code=%s: %s",
@@ -1239,7 +1276,11 @@ async def refresh_customs_snapshot_handler(
 
     sb = get_supabase()
 
-    # Verify quote exists and belongs to user's org (cheap permission check)
+    # Verify quote exists and belongs to user's org (cheap permission check).
+    # PostgrestAPIError covers .single()'s "no rows" and other PostgREST-level
+    # failures (RLS denial, schema mismatch). Genuine network/JSON parsing
+    # failures bubble up via the bare except below as 500 DB_ERROR — we never
+    # want to mask infra issues behind a misleading 404.
     try:
         quote_resp = (
             sb.table("quotes")
@@ -1248,8 +1289,25 @@ async def refresh_customs_snapshot_handler(
               .single()
               .execute()
         )
-    except Exception:
+    except PostgrestAPIError as exc:
+        # PGRST116 = no rows for .single(); other codes (PGRST301 = RLS, etc.)
+        # legitimately mean "not visible to this caller" → still 404.
+        logger.info(
+            "refresh_customs_snapshot: quote lookup PostgrestAPIError code=%s msg=%s",
+            getattr(exc, "code", None), exc,
+        )
         return _err("NOT_FOUND", f"quote {quote_id} not found", 404)
+    except Exception as exc:
+        # JSON decode failures, connection errors, anything we did not expect.
+        logger.error(
+            "refresh_customs_snapshot: quote lookup failed for %s: %s",
+            quote_id, exc,
+        )
+        return _err(
+            "DB_ERROR",
+            "Quote lookup failed; please retry",
+            500,
+        )
 
     quote = getattr(quote_resp, "data", None)
     if not quote:

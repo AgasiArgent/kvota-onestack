@@ -31,6 +31,30 @@ const INITIAL_STATE: MeasuresState = {
 };
 
 /**
+ * Allow-list of known error codes returned by /api/customs/non-tariff-measures.
+ * For any code outside this set we show a static fallback message instead of
+ * echoing server text — avoids leaking stack traces / DB column names through
+ * an unexpected error branch (review fix L2).
+ */
+const KNOWN_ERROR_MESSAGES: Record<string, string> = {
+  UNAUTHORIZED: "Необходима авторизация",
+  FORBIDDEN: "Недостаточно прав для просмотра мер",
+  ALTA_UNAVAILABLE:
+    "Alta API недоступен, попробуйте позже",
+  BAD_REQUEST: "Некорректный запрос",
+  INVALID_TNVED_CODE: "Неверный код ТН ВЭД",
+  INVALID_OKSM: "Неверный код страны",
+  DB_ERROR: "Ошибка базы данных, попробуйте позже",
+};
+
+function resolveErrorMessage(code: string | undefined): string {
+  if (code && code in KNOWN_ERROR_MESSAGES) {
+    return KNOWN_ERROR_MESSAGES[code];
+  }
+  return "Не удалось получить меры нетарифного регулирования";
+}
+
+/**
  * Pull-trigger list of non-tariff regulation measures.
  *
  * The button is the explicit user action that triggers the billed Alta call
@@ -64,12 +88,16 @@ export function MeasuresList({
           error: null,
         });
       } else {
-        const msg = res.error?.message ?? "Не удалось получить меры";
+        // Allow-list known error codes; never echo server message verbatim
+        // for unknown codes (review fix L2 — avoid leaking stack traces).
+        const msg = resolveErrorMessage(res.error?.code);
         toast.error(msg);
         setState({ status: "error", measures: [], error: msg });
       }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Сетевая ошибка";
+    } catch {
+      // Network / parse failure — show a generic Russian message and discard
+      // any raw error text (review fix L2).
+      const msg = "Сетевая ошибка, попробуйте позже";
       toast.error(msg);
       setState({ status: "error", measures: [], error: msg });
     }
