@@ -1,6 +1,12 @@
 /**
  * Suggestion returned by POST /api/customs/autofill.
  * Mirrors api.customs._AUTOFILL_FIELDS.
+ *
+ * REQ-5 customs-phase-1: extended with optional fields populated when
+ * the request includes ``force_live=true`` and the resolver fallback
+ * synthesises a suggestion from a live (or cached) Alta result. Existing
+ * fields remain unchanged — additions are strictly optional so legacy
+ * consumers are not broken.
  */
 export interface CustomsAutofillSuggestion {
   item_id: string;
@@ -23,4 +29,15 @@ export interface CustomsAutofillSuggestion {
   license_ds_cost: number | null;
   license_ss_cost: number | null;
   license_sgr_cost: number | null;
+
+  // ---- REQ-5 additive (customs-phase-1) ----------------------------------
+  // Populated for both historical and force_live suggestions.
+  country_of_origin_oksm?: number | null;
+  has_origin_certificate?: boolean | null;
+  has_fta_certificate?: boolean | null;
+
+  // Populated only when force_live=true triggered the resolver fallback.
+  customs_rates_source?: string | null;
+  customs_rates_fetched_at?: string | null;
+  customs_rates_summary?: string | null;
 }
