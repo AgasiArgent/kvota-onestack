@@ -269,6 +269,12 @@ def _calc_combined_duty(item: Dict) -> float:
     Formula: customs_duty + (customs_duty_per_kg * weight_in_kg / base_price * 100)
     Falls back to customs_duty only when weight or price is missing/zero.
     Falls back to legacy import_tariff field when customs_duty is absent.
+
+    NOTE: This is the legacy combined-rate formula. Per Q1 (decisions.md),
+    it is wrapped by ``_resolve_import_tariff_pct`` which switches to the
+    new ``services.customs_calc`` path when the item carries a Rate
+    sourced from Alta. Sunset planned when all quote_items migrated to
+    Alta-resolved rates (Phase 5+).
     """
     duty_pct = float(safe_decimal(item.get('customs_duty')))
     duty_per_kg = float(safe_decimal(item.get('customs_duty_per_kg')))
@@ -292,6 +298,114 @@ def _calc_combined_duty(item: Dict) -> float:
             return duty_pct
 
     return duty_pct
+
+
+# ============================================================================
+# REQ-4 customs_calc adapter switch (decisions.md Q1, Option B)
+#
+# When a quote_item carries a `_resolved_customs_rate` Rate object whose
+# `source` is one of {'alta-live', 'alta-revalidate'}, route the import
+# tariff calculation through the new pure-functional `customs_calc.calculate_duty`
+# (which supports max(адвалорная, специфическая) per gotcha #3 and currency-
+# scaled specific rates). Otherwise, fall through to the legacy combined-rate
+# formula `_calc_combined_duty()` above.
+#
+# The `_resolved_customs_rate` key is set by the higher-level caller (Task 5
+# API endpoints, future). The calculation engine itself
+# (calculation_engine.py / calculation_models.py / calculation_mapper.py) is
+# NEVER modified — this adapter is the integration seam.
+#
+# Sunset: legacy path stays until all quote_items have been migrated to
+# Alta-resolved rates (Phase 5+).
+# ============================================================================
+
+
+_ALTA_RESOLVED_SOURCES: frozenset[str] = frozenset({"alta-live", "alta-revalidate"})
+
+
+def _resolve_import_tariff_pct(
+    item: Dict,
+    quote_currency: str,
+) -> float:
+    """Resolve the import-tariff percent for one item.
+
+    Switch by `item['_resolved_customs_rate'].source` (Q1 Option B):
+        * source ∈ {'alta-live', 'alta-revalidate'}  →  customs_calc path
+        * else (None, 'manual', missing key)         →  legacy formula
+
+    The customs_calc path computes duty in RUB and converts back to a
+    percent-of-customs-value, where customs_value is taken from the
+    item's purchase price (consistent with the legacy formula's
+    `base_price` denominator on line 285 above).
+    """
+    resolved_rate = item.get("_resolved_customs_rate")
+    is_alta_resolved = (
+        resolved_rate is not None
+        and getattr(resolved_rate, "source", None) in _ALTA_RESOLVED_SOURCES
+    )
+
+    if not is_alta_resolved:
+        # legacy combined-rate, sunset при переводе всех quote_items
+        # на Alta-resolved (Phase 5+)
+        return _calc_combined_duty(item)
+
+    # --- Alta-resolved path ---------------------------------------------
+    from services.currency_service import convert_amount, get_latest_rates
+    from services.customs_calc import calculate_duty
+
+    customs_value_rub = _customs_value_in_rub(item, quote_currency, convert_amount)
+    weight_kg = safe_decimal(item.get("weight_in_kg"))
+    quantity = safe_decimal(item.get("quantity"))
+    currency_rates = get_latest_rates() if customs_value_rub > 0 else {}
+
+    duty_rub = calculate_duty(
+        rate=resolved_rate,
+        customs_value_rub=customs_value_rub,
+        weight_kg=weight_kg,
+        quantity=quantity,
+        currency_rates=currency_rates,
+    )
+
+    # Convert RUB duty → percent of customs value so the calc engine's
+    # `import_tariff × (AY16 + T16)` semantics still apply. When customs
+    # value is zero (insufficient pricing data) we cannot derive a
+    # percent — fall back to 0% rather than dividing by zero. The 0%
+    # result is identical to what the legacy formula would emit for a
+    # zero-priced item, so behaviour is consistent across both paths.
+    if customs_value_rub <= 0:
+        return 0.0
+    pct = duty_rub * Decimal("100") / customs_value_rub
+    return float(pct)
+
+
+def _customs_value_in_rub(
+    item: Dict,
+    quote_currency: str,
+    convert_amount,
+) -> Decimal:
+    """Estimate customs value (purchase price × quantity) in rubles.
+
+    Uses the item's purchase_price_original and purchase_currency, then
+    converts to RUB via the existing currency service. Returns 0 if
+    pricing data is missing — caller treats that as "cannot derive a
+    percent" and falls back to 0%.
+    """
+    base_price = safe_decimal(
+        item.get("purchase_price_original") or item.get("base_price_vat")
+    )
+    if base_price <= 0:
+        return Decimal("0")
+    quantity = safe_decimal(item.get("quantity") or 1)
+    src_currency = (
+        item.get("purchase_currency")
+        or item.get("currency_of_base_price")
+        or quote_currency
+    )
+    total = base_price * quantity
+    if src_currency == "RUB":
+        return total
+    converted = convert_amount(total, src_currency, "RUB")
+    return safe_decimal(converted)
 
 
 def build_calculation_inputs(items: List[Dict], variables: Dict[str, Any]) -> List[QuoteCalculationInput]:
@@ -419,7 +533,7 @@ def build_calculation_inputs(items: List[Dict], variables: Dict[str, Any]) -> Li
                 bool(item.get('price_includes_vat', False))
             )["zone"] or "Прочие",
             'currency_of_base_price': item_currency,
-            'import_tariff': _calc_combined_duty(item),
+            'import_tariff': _resolve_import_tariff_pct(item, quote_currency),
             'markup': item.get('markup'),
             'supplier_discount': item.get('supplier_discount'),
         }

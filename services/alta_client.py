@@ -98,6 +98,12 @@ class Rate:
     certificate_required: bool = False
     sp_certificate_required: bool = False
 
+    # Provenance for the customs_calc adapter switch (REQ-4 / decisions Q1).
+    # Populated when reading from `kvota.tnved_rates.source` ('alta-live' |
+    # 'alta-revalidate' | 'manual'). The Alta XML response itself does not
+    # carry this field — it is set by the persistence layer on read/upsert.
+    source: str | None = None
+
 
 @dataclass(frozen=True)
 class Measure:
