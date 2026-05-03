@@ -2270,7 +2270,8 @@ async def send_approval_required_notification(
     approval_reason: str,
     markup_percent: str = "N/A",
     payment_terms: str = "N/A",
-    requested_by: str = "Система"
+    requested_by: str = "Система",
+    recipient_role_slugs: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """Send approval_required notifications to all top managers in the organization.
 
@@ -2324,25 +2325,24 @@ async def send_approval_required_notification(
                 "error": "Database connection error"
             }
 
-        # Get users with top_manager or admin role
-        manager_user_ids = set()
+        # Resolve recipient user_ids by role slugs.
+        # Backward-compat default: top_manager + admin (legacy markup-approval flow).
+        # Procurement-unlock and other flows pass explicit role slugs (e.g. ["head_of_procurement"]).
+        role_slugs = recipient_role_slugs or ["top_manager", "admin"]
+        manager_user_ids: set = set()
 
-        for role_code in ["top_manager", "admin"]:
-            # Get role ID
-            role_response = supabase.table("roles").select("id").eq("code", role_code).execute()
-            if not role_response.data:
-                continue
+        # Single JOIN query: roles → user_roles → user_id.
+        # NOTE: this project uses `roles.slug` (not `roles.code`) — see CLAUDE.md.
+        roles_response = supabase.table("roles").select("id").in_("slug", role_slugs).execute()
+        role_ids = [r.get("id") for r in (roles_response.data or []) if r.get("id")]
 
-            role_id = role_response.data[0].get("id")
-
-            # Get users with this role in the organization
+        if role_ids:
             users_response = supabase.table("user_roles").select(
                 "user_id"
-            ).eq("organization_id", organization_id).eq("role_id", role_id).execute()
-
-            if users_response.data:
-                for u in users_response.data:
-                    manager_user_ids.add(u.get("user_id"))
+            ).eq("organization_id", organization_id).in_("role_id", role_ids).execute()
+            for u in (users_response.data or []):
+                if u.get("user_id"):
+                    manager_user_ids.add(u["user_id"])
 
         if not manager_user_ids:
             logger.warning(f"No top_manager/admin users found in org {organization_id} for approval notification")
@@ -2442,27 +2442,25 @@ async def send_approval_required_notification(
 async def send_approval_notification_for_quote(
     quote_id: str,
     approval_reason: str,
-    requested_by_user_id: Optional[str] = None
+    requested_by_user_id: Optional[str] = None,
+    recipient_role_slugs: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """Convenience function to send approval notification for a quote.
 
-    This function loads quote details from the database and sends approval
-    notifications to all top managers. Use this when you have just the quote_id.
+    Loads quote details from DB and dispatches Telegram notifications to users
+    matching `recipient_role_slugs`. Defaults to top_manager + admin (markup
+    approval flow). Other flows pass explicit slugs (e.g. ["head_of_procurement"]
+    for procurement-unlock approval).
 
     Args:
         quote_id: UUID of the quote
         approval_reason: Why approval is required
         requested_by_user_id: Optional user ID who requested the approval
+        recipient_role_slugs: Role slugs to receive the notification. If None,
+            defaults to ["top_manager", "admin"].
 
     Returns:
         Result of send_approval_required_notification
-
-    Example:
-        >>> result = await send_approval_notification_for_quote(
-        ...     quote_id="quote-uuid",
-        ...     approval_reason="Валюта в рублях",
-        ...     requested_by_user_id="user-uuid"
-        ... )
     """
     try:
         supabase = get_supabase()
@@ -2508,15 +2506,19 @@ async def send_approval_notification_for_quote(
                 if full_name:
                     requested_by = full_name
 
-        # Try to get markup from calculation variables
+        # Try to get markup from calculation variables (now a JSONB column).
+        # Modern schema: quote_calculation_variables.variables is a JSONB blob;
+        # markup_percent (if set) lives inside that blob.
         markup_percent = "N/A"
         calc_response = supabase.table("quote_calculation_variables").select(
-            "markup_percent"
-        ).eq("quote_id", quote_id).execute()
+            "variables"
+        ).eq("quote_id", quote_id).limit(1).execute()
         if calc_response.data and len(calc_response.data) > 0:
-            mp = calc_response.data[0].get("markup_percent")
-            if mp is not None:
-                markup_percent = str(mp)
+            variables = calc_response.data[0].get("variables") or {}
+            if isinstance(variables, dict):
+                mp = variables.get("markup_percent")
+                if mp is not None:
+                    markup_percent = str(mp)
 
         return await send_approval_required_notification(
             organization_id=organization_id,
@@ -2527,7 +2529,8 @@ async def send_approval_notification_for_quote(
             approval_reason=approval_reason,
             markup_percent=markup_percent,
             payment_terms=payment_terms,
-            requested_by=requested_by
+            requested_by=requested_by,
+            recipient_role_slugs=recipient_role_slugs,
         )
 
     except Exception as e:
