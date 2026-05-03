@@ -51,7 +51,7 @@ function resolveErrorMessage(code: string | undefined): string {
   if (code && code in KNOWN_ERROR_MESSAGES) {
     return KNOWN_ERROR_MESSAGES[code];
   }
-  return "Не удалось получить меры нетарифного регулирования";
+  return "Не удалось получить регуляторную справку";
 }
 
 /**
@@ -114,10 +114,10 @@ export function MeasuresList({
             />
             <div>
               <div className="text-sm font-medium text-foreground">
-                Меры нетарифного регулирования
+                Регуляторная справка Alta
               </div>
               <div className="text-xs text-muted-foreground">
-                Запрос тарифицируется отдельно (~3₽).
+                Меры, условия льгот и ссылки на нормативные документы. Запрос тарифицируется отдельно (~3₽).
               </div>
             </div>
           </div>
@@ -135,7 +135,7 @@ export function MeasuresList({
                   : undefined
             }
           >
-            Показать меры
+            Показать справку
           </Button>
         </div>
       </div>
@@ -147,7 +147,7 @@ export function MeasuresList({
       <div className="rounded-md border border-border bg-card p-3">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 size={14} className="animate-spin" />
-          Загрузка мер из Alta…
+          Загрузка справки из Alta…
         </div>
       </div>
     );
@@ -180,7 +180,7 @@ export function MeasuresList({
       <div className="rounded-md border border-border bg-card p-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-sm text-muted-foreground">
-            Нет применимых мер для этого кода и страны.
+            Нет регуляторных записей для этого кода и страны.
           </span>
           <Button
             type="button"
@@ -200,7 +200,7 @@ export function MeasuresList({
     <div className="rounded-md border border-border bg-card p-3">
       <div className="mb-2 flex items-center justify-between">
         <div className="text-sm font-medium text-foreground">
-          Меры нетарифного регулирования ({state.measures.length})
+          Регуляторная справка Alta ({state.measures.length})
         </div>
         <Button
           type="button"
