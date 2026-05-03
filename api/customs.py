@@ -998,29 +998,28 @@ async def resolve_rates_handler(request: Request, alta_client) -> JSONResponse:
     sources: set[str] = set()
     cache_hit_count = 0
     fetched_at: datetime | None = None
-    for payment_type in payment_types:
-        try:
-            outcome, variants = await rate_resolver.resolve_rate_variants(
-                tnved_code=tnved_code,
-                payment_type=payment_type,
-                country_oksm=country_oksm,
-                target_date=target_date,
-                has_certificate=has_certificate,
-                has_sp_certificate=has_sp_certificate,
-                alta_client=alta_client,
-            )
-        except Exception as exc:
-            # Resolver itself crashed (defensive — should not normally happen
-            # since the resolver swallows AltaApiError internally). Treat as
-            # ALTA_ERROR for outcome aggregation purposes.
-            logger.warning(
-                "resolve_rates: resolver crashed for payment_type=%s: %s",
-                payment_type, exc,
-            )
-            outcomes_by_payment_type[payment_type] = "ALTA_ERROR"
-            saw_alta_error = True
-            continue
+    # Packet-efficiency optimisation: ONE Alta call covers all payment_types
+    # (Alta Такса response is comprehensive). Saves ~6 packets per autofill.
+    try:
+        by_payment_type, outcomes = await rate_resolver.resolve_all_payment_types(
+            tnved_code=tnved_code,
+            country_oksm=country_oksm,
+            target_date=target_date,
+            payment_types=payment_types,
+            has_certificate=has_certificate,
+            has_sp_certificate=has_sp_certificate,
+            alta_client=alta_client,
+        )
+    except Exception as exc:
+        logger.warning(
+            "resolve_rates: bulk resolver crashed: %s — falling back to all-error",
+            exc,
+        )
+        by_payment_type = {pt: [] for pt in payment_types}
+        outcomes = {pt: rate_resolver.ResolveOutcome.ALTA_ERROR for pt in payment_types}
 
+    for payment_type in payment_types:
+        outcome = outcomes.get(payment_type, rate_resolver.ResolveOutcome.ALTA_ERROR)
         outcomes_by_payment_type[payment_type] = outcome.name
 
         if outcome == rate_resolver.ResolveOutcome.ALTA_ERROR:
@@ -1030,9 +1029,9 @@ async def resolve_rates_handler(request: Request, alta_client) -> JSONResponse:
             saw_not_found = True
             continue
 
-        # FOUND — emit every variant for this payment_type. UI shows them
-        # as a льготная-aware selector pre-seeded to is_default=true.
-        for r in variants:
+        # FOUND — emit every variant. UI shows them as a льготная-aware
+        # selector pre-seeded to is_default=true.
+        for r in by_payment_type.get(payment_type, []):
             resolved_rates.append(r)
             sources.add(r.source)
             if (

@@ -300,6 +300,120 @@ async def resolve_rate(
     return ResolveResult(ResolveOutcome.NOT_FOUND, None)
 
 
+async def resolve_all_payment_types(
+    tnved_code: str,
+    country_oksm: int,
+    target_date: date,
+    payment_types: tuple[str, ...] | list[str],
+    has_certificate: bool = False,
+    has_sp_certificate: bool = False,
+    *,
+    alta_client: AltaClient,
+) -> tuple[dict[str, list[ResolvedRate]], dict[str, ResolveOutcome]]:
+    """Resolve variants for many payment_types using ONE Alta call.
+
+    Phase 1 packet-efficiency optimisation. ``resolve_rate_variants`` makes
+    one Alta call per payment_type — but Alta Такса returns ALL payment
+    types in a single response, so 7 separate calls waste 6 packets per
+    autofill click.
+
+    Strategy:
+      1. Try cache-only first for every payment_type. If all hit, return.
+      2. Otherwise fire ONE Alta call. The response covers all payment
+         types — bulk-upsert the lot, then re-query the cache per type.
+
+    Returns:
+      ``(by_payment_type, outcomes)``
+        - ``by_payment_type[pt]`` — list of ResolvedRate variants (empty if
+          NOT_FOUND or ALTA_ERROR for that pt).
+        - ``outcomes[pt]`` — FOUND | NOT_FOUND | ALTA_ERROR.
+    """
+    sb = get_supabase()
+
+    # Step 1 — cache-only sweep
+    by_pt: dict[str, list[ResolvedRate]] = {}
+    outcomes: dict[str, ResolveOutcome] = {}
+    cache_misses: list[str] = []
+    for pt in payment_types:
+        variants = _lookup_all_variants(
+            sb,
+            tnved_code=tnved_code,
+            payment_type=pt,
+            country_oksm=country_oksm,
+            target_date=target_date,
+            has_certificate=has_certificate,
+            has_sp_certificate=has_sp_certificate,
+        )
+        if variants:
+            by_pt[pt] = variants
+            outcomes[pt] = ResolveOutcome.FOUND
+            for v in variants:
+                if v.id is not None:
+                    _touch_last_used_at(sb, v.id)
+        else:
+            cache_misses.append(pt)
+
+    if not cache_misses:
+        return by_pt, outcomes
+
+    # Step 2 — single Alta call covers all missing payment types
+    try:
+        fetched = await alta_client.get_rates(
+            tncode=tnved_code,
+            country=country_oksm,
+            date_=target_date,
+            certificate=has_certificate,
+            sp_certificate=has_sp_certificate,
+        )
+    except AltaApiError as e:
+        logger.error(
+            "rate_resolver.resolve_all: Alta error %s for tnved_code=%s "
+            "country=%s — marking %s as ALTA_ERROR",
+            e.code, tnved_code, country_oksm, ",".join(cache_misses),
+        )
+        for pt in cache_misses:
+            by_pt.setdefault(pt, [])
+            outcomes[pt] = ResolveOutcome.ALTA_ERROR
+        return by_pt, outcomes
+    except Exception as e:
+        logger.error(
+            "rate_resolver.resolve_all: Alta call failed for tnved_code=%s "
+            "country=%s: %s",
+            tnved_code, country_oksm, e,
+        )
+        for pt in cache_misses:
+            by_pt.setdefault(pt, [])
+            outcomes[pt] = ResolveOutcome.ALTA_ERROR
+        return by_pt, outcomes
+
+    if fetched:
+        _bulk_upsert(sb, fetched, source="alta-live")
+
+    # Step 3 — re-query cache for each missing payment_type
+    for pt in cache_misses:
+        variants = _lookup_all_variants(
+            sb,
+            tnved_code=tnved_code,
+            payment_type=pt,
+            country_oksm=country_oksm,
+            target_date=target_date,
+            has_certificate=has_certificate,
+            has_sp_certificate=has_sp_certificate,
+        )
+        by_pt[pt] = variants
+        if variants:
+            outcomes[pt] = ResolveOutcome.FOUND
+            for v in variants:
+                if v.id is not None:
+                    _touch_last_used_at(sb, v.id)
+        else:
+            # Alta call succeeded but no rates of this payment_type came
+            # back — terminal NOT_FOUND, not retry-worthy.
+            outcomes[pt] = ResolveOutcome.NOT_FOUND
+
+    return by_pt, outcomes
+
+
 async def resolve_rate_variants(
     tnved_code: str,
     payment_type: str,

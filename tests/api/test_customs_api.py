@@ -159,6 +159,37 @@ def _alta_error_variants() -> tuple:
     return (ResolveOutcome.ALTA_ERROR, [])
 
 
+# Bulk-resolver helpers (FU-1: packet inefficiency fix). The handler now
+# calls ``resolve_all_payment_types`` once for all payment_types — saves
+# ~6 Alta packets per autofill click. Returns ``(by_pt, outcomes)``.
+def _bulk_found(rates_by_type: dict[str, list[ResolvedRate]]) -> tuple:
+    """All payment_types FOUND — wrap a per-type rates map."""
+    by_pt = {pt: rates for pt, rates in rates_by_type.items()}
+    outcomes = {pt: ResolveOutcome.FOUND for pt in rates_by_type}
+    return by_pt, outcomes
+
+
+def _bulk_not_found(payment_types: list[str]) -> tuple:
+    return (
+        {pt: [] for pt in payment_types},
+        {pt: ResolveOutcome.NOT_FOUND for pt in payment_types},
+    )
+
+
+def _bulk_alta_error(payment_types: list[str]) -> tuple:
+    return (
+        {pt: [] for pt in payment_types},
+        {pt: ResolveOutcome.ALTA_ERROR for pt in payment_types},
+    )
+
+
+def _bulk_mixed(per_type: dict[str, tuple[ResolveOutcome, list[ResolvedRate]]]) -> tuple:
+    """Custom outcome per payment_type."""
+    by_pt = {pt: rates for pt, (_, rates) in per_type.items()}
+    outcomes = {pt: outcome for pt, (outcome, _) in per_type.items()}
+    return by_pt, outcomes
+
+
 def _make_measure(
     *,
     measure_type: str = "certification",
@@ -360,18 +391,19 @@ class TestResolveRatesHandler:
         mock_sb, _ = _patch_country_lookup_ok()
         mock_get_sb.return_value = mock_sb
 
-        # Migration 301: handler now calls resolve_rate_variants which
-        # returns (outcome, list[ResolvedRate]) — IMP yields one variant,
-        # NDS two (a льготная 10% and the стандартная 22%) so the response
-        # carries 3 rates total.
-        async def _resolve(*args, **kwargs):
-            payment_type = kwargs.get("payment_type")
-            if payment_type == "IMP":
-                return _found_variants(
-                    [_make_resolved_rate(payment_type="IMP")]
-                )
-            if payment_type == "NDS":
-                return _found_variants([
+        # FU-1: handler now calls resolve_all_payment_types ONCE for all
+        # payment_types. IMP yields one variant, NDS two (10% льготная +
+        # 22% стандартная), others NOT_FOUND. Response carries 3 rates.
+        from services.rate_resolver import ResolveOutcome as _RO
+
+        per_type = {
+            "IMP": (
+                _RO.FOUND,
+                [_make_resolved_rate(payment_type="IMP")],
+            ),
+            "NDS": (
+                _RO.FOUND,
+                [
                     _make_resolved_rate(
                         payment_type="NDS",
                         value_1_number=10.0,
@@ -382,12 +414,20 @@ class TestResolveRatesHandler:
                         value_1_number=22.0,
                         raw_value_string="22%",
                     ),
-                ])
-            return _not_found_variants()
+                ],
+            ),
+            "AKC": (_RO.NOT_FOUND, []),
+            "IMPCOMP": (_RO.NOT_FOUND, []),
+            "IMPDEMP": (_RO.NOT_FOUND, []),
+            "IMPTMP": (_RO.NOT_FOUND, []),
+            "IMPDOP": (_RO.NOT_FOUND, []),
+        }
 
         # Re-export so api.customs.rate_resolver.ResolveOutcome lookups work
         mock_rate_resolver.ResolveOutcome = ResolveOutcome
-        mock_rate_resolver.resolve_rate_variants = AsyncMock(side_effect=_resolve)
+        mock_rate_resolver.resolve_all_payment_types = AsyncMock(
+            return_value=_bulk_mixed(per_type)
+        )
 
         req = _make_request(
             body={"tnved_code": "8409910008", "country_oksm": 156}
@@ -402,8 +442,8 @@ class TestResolveRatesHandler:
         assert "fetched_at" in body["data"]
         # 1 IMP + 2 NDS variants = 3 rates emitted
         assert len(body["data"]["rates"]) == 3
-        # Resolver called once per requested payment_type
-        assert mock_rate_resolver.resolve_rate_variants.await_count >= 2
+        # Resolver called exactly once (FU-1: bulk path)
+        assert mock_rate_resolver.resolve_all_payment_types.await_count == 1
         # Partial flag should be set since some payment_types came back NOT_FOUND
         assert body.get("meta", {}).get("partial") is True
 
@@ -422,8 +462,10 @@ class TestResolveRatesHandler:
         mock_sb, _ = _patch_country_lookup_ok()
         mock_get_sb.return_value = mock_sb
         mock_rate_resolver.ResolveOutcome = ResolveOutcome
-        mock_rate_resolver.resolve_rate_variants = AsyncMock(
-            return_value=_alta_error_variants()
+        # FU-1 bulk path — every payment_type returns ALTA_ERROR
+        from api.customs import _DEFAULT_RESOLVE_PAYMENT_TYPES
+        mock_rate_resolver.resolve_all_payment_types = AsyncMock(
+            return_value=_bulk_alta_error(list(_DEFAULT_RESOLVE_PAYMENT_TYPES))
         )
 
         req = _make_request(
@@ -450,8 +492,9 @@ class TestResolveRatesHandler:
         mock_sb, _ = _patch_country_lookup_ok()
         mock_get_sb.return_value = mock_sb
         mock_rate_resolver.ResolveOutcome = ResolveOutcome
-        mock_rate_resolver.resolve_rate_variants = AsyncMock(
-            return_value=_not_found_variants()
+        from api.customs import _DEFAULT_RESOLVE_PAYMENT_TYPES
+        mock_rate_resolver.resolve_all_payment_types = AsyncMock(
+            return_value=_bulk_not_found(list(_DEFAULT_RESOLVE_PAYMENT_TYPES))
         )
 
         req = _make_request(
@@ -485,13 +528,16 @@ class TestResolveRatesHandler:
         mock_get_sb.return_value = mock_sb
         mock_rate_resolver.ResolveOutcome = ResolveOutcome
 
-        # Mix: IMP errored on Alta, NDS not found, others NOT_FOUND
-        async def _resolve(*args, **kwargs):
-            if kwargs.get("payment_type") == "IMP":
-                return _alta_error_variants()
-            return _not_found_variants()
-
-        mock_rate_resolver.resolve_rate_variants = AsyncMock(side_effect=_resolve)
+        # Mix: IMP errored on Alta, others NOT_FOUND. FU-1 bulk path.
+        from api.customs import _DEFAULT_RESOLVE_PAYMENT_TYPES
+        from services.rate_resolver import ResolveOutcome as _RO
+        per_type = {
+            pt: (_RO.ALTA_ERROR if pt == "IMP" else _RO.NOT_FOUND, [])
+            for pt in _DEFAULT_RESOLVE_PAYMENT_TYPES
+        }
+        mock_rate_resolver.resolve_all_payment_types = AsyncMock(
+            return_value=_bulk_mixed(per_type)
+        )
 
         req = _make_request(
             body={"tnved_code": "8409910008", "country_oksm": 156}
@@ -521,17 +567,19 @@ class TestResolveRatesHandler:
         mock_get_sb.return_value = mock_sb
         mock_rate_resolver.ResolveOutcome = ResolveOutcome
 
-        async def _resolve(*args, **kwargs):
-            pt = kwargs.get("payment_type")
-            if pt == "IMP":
-                return _found_variants(
-                    [_make_resolved_rate(payment_type="IMP")]
-                )
-            if pt == "NDS":
-                return _not_found_variants()
-            return _not_found_variants()
-
-        mock_rate_resolver.resolve_rate_variants = AsyncMock(side_effect=_resolve)
+        from api.customs import _DEFAULT_RESOLVE_PAYMENT_TYPES
+        from services.rate_resolver import ResolveOutcome as _RO
+        per_type = {
+            pt: (
+                (_RO.FOUND, [_make_resolved_rate(payment_type="IMP")])
+                if pt == "IMP"
+                else (_RO.NOT_FOUND, [])
+            )
+            for pt in _DEFAULT_RESOLVE_PAYMENT_TYPES
+        }
+        mock_rate_resolver.resolve_all_payment_types = AsyncMock(
+            return_value=_bulk_mixed(per_type)
+        )
 
         req = _make_request(
             body={"tnved_code": "8409910008", "country_oksm": 156}
@@ -562,8 +610,19 @@ class TestResolveRatesHandler:
         mock_sb, item_chain = _patch_country_lookup_ok()
         mock_get_sb.return_value = mock_sb
         mock_rate_resolver.ResolveOutcome = ResolveOutcome
-        mock_rate_resolver.resolve_rate_variants = AsyncMock(
-            return_value=_found_variants()
+        from api.customs import _DEFAULT_RESOLVE_PAYMENT_TYPES
+        # FOUND for IMP only — enough to trigger the update branch.
+        from services.rate_resolver import ResolveOutcome as _RO
+        per_type = {
+            pt: (
+                (_RO.FOUND, [_make_resolved_rate(payment_type="IMP")])
+                if pt == "IMP"
+                else (_RO.NOT_FOUND, [])
+            )
+            for pt in _DEFAULT_RESOLVE_PAYMENT_TYPES
+        }
+        mock_rate_resolver.resolve_all_payment_types = AsyncMock(
+            return_value=_bulk_mixed(per_type)
         )
 
         req = _make_request(
@@ -595,8 +654,8 @@ class TestResolveRatesHandler:
         mock_sb, _ = _patch_country_lookup_ok()
         mock_get_sb.return_value = mock_sb
         mock_rate_resolver.ResolveOutcome = ResolveOutcome
-        mock_rate_resolver.resolve_rate_variants = AsyncMock(
-            return_value=_found_variants()
+        mock_rate_resolver.resolve_all_payment_types = AsyncMock(
+            return_value=_bulk_found({"IMP": [_make_resolved_rate()]})
         )
 
         req = _make_request(
