@@ -3,7 +3,37 @@ import { describe, it, expect } from "vitest";
 import { humanizeAge } from "../ui/source-timestamp";
 import { formatRate } from "../ui/rate-breakdown";
 import { isValidTnvedCode } from "../ui/auto-resolve-button";
-import { paymentTypeLabel } from "../model/types";
+import { paymentTypeLabel, type ResolvedRate } from "../model/types";
+
+// Stable defaults for the migration 301 fields — tests don't care about
+// variant metadata for value-formatting concerns.
+const VARIANT_DEFAULTS = {
+  description: null,
+  category_code: null,
+  category_ru: null,
+  condition_text: null,
+  legal_document: null,
+  legal_link: null,
+  order_ref: null,
+  is_default: false,
+} as const;
+
+function _rate(overrides: Partial<ResolvedRate>): ResolvedRate {
+  return {
+    payment_type: "IMP",
+    value_1_number: null,
+    value_1_unit: null,
+    value_1_currency: null,
+    value_2_number: null,
+    value_2_unit: null,
+    value_2_currency: null,
+    sign_1: null,
+    raw_value_string: null,
+    calculated_amount_rub: null,
+    ...VARIANT_DEFAULTS,
+    ...overrides,
+  };
+}
 
 describe("humanizeAge", () => {
   const NOW = new Date("2026-05-03T12:00:00Z");
@@ -37,70 +67,35 @@ describe("humanizeAge", () => {
 describe("formatRate", () => {
   it("prefers raw_value_string when available", () => {
     expect(
-      formatRate({
-        payment_type: "IMP",
+      formatRate(_rate({
         value_1_number: 10,
         value_1_unit: "percent",
-        value_1_currency: null,
-        value_2_number: null,
-        value_2_unit: null,
-        value_2_currency: null,
-        sign_1: null,
         raw_value_string: "10%, но не менее 0.04 EUR/kg",
-        calculated_amount_rub: null,
-      })
+      }))
     ).toBe("10%, но не менее 0.04 EUR/kg");
   });
 
   it("formats percent rates", () => {
     expect(
-      formatRate({
-        payment_type: "IMP",
+      formatRate(_rate({
         value_1_number: 5,
         value_1_unit: "percent",
-        value_1_currency: null,
-        value_2_number: null,
-        value_2_unit: null,
-        value_2_currency: null,
-        sign_1: null,
-        raw_value_string: null,
-        calculated_amount_rub: null,
-      })
+      }))
     ).toBe("5%");
   });
 
   it("formats currency-per-unit rates", () => {
     expect(
-      formatRate({
-        payment_type: "IMP",
+      formatRate(_rate({
         value_1_number: 0.04,
         value_1_unit: "166",
         value_1_currency: "EUR",
-        value_2_number: null,
-        value_2_unit: null,
-        value_2_currency: null,
-        sign_1: null,
-        raw_value_string: null,
-        calculated_amount_rub: null,
-      })
+      }))
     ).toBe("0.04 EUR/166");
   });
 
   it("falls back to em-dash when no values present", () => {
-    expect(
-      formatRate({
-        payment_type: "IMP",
-        value_1_number: null,
-        value_1_unit: null,
-        value_1_currency: null,
-        value_2_number: null,
-        value_2_unit: null,
-        value_2_currency: null,
-        sign_1: null,
-        raw_value_string: null,
-        calculated_amount_rub: null,
-      })
-    ).toBe("—");
+    expect(formatRate(_rate({}))).toBe("—");
   });
 });
 

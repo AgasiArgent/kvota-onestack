@@ -22,6 +22,20 @@ export interface ResolvedRate {
   raw_value_string: string | null;
   /** Phase 1: always null — backend lacks customs_value/weight/quantity inputs. */
   calculated_amount_rub: number | null;
+  /**
+   * Variant metadata (migration 301). Backend now returns ALL Alta variants
+   * per (code, payment_type) instead of arbitrarily picking one. UI renders
+   * a selector with these fields as context — customs-specialist picks the
+   * variant applicable to the actual product (медицинское / прочее / etc.).
+   */
+  description: string | null;       // <Prim> (IMP) | <Condition> (NDS/AKC)
+  category_code: string | null;     // <Directory><EnName> | <Order> for IMP
+  category_ru: string | null;       // <Directory><RuName>
+  condition_text: string | null;    // <OrderCond> | <MainCondition>
+  legal_document: string | null;    // <Document> — e.g., "Постановление 688..."
+  legal_link: string | null;        // <Link>     — URL to alta.ru/tamdoc/...
+  order_ref: string | null;         // <Order>    — IMP only ("реш.80")
+  is_default: boolean;              // true = "Прочие"/"прочее" — pre-selected
 }
 
 export interface ResolveRatesData {
