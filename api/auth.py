@@ -24,6 +24,7 @@ PUBLIC_API_PATHS = {
     "/api/telegram/webhook",
     "/api/changelog",
     "/api/cron/check-overdue",
+    "/api/cron/revalidate-rates",
     "/api/cron/sla-check",
 }
 

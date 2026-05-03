@@ -225,6 +225,10 @@ class AltaClient:
             password.encode("utf-8")
         ).hexdigest()
         self._http_timeout: float = HTTP_TIMEOUT_SECONDS
+        # Last-known packet_left from Alta — populated after each request
+        # by ``_log_packet_left``. Read by ``api.cron.cron_revalidate_rates``
+        # to abort the loop when the prepaid packet runs low (REQ-6 AC#5).
+        self.last_packet_left: int | None = None
         # plaintext `password` parameter goes out of scope here
 
     def __repr__(self) -> str:
@@ -357,10 +361,15 @@ class AltaClient:
     def _log_packet_left(self, left_count: int | None) -> None:
         """Log packet remaining; Telegram-alert when low (REQ-2 AC#10, Q2).
 
+        Also stores the value in ``self.last_packet_left`` so
+        ``api.cron.cron_revalidate_rates`` (REQ-6 AC#5) can read it
+        after each call without re-parsing the response XML.
+
         Throttled: at most one alert of each kind per hour.
         """
         if left_count is None:
             return
+        self.last_packet_left = left_count
         logger.info("Alta packet remaining: %d", left_count)
         if left_count >= PACKET_LOW_THRESHOLD:
             return
