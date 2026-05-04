@@ -572,13 +572,19 @@ class TestUtility:
         assert result == ["Китай", "Россия", "Турция"]
 
     def test_get_location_stats(self, mock_supabase):
-        """Test getting location statistics."""
+        """Test getting location statistics.
+
+        Schema-drift fix (Phase 2c): the legacy ``is_hub`` / ``is_customs_point``
+        boolean columns were replaced by the ``location_type`` enum
+        (migration 287). Stats now derive hub/customs counts from
+        ``location_type`` values instead.
+        """
         mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value = MagicMock(
             data=[
-                {"is_active": True, "is_hub": True, "is_customs_point": False, "country": "Россия"},
-                {"is_active": True, "is_hub": False, "is_customs_point": True, "country": "Россия"},
-                {"is_active": False, "is_hub": True, "is_customs_point": False, "country": "Китай"},
-                {"is_active": True, "is_hub": True, "is_customs_point": True, "country": "Китай"},
+                {"is_active": True, "location_type": "hub", "country": "Россия"},
+                {"is_active": True, "location_type": "customs", "country": "Россия"},
+                {"is_active": False, "location_type": "hub", "country": "Китай"},
+                {"is_active": True, "location_type": "customs", "country": "Китай"},
             ]
         )
 
@@ -587,7 +593,7 @@ class TestUtility:
         assert stats["total"] == 4
         assert stats["active"] == 3
         assert stats["inactive"] == 1
-        assert stats["hubs"] == 3
+        assert stats["hubs"] == 2
         assert stats["customs_points"] == 2
         assert stats["by_country"]["Россия"] == 2
         assert stats["by_country"]["Китай"] == 2

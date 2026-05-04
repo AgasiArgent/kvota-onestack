@@ -20,13 +20,17 @@ import {
 } from "@/features/customs-certificates";
 import type { TableView } from "@/entities/table-view";
 import { fetchAllAvailable } from "@/entities/table-view";
-import { TableViewsDropdown } from "@/features/table-views";
+import {
+  TableViewsDropdown,
+  type DropdownTableView,
+} from "@/features/table-views";
 import { CustomsActionBar } from "./customs-action-bar";
 import { CustomsItemsEditor } from "./customs-items-editor";
 import {
   CUSTOMS_AVAILABLE_COLUMNS,
   CUSTOMS_TABLE_KEY,
 } from "./customs-columns";
+import { CUSTOMS_SYSTEM_VIEWS } from "./customs-views";
 import { CustomsExpenses } from "./customs-expenses";
 import { CustomsNotes } from "./customs-notes";
 import { EntityNotesPanel } from "@/entities/entity-note";
@@ -137,6 +141,34 @@ interface CustomsStepProps {
   canCreateSharedView?: boolean;
 }
 
+/**
+ * Adapt the synthetic, client-side `CUSTOMS_SYSTEM_VIEWS` constants
+ * (`SystemView` shape) to the `DropdownTableView` shape consumed by
+ * `<TableViewsDropdown>`. The dropdown uses `is_system: true` to render
+ * the «Системные» group above personal/shared rows (REQ-11 AC#4).
+ *
+ * The synthetic ids (`system:*`) cannot collide with UUID rows in
+ * `kvota.user_table_views`, so the merged list is safe to feed straight
+ * into the dropdown's `views` prop — see `customs-views.ts` for ID
+ * scheme rationale.
+ */
+const CUSTOMS_SYSTEM_DROPDOWN_VIEWS: readonly DropdownTableView[] =
+  CUSTOMS_SYSTEM_VIEWS.map((sv) => ({
+    id: sv.id,
+    userId: "system",
+    tableKey: CUSTOMS_TABLE_KEY,
+    name: sv.label,
+    filters: {},
+    sort: null,
+    visibleColumns: sv.visibleColumnIds,
+    isShared: false,
+    organizationId: null,
+    isDefault: false,
+    createdAt: "1970-01-01T00:00:00.000Z",
+    updatedAt: "1970-01-01T00:00:00.000Z",
+    is_system: true,
+  }));
+
 export function CustomsStep({
   quote,
   items,
@@ -166,6 +198,18 @@ export function CustomsStep({
     setViews(tableViews);
   }, [tableViews]);
 
+  // Merge the 4 synthetic system views in front of the user/org rows so
+  // the dropdown renders «Системные» above «Личные»/«Общие» and the
+  // `system:*` ids resolve via the same `views.find(...)` path used for
+  // UUID rows. The system constants live as readonly module-level data
+  // (`CUSTOMS_SYSTEM_DROPDOWN_VIEWS`); the `views` state still holds only
+  // the real `TableView` rows so settings-dialog mutations don't have to
+  // skip system rows.
+  const dropdownViews = useMemo<readonly DropdownTableView[]>(
+    () => [...CUSTOMS_SYSTEM_DROPDOWN_VIEWS, ...views],
+    [views]
+  );
+
   // Active view: either the `?customs_view=<id>` query param or the user's
   // default view. `null` means "show all columns".
   const viewParam = searchParams?.get("customs_view") ?? null;
@@ -175,8 +219,8 @@ export function CustomsStep({
   );
   const activeViewId = viewParam ?? defaultView?.id ?? null;
   const activeView = useMemo(
-    () => views.find((v) => v.id === activeViewId) ?? null,
-    [views, activeViewId]
+    () => dropdownViews.find((v) => v.id === activeViewId) ?? null,
+    [dropdownViews, activeViewId]
   );
   const visibleColumns = activeView?.visibleColumns;
 
@@ -411,7 +455,7 @@ export function CustomsStep({
         {userId && quote.organization_id && (
           <div className="flex items-center justify-end">
             <TableViewsDropdown
-              views={views}
+              views={dropdownViews}
               activeViewId={activeViewId}
               onViewChange={handleViewChange}
               onViewsRefresh={handleViewsRefresh}

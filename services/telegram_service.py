@@ -3138,7 +3138,7 @@ async def notify_quote_creator_of_status_change(
 
         # Get actor name if not provided
         if not actor_name:
-            actor_response = supabase.table("organization_members").select(
+            actor_response = supabase.table("user_profiles").select(
                 "full_name"
             ).eq("user_id", actor_id).execute()
 
@@ -3286,7 +3286,7 @@ async def notify_assigned_users_of_status_change(
 
         # Get actor name if not provided
         if not actor_name:
-            actor_response = supabase.table("organization_members").select(
+            actor_response = supabase.table("user_profiles").select(
                 "full_name"
             ).eq("user_id", actor_id).execute()
 
@@ -3528,7 +3528,7 @@ async def notify_creator_of_return(
 
         # Get actor name if not provided
         if not actor_name:
-            actor_response = supabase.table("organization_members").select(
+            actor_response = supabase.table("user_profiles").select(
                 "full_name"
             ).eq("user_id", actor_id).execute()
 

@@ -100,6 +100,33 @@ _AUTOFILL_FIELDS = (
     "has_fta_certificate",
 )
 
+# Subset of _AUTOFILL_FIELDS that actually maps to columns on
+# ``kvota.quote_items``. The license_*_cost columns moved off quote_items in
+# Phase 5d (they live on invoice_items only) — selecting them via PostgREST
+# raises 42703. The frontend contract still requires the keys to appear in
+# the response (per ``CustomsAutofillSuggestion`` mirror + REQ-5 AC#3
+# "STRICTLY ADDITIVE"); the population loop below uses ``row.get(field)``
+# which silently yields ``None`` for the dropped columns — preserving the
+# additive-only contract while keeping the SELECT schema-clean.
+#
+# Defined as a literal tuple (not a generator filter) so the static
+# schema-drift lint at ``tools/check_select_columns.py`` can resolve it.
+_AUTOFILL_SELECT_FIELDS = (
+    "hs_code",
+    "customs_duty",
+    "customs_duty_per_kg",
+    "customs_util_fee",
+    "customs_excise",
+    "customs_eco_fee",
+    "customs_honest_mark",
+    "license_ds_required",
+    "license_ss_required",
+    "license_sgr_required",
+    "country_of_origin_oksm",
+    "has_origin_certificate",
+    "has_fta_certificate",
+)
+
 
 def _resolve_dual_auth(request: Request) -> tuple[dict | None, list[str]]:
     """Resolve authenticated user + effective role codes.
@@ -431,7 +458,9 @@ async def autofill_handler(
     resolved: list[tuple[list[str], dict]] = []
 
     for (brand, product_code), item_ids in keys_by_pair.items():
-        select_cols = ", ".join(("id", "quote_id", "created_at", *_AUTOFILL_FIELDS))
+        select_cols = ", ".join(
+            ("id", "quote_id", "created_at", *_AUTOFILL_SELECT_FIELDS)
+        )
         try:
             result = (
                 supabase.table("quote_items")
@@ -1753,7 +1782,7 @@ def _verify_quote_in_org(supabase, quote_id: str, org_id: str) -> dict | None:
     """Verify quote exists, belongs to org, not soft-deleted. Returns row or None."""
     res = (
         supabase.table("quotes")
-        .select("id, organization_id, currency_of_quote, currency")
+        .select("id, organization_id, currency")
         .eq("id", quote_id)
         .eq("organization_id", org_id)
         .is_("deleted_at", None)
@@ -1809,60 +1838,109 @@ def _compute_attached_items_payload(
     """Compute ``attached_items[]`` shares for a certificate.
 
     For each item_id in ``attached_item_ids``:
-      1. Fetch the quote_item payload (purchase_price_original, quantity,
-         purchase_currency).
-      2. Derive RUB cost basis via ``customs_value_rub_for_item`` against
-         the parent quote's currency context.
-      3. Pass the list of bases into ``split_cost_batch``.
+      1. Fetch invoice-level pricing via ``invoice_item_coverage`` JOIN to
+         ``invoice_items`` (post-Phase 5d the price columns moved off
+         ``quote_items``; the canonical source is ``invoice_items``).
+      2. Sum ``purchase_price_original × invoice_items.quantity × ratio``
+         across coverage rows for the quote_item, then convert that sum
+         to RUB once via ``services.currency_service.convert_amount``.
+      3. Pass the list of RUB bases into ``split_cost_batch``.
 
     Returns ``[{item_id, share_rub, share_percent}]`` rounded to 1
     decimal on share_percent. Empty list if ``attached_item_ids`` is empty.
+
+    Edge cases:
+      - quote_item with no coverage rows (item attached to cert but never
+        had an invoice picked) → basis = 0; ``split_cost_batch`` falls
+        through its zero-sum branch and equal-splits.
+      - ``invoice_items.purchase_price_original`` or ``quantity`` NULL →
+        treated as 0 (no contribution).
+      - currency mismatch across coverage rows for the same quote_item
+        violates Phase 5c invariants → raises ``RuntimeError`` with
+        diagnostic context (should never happen in practice).
     """
     if not attached_item_ids:
         return []
 
     from decimal import Decimal
 
-    from services.cost_split import (
-        customs_value_rub_for_item,
-        split_cost_batch,
-    )
+    from services.cost_split import split_cost_batch
     from services.currency_service import convert_amount
 
     cert_cost = Decimal(str(cert_row.get("cost_rub") or 0))
-    quote_id = cert_row["quote_id"]
 
-    quote_res = (
-        supabase.table("quotes")
-        .select("currency_of_quote, currency")
-        .eq("id", quote_id)
-        .limit(1)
-        .execute()
-    )
-    quote_row = (quote_res.data or [{}])[0]
-    quote_currency = (
-        quote_row.get("currency_of_quote") or quote_row.get("currency") or "USD"
-    )
-
-    items_res = (
+    # Query 1 — quote_items: validates the IDs resolve and is the public
+    # entry-point for the JOIN. ``_verify_items_in_quote`` upstream already
+    # gates by quote membership; this call is the per-helper authority on
+    # which IDs exist.
+    qi_resp = (
         supabase.table("quote_items")
-        .select(
-            "id, purchase_price_original, purchase_currency, "
-            "currency_of_base_price, quantity, base_price_vat, created_at"
-        )
+        .select("id, composition_selected_invoice_id, quantity")
         .in_("id", attached_item_ids)
         .execute()
     )
-    items_by_id = {row["id"]: row for row in (items_res.data or [])}
+    valid_ids = {row["id"] for row in (qi_resp.data or [])}
 
-    # Preserve attachment order — caller provides item_ids ordered by
-    # quote_certificate_items.created_at ASC (Req 3 AC#7 — last absorbs residual).
-    ordered_items = [items_by_id[iid] for iid in attached_item_ids if iid in items_by_id]
+    # Query 2 — invoice_item_coverage embedded with invoice_items via
+    # PostgREST ``!inner`` join. The pattern mirrors
+    # ``services/composition_service.py:371-381`` (proven, in production).
+    coverage_resp = (
+        supabase.table("invoice_item_coverage")
+        .select(
+            "quote_item_id, ratio, "
+            "invoice_items!inner("
+            "id, purchase_price_original, purchase_currency, quantity"
+            ")"
+        )
+        .in_("quote_item_id", attached_item_ids)
+        .execute()
+    )
+    coverage_rows = coverage_resp.data or []
 
-    bases: list[Decimal] = [
-        customs_value_rub_for_item(item, quote_currency, convert_amount)
-        for item in ordered_items
-    ]
+    # Compute per-quote-item RUB basis preserving attachment order.
+    bases: list[Decimal] = []
+    for qi_id in attached_item_ids:
+        if qi_id not in valid_ids:
+            # Item disappeared mid-flight — treat as zero basis.
+            bases.append(Decimal("0"))
+            continue
+
+        qi_coverage = [
+            c for c in coverage_rows if c.get("quote_item_id") == qi_id
+        ]
+        total_in_currency = Decimal("0")
+        currency: str | None = None
+        for cov in qi_coverage:
+            inv = cov.get("invoice_items") or {}
+            price = Decimal(str(inv.get("purchase_price_original") or 0))
+            inv_qty = Decimal(str(inv.get("quantity") or 0))
+            ratio = Decimal(str(cov.get("ratio") or 0))
+            inv_currency = inv.get("purchase_currency")
+            if inv_currency is None:
+                # NOT NULL constraint at the DB level — defensive only.
+                continue
+            if currency is None:
+                currency = inv_currency
+            elif currency != inv_currency:
+                raise RuntimeError(
+                    f"Currency mismatch in invoice_item_coverage for "
+                    f"quote_item {qi_id}: {currency!r} vs {inv_currency!r}. "
+                    f"Phase 5c invariant violation."
+                )
+            total_in_currency += price * inv_qty * ratio
+
+        if total_in_currency <= 0 or currency is None:
+            bases.append(Decimal("0"))
+            continue
+
+        if currency == "RUB":
+            # Short-circuit: avoid an unnecessary rate lookup. Mirrors the
+            # legacy ``_customs_value_in_rub`` behaviour.
+            bases.append(total_in_currency)
+            continue
+
+        rub_basis = convert_amount(total_in_currency, currency, "RUB")
+        bases.append(Decimal(str(rub_basis)))
 
     shares = split_cost_batch(bases, cert_cost)
 

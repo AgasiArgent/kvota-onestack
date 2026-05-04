@@ -678,14 +678,17 @@ def process_approval_decision(
     quote_creator_id = None
 
     try:
+        # customer_name lives on the customers table (FK from quotes.customer_id),
+        # not on quotes itself. Use a PostgREST embed to fetch the related row.
         quote_result = supabase.table('quotes').select(
-            'idn, customer_name, created_by'
+            'idn, created_by, customer:customers(name)'
         ).eq('id', quote_id).execute()
 
         if quote_result.data:
             quote_data = quote_result.data[0]
             quote_idn = quote_data.get('idn', 'N/A')
-            customer_name = quote_data.get('customer_name', 'Не указан')
+            customer = quote_data.get('customer') or {}
+            customer_name = customer.get('name') or 'Не указан'
             quote_creator_id = quote_data.get('created_by')
     except Exception as e:
         print(f"Error fetching quote details: {e}")
@@ -1373,21 +1376,34 @@ def apply_modifications_to_quote(
             quote_updates[quote_field] = modifications[mod_field]
             fields_updated.append(mod_field)
 
-    # Handle margin_percent - typically stored in variables JSONB
+    # Handle margin_percent — stored in quote_versions.input_variables JSONB.
+    # The legacy `variables` column on quotes was retired when variables
+    # migrated to per-version JSONB (see services/workflow_service.py:1505+
+    # for the canonical merge-into-latest-version pattern).
     if 'margin_percent' in modifications:
-        # We'll update the variables JSON field
         try:
-            quote_result = supabase.table('quotes').select('variables').eq('id', quote_id).execute()
-            if quote_result.data:
-                variables = quote_result.data[0].get('variables', {}) or {}
-                variables['margin_percent'] = modifications['margin_percent']
-                variables['manager_modified'] = True
-                quote_updates['variables'] = variables
+            latest_version_resp = (
+                supabase.table('quote_versions')
+                        .select('id, input_variables')
+                        .eq('quote_id', quote_id)
+                        .order('version', desc=True)
+                        .limit(1)
+                        .execute()
+            )
+            if latest_version_resp.data:
+                latest = latest_version_resp.data[0]
+                merged_iv = dict(latest.get('input_variables') or {})
+                merged_iv['margin_percent'] = modifications['margin_percent']
+                merged_iv['manager_modified'] = True
+                supabase.table('quote_versions') \
+                        .update({'input_variables': merged_iv}) \
+                        .eq('id', latest['id']) \
+                        .execute()
                 fields_updated.append('margin_percent')
         except Exception as e:
             errors.append(f"Failed to update margin_percent: {str(e)}")
 
-    # Apply quote updates
+    # Apply quote updates (excluding variables — those go to quote_versions)
     if quote_updates:
         try:
             supabase.table('quotes').update(quote_updates).eq('id', quote_id).execute()
