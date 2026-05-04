@@ -244,6 +244,83 @@ interface ProcurementHandsontableProps {
   onMutated?: () => void;
 }
 
+/**
+ * Module-scoped singleton tooltip manager for the Handsontable action icons.
+ *
+ * Earlier the row renderer attached a per-button closure over a tooltip
+ * element appended to `document.body`. When Handsontable re-rendered a cell
+ * mid-hover (data updates, sort, scroll virtualisation) the trigger was
+ * detached from the DOM but `mouseleave` never fired — so the cleanup
+ * branch in the closure never ran and the tooltip stayed orphaned in
+ * `<body>` indefinitely. Each subsequent hover compounded the leak.
+ *
+ * One reused element + a `gc()` sweep that hides the tooltip when the
+ * active trigger is no longer connected restores a self-healing invariant:
+ * the renderer itself can clear stale state, regardless of which event
+ * handlers ran or didn't.
+ */
+const tooltipMgr = (() => {
+  let el: HTMLDivElement | null = null;
+  let activeBtn: HTMLElement | null = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  const ensureEl = (): HTMLDivElement => {
+    if (el) return el;
+    el = document.createElement("div");
+    el.style.cssText =
+      "position:fixed;z-index:9999;background:#1f2937;color:#fff;font-size:11px;font-weight:400;padding:3px 6px;border-radius:4px;pointer-events:none;white-space:nowrap;box-shadow:0 2px 4px rgba(0,0,0,0.15);display:none;";
+    document.body.appendChild(el);
+    return el;
+  };
+
+  const show = (btn: HTMLElement, text: string) => {
+    const tip = ensureEl();
+    tip.textContent = text;
+    tip.style.display = "block";
+    const r = btn.getBoundingClientRect();
+    // Anchor below the button, horizontally centred. Falls back above when
+    // the row is near the viewport bottom — simple, no Floating-UI.
+    const y = r.bottom + 6;
+    tip.style.left = `${r.left + r.width / 2 - tip.offsetWidth / 2}px`;
+    tip.style.top = `${y + tip.offsetHeight > window.innerHeight ? r.top - tip.offsetHeight - 6 : y}px`;
+    activeBtn = btn;
+  };
+
+  const hide = () => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    if (el) el.style.display = "none";
+    activeBtn = null;
+  };
+
+  const attach = (btn: HTMLButtonElement, text: string) => {
+    btn.addEventListener("mouseenter", () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (btn.isConnected) show(btn, text);
+      }, 250);
+    });
+    btn.addEventListener("mouseleave", () => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      if (activeBtn === btn) hide();
+    });
+  };
+
+  // Call from the row renderer before re-painting buttons. If Handsontable
+  // yanked the active trigger out of the DOM without firing mouseleave,
+  // this is what unsticks the tooltip.
+  const gc = () => {
+    if (activeBtn && !activeBtn.isConnected) hide();
+  };
+
+  return { attach, gc };
+})();
+
 export function ProcurementHandsontable({
   items,
   procurementCompleted,
@@ -323,39 +400,12 @@ export function ProcurementHandsontable({
       td.style.padding = "0";
       td.style.whiteSpace = "nowrap";
 
-      const rowId = rowIdsRef.current[row];
+      // Sweep stale tooltip state — Handsontable removes the previous
+      // buttons by clearing innerHTML, but if a button was being hovered,
+      // mouseleave never fires on a detached node.
+      tooltipMgr.gc();
 
-      // Custom 250ms tooltip — replaces the native HTML `title` attribute
-      // (browser default ≈ 500ms+, too slow per user feedback). Reuses one
-      // floating tooltip element per button via mouseenter/leave.
-      const attachFastTooltip = (btn: HTMLButtonElement, text: string) => {
-        let tip: HTMLDivElement | null = null;
-        let timer: ReturnType<typeof setTimeout> | null = null;
-        const show = () => {
-          if (tip) return;
-          tip = document.createElement("div");
-          tip.textContent = text;
-          tip.style.cssText =
-            "position:fixed;z-index:9999;background:#1f2937;color:#fff;font-size:11px;font-weight:400;padding:3px 6px;border-radius:4px;pointer-events:none;white-space:nowrap;box-shadow:0 2px 4px rgba(0,0,0,0.15);";
-          document.body.appendChild(tip);
-          const r = btn.getBoundingClientRect();
-          // Anchor below the button, horizontally centred. Falls back above
-          // when the row is near the viewport bottom — simple, no Floating-UI.
-          const y = r.bottom + 6;
-          tip.style.left = `${r.left + r.width / 2 - tip.offsetWidth / 2}px`;
-          tip.style.top = `${y + tip.offsetHeight > window.innerHeight ? r.top - tip.offsetHeight - 6 : y}px`;
-        };
-        btn.addEventListener("mouseenter", () => {
-          timer = setTimeout(show, 250);
-        });
-        btn.addEventListener("mouseleave", () => {
-          if (timer) clearTimeout(timer);
-          if (tip) {
-            tip.remove();
-            tip = null;
-          }
-        });
-      };
+      const rowId = rowIdsRef.current[row];
 
       // SVG glyphs styled via currentColor — replaces opaque unicode arrows
       // (↧ ⋃ ↪ ↩) for split/merge/undo with explicit "diverging" / "converging"
@@ -404,7 +454,7 @@ export function ProcurementHandsontable({
           e.stopPropagation();
           onClick();
         };
-        attachFastTooltip(btn, title);
+        tooltipMgr.attach(btn, title);
         return btn;
       };
 
