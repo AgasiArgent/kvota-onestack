@@ -17,6 +17,7 @@ from services.alta_client import (
     AltaApiError,
     AltaClient,
     Rate,
+    _classify_import_payment_type,
     get_alta_client,
     notify_admin,
 )
@@ -924,3 +925,231 @@ async def test_get_rates_emits_one_row_per_alta_variant():
     for r in rates:
         payment_counts[r.payment_type] = payment_counts.get(r.payment_type, 0) + 1
     assert payment_counts == {"IMP": 2, "NDS": 3}
+
+
+# ---------------------------------------------------------------------------
+# Phase A — Importlist payment_type classification (Req 1)
+# ---------------------------------------------------------------------------
+
+
+def _antidumping_taksa_xml() -> bytes:
+    """Trimmed real Alta response shape for HS=7304110008 × Украина.
+
+    Models the antidumping case probed during Phase A scoping: 6 variants
+    под Решением 702 КТС (Антидемпинговые пошлины) + 1 base IMP под «реш.80».
+    The previous parser collapsed all 7 into IMP — Phase A splits the 6
+    антидемпинг rows into IMPDEMP and keeps the «реш.80» as IMP.
+    """
+    xml = (
+        '<?xml version="1.0" encoding="utf-8"?>'
+        '<GoodInfo><Code>7304110008</Code>'
+        '<Importlist>'
+        # Base IMP (реш.80 — default)
+        '<Import>'
+        '<Value>5%</Value>'
+        '<ValueDetail><ValueCount>5</ValueCount><ValueUnit>%</ValueUnit></ValueDetail>'
+        '<Prim>- прочее</Prim>'
+        '<Order>реш.80</Order>'
+        '<OrderCond>НЕТ льготы</OrderCond>'
+        '<Link>https://www.alta.ru/tamdoc/12reh0080/</Link>'
+        '</Import>'
+        # 6 антидемпинг variants (Решение 702 КТС)
+        '<Import>'
+        '<Value>18.9%</Value>'
+        '<ValueDetail><ValueCount>18.9</ValueCount><ValueUnit>%</ValueUnit></ValueDetail>'
+        '<Prim>ОАО Интерпайп</Prim>'
+        '<Order>Решение 702 от 22.06.2011 КТС (Антидемпинговые пошлины — производитель ОАО Интерпайп)</Order>'
+        '<Link>https://www.alta.ru/tamdoc/11k00702/</Link>'
+        '</Import>'
+        '<Import>'
+        '<Value>23.4%</Value>'
+        '<ValueDetail><ValueCount>23.4</ValueCount><ValueUnit>%</ValueUnit></ValueDetail>'
+        '<Prim>ОАО Северский</Prim>'
+        '<Order>Решение 702 от 22.06.2011 КТС (Антидемпинговые пошлины — производитель ОАО Северский)</Order>'
+        '<Link>https://www.alta.ru/tamdoc/11k00702/</Link>'
+        '</Import>'
+        '<Import>'
+        '<Value>19.4%</Value>'
+        '<ValueDetail><ValueCount>19.4</ValueCount><ValueUnit>%</ValueUnit></ValueDetail>'
+        '<Prim>ОАО Никопольский</Prim>'
+        '<Order>Решение 702 от 22.06.2011 КТС (Антидемпинговые пошлины — производитель ОАО Никопольский)</Order>'
+        '<Link>https://www.alta.ru/tamdoc/11k00702/</Link>'
+        '</Import>'
+        '<Import>'
+        '<Value>37.8%</Value>'
+        '<ValueDetail><ValueCount>37.8</ValueCount><ValueUnit>%</ValueUnit></ValueDetail>'
+        '<Prim>прочие</Prim>'
+        '<Order>Решение 702 от 22.06.2011 КТС (Антидемпинговые пошлины — прочие производители)</Order>'
+        '<Link>https://www.alta.ru/tamdoc/11k00702/</Link>'
+        '</Import>'
+        '<Import>'
+        '<Value>14.2%</Value>'
+        '<ValueDetail><ValueCount>14.2</ValueCount><ValueUnit>%</ValueUnit></ValueDetail>'
+        '<Prim>ОАО Днепропетровский</Prim>'
+        '<Order>Решение 702 от 22.06.2011 КТС (Антидемпинговые пошлины — производитель ОАО Днепропетровский)</Order>'
+        '<Link>https://www.alta.ru/tamdoc/11k00702/</Link>'
+        '</Import>'
+        '<Import>'
+        '<Value>26.7%</Value>'
+        '<ValueDetail><ValueCount>26.7</ValueCount><ValueUnit>%</ValueUnit></ValueDetail>'
+        '<Prim>ОАО Харцызский</Prim>'
+        '<Order>Решение 702 от 22.06.2011 КТС (Антидемпинговые пошлины — производитель ОАО Харцызский)</Order>'
+        '<Link>https://www.alta.ru/tamdoc/11k00702/</Link>'
+        '</Import>'
+        '</Importlist>'
+        '<Exciselist/>'
+        '<VATlist/>'
+        '</GoodInfo>'
+    )
+    return xml.encode("utf-8")
+
+
+# Unit tests — _classify_import_payment_type ----------------------------------
+
+
+def test_classify_imp_default_when_no_order():
+    """Empty/None <Order> → IMP без warning (legacy non-categorised data, AC#10)."""
+    assert _classify_import_payment_type(None) == ("IMP", False)
+    assert _classify_import_payment_type("") == ("IMP", False)
+
+
+def test_classify_imp_when_resh_prefix():
+    """Order starting with "реш." → IMP без warning (AC#6)."""
+    assert _classify_import_payment_type("реш.80") == ("IMP", False)
+    assert _classify_import_payment_type("Реш.130") == ("IMP", False)
+    # "Решение 80" variant
+    assert _classify_import_payment_type("Решение 80 от ...") == ("IMP", False)
+
+
+def test_classify_impdemp_from_antidemp_text():
+    """Order containing "антидемп" → IMPDEMP (AC#2)."""
+    assert _classify_import_payment_type(
+        "Решение 702 от 22.06.2011 КТС (Антидемпинговые пошлины — ОАО Интерпайп)"
+    ) == ("IMPDEMP", False)
+    # case-insensitive
+    assert _classify_import_payment_type("АНТИДЕМПИНГОВАЯ пошлина") == ("IMPDEMP", False)
+
+
+def test_classify_impcomp_from_compensation_text():
+    """Order containing "компенсационн" → IMPCOMP (AC#3)."""
+    assert _classify_import_payment_type(
+        "Решение 123 (Компенсационные пошлины)"
+    ) == ("IMPCOMP", False)
+    assert _classify_import_payment_type("компенсационная пошлина") == ("IMPCOMP", False)
+
+
+def test_classify_impdop_from_special_text():
+    """Order containing "специальн" or "специальная защитная" → IMPDOP (AC#4)."""
+    assert _classify_import_payment_type(
+        "Решение 555 (Специальная защитная пошлина)"
+    ) == ("IMPDOP", False)
+    assert _classify_import_payment_type("Специальные тарифы") == ("IMPDOP", False)
+
+
+def test_classify_imptmp_from_seasonal_text():
+    """Order containing "сезонн" → IMPTMP (AC#5)."""
+    assert _classify_import_payment_type(
+        "Постановление 100 (Сезонная пошлина на сахар)"
+    ) == ("IMPTMP", False)
+    assert _classify_import_payment_type("СЕЗОННЫЕ пошлины") == ("IMPTMP", False)
+
+
+def test_classify_unknown_pattern_defaults_imp_with_warning():
+    """Non-empty, non-default text matching no pattern → IMP + is_unknown=True (AC#7)."""
+    payment_type, is_unknown = _classify_import_payment_type("Неизвестный документ ABC-2099")
+    assert payment_type == "IMP"
+    assert is_unknown is True
+
+
+@pytest.mark.asyncio
+async def test_extract_rates_emits_warning_for_unknown_order_pattern(caplog):
+    """When <Order> matches no known pattern, _extract_rates logs structured WARNING.
+
+    The log entry includes tnved_code, order_ref, and unknown_order_pattern flag
+    so ops can grep production logs and extend `_IMPORT_TYPE_PATTERNS` without
+    a release (Req 1 AC#7).
+    """
+    xml = (
+        '<?xml version="1.0" encoding="utf-8"?>'
+        '<GoodInfo><Code>1234567890</Code>'
+        '<Importlist>'
+        '<Import>'
+        '<Value>5%</Value>'
+        '<ValueDetail><ValueCount>5</ValueCount><ValueUnit>%</ValueUnit></ValueDetail>'
+        '<Prim>- прочее</Prim>'
+        '<Order>Неклассифицированный документ XYZ</Order>'
+        '</Import>'
+        '</Importlist>'
+        '<Exciselist/><VATlist/>'
+        '</GoodInfo>'
+    ).encode("utf-8")
+
+    client = AltaClient(login="testlogin", password="testpw")
+    fake_resp = _make_response(xml, charset="utf-8")
+
+    with caplog.at_level("WARNING", logger="services.alta_client"):
+        with patch("httpx.AsyncClient") as mock_client_cls:
+            mock_client = AsyncMock()
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client.get.return_value = fake_resp
+            mock_client_cls.return_value = mock_client
+
+            rates = await client.get_rates(
+                "1234567890", 156, date(2026, 5, 3),
+            )
+
+    # Defaulted to IMP despite unknown pattern
+    assert len(rates) == 1
+    assert rates[0].payment_type == "IMP"
+
+    # WARNING with structured fields
+    matching = [r for r in caplog.records if "unknown <Order> pattern" in r.message]
+    assert len(matching) == 1
+    record = matching[0]
+    assert record.levelname == "WARNING"
+    assert getattr(record, "tnved_code", None) == "1234567890"
+    assert getattr(record, "order_ref", None) == "Неклассифицированный документ XYZ"
+    assert getattr(record, "unknown_order_pattern", None) is True
+
+
+# Integration test — _extract_rates classifies antidumping variants -----------
+
+
+@pytest.mark.asyncio
+async def test_get_rates_classifies_antidumping_variants():
+    """Antidumping fixture: 6× IMPDEMP variants + 1× IMP base.
+
+    Previously the parser hardcoded "IMP" for every Importlist row, so the
+    антидемпинг information collapsed into the base IMP rate. Phase A
+    classifier splits them so the resolver can group by payment_type and
+    the UI can render an orange antidumping block.
+    """
+    client = AltaClient(login="testlogin", password="testpw")
+
+    fake_resp = _make_response(_antidumping_taksa_xml(), charset="utf-8")
+    with patch("httpx.AsyncClient") as mock_client_cls:
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.__aexit__.return_value = None
+        mock_client.get.return_value = fake_resp
+        mock_client_cls.return_value = mock_client
+
+        rates = await client.get_rates(
+            "7304110008", 804, date(2026, 5, 3),
+        )
+
+    payment_counts: dict[str, int] = {}
+    for r in rates:
+        payment_counts[r.payment_type] = payment_counts.get(r.payment_type, 0) + 1
+    assert payment_counts == {"IMP": 1, "IMPDEMP": 6}
+
+    impdemp_rates = [r for r in rates if r.payment_type == "IMPDEMP"]
+    # All IMPDEMP rates carry the Решение 702 reference in order_ref
+    for r in impdemp_rates:
+        assert r.order_ref is not None
+        assert "702" in r.order_ref
+        assert "Антидемпинг" in r.order_ref
+
+    imp_rates = [r for r in rates if r.payment_type == "IMP"]
+    assert imp_rates[0].order_ref == "реш.80"

@@ -92,6 +92,39 @@ PACKET_ALERT_THROTTLE = timedelta(hours=1)
 # Encoding fallback for Такса/xml_nodes endpoints (gotcha #2)
 TAKSA_DEFAULT_ENCODING = "windows-1251"
 
+# Phase A: heuristic classification of import payment types from <Order> text.
+# Order matters — IMPDOP / IMPCOMP / IMPDEMP / IMPTMP first (specific patterns),
+# IMP fallback last. case-insensitive substring match.
+_IMPORT_TYPE_PATTERNS: tuple[tuple[str, str], ...] = (
+    ("антидемп",      "IMPDEMP"),
+    ("компенсационн", "IMPCOMP"),
+    ("специальная защитная", "IMPDOP"),
+    ("специальн",     "IMPDOP"),
+    ("сезонн",        "IMPTMP"),
+)
+
+
+def _classify_import_payment_type(order_ref: str | None) -> tuple[str, bool]:
+    """Map Importlist `<Order>` text → (payment_type, is_unknown_pattern).
+
+    Returns ``("IMP", False)`` for the default cases (empty `<Order>`,
+    "реш.*" decisions, or "Решение 80"). Returns ``(matched_type, False)``
+    when the text matches one of the special-duty patterns. Returns
+    ``("IMP", True)`` when the text is non-empty and matches no pattern —
+    caller should emit a structured WARNING so ops can extend the regex
+    without a release (Req 1 AC#7).
+    """
+    if not order_ref:
+        return ("IMP", False)
+    text = order_ref.lower()
+    for needle, payment_type in _IMPORT_TYPE_PATTERNS:
+        if needle in text:
+            return (payment_type, False)
+    if text.startswith("реш.") or "решение 80" in text:
+        return ("IMP", False)
+    # Non-empty, non-default — log for ops review
+    return ("IMP", True)
+
 
 # ---------------------------------------------------------------------------
 # Public dataclasses
@@ -984,7 +1017,18 @@ class AltaClient:
                 )
 
         for el in root.findall("Importlist/Import"):
-            _emit(el, "IMP")
+            order_ref = _text(el.find("Order")) or None
+            payment_type, is_unknown = _classify_import_payment_type(order_ref)
+            if is_unknown:
+                logger.warning(
+                    "alta_client._extract_rates: unknown <Order> pattern — defaulting to IMP",
+                    extra={
+                        "tnved_code": tncode,
+                        "order_ref": order_ref,
+                        "unknown_order_pattern": True,
+                    },
+                )
+            _emit(el, payment_type)
         for el in root.findall("Exciselist/Excise"):
             _emit(el, "AKC")
         for el in root.findall("VATlist/VAT"):
