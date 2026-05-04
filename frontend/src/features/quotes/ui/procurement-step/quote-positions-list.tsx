@@ -53,6 +53,12 @@ interface QuotePositionsListProps {
    * fetches via useEffect on mount.
    */
   coverageByQuoteItem?: Record<string, CoverageChip[]>;
+  /**
+   * Fired after «Назначить в КП» persists successfully. Lets the parent
+   * notify sibling InvoiceCards (which fetch invoice_items client-side) to
+   * re-load without a full page reload. MOЗ-91 / РОЗ-104.
+   */
+  onAssigned?: () => void;
 }
 
 export function QuotePositionsList({
@@ -60,6 +66,7 @@ export function QuotePositionsList({
   invoices,
   onCreateInvoiceWithItems,
   coverageByQuoteItem: coverageOverride,
+  onAssigned,
 }: QuotePositionsListProps) {
   const router = useRouter();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -159,6 +166,15 @@ export function QuotePositionsList({
       await assignItemsToInvoice(Array.from(selectedIds), invoiceId);
       toast.success(`${selectedIds.size} поз. назначено в КП`);
       setSelectedIds(new Set());
+      // Re-fetch this list's coverage chips so the «В КП» column reflects
+      // the new assignment without an F5.
+      void loadCoverage();
+      // Tell the parent to bump every InvoiceCard's externalRefreshKey so
+      // the target КПП re-fetches its supplier-side invoice_items.
+      onAssigned?.();
+      // RSC metadata (workflow status, totals on the action bar) still
+      // benefits from a refresh — the client-side patches above only
+      // refresh data this component owns.
       router.refresh();
     } catch (err) {
       console.error("[quote-positions-list] assign failed:", err);
