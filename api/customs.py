@@ -1,18 +1,26 @@
-"""Customs /api/customs/* endpoints — bulk item update + autofill + expenses.
+"""Customs /api/customs/* endpoints — bulk item update + autofill + certificates.
 
 Handler module (not router). Registered via thin wrapper in
 api/routers/customs.py. Originally moved from main.py in Phase 6B-9; the
-autofill + expense handlers below were added in Wave 1 of the
-logistics-customs-redesign spec (Tasks 3 + 9).
+autofill handler below was added in Wave 1 of the
+logistics-customs-redesign spec (Task 3).
 
 REQ-5 customs-phase-1 (Task 5) added two new handlers — ``resolve_rates_handler``
 and ``non_tariff_measures_handler`` — and extended ``autofill_handler`` with
 an additive ``force_live`` flag plus optional Alta-resolved fields appended
 to ``_AUTOFILL_FIELDS`` (strictly additive — never reorder/rename).
 
+Phase B (customs-shared-certificates) Task 5 replaced the per-item +
+per-quote expense handlers with the unified certificates CRUD endpoints
+(``create_certificate_handler`` / ``list_certificates_handler`` /
+``attach_item_handler`` / ``detach_item_handler`` / ``delete_certificate_handler``
+/ ``history_certificate_handler``). The old ``/api/customs/expenses/*``
+handlers were deleted in the same PR per REQ-2 AC#16 (no-dead-code rule).
+
 Auth: dual — JWT (Next.js) via ApiAuthMiddleware (request.state.api_user),
 or legacy session (FastHTML) via Starlette's SessionMiddleware.
-Roles: customs, admin, head_of_customs.
+Roles: customs, admin, head_of_customs (write); plus sales,
+quote_controller, spec_controller, finance, top_manager (read on certificates).
 """
 
 from __future__ import annotations
@@ -35,6 +43,16 @@ from services.role_service import get_user_role_codes
 logger = logging.getLogger(__name__)
 
 _CUSTOMS_ROLES = {"customs", "admin", "head_of_customs"}
+
+# Phase B Req 1 AC#6 + Req 2 AC#10 — read-side role list for certificates.
+# Writes (POST/DELETE on /certificates) remain gated by `_CUSTOMS_ROLES`;
+# reads (GET /certificates and GET /certificates/history) allow extended
+# roles so sales/finance/top-manager can see attached docs without granting
+# them edit rights. Frozenset for safe module-level reuse.
+_CERT_READ_ROLES: frozenset[str] = frozenset({
+    "customs", "admin", "head_of_customs",
+    "sales", "quote_controller", "spec_controller", "finance", "top_manager",
+})
 _READY_STATUSES = {
     "pending_customs",
     "pending_logistics",
@@ -562,240 +580,6 @@ async def _append_resolver_suggestions(
         )
         sug["customs_rates_summary"] = resolved.raw_value_string or ""
         suggestions.append(sug)
-
-
-# ---------------------------------------------------------------------------
-# Customs expenses — per-item + per-quote CRUD
-# ---------------------------------------------------------------------------
-
-
-def _expense_error(code: str, message: str, status: int) -> JSONResponse:
-    return JSONResponse(
-        {"success": False, "error": {"code": code, "message": message}},
-        status_code=status,
-    )
-
-
-def _parse_amount_rub(value) -> float | None:
-    """Parse non-negative RUB amount. Returns None on invalid input."""
-    if value is None:
-        return 0.0
-    try:
-        parsed = float(value)
-    except (TypeError, ValueError):
-        return None
-    if parsed < 0:
-        return None
-    return parsed
-
-
-def _require_customs_auth(request: Request) -> tuple[dict, None] | tuple[None, JSONResponse]:
-    """Gate a request to authenticated users with a customs role.
-
-    Returns (user, None) on success or (None, JSONResponse) on failure.
-    """
-    user, role_codes = _resolve_dual_auth(request)
-    if not user or not user.get("org_id"):
-        return None, _expense_error("UNAUTHORIZED", "Not authenticated", 401)
-    if not (set(role_codes) & _CUSTOMS_ROLES):
-        return None, _expense_error("FORBIDDEN", "Forbidden", 403)
-    return user, None
-
-
-async def create_item_expense(request: Request, item_id: str) -> JSONResponse:
-    """POST /api/customs/items/{item_id}/expenses — create per-item expense.
-
-    Path: POST /api/customs/items/{item_id}/expenses
-    Auth: dual — JWT (Next.js) or legacy session (FastHTML).
-    Body (JSON):
-        label: str (required, non-empty)
-        amount_rub: number (required, >= 0, RUB only)
-        notes: str (optional)
-    Returns: { success, data: { expense_id } }.
-    Side Effects: inserts a row into ``customs_item_expenses``.
-    Roles: customs, admin, head_of_customs.
-    """
-    user, err = _require_customs_auth(request)
-    if err:
-        return err
-
-    try:
-        body = await request.json()
-    except Exception:
-        return _expense_error("BAD_REQUEST", "Invalid JSON", 400)
-
-    label = (body.get("label") or "").strip()
-    if not label:
-        return _expense_error("BAD_REQUEST", "label is required", 400)
-
-    amount = _parse_amount_rub(body.get("amount_rub"))
-    if amount is None:
-        return _expense_error("BAD_REQUEST", "amount_rub must be a non-negative number", 400)
-
-    notes = body.get("notes")
-    if notes is not None:
-        notes = str(notes).strip() or None
-
-    supabase = get_supabase()
-
-    # Scope check: ensure quote_item belongs to caller's org (via quote → org).
-    qi_result = (
-        supabase.table("quote_items")
-        .select("id, quote_id, quotes!inner(organization_id)")
-        .eq("id", item_id)
-        .eq("quotes.organization_id", user["org_id"])
-        .limit(1)
-        .execute()
-    )
-    if not qi_result.data:
-        return _expense_error("NOT_FOUND", "Quote item not found", 404)
-
-    inserted = (
-        supabase.table("customs_item_expenses")
-        .insert(
-            {
-                "quote_item_id": item_id,
-                "label": label,
-                "amount_rub": amount,
-                "notes": notes,
-                "created_by": user["id"],
-            }
-        )
-        .execute()
-    )
-    if not inserted.data:
-        return _expense_error("INTERNAL", "Failed to create expense", 500)
-
-    return JSONResponse(
-        {"success": True, "data": {"expense_id": inserted.data[0]["id"]}}
-    )
-
-
-async def delete_item_expense(request: Request, expense_id: str) -> JSONResponse:
-    """DELETE /api/customs/items/expenses/{expense_id} — delete per-item expense.
-
-    Path: DELETE /api/customs/items/expenses/{expense_id}
-    Auth: dual — JWT (Next.js) or legacy session (FastHTML).
-    Returns: { success }.
-    Side Effects: removes the row from ``customs_item_expenses``.
-    Roles: customs, admin, head_of_customs.
-    """
-    user, err = _require_customs_auth(request)
-    if err:
-        return err
-
-    supabase = get_supabase()
-    # Org-scope check: join via quote_items → quotes → organization_id.
-    scope_check = (
-        supabase.table("customs_item_expenses")
-        .select("id, quote_items!inner(quotes!inner(organization_id))")
-        .eq("id", expense_id)
-        .eq("quote_items.quotes.organization_id", user["org_id"])
-        .limit(1)
-        .execute()
-    )
-    if not scope_check.data:
-        return _expense_error("NOT_FOUND", "Expense not found", 404)
-
-    supabase.table("customs_item_expenses").delete().eq("id", expense_id).execute()
-    return JSONResponse({"success": True})
-
-
-async def create_quote_expense(request: Request, quote_id: str) -> JSONResponse:
-    """POST /api/customs/quotes/{quote_id}/expenses — create per-quote expense.
-
-    Path: POST /api/customs/quotes/{quote_id}/expenses
-    Auth: dual — JWT (Next.js) or legacy session (FastHTML).
-    Body (JSON):
-        label: str (required, non-empty)
-        amount_rub: number (required, >= 0, RUB only)
-        notes: str (optional)
-    Returns: { success, data: { expense_id } }.
-    Side Effects: inserts a row into ``customs_quote_expenses``.
-    Roles: customs, admin, head_of_customs.
-    """
-    user, err = _require_customs_auth(request)
-    if err:
-        return err
-
-    try:
-        body = await request.json()
-    except Exception:
-        return _expense_error("BAD_REQUEST", "Invalid JSON", 400)
-
-    label = (body.get("label") or "").strip()
-    if not label:
-        return _expense_error("BAD_REQUEST", "label is required", 400)
-
-    amount = _parse_amount_rub(body.get("amount_rub"))
-    if amount is None:
-        return _expense_error("BAD_REQUEST", "amount_rub must be a non-negative number", 400)
-
-    notes = body.get("notes")
-    if notes is not None:
-        notes = str(notes).strip() or None
-
-    supabase = get_supabase()
-
-    q_result = (
-        supabase.table("quotes")
-        .select("id, organization_id")
-        .eq("id", quote_id)
-        .eq("organization_id", user["org_id"])
-        .limit(1)
-        .execute()
-    )
-    if not q_result.data:
-        return _expense_error("NOT_FOUND", "Quote not found", 404)
-
-    inserted = (
-        supabase.table("customs_quote_expenses")
-        .insert(
-            {
-                "quote_id": quote_id,
-                "label": label,
-                "amount_rub": amount,
-                "notes": notes,
-                "created_by": user["id"],
-            }
-        )
-        .execute()
-    )
-    if not inserted.data:
-        return _expense_error("INTERNAL", "Failed to create expense", 500)
-
-    return JSONResponse(
-        {"success": True, "data": {"expense_id": inserted.data[0]["id"]}}
-    )
-
-
-async def delete_quote_expense(request: Request, expense_id: str) -> JSONResponse:
-    """DELETE /api/customs/quotes/expenses/{expense_id} — delete per-quote expense.
-
-    Path: DELETE /api/customs/quotes/expenses/{expense_id}
-    Auth: dual — JWT (Next.js) or legacy session (FastHTML).
-    Returns: { success }.
-    Side Effects: removes the row from ``customs_quote_expenses``.
-    Roles: customs, admin, head_of_customs.
-    """
-    user, err = _require_customs_auth(request)
-    if err:
-        return err
-
-    supabase = get_supabase()
-    scope_check = (
-        supabase.table("customs_quote_expenses")
-        .select("id, quotes!inner(organization_id)")
-        .eq("id", expense_id)
-        .eq("quotes.organization_id", user["org_id"])
-        .limit(1)
-        .execute()
-    )
-    if not scope_check.data:
-        return _expense_error("NOT_FOUND", "Expense not found", 404)
-
-    supabase.table("customs_quote_expenses").delete().eq("id", expense_id).execute()
-    return JSONResponse({"success": True})
 
 
 # ---------------------------------------------------------------------------
@@ -1866,3 +1650,721 @@ async def classify_select_handler(request: Request) -> JSONResponse:
             "hs_code": chosen_code,
         },
     })
+
+
+# ---------------------------------------------------------------------------
+# Phase B (customs-shared-certificates) Task 5 — certificates CRUD handlers
+# ---------------------------------------------------------------------------
+#
+# 6 endpoints replace the deleted Phase A `/api/customs/expenses/*` paths:
+#   POST   /api/customs/certificates                   create cert + N atts
+#   GET    /api/customs/certificates?quote_id=         list with shares
+#   POST   /api/customs/certificates/{cid}/items       attach + recompute
+#   DELETE /api/customs/certificates/{cid}/items/{id}  detach + recompute
+#   DELETE /api/customs/certificates/{cid}             cascade delete
+#   GET    /api/customs/certificates/history?...       loose 2-of-3 match
+#
+# Auth: dual (request.state.api_user OR session.user). Writes are gated by
+# `_CUSTOMS_ROLES`; reads by `_CERT_READ_ROLES` (REQ-2 AC#10, REQ-1 AC#6).
+# Cross-quote isolation enforced inline before every attachment INSERT
+# (REQ-2 AC#11). Atomicity: POST /certificates uses a manual DELETE-cert
+# rollback when item attachments fail (Supabase Python client lacks
+# transactions; design.md §4.6 step 3 — verify item_ids first, then INSERT
+# cert + items; on item-INSERT failure, DELETE the just-created cert).
+# Share computation: `_compute_attached_items_payload` fetches the joined
+# quote_items, derives RUB cost basis via `customs_value_rub_for_item`,
+# and feeds the list into `services.cost_split.split_cost_batch`.
+
+
+_CERT_FIELDS_PUBLIC = (
+    "id",
+    "quote_id",
+    "type",
+    "number",
+    "issuer",
+    "legal_doc",
+    "issued_at",
+    "valid_until",
+    "cost_rub",
+    "notes",
+    "display_name",
+    "is_custom_expense",
+    "created_at",
+    "updated_at",
+    "created_by",
+)
+
+
+def _require_cert_write_auth(
+    request: Request,
+) -> tuple[dict, None] | tuple[None, JSONResponse]:
+    """Gate to authenticated user with a customs-write role.
+
+    Returns (user, None) on success or (None, JSONResponse) carrying the
+    appropriate 401/403 error envelope. Writes use the narrow
+    ``_CUSTOMS_ROLES`` set (customs/admin/head_of_customs).
+    """
+    user, role_codes = _resolve_dual_auth(request)
+    if not user or not user.get("org_id"):
+        return None, _err("UNAUTHORIZED", "Not authenticated", 401)
+    if not (set(role_codes) & _CUSTOMS_ROLES):
+        return None, _err("FORBIDDEN", "Forbidden", 403)
+    return user, None
+
+
+def _require_cert_read_auth(
+    request: Request,
+) -> tuple[dict, None] | tuple[None, JSONResponse]:
+    """Gate to authenticated user with any cert-read role.
+
+    Returns (user, None) on success or (None, JSONResponse) on failure.
+    Read endpoints widen the role list to ``_CERT_READ_ROLES``
+    (customs/admin/head_of_customs + sales/quote_controller/spec_controller/
+    finance/top_manager) per Phase B Req 1 AC#6.
+    """
+    user, role_codes = _resolve_dual_auth(request)
+    if not user or not user.get("org_id"):
+        return None, _err("UNAUTHORIZED", "Not authenticated", 401)
+    if not (set(role_codes) & _CERT_READ_ROLES):
+        return None, _err("FORBIDDEN", "Forbidden", 403)
+    return user, None
+
+
+def _parse_cost_rub(value) -> tuple[float | None, JSONResponse | None]:
+    """Parse non-negative RUB amount. Returns (value, error)."""
+    if value is None:
+        return None, _err(
+            "VALIDATION_ERROR", "cost_rub is required", 400,
+        )
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None, _err(
+            "VALIDATION_ERROR", "cost_rub must be a non-negative number", 400,
+        )
+    if parsed < 0:
+        return None, _err(
+            "VALIDATION_ERROR", "cost_rub must be a non-negative number", 400,
+        )
+    return parsed, None
+
+
+def _verify_quote_in_org(supabase, quote_id: str, org_id: str) -> dict | None:
+    """Verify quote exists, belongs to org, not soft-deleted. Returns row or None."""
+    res = (
+        supabase.table("quotes")
+        .select("id, organization_id, currency_of_quote, currency")
+        .eq("id", quote_id)
+        .eq("organization_id", org_id)
+        .is_("deleted_at", None)
+        .limit(1)
+        .execute()
+    )
+    return (res.data or [None])[0]
+
+
+def _verify_items_in_quote(
+    supabase, item_ids: list[str], quote_id: str
+) -> tuple[list[dict] | None, JSONResponse | None]:
+    """Cross-quote isolation guard (REQ-2 AC#11).
+
+    Verify ALL item_ids belong to ``quote_id`` in a single SELECT. Returns
+    (rows, None) on success or (None, JSONResponse) with the appropriate
+    422 NOT_IN_QUOTE / 404 NOT_FOUND envelope.
+    """
+    if not item_ids:
+        return [], None
+
+    res = (
+        supabase.table("quote_items")
+        .select("id, quote_id")
+        .in_("id", item_ids)
+        .execute()
+    )
+    rows = res.data or []
+
+    found_ids = {row["id"] for row in rows}
+    missing = [iid for iid in item_ids if iid not in found_ids]
+    if missing:
+        return None, _err(
+            "NOT_FOUND",
+            f"Quote item(s) not found: {', '.join(missing)}",
+            404,
+        )
+
+    wrong_quote = [row["id"] for row in rows if row["quote_id"] != quote_id]
+    if wrong_quote:
+        return None, _err(
+            "NOT_IN_QUOTE",
+            "Позиция не принадлежит КП сертификата",
+            422,
+        )
+
+    return rows, None
+
+
+def _compute_attached_items_payload(
+    supabase, cert_row: dict, attached_item_ids: list[str]
+) -> list[dict]:
+    """Compute ``attached_items[]`` shares for a certificate.
+
+    For each item_id in ``attached_item_ids``:
+      1. Fetch the quote_item payload (purchase_price_original, quantity,
+         purchase_currency).
+      2. Derive RUB cost basis via ``customs_value_rub_for_item`` against
+         the parent quote's currency context.
+      3. Pass the list of bases into ``split_cost_batch``.
+
+    Returns ``[{item_id, share_rub, share_percent}]`` rounded to 1
+    decimal on share_percent. Empty list if ``attached_item_ids`` is empty.
+    """
+    if not attached_item_ids:
+        return []
+
+    from decimal import Decimal
+
+    from services.cost_split import (
+        customs_value_rub_for_item,
+        split_cost_batch,
+    )
+    from services.currency_service import convert_amount
+
+    cert_cost = Decimal(str(cert_row.get("cost_rub") or 0))
+    quote_id = cert_row["quote_id"]
+
+    quote_res = (
+        supabase.table("quotes")
+        .select("currency_of_quote, currency")
+        .eq("id", quote_id)
+        .limit(1)
+        .execute()
+    )
+    quote_row = (quote_res.data or [{}])[0]
+    quote_currency = (
+        quote_row.get("currency_of_quote") or quote_row.get("currency") or "USD"
+    )
+
+    items_res = (
+        supabase.table("quote_items")
+        .select(
+            "id, purchase_price_original, purchase_currency, "
+            "currency_of_base_price, quantity, base_price_vat, created_at"
+        )
+        .in_("id", attached_item_ids)
+        .execute()
+    )
+    items_by_id = {row["id"]: row for row in (items_res.data or [])}
+
+    # Preserve attachment order — caller provides item_ids ordered by
+    # quote_certificate_items.created_at ASC (Req 3 AC#7 — last absorbs residual).
+    ordered_items = [items_by_id[iid] for iid in attached_item_ids if iid in items_by_id]
+
+    bases: list[Decimal] = [
+        customs_value_rub_for_item(item, quote_currency, convert_amount)
+        for item in ordered_items
+    ]
+
+    shares = split_cost_batch(bases, cert_cost)
+
+    payload: list[dict] = []
+    for iid, share in zip(attached_item_ids, shares):
+        if cert_cost > 0:
+            pct = (share / cert_cost) * Decimal("100")
+            share_percent = float(pct.quantize(Decimal("0.1")))
+        else:
+            share_percent = 0.0
+        payload.append(
+            {
+                "item_id": iid,
+                "share_rub": float(share),
+                "share_percent": share_percent,
+            }
+        )
+    return payload
+
+
+def _serialize_cert(cert_row: dict, attached_items: list[dict]) -> dict:
+    """Project a quote_certificates row + attached_items into the API envelope.
+
+    Filters columns to ``_CERT_FIELDS_PUBLIC`` and appends the computed
+    ``attached_items: [{item_id, share_rub, share_percent}]`` array.
+    """
+    out = {k: cert_row.get(k) for k in _CERT_FIELDS_PUBLIC}
+    out["cost_rub"] = (
+        float(out["cost_rub"]) if out.get("cost_rub") is not None else 0.0
+    )
+    out["attached_items"] = attached_items
+    return out
+
+
+def _fetch_attached_item_ids_ordered(supabase, cert_id: str) -> list[str]:
+    """Fetch attachment item_ids for a cert, ordered by created_at ASC."""
+    res = (
+        supabase.table("quote_certificate_items")
+        .select("item_id, created_at")
+        .eq("certificate_id", cert_id)
+        .order("created_at")
+        .execute()
+    )
+    return [row["item_id"] for row in (res.data or [])]
+
+
+async def create_certificate_handler(request: Request) -> JSONResponse:
+    """Create a certificate + N item attachments atomically.
+
+    Path: POST /api/customs/certificates
+    Auth: dual — JWT (Next.js) or legacy session (FastHTML).
+    Body (JSON):
+        quote_id: str (uuid, required)
+        type: str (required) — e.g. "СС", "ДС ТР ТС", or "custom_expense"
+        number: str (optional)
+        issuer: str (optional)
+        legal_doc: str (optional)
+        issued_at: str (ISO date, optional)
+        valid_until: str (ISO date, optional)
+        cost_rub: number (required, >= 0)
+        notes: str (optional)
+        display_name: str (optional, only for is_custom_expense=true)
+        is_custom_expense: bool (optional, default false)
+        item_ids: list[uuid] (required, may be empty)
+    Returns:
+        Success (200): {success: true, data: {...cert, attached_items}}
+        Errors:
+            - 400 VALIDATION_ERROR — bad body / cost_rub negative
+            - 401 UNAUTHORIZED / 403 FORBIDDEN
+            - 404 NOT_FOUND — quote or item missing
+            - 422 NOT_IN_QUOTE — item_id from a different quote
+            - 500 INTERNAL — DB write failure (rollback applied)
+    Side Effects:
+        - INSERT 1 row into kvota.quote_certificates
+        - INSERT len(item_ids) rows into kvota.quote_certificate_items
+        - On any item-attachment failure, DELETE the just-created cert
+          (manual rollback — Supabase Python client lacks transactions).
+    Roles: customs, admin, head_of_customs.
+    """
+    user, err = _require_cert_write_auth(request)
+    if err:
+        return err
+
+    try:
+        body = await request.json()
+    except Exception:
+        return _err("VALIDATION_ERROR", "Invalid JSON", 400)
+    if not isinstance(body, dict):
+        return _err("VALIDATION_ERROR", "body must be a JSON object", 400)
+
+    quote_id = (body.get("quote_id") or "").strip()
+    if not quote_id:
+        return _err("VALIDATION_ERROR", "quote_id is required", 400)
+
+    cert_type = (body.get("type") or "").strip()
+    if not cert_type:
+        return _err("VALIDATION_ERROR", "type is required", 400)
+
+    cost_rub, cost_err = _parse_cost_rub(body.get("cost_rub"))
+    if cost_err:
+        return cost_err
+
+    item_ids_raw = body.get("item_ids")
+    if not isinstance(item_ids_raw, list):
+        return _err("VALIDATION_ERROR", "item_ids must be a list", 400)
+    item_ids: list[str] = []
+    for raw in item_ids_raw:
+        if not isinstance(raw, str) or not raw.strip():
+            return _err(
+                "VALIDATION_ERROR",
+                "item_ids[] must be a list of non-empty strings",
+                400,
+            )
+        item_ids.append(raw.strip())
+
+    is_custom_expense = bool(body.get("is_custom_expense", False))
+
+    supabase = get_supabase()
+
+    quote = _verify_quote_in_org(supabase, quote_id, user["org_id"])
+    if not quote:
+        return _err("NOT_FOUND", "Quote not found", 404)
+
+    # Cross-quote isolation guard BEFORE we INSERT anything (REQ-2 AC#11).
+    _items, items_err = _verify_items_in_quote(supabase, item_ids, quote_id)
+    if items_err:
+        return items_err
+
+    # Build the cert payload, omitting unset optional keys to leave DB
+    # defaults intact.
+    cert_payload = {
+        "quote_id": quote_id,
+        "type": cert_type,
+        "cost_rub": cost_rub,
+        "is_custom_expense": is_custom_expense,
+        "created_by": user["id"],
+    }
+    for key in ("number", "issuer", "legal_doc", "issued_at",
+                "valid_until", "notes", "display_name"):
+        val = body.get(key)
+        if val is not None and val != "":
+            cert_payload[key] = val
+
+    try:
+        inserted = (
+            supabase.table("quote_certificates")
+            .insert(cert_payload)
+            .execute()
+        )
+    except Exception as exc:
+        logger.error("create_certificate: cert insert failed: %s", exc)
+        return _err("INTERNAL", "Failed to create certificate", 500)
+
+    if not inserted.data:
+        return _err("INTERNAL", "Failed to create certificate", 500)
+
+    cert_row = inserted.data[0]
+    cert_id = cert_row["id"]
+
+    # Attach items — manual rollback on failure (delete the just-created cert).
+    if item_ids:
+        attachment_payload = [
+            {"certificate_id": cert_id, "item_id": iid} for iid in item_ids
+        ]
+        try:
+            (
+                supabase.table("quote_certificate_items")
+                .insert(attachment_payload)
+                .execute()
+            )
+        except Exception as exc:
+            logger.warning(
+                "create_certificate: attachment insert failed for cert=%s "
+                "(rolling back): %s",
+                cert_id, exc,
+            )
+            try:
+                supabase.table("quote_certificates").delete().eq(
+                    "id", cert_id
+                ).execute()
+            except Exception as rollback_exc:
+                logger.error(
+                    "create_certificate: rollback DELETE failed for cert=%s: %s",
+                    cert_id, rollback_exc,
+                )
+            return _err(
+                "INTERNAL",
+                "Failed to attach items to certificate",
+                500,
+            )
+
+    # Compute attached_items shares (uses split_cost_batch + RUB derivation).
+    attached_items = _compute_attached_items_payload(
+        supabase, cert_row, item_ids
+    )
+
+    return JSONResponse(
+        {"success": True, "data": _serialize_cert(cert_row, attached_items)}
+    )
+
+
+async def list_certificates_handler(request: Request) -> JSONResponse:
+    """List certificates (and custom expenses) for a quote with computed shares.
+
+    Path: GET /api/customs/certificates?quote_id={uuid}
+    Auth: dual — JWT (Next.js) or legacy session (FastHTML).
+    Query params:
+        quote_id: str (uuid, required)
+    Returns:
+        Success (200): {success: true, data: {certificates: [{...cert,
+                                                              attached_items}]}}
+        Errors:
+            - 400 VALIDATION_ERROR — missing quote_id
+            - 401 UNAUTHORIZED / 403 FORBIDDEN
+            - 404 NOT_FOUND — quote missing or different org
+    Side Effects: read-only.
+    Roles: customs, admin, head_of_customs, sales, quote_controller,
+           spec_controller, finance, top_manager.
+    """
+    user, err = _require_cert_read_auth(request)
+    if err:
+        return err
+
+    quote_id = (request.query_params.get("quote_id") or "").strip()
+    if not quote_id:
+        return _err("VALIDATION_ERROR", "quote_id is required", 400)
+
+    supabase = get_supabase()
+    quote = _verify_quote_in_org(supabase, quote_id, user["org_id"])
+    if not quote:
+        return _err("NOT_FOUND", "Quote not found", 404)
+
+    certs_res = (
+        supabase.table("quote_certificates")
+        .select(",".join(_CERT_FIELDS_PUBLIC))
+        .eq("quote_id", quote_id)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    cert_rows = certs_res.data or []
+
+    certificates: list[dict] = []
+    for cert_row in cert_rows:
+        attached_item_ids = _fetch_attached_item_ids_ordered(
+            supabase, cert_row["id"]
+        )
+        attached_items = _compute_attached_items_payload(
+            supabase, cert_row, attached_item_ids
+        )
+        certificates.append(_serialize_cert(cert_row, attached_items))
+
+    return JSONResponse(
+        {"success": True, "data": {"certificates": certificates}}
+    )
+
+
+def _fetch_cert_in_org(supabase, cert_id: str, org_id: str) -> dict | None:
+    """Fetch cert row scoped to org via quote → organization_id. Returns row or None."""
+    res = (
+        supabase.table("quote_certificates")
+        .select(
+            ",".join(_CERT_FIELDS_PUBLIC) + ",quotes!inner(organization_id)"
+        )
+        .eq("id", cert_id)
+        .eq("quotes.organization_id", org_id)
+        .limit(1)
+        .execute()
+    )
+    rows = res.data or []
+    if not rows:
+        return None
+    row = rows[0]
+    # Strip the joined quotes payload — callers only need the cert columns.
+    row.pop("quotes", None)
+    return row
+
+
+async def attach_item_handler(request: Request, cert_id: str) -> JSONResponse:
+    """Attach a quote_item to an existing certificate, returning recomputed shares.
+
+    Path: POST /api/customs/certificates/{cert_id}/items
+    Auth: dual — JWT (Next.js) or legacy session (FastHTML).
+    Body (JSON):
+        item_id: str (uuid, required)
+    Returns:
+        Success (200): {success: true, data: {...cert, attached_items}}
+        Errors:
+            - 400 VALIDATION_ERROR — bad body
+            - 401 UNAUTHORIZED / 403 FORBIDDEN
+            - 404 NOT_FOUND — cert or item missing (or wrong org)
+            - 409 CONFLICT — item already attached (UNIQUE constraint)
+            - 422 NOT_IN_QUOTE — item_id from a different quote
+            - 500 INTERNAL — DB write failure
+    Side Effects: INSERT 1 row into kvota.quote_certificate_items.
+    Roles: customs, admin, head_of_customs.
+    """
+    user, err = _require_cert_write_auth(request)
+    if err:
+        return err
+
+    try:
+        body = await request.json()
+    except Exception:
+        return _err("VALIDATION_ERROR", "Invalid JSON", 400)
+    if not isinstance(body, dict):
+        return _err("VALIDATION_ERROR", "body must be a JSON object", 400)
+
+    item_id = (body.get("item_id") or "").strip()
+    if not item_id:
+        return _err("VALIDATION_ERROR", "item_id is required", 400)
+
+    supabase = get_supabase()
+
+    cert_row = _fetch_cert_in_org(supabase, cert_id, user["org_id"])
+    if not cert_row:
+        return _err("NOT_FOUND", "Certificate not found", 404)
+
+    _items, items_err = _verify_items_in_quote(
+        supabase, [item_id], cert_row["quote_id"]
+    )
+    if items_err:
+        return items_err
+
+    try:
+        (
+            supabase.table("quote_certificate_items")
+            .insert({"certificate_id": cert_id, "item_id": item_id})
+            .execute()
+        )
+    except PostgrestAPIError as exc:
+        # UNIQUE (certificate_id, item_id) → 23505 unique_violation.
+        code = getattr(exc, "code", None) or ""
+        if code == "23505":
+            return _err(
+                "CONFLICT",
+                "Item already attached to this certificate",
+                409,
+            )
+        logger.error("attach_item: insert failed for cert=%s: %s", cert_id, exc)
+        return _err("INTERNAL", "Failed to attach item", 500)
+    except Exception as exc:
+        logger.error("attach_item: insert failed for cert=%s: %s", cert_id, exc)
+        return _err("INTERNAL", "Failed to attach item", 500)
+
+    attached_item_ids = _fetch_attached_item_ids_ordered(supabase, cert_id)
+    attached_items = _compute_attached_items_payload(
+        supabase, cert_row, attached_item_ids
+    )
+    return JSONResponse(
+        {"success": True, "data": _serialize_cert(cert_row, attached_items)}
+    )
+
+
+async def detach_item_handler(
+    request: Request, cert_id: str, item_id: str
+) -> JSONResponse:
+    """Detach a quote_item from a certificate, returning recomputed shares.
+
+    Path: DELETE /api/customs/certificates/{cert_id}/items/{item_id}
+    Auth: dual — JWT (Next.js) or legacy session (FastHTML).
+    Returns:
+        Success (200): {success: true, data: {...cert, attached_items}}
+            attached_items may be [] if this was the last attachment.
+        Errors:
+            - 401 UNAUTHORIZED / 403 FORBIDDEN
+            - 404 NOT_FOUND — cert missing (or wrong org) or attachment missing
+    Side Effects: DELETE 1 row from kvota.quote_certificate_items.
+    Roles: customs, admin, head_of_customs.
+    """
+    user, err = _require_cert_write_auth(request)
+    if err:
+        return err
+
+    supabase = get_supabase()
+
+    cert_row = _fetch_cert_in_org(supabase, cert_id, user["org_id"])
+    if not cert_row:
+        return _err("NOT_FOUND", "Certificate not found", 404)
+
+    delete_res = (
+        supabase.table("quote_certificate_items")
+        .delete()
+        .eq("certificate_id", cert_id)
+        .eq("item_id", item_id)
+        .execute()
+    )
+    if not (delete_res.data or []):
+        return _err("NOT_FOUND", "Attachment not found", 404)
+
+    attached_item_ids = _fetch_attached_item_ids_ordered(supabase, cert_id)
+    attached_items = _compute_attached_items_payload(
+        supabase, cert_row, attached_item_ids
+    )
+    return JSONResponse(
+        {"success": True, "data": _serialize_cert(cert_row, attached_items)}
+    )
+
+
+async def delete_certificate_handler(
+    request: Request, cert_id: str
+) -> JSONResponse:
+    """Delete a certificate (cascades to attachments via FK ON DELETE CASCADE).
+
+    Path: DELETE /api/customs/certificates/{cert_id}
+    Auth: dual — JWT (Next.js) or legacy session (FastHTML).
+    Returns:
+        Success (200): {success: true, data: {deleted_id: cert_id}}
+        Errors:
+            - 401 UNAUTHORIZED / 403 FORBIDDEN
+            - 404 NOT_FOUND — cert missing (or wrong org)
+    Side Effects:
+        - DELETE 1 row from kvota.quote_certificates
+        - Cascades to N rows in kvota.quote_certificate_items.
+    Roles: customs, admin, head_of_customs.
+    """
+    user, err = _require_cert_write_auth(request)
+    if err:
+        return err
+
+    supabase = get_supabase()
+
+    cert_row = _fetch_cert_in_org(supabase, cert_id, user["org_id"])
+    if not cert_row:
+        return _err("NOT_FOUND", "Certificate not found", 404)
+
+    supabase.table("quote_certificates").delete().eq("id", cert_id).execute()
+
+    return JSONResponse(
+        {"success": True, "data": {"deleted_id": cert_id}}
+    )
+
+
+async def history_certificate_handler(request: Request) -> JSONResponse:
+    """Find a previous certificate by loose 2-of-3 match (12-month window).
+
+    Path: GET /api/customs/certificates/history
+        ?hs_code={code}&brand={brand}&supplier_id={uuid}&current_quote_id={uuid}
+    Auth: dual — JWT (Next.js) or legacy session (FastHTML).
+    Query params:
+        hs_code: str (optional)
+        brand: str (optional)
+        supplier_id: str (uuid, optional)
+        current_quote_id: str (uuid, required) — exclude from match
+    Returns:
+        Success (200, match): {success: true, data: {match: HistoryCertMatch}}
+        Success (200, no match or DB error): {success: true, data: {match: null}}
+        Errors:
+            - 400 VALIDATION_ERROR — missing current_quote_id
+            - 401 UNAUTHORIZED / 403 FORBIDDEN
+    Side Effects: read-only.
+    Roles: customs, admin, head_of_customs, sales, quote_controller,
+           spec_controller, finance, top_manager.
+    """
+    user, err = _require_cert_read_auth(request)
+    if err:
+        return err
+
+    qp = request.query_params
+    current_quote_id = (qp.get("current_quote_id") or "").strip()
+    if not current_quote_id:
+        return _err("VALIDATION_ERROR", "current_quote_id is required", 400)
+
+    hs_code = (qp.get("hs_code") or "").strip() or None
+    brand = (qp.get("brand") or "").strip() or None
+    supplier_id = (qp.get("supplier_id") or "").strip() or None
+
+    from services.quote_certificates_history import find_match
+
+    match = find_match(
+        organization_id=user["org_id"],
+        current_quote_id=current_quote_id,
+        hs_code=hs_code,
+        brand=brand,
+        supplier_id=supplier_id,
+    )
+    if match is None:
+        return JSONResponse({"success": True, "data": {"match": None}})
+
+    return JSONResponse(
+        {
+            "success": True,
+            "data": {
+                "match": {
+                    "cert_id": match.cert_id,
+                    "type": match.type,
+                    "number": match.number,
+                    "issuer": match.issuer,
+                    "legal_doc": match.legal_doc,
+                    "issued_at": (
+                        match.issued_at.isoformat()
+                        if match.issued_at is not None else None
+                    ),
+                    "valid_until": (
+                        match.valid_until.isoformat()
+                        if match.valid_until is not None else None
+                    ),
+                    "cost_rub": float(match.cost_rub),
+                    "created_at": match.created_at.isoformat(),
+                    "source_quote_id": match.source_quote_id,
+                    "source_item_id": match.source_item_id,
+                    "is_actual": match.is_actual,
+                }
+            },
+        }
+    )

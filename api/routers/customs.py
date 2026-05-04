@@ -8,15 +8,17 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from api.customs import (
+    attach_item_handler as _attach_item_handler,
     autofill_handler as _autofill_handler,
     bulk_update_items as _bulk_update_items,
     classify_handler as _classify_handler,
     classify_select_handler as _classify_select_handler,
-    create_item_expense as _create_item_expense,
-    create_quote_expense as _create_quote_expense,
-    delete_item_expense as _delete_item_expense,
-    delete_quote_expense as _delete_quote_expense,
+    create_certificate_handler as _create_certificate_handler,
+    delete_certificate_handler as _delete_certificate_handler,
+    detach_item_handler as _detach_item_handler,
+    history_certificate_handler as _history_certificate_handler,
     history_lookup_handler as _history_lookup_handler,
+    list_certificates_handler as _list_certificates_handler,
     non_tariff_measures_handler as _non_tariff_measures_handler,
     resolve_rates_handler as _resolve_rates_handler,
 )
@@ -37,28 +39,53 @@ async def post_autofill(request: Request) -> JSONResponse:
     return await _autofill_handler(request)
 
 
-@router.post("/items/{item_id}/expenses")
-async def post_item_expense(request: Request, item_id: str) -> JSONResponse:
-    """Create a per-item customs expense (RUB)."""
-    return await _create_item_expense(request, item_id)
+# Phase B (customs-shared-certificates) Task 5 — certificates CRUD.
+# Route ordering: most-specific paths come BEFORE generic paths (FastAPI
+# matches in registration order). `/certificates/history` must precede
+# `/certificates/{cert_id}`; `/certificates/{cert_id}/items/{item_id}` must
+# precede `/certificates/{cert_id}` (FastAPI's path-converter would not
+# accidentally match "history" as a cert_id, but explicit ordering keeps
+# the surface easier to audit).
 
 
-@router.delete("/items/expenses/{expense_id}")
-async def delete_item_expense_route(request: Request, expense_id: str) -> JSONResponse:
-    """Delete a per-item customs expense."""
-    return await _delete_item_expense(request, expense_id)
+@router.get("/certificates/history")
+async def get_certificates_history(request: Request) -> JSONResponse:
+    """Find previous certificate by loose 2-of-3 match — see history_certificate_handler."""
+    return await _history_certificate_handler(request)
 
 
-@router.post("/quotes/{quote_id}/expenses")
-async def post_quote_expense(request: Request, quote_id: str) -> JSONResponse:
-    """Create a per-quote customs overhead expense (RUB)."""
-    return await _create_quote_expense(request, quote_id)
+@router.post("/certificates")
+async def post_certificates(request: Request) -> JSONResponse:
+    """Create cert + N attachments atomically — see create_certificate_handler."""
+    return await _create_certificate_handler(request)
 
 
-@router.delete("/quotes/expenses/{expense_id}")
-async def delete_quote_expense_route(request: Request, expense_id: str) -> JSONResponse:
-    """Delete a per-quote customs overhead expense."""
-    return await _delete_quote_expense(request, expense_id)
+@router.get("/certificates")
+async def get_certificates(request: Request) -> JSONResponse:
+    """List certs (and custom expenses) for a quote — see list_certificates_handler."""
+    return await _list_certificates_handler(request)
+
+
+@router.post("/certificates/{cert_id}/items")
+async def post_certificate_items(
+    request: Request, cert_id: str
+) -> JSONResponse:
+    """Attach an item — see attach_item_handler."""
+    return await _attach_item_handler(request, cert_id)
+
+
+@router.delete("/certificates/{cert_id}/items/{item_id}")
+async def delete_certificate_items(
+    request: Request, cert_id: str, item_id: str
+) -> JSONResponse:
+    """Detach an item — see detach_item_handler."""
+    return await _detach_item_handler(request, cert_id, item_id)
+
+
+@router.delete("/certificates/{cert_id}")
+async def delete_certificate(request: Request, cert_id: str) -> JSONResponse:
+    """Cascade delete a certificate — see delete_certificate_handler."""
+    return await _delete_certificate_handler(request, cert_id)
 
 
 # REQ-5 customs-phase-1 — resolve-rates + non-tariff-measures
