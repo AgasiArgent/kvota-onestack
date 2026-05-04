@@ -65,3 +65,14 @@ export type {
   LivePreviewPanelProps,
   PreviewRow,
 } from "./ui/live-preview-panel";
+
+// UI components — Wave 3 Task 7a (REQ-6 AC#4 cert tile + REQ-6 AC#5 expense
+// tile + REQ-4 AC#3 expired red border).
+//
+// Cards live behind the section (Task 7f) but the section composes them
+// from this barrel — exposing them via the public surface keeps the import
+// graph flat (sibling UI files don't reach into `./ui/*` directly).
+export { CertificateCard } from "./ui/certificate-card";
+export type { CertificateCardProps } from "./ui/certificate-card";
+export { CustomExpenseCard } from "./ui/custom-expense-card";
+export type { CustomExpenseCardProps } from "./ui/custom-expense-card";
