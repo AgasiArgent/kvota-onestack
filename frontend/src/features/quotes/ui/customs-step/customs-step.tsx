@@ -14,6 +14,10 @@ import {
   AutofillBanner,
   type CustomsAutofillSuggestion,
 } from "@/features/customs-autofill";
+import {
+  CertificatesSection,
+  type QuoteItemForSelect,
+} from "@/features/customs-certificates";
 import type { TableView } from "@/entities/table-view";
 import { fetchAllAvailable } from "@/entities/table-view";
 import { TableViewsDropdown } from "@/features/table-views";
@@ -28,8 +32,6 @@ import { CustomsNotes } from "./customs-notes";
 import { EntityNotesPanel } from "@/entities/entity-note";
 import type { EntityNoteCardData } from "@/entities/entity-note/ui/entity-note-card";
 import { CustomsInfoBlock } from "./customs-info-block";
-import { QuoteCustomsExpenses } from "./quote-customs-expenses";
-import { ItemCustomsExpenses } from "./item-customs-expenses";
 import { CustomsItemDialog } from "./customs-item-dialog";
 
 function ext<T>(row: unknown): T {
@@ -153,7 +155,6 @@ export function CustomsStep({
     CustomsAutofillSuggestion[]
   >([]);
   const [autofillDismissed, setAutofillDismissed] = useState(false);
-  const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
   const [bulkAcceptPending, startBulkAccept] = useTransition();
 
@@ -346,17 +347,44 @@ export function CustomsStep({
     [quote.id, router],
   );
 
-  const selectedItem = useMemo(
-    () => items.find((it) => it.id === selectedRowId) ?? null,
-    [items, selectedRowId],
+  // ── CertificatesSection wiring (Phase B Wave 4 Task 9) ─────────────────
+  // Map QuoteItemRow → QuoteItemForSelect for the certificates feature.
+  // `rub_basis` is the proportional weight used by the cost-split helper;
+  // for the section's «N из M позиций» counter only `items.length` matters,
+  // but we feed a sane number here so the nested CertificateModal /
+  // ExpenseModal multi-select preview remains accurate. The cost-split is
+  // also recomputed server-side, so this client value is informational.
+  const quoteItemsForCerts = useMemo<QuoteItemForSelect[]>(
+    () =>
+      items.map((it) => {
+        const proforma = Number(
+          ext<{ proforma_amount_excl_vat?: number | null }>(it)
+            .proforma_amount_excl_vat ?? 0,
+        );
+        const quantity = Number(it.quantity ?? 0);
+        return {
+          id: it.id,
+          position: Number(it.position ?? 0),
+          name: it.product_name ?? "",
+          product_code: it.product_code ?? null,
+          // Best-effort RUB basis for the live-preview math inside the
+          // cert/expense modals. Authoritative basis is computed server-side.
+          rub_basis: proforma * (quantity || 1),
+        };
+      }),
+    [items],
   );
-  const selectedItemLabel = useMemo(() => {
-    if (!selectedItem) return "";
-    const parts: string[] = [];
-    if (selectedItem.brand) parts.push(selectedItem.brand);
-    if (selectedItem.product_code) parts.push(selectedItem.product_code);
-    return parts.join(" · ") || selectedItem.product_name || "";
-  }, [selectedItem]);
+
+  // Write gate mirrors `_CUSTOMS_ROLES` in `api/customs.py` — the server
+  // also enforces this set, so the UI gate is purely cosmetic (read-only
+  // consumers still see the data, mutations 403 server-side).
+  const canEditCustoms = useMemo(
+    () =>
+      userRoles.some(
+        (r) => r === "customs" || r === "head_of_customs" || r === "admin",
+      ),
+    [userRoles],
+  );
 
   return (
     <div className="flex-1 min-w-0">
@@ -402,21 +430,22 @@ export function CustomsStep({
           supplierByQuoteItemId={supplierByQuoteItemId}
           userRoles={userRoles}
           autofillSuggestions={autofillSuggestions}
-          onSelectRow={setSelectedRowId}
           onExpandRow={setExpandedRowId}
           visibleColumns={visibleColumns}
         />
 
-        {selectedItem && (
-          <ItemCustomsExpenses
-            quoteId={quote.id}
-            quoteItemId={selectedItem.id}
-            itemLabel={selectedItemLabel}
-            userRoles={userRoles}
-          />
-        )}
-
-        <QuoteCustomsExpenses quoteId={quote.id} userRoles={userRoles} />
+        {/*
+          Phase B Wave 4 Task 9 (REQ-6): unified «Расходы по таможне» section
+          replaces the Phase A `<QuoteCustomsExpenses />` (per-quote) +
+          `<ItemCustomsExpenses />` (per-item) split. Both data layers are
+          now stored in `kvota.quote_certificates` with `is_custom_expense`
+          discriminating between certificates and ad-hoc fees.
+        */}
+        <CertificatesSection
+          quoteId={quote.id}
+          items={quoteItemsForCerts}
+          canEdit={canEditCustoms}
+        />
 
         <CustomsExpenses quoteId={quote.id} />
 

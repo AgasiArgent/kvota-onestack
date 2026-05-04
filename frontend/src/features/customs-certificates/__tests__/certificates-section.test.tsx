@@ -6,15 +6,20 @@ import { CertificatesSection } from "../ui/certificates-section";
 import type { Certificate, QuoteItemForSelect } from "../model/types";
 
 /**
- * SSR rendering tests for CertificatesSection (Phase B Task 7f / REQ-6).
+ * SSR rendering tests for CertificatesSection (Phase B Task 7f / REQ-6
+ * + Wave 4 Task 9 — sibling-component + modal-mount wiring).
  *
  * The frontend workspace has no jsdom configured, so we use
  * `react-dom/server` to assert markup. `useEffect` does not run in SSR —
  * tests therefore rely on the `initialCertificates` prop to seed the list,
- * which is the path Wave 4 Task 9 will use after server-side fetch.
+ * which is the path the parent `customs-step.tsx` uses after server-side
+ * fetch.
  *
  * Click handlers (open modals, refresh) are integration-tested at
- * localhost:3000 per `reference_localhost_browser_test.md`.
+ * localhost:3000 per `reference_localhost_browser_test.md`. The SSR
+ * tests below assert that the modal *mount points* are present and the
+ * sibling card components are wired (their distinctive `data-testid`s
+ * appear in the output) — full interaction flow is browser-only.
  *
  * `formatRub` renders ru-RU with NBSP (U+00A0) thousand separators — match
  * exactly via the `NBSP` constant.
@@ -44,8 +49,8 @@ function makeCert(overrides: Partial<Certificate> = {}): Certificate {
     issuer: null,
     legal_doc: null,
     issued_at: null,
-    // Far-future expiry so isCertExpired returns false in any test run.
-    valid_until: "2099-12-31T12:00:00Z",
+    // Far-future expiry so the expired branch never fires in stable tests.
+    valid_until: "2099-12-31",
     cost_rub: 12500,
     notes: null,
     display_name: null,
@@ -177,8 +182,8 @@ describe("CertificatesSection — empty state", () => {
   });
 });
 
-describe("CertificatesSection — list rendering", () => {
-  it("renders a cert card for is_custom_expense=false rows", () => {
+describe("CertificatesSection — list rendering via sibling components", () => {
+  it("renders a CertificateCard for is_custom_expense=false rows", () => {
     const html = renderToString(
       <CertificatesSection
         quoteId="quote-1"
@@ -187,19 +192,18 @@ describe("CertificatesSection — list rendering", () => {
         initialCertificates={[makeCert()]}
       />,
     );
-    expect(html).toContain('data-testid="customs-cert-card"');
-    expect(html).toContain('data-cert-id="cert-1"');
+    // Sibling-component testid (NOT the inline placeholder).
+    expect(html).toContain('data-testid="certificate-card"');
+    expect(html).toContain('data-testid="certificate-card-type"');
     expect(html).toContain("ДС ТР ТС");
     expect(html).toContain("№EAEU-100");
     // Cost rendered via formatRub — NBSP separators.
     expect(html).toContain(`12${NBSP}500${NBSP}₽`);
-    // Counter "1 из 3 позиций" (1 attached, 3 items in quote). React SSR
-    // inserts <!-- --> comments between adjacent text nodes, so match the
-    // numeric tokens via regex with optional comment whitespace.
-    expect(html).toMatch(/1(?:<!-- -->)?\s*из\s*(?:<!-- -->)?3(?:<!-- -->)?\s*позиций/);
+    // Counter "1 из 3 позиций" (1 attached, 3 items in quote).
+    expect(html).toContain("1 из 3 позиций");
   });
 
-  it("renders an expense card for is_custom_expense=true rows", () => {
+  it("renders a CustomExpenseCard for is_custom_expense=true rows", () => {
     const html = renderToString(
       <CertificatesSection
         quoteId="quote-1"
@@ -208,7 +212,8 @@ describe("CertificatesSection — list rendering", () => {
         initialCertificates={[makeExpense()]}
       />,
     );
-    expect(html).toContain('data-testid="customs-expense-card"');
+    expect(html).toContain('data-testid="custom-expense-card"');
+    expect(html).toContain('data-testid="custom-expense-card-badge"');
     expect(html).toContain("Расход");
     expect(html).toContain("Услуги декларанта");
     expect(html).toContain(`5${NBSP}000${NBSP}₽`);
@@ -223,12 +228,41 @@ describe("CertificatesSection — list rendering", () => {
         initialCertificates={[makeExpense({ display_name: "Декларант X" })]}
       />,
     );
-    // Expense card should NOT contain a date label "до" (valid_until).
-    // The cert version uses "до DD.MM.YYYY" which wouldn't render here
-    // because expense.valid_until is null and is_custom_expense=true.
-    expect(html).not.toMatch(/до \d{2}\.\d{2}\.\d{4}/);
-    // Expense card uses display_name, not type badge text "ДС ТР ТС".
+    // Expense card never shows the cert-only «Срок действия» row.
+    expect(html).not.toContain("Срок действия");
+    // Expense card uses `display_name`, not the cert «ДС ТР ТС» badge.
     expect(html).not.toContain("ДС ТР ТС");
+    // Sibling testid mismatch — must be expense, not certificate.
+    expect(html).not.toContain('data-testid="certificate-card-type"');
+  });
+
+  it("hides edit/delete buttons on cards when canEdit=false", () => {
+    const html = renderToString(
+      <CertificatesSection
+        quoteId="quote-1"
+        items={ITEMS}
+        canEdit={false}
+        initialCertificates={[makeCert()]}
+      />,
+    );
+    // Card itself still renders (read-only consumers must see the data).
+    expect(html).toContain('data-testid="certificate-card"');
+    // ...but the action buttons are absent.
+    expect(html).not.toContain('data-testid="certificate-card-edit"');
+    expect(html).not.toContain('data-testid="certificate-card-delete"');
+  });
+
+  it("renders edit + delete buttons on cards when canEdit=true", () => {
+    const html = renderToString(
+      <CertificatesSection
+        quoteId="quote-1"
+        items={ITEMS}
+        canEdit
+        initialCertificates={[makeCert()]}
+      />,
+    );
+    expect(html).toContain('data-testid="certificate-card-edit"');
+    expect(html).toContain('data-testid="certificate-card-delete"');
   });
 
   it("renders mixed list (cert + expense) in created_at DESC order", () => {
@@ -250,21 +284,21 @@ describe("CertificatesSection — list rendering", () => {
         initialCertificates={[older, newer]}
       />,
     );
-    // Both cards present.
-    expect(html).toContain("cert-newer");
-    expect(html).toContain("expense-older");
+    // Both cards present (search by their distinctive text).
+    expect(html).toContain("NEWER-1");
+    expect(html).toContain("Older expense");
     // Newer card appears before older in the rendered HTML (DESC sort).
-    const idxNewer = html.indexOf("cert-newer");
-    const idxOlder = html.indexOf("expense-older");
+    const idxNewer = html.indexOf("NEWER-1");
+    const idxOlder = html.indexOf("Older expense");
     expect(idxNewer).toBeLessThan(idxOlder);
     // List counter exposed for downstream tests.
     expect(html).toContain('data-cert-count="2"');
   });
 
-  it("flags expired certs with data-expired=true and the destructive border", () => {
+  it("uses the destructive border on expired certs (delegated to CertificateCard)", () => {
     const expired = makeCert({
       id: "cert-expired",
-      valid_until: "2020-01-01T12:00:00Z",
+      valid_until: "2020-01-01",
     });
     const html = renderToString(
       <CertificatesSection
@@ -274,30 +308,15 @@ describe("CertificatesSection — list rendering", () => {
         initialCertificates={[expired]}
       />,
     );
-    expect(html).toContain('data-expired="true"');
-    expect(html).toContain("border-destructive");
-  });
-
-  it("does not flag certs without valid_until as expired", () => {
-    const perpetual = makeCert({
-      id: "cert-perpetual",
-      valid_until: null,
-    });
-    const html = renderToString(
-      <CertificatesSection
-        quoteId="quote-1"
-        items={ITEMS}
-        canEdit
-        initialCertificates={[perpetual]}
-      />,
-    );
-    // Card present but flagged as not expired.
-    expect(html).toContain('data-cert-id="cert-perpetual"');
-    expect(html).toContain('data-expired="false"');
+    // The sibling CertificateCard owns the expired branch — assert that the
+    // section delegates rendering by checking for the card's destructive
+    // container class (matches the prefix exactly to avoid false positives
+    // on shadcn `aria-invalid:border-destructive` button utilities).
+    expect(html).toContain("rounded-md border border-destructive");
   });
 });
 
-describe("CertificatesSection — modal flag state", () => {
+describe("CertificatesSection — modal mount points (Wave 4 Task 9)", () => {
   it("starts with all modal flags closed", () => {
     const html = renderToString(
       <CertificatesSection
@@ -322,6 +341,18 @@ describe("CertificatesSection — modal flag state", () => {
       />,
     );
     expect(html).toContain('data-testid="customs-certificates-section"');
+  });
+
+  it("renders the deleting-id flag empty on initial render", () => {
+    const html = renderToString(
+      <CertificatesSection
+        quoteId="quote-1"
+        items={ITEMS}
+        canEdit
+        initialCertificates={[makeCert()]}
+      />,
+    );
+    expect(html).toContain('data-deleting-id=""');
   });
 });
 

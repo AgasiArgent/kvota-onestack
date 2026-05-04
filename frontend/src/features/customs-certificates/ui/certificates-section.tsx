@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * CertificatesSection — Phase B Wave 3 Task 7f / REQ-6.
+ * CertificatesSection — Phase B Wave 3 Task 7f / REQ-6 + Wave 4 Task 9.
  *
  * Single section "Расходы по таможне" replacing the Phase A
  * `<QuoteCustomsExpenses />` + `<ItemCustomsExpenses />` split.
@@ -20,14 +20,15 @@
  * exposes a re-fetch callback to children that mutate the list (REQ-6
  * AC#9 — delete & refresh path).
  *
- * **Wave 3 isolation note (Task 7f):** sibling cards/modals
- * (`CertificateCard`, `CustomExpenseCard`, `CertificateModal`, `ExpenseModal`,
- * `CertificateDetailsModal`) live in Wave 3 Tasks 7a/7c/7e and may not be
- * present in this commit. To keep `tsc --noEmit` green this section renders
- * card markup inline — matching the visual contract from design.md §4.8.4 —
- * until those siblings land. Wave 4 Task 9 will wire the modal mount points
- * once `CertificateModal` / `ExpenseModal` / `CertificateDetailsModal` are
- * available.
+ * **Wave 4 Task 9 wiring:** mounts the sibling cards
+ * (`CertificateCard`, `CustomExpenseCard`) plus three modals
+ * (`CertificateModal`, `ExpenseModal`, `CertificateDetailsModal`):
+ *   - «+ Добавить сертификат» → `CertificateModal` (create flow).
+ *   - «+ Добавить расход» → `ExpenseModal` (custom-expense create flow).
+ *   - Card click / edit button → `CertificateDetailsModal` (read-only
+ *     details for now; an explicit edit form is out of Phase B scope —
+ *     REQ-9 AC#7).
+ *   - Card delete button → confirm + `deleteCertificate` API + refresh.
  *
  * Compliance (LD-13):
  *   - shadcn `<Button variant="default|secondary">` only — no raw button.
@@ -38,13 +39,17 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { formatDateRussian } from "@/features/customs-history/lib/format-date";
 
-import { listCertificates } from "../api/certificates";
-import { formatRub } from "../lib/format-rub";
+import { deleteCertificate, listCertificates } from "../api/certificates";
 import type { Certificate, QuoteItemForSelect } from "../model/types";
+import { CertificateCard } from "./certificate-card";
+import { CertificateDetailsModal } from "./certificate-details-modal";
+import { CertificateModal } from "./certificate-modal";
+import { CustomExpenseCard } from "./custom-expense-card";
+import { ExpenseModal } from "./expense-modal";
 
 export interface CertificatesSectionProps {
   /** UUID of the parent quote — used to fetch the certificate list. */
@@ -79,130 +84,6 @@ function sortByCreatedAtDesc(certs: Certificate[]): Certificate[] {
   });
 }
 
-/** Whether `cert.valid_until` is strictly in the past (UTC midnight). */
-function isCertExpired(cert: Certificate): boolean {
-  if (!cert.valid_until) return false;
-  const validUntil = new Date(cert.valid_until);
-  if (Number.isNaN(validUntil.getTime())) return false;
-  // Normalize today to UTC midnight so the comparison matches the server
-  // SQL `valid_until <= CURRENT_DATE` (REQ-4 AC#8).
-  const todayUtc = new Date();
-  todayUtc.setUTCHours(0, 0, 0, 0);
-  return validUntil <= todayUtc;
-}
-
-/**
- * Inline cert card markup — placeholder until Wave 3 Task 7a's
- * `CertificateCard` lands. Matches REQ-6 AC#4 fields: type badge, number,
- * cost_rub, counter, valid_until (red border when expired per REQ-4 AC#3).
- */
-function CertCardInline({
-  cert,
-  totalItemsInQuote,
-  onClick,
-}: {
-  cert: Certificate;
-  totalItemsInQuote: number;
-  onClick: () => void;
-}) {
-  const expired = isCertExpired(cert);
-  // Red border takes priority over emerald when the cert is expired
-  // (REQ-9 AC#5 — visual priority order).
-  const borderClass = expired ? "border-destructive" : "border-emerald-700";
-  const validUntilRu = cert.valid_until
-    ? formatDateRussian(cert.valid_until)
-    : "";
-  const attachedCount = cert.attached_items.length;
-  const numberFragment = cert.number ? `№${cert.number}` : "";
-
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={onClick}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onClick();
-        }
-      }}
-      className={
-        `flex flex-col gap-1 rounded-md border ${borderClass} ` +
-        "bg-card px-3 py-2 cursor-pointer"
-      }
-      data-testid="customs-cert-card"
-      data-cert-id={cert.id}
-      data-cert-type={cert.type}
-      data-expired={expired ? "true" : "false"}
-    >
-      <div className="flex items-center gap-2 flex-wrap text-xs">
-        <span className="rounded-sm bg-emerald-950/40 text-emerald-300 px-1.5 py-0.5">
-          {cert.type}
-        </span>
-        {numberFragment ? (
-          <span className="text-foreground/90">{numberFragment}</span>
-        ) : null}
-        <span className="ml-auto font-medium">{formatRub(cert.cost_rub)}</span>
-      </div>
-      <div className="flex items-center justify-between gap-2 text-xs text-foreground/70">
-        <span>
-          {attachedCount} из {totalItemsInQuote} позиций
-        </span>
-        {validUntilRu ? <span>до {validUntilRu}</span> : null}
-      </div>
-    </div>
-  );
-}
-
-/**
- * Inline custom-expense card markup — placeholder until Wave 3 Task 7a's
- * `CustomExpenseCard` lands. Matches REQ-6 AC#5: gray badge «Расход»,
- * `display_name`, `cost_rub`, counter — NO `valid_until`/`type`/`legal_doc`.
- */
-function ExpenseCardInline({
-  cert,
-  totalItemsInQuote,
-  onClick,
-}: {
-  cert: Certificate;
-  totalItemsInQuote: number;
-  onClick: () => void;
-}) {
-  const attachedCount = cert.attached_items.length;
-  const label = cert.display_name ?? "Расход без названия";
-
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={onClick}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onClick();
-        }
-      }}
-      className={
-        "flex flex-col gap-1 rounded-md border border-border-light " +
-        "bg-card px-3 py-2 cursor-pointer"
-      }
-      data-testid="customs-expense-card"
-      data-cert-id={cert.id}
-    >
-      <div className="flex items-center gap-2 flex-wrap text-xs">
-        <span className="rounded-sm bg-muted text-muted-foreground px-1.5 py-0.5">
-          Расход
-        </span>
-        <span className="text-foreground/90 truncate">{label}</span>
-        <span className="ml-auto font-medium">{formatRub(cert.cost_rub)}</span>
-      </div>
-      <div className="text-xs text-foreground/70">
-        {attachedCount} из {totalItemsInQuote} позиций
-      </div>
-    </div>
-  );
-}
-
 /**
  * Top-level section — see component-level docstring for behaviour.
  */
@@ -220,15 +101,13 @@ export function CertificatesSection({
   const [loadError, setLoadError] = useState<string | null>(null);
 
   // ── Modal flags ────────────────────────────────────────────────────────
-  // Sibling Wave 3 Task 7c/7e modal components are mounted by Wave 4 Task 9
-  // (the wiring task that ties this section into `customs-step.tsx`). The
-  // flags below capture intent — opening a modal sets the flag, the parent
-  // wiring task is responsible for actually rendering the modal markup
-  // once the sibling components ship. Until then, opening a card simply
-  // marks the cert as "selected for inspection" — verifiable via tests.
+  // `selectedCertForDetails` drives the read-only `CertificateDetailsModal`
+  // open state — open when not null, closed when null (REQ-9 AC#7).
   const [createCertOpen, setCreateCertOpen] = useState(false);
   const [createExpenseOpen, setCreateExpenseOpen] = useState(false);
-  const [selectedCert, setSelectedCert] = useState<Certificate | null>(null);
+  const [selectedCertForDetails, setSelectedCertForDetails] =
+    useState<Certificate | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   /** Re-fetch the list — exposed to nested modals/popovers. */
   const refreshCerts = useCallback(async () => {
@@ -279,24 +158,84 @@ export function CertificatesSection({
   const isLoading = certs === null && loadError === null;
   const isEmpty = certs !== null && certs.length === 0;
 
-  // ── Card click handler — open edit modal (canEdit) or details modal ────
-  const handleCardClick = useCallback(
+  // ── Mutating handlers ──────────────────────────────────────────────────
+
+  /**
+   * Append the freshly-created cert/expense to the local list and trigger
+   * a server refresh. Optimistic append keeps the UI responsive while the
+   * server response cycles in via `refreshCerts()` — both shouldn't drift
+   * because `createCertificate` returns the same row shape.
+   */
+  const handleCreated = useCallback(
     (cert: Certificate) => {
-      // Sibling modals not mounted yet — capture intent in state so the
-      // wire-up task (Wave 4 Task 9) can drive the modal mount. Tests
-      // assert state transitions via `data-*` attributes.
-      setSelectedCert(cert);
+      setCerts((prev) => {
+        if (!prev) return [cert];
+        // Defensive de-dup in case the refresh races and the cert is
+        // already present from the network refresh below.
+        if (prev.some((c) => c.id === cert.id)) return prev;
+        return [cert, ...prev];
+      });
+      // Network refresh to pick up server-computed share_rub / share_percent
+      // for any pre-existing certs whose attached_items[] may have shifted.
+      void refreshCerts();
     },
-    [setSelectedCert],
+    [refreshCerts],
+  );
+
+  /**
+   * Card edit click → open the read-only details modal. Phase B scope
+   * does not include an inline edit form (REQ-9 AC#7); when one ships we
+   * can swap this for an editable variant without changing the cards.
+   */
+  const handleEditCert = useCallback((cert: Certificate) => {
+    setSelectedCertForDetails(cert);
+  }, []);
+
+  /**
+   * Confirm + delete + refresh. The `confirm()` prompt is intentional —
+   * destructive actions get an explicit gate per project UX policy.
+   */
+  const handleDeleteCert = useCallback(
+    async (cert: Certificate) => {
+      const label = cert.is_custom_expense
+        ? cert.display_name || "расход"
+        : `сертификат «${cert.type}»`;
+      const ok =
+        typeof window === "undefined"
+          ? true
+          : window.confirm(`Удалить ${label}?`);
+      if (!ok) return;
+
+      setDeletingId(cert.id);
+      try {
+        const res = await deleteCertificate(cert.id);
+        if (!res.success) {
+          toast.error(res.error?.message ?? "Не удалось удалить");
+          return;
+        }
+        // Optimistic removal + server refresh for absolute parity.
+        setCerts((prev) =>
+          prev ? prev.filter((c) => c.id !== cert.id) : prev,
+        );
+        await refreshCerts();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Network error";
+        toast.error(msg);
+      } finally {
+        setDeletingId(null);
+      }
+    },
+    [refreshCerts],
   );
 
   return (
     <section
       className="flex flex-col gap-3"
       data-testid="customs-certificates-section"
-      data-selected-cert-id={selectedCert?.id ?? ""}
+      data-selected-cert-id={selectedCertForDetails?.id ?? ""}
       data-create-cert-open={createCertOpen ? "true" : "false"}
       data-create-expense-open={createExpenseOpen ? "true" : "false"}
+      data-deleting-id={deletingId ?? ""}
     >
       {/* Header — title + two buttons (hidden when canEdit=false). */}
       <div className="flex items-center justify-between gap-2">
@@ -384,43 +323,56 @@ export function CertificatesSection({
         >
           {sortedCerts.map((cert) =>
             cert.is_custom_expense ? (
-              <ExpenseCardInline
+              <CustomExpenseCard
                 key={cert.id}
-                cert={cert}
-                totalItemsInQuote={totalItemsInQuote}
-                onClick={() => handleCardClick(cert)}
+                expense={cert}
+                totalQuoteItems={totalItemsInQuote}
+                canEdit={canEdit}
+                onEdit={() => handleEditCert(cert)}
+                onDelete={() => handleDeleteCert(cert)}
               />
             ) : (
-              <CertCardInline
+              <CertificateCard
                 key={cert.id}
                 cert={cert}
-                totalItemsInQuote={totalItemsInQuote}
-                onClick={() => handleCardClick(cert)}
+                totalQuoteItems={totalItemsInQuote}
+                canEdit={canEdit}
+                onEdit={() => handleEditCert(cert)}
+                onDelete={() => handleDeleteCert(cert)}
               />
             ),
           )}
         </div>
       ) : null}
 
-      {/*
-        Modal mount points — Wave 4 Task 9 will wire `CertificateModal` /
-        `ExpenseModal` / `CertificateDetailsModal` once the sibling Wave 3
-        components ship. The state flags above (`createCertOpen`,
-        `createExpenseOpen`, `selectedCert`) capture the intent today so
-        the wiring task only has to mount the components and pass props.
-      */}
-      {/*
-        Hidden refresh token — exposes a stable testid so future wiring
-        tasks can verify that the cert list re-fetches after children
-        mutate the data. The refresh callback itself is bound above
-        (`refreshCerts`) — kept in scope so Wave 4 Task 9 can pass it
-        down to the modal/popover children that need it.
-      */}
-      <span
-        className="hidden"
-        data-testid="customs-cert-refresh-token"
-        data-refresh-handler={refreshCerts.name || "refreshCerts"}
+      {/* ── Modals ──────────────────────────────────────────────────────── */}
+
+      <CertificateModal
+        open={createCertOpen}
+        onOpenChange={setCreateCertOpen}
+        quoteId={quoteId}
+        items={items}
+        onCreated={handleCreated}
       />
+
+      <ExpenseModal
+        open={createExpenseOpen}
+        onOpenChange={setCreateExpenseOpen}
+        quoteId={quoteId}
+        items={items}
+        onCreated={handleCreated}
+      />
+
+      {selectedCertForDetails ? (
+        <CertificateDetailsModal
+          open={selectedCertForDetails !== null}
+          onOpenChange={(open) => {
+            if (!open) setSelectedCertForDetails(null);
+          }}
+          cert={selectedCertForDetails}
+          items={items}
+        />
+      ) : null}
     </section>
   );
 }
