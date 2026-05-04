@@ -113,3 +113,14 @@ export { CertificateModal } from "./ui/certificate-modal";
 export type { CertificateModalProps } from "./ui/certificate-modal";
 export { ExpenseModal } from "./ui/expense-modal";
 export type { ExpenseModalProps } from "./ui/expense-modal";
+
+// UI — bind-to-existing popover (Wave 3 Task 7d, REQ-8). Mounted from
+// `customs-item-dialog.tsx` (Wave 4 Task 10) on the empty-amber-card's
+// «Привязать к существующему» button. Pure helpers re-exported so
+// downstream code (and tests) can compute the after-attach preview
+// without duplicating the formula.
+export { CertificateBindPopover } from "./ui/certificate-bind-popover";
+export type {
+  AfterAttachPreviewRow,
+  CertificateBindPopoverProps,
+} from "./ui/certificate-bind-popover";
