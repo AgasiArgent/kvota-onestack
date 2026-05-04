@@ -10,11 +10,32 @@ import {
   type ResolvedRate,
 } from "../model/types";
 
+/**
+ * Live-context for the auto-НДС formula display (Phase A — Req 7).
+ *
+ * Caller-supplied real numbers from the current item state — customs_value,
+ * sum of all import-duty payment_types (IMP + IMPDEMP + IMPCOMP + ...) and
+ * AKC. RateBreakdown uses these together with the selected NDS variant's
+ * percent rate to render «(customs_value + duty + akc) × pct% = nds» in a
+ * monospace box under the NDS row.
+ *
+ * When the prop is omitted (`undefined` / `null`), RateBreakdown falls back
+ * to the simple badge rendering — keeps backwards compat with existing
+ * callers (customs-item-dialog Phase 1 layout).
+ */
+export interface TotalContext {
+  customs_value_rub: number;
+  total_import_duty_rub: number;
+  akc_rub: number;
+}
+
 export interface RateBreakdownProps {
   rates: ResolvedRate[];
   /** Phase 1: always null. When non-null, renders the итого row. */
   totalRub: number | null;
   source: string;
+  /** Phase A — Req 7. When provided, NDS row renders live formula. */
+  totalContext?: TotalContext | null;
 }
 
 /**
@@ -36,6 +57,71 @@ export function formatRate(rate: ResolvedRate): string {
     return `${rate.value_1_number}${cur}${unit}`;
   }
   return "—";
+}
+
+/** Format a number with Russian thousand separators (NBSP between groups). */
+function formatRub(n: number): string {
+  return n.toLocaleString("ru-RU");
+}
+
+/**
+ * Compose the auto-НДС formula string with real numbers — Req 7 AC#3.
+ *
+ * Returns `(customs_value + duty + akc) × pct% = nds` rendered with
+ * Russian thousand separators. Returns null when the variant has no
+ * percent rate (e.g., raw-string-only льготная without numeric value)
+ * because we can't safely substitute a numeric pct in that case.
+ */
+export function composeNdsFormula(
+  ctx: TotalContext,
+  variant: ResolvedRate,
+): string | null {
+  if (
+    variant.value_1_unit !== "percent" ||
+    variant.value_1_number == null
+  ) {
+    return null;
+  }
+  const pct = variant.value_1_number;
+  const base =
+    ctx.customs_value_rub + ctx.total_import_duty_rub + ctx.akc_rub;
+  const ndsAmount = (base * pct) / 100;
+  return (
+    "(" +
+    formatRub(ctx.customs_value_rub) +
+    " + " +
+    formatRub(ctx.total_import_duty_rub) +
+    " + " +
+    formatRub(ctx.akc_rub) +
+    ") × " +
+    pct +
+    "% = " +
+    formatRub(ndsAmount)
+  );
+}
+
+/**
+ * Build the alternative-льготы tooltip text — Req 7 AC#5.
+ *
+ * Lists every NDS variant other than the selected one, in the form
+ * «category_ru (condition_text): pct%» — one per line. Returns null
+ * when there are no alternatives (single-variant NDS group).
+ */
+export function composeNdsTooltip(
+  variants: ResolvedRate[],
+  selectedIdx: number,
+): string | null {
+  const lines: string[] = [];
+  for (let i = 0; i < variants.length; i += 1) {
+    if (i === selectedIdx) continue;
+    const v = variants[i];
+    const label = v.category_ru ?? "Вариант";
+    const cond = v.condition_text ? ` (${v.condition_text})` : "";
+    const rate = formatRate(v);
+    lines.push(`${label}${cond}: ${rate}`);
+  }
+  if (lines.length === 0) return null;
+  return "Льготные категории:\n" + lines.join("\n");
 }
 
 interface RateGroup {
@@ -76,11 +162,21 @@ function groupRates(rates: ResolvedRate[]): RateGroup[] {
  * actual product. Default selection = is_default=true variant (the
  * "прочее" / стандартная rate), so a wrong льготная never silently wins.
  *
+ * Phase A — Req 7: when caller supplies `totalContext`, NDS row renders a
+ * monospace formula box «(customs_value + duty + akc) × pct% = nds» with
+ * real numbers from the item state. Without the prop the row falls back
+ * to the simple badge — backwards compat with existing callers.
+ *
  * Phase 1 limitation: backend cannot compute RUB amounts because the
  * `/resolve-rates` request body lacks customs_value/weight/quantity
  * inputs. When `totalRub` is null we surface that explicitly.
  */
-export function RateBreakdown({ rates, totalRub, source }: RateBreakdownProps) {
+export function RateBreakdown({
+  rates,
+  totalRub,
+  source,
+  totalContext,
+}: RateBreakdownProps) {
   const groups = useMemo(() => groupRates(rates), [rates]);
 
   if (groups.length === 0) {
@@ -104,7 +200,11 @@ export function RateBreakdown({ rates, totalRub, source }: RateBreakdownProps) {
 
       <ul className="flex flex-col gap-3">
         {groups.map((group) => (
-          <RateGroupRow key={group.payment_type} group={group} />
+          <RateGroupRow
+            key={group.payment_type}
+            group={group}
+            totalContext={totalContext}
+          />
         ))}
       </ul>
 
@@ -129,44 +229,76 @@ export function RateBreakdown({ rates, totalRub, source }: RateBreakdownProps) {
   );
 }
 
-function RateGroupRow({ group }: { group: RateGroup }) {
+function RateGroupRow({
+  group,
+  totalContext,
+}: {
+  group: RateGroup;
+  totalContext?: TotalContext | null;
+}) {
   const [selectedIdx, setSelectedIdx] = useState(group.defaultIdx);
   const label = paymentTypeLabel(group.payment_type);
   const selected = group.variants[selectedIdx] ?? group.variants[0];
   const isMulti = group.variants.length > 1;
+  const isNds = group.payment_type === "NDS";
+  const ndsFormula =
+    isNds && totalContext ? composeNdsFormula(totalContext, selected) : null;
+  const ndsTooltip = isNds
+    ? composeNdsTooltip(group.variants, selectedIdx)
+    : null;
 
   if (!isMulti) {
     // Single-variant row — keep the compact layout. Show льгота context
     // when present so users see why the rate is what it is.
     const display = formatRate(selected);
+    const titleText = ndsTooltip ?? selected.raw_value_string ?? display;
     return (
-      <li
-        className="flex items-start justify-between gap-3"
-        title={selected.raw_value_string ?? display}
-      >
-        <div className="flex min-w-0 flex-col">
-          <span className="truncate text-foreground">{label}</span>
-          {selected.description ? (
-            <span className="truncate text-[11px] text-muted-foreground">
-              {selected.description}
-            </span>
-          ) : null}
+      <li className="flex flex-col gap-1" title={titleText}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 flex-col">
+            <span className="truncate text-foreground">{label}</span>
+            {selected.description ? (
+              <span className="truncate text-[11px] text-muted-foreground">
+                {selected.description}
+              </span>
+            ) : null}
+          </div>
+          <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
+            {display}
+          </span>
         </div>
-        <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
-          {display}
-        </span>
+        {ndsFormula ? (
+          <div
+            className="font-mono text-xs text-amber-400"
+            data-testid="nds-formula"
+          >
+            {ndsFormula}
+          </div>
+        ) : null}
       </li>
     );
   }
 
   return (
-    <li className="flex flex-col gap-1.5">
+    <li
+      className="flex flex-col gap-1.5"
+      title={ndsTooltip ?? undefined}
+    >
       <div className="flex items-center justify-between gap-3">
         <span className="text-foreground">{label}</span>
         <span className="text-[10px] font-medium text-muted-foreground">
           {group.variants.length} варианта · выберите применимый
         </span>
       </div>
+
+      {ndsFormula ? (
+        <div
+          className="font-mono text-xs text-amber-400"
+          data-testid="nds-formula"
+        >
+          {ndsFormula}
+        </div>
+      ) : null}
 
       <div className="flex flex-col gap-1 rounded-md border border-border bg-muted/30 p-2">
         {group.variants.map((variant, idx) => {
