@@ -48,7 +48,177 @@ type ItemExtras = {
   // REQ-7 customs-phase-1 — country of origin (read-only column).
   // Edits happen through customs-item-dialog (CustomsCountryDropdown).
   country_of_origin_oksm?: number | null;
+  // REQ-6 customs-phase-A — special-duty variants from snapshot.
+  // Multiple shapes supported (defensive read-side):
+  //   - Phase 1 snapshot: `customs_rates_snapshot.rates: SpecialDutyVariant[]`
+  //   - Phase A user choices: `tnved_user_choices_chosen.chosen_*_variant`
+  //   - Resolved live: `_resolved_rates_by_payment_type.IMPDEMP[]`
+  customs_rates_snapshot?: { rates?: unknown[] } | null;
+  _resolved_rates_by_payment_type?: Record<string, unknown[]> | null;
+  tnved_user_choices_chosen?: {
+    chosen_impdemp_variant?: unknown;
+    chosen_impcomp_variant?: unknown;
+    chosen_impdop_variant?: unknown;
+    chosen_imptmp_variant?: unknown;
+  } | null;
 };
+
+/**
+ * REQ-6: payment_types rendered in the «Антидемпинг» column.
+ * IMPDEMP is the priority case (МастерБэринг товары часто из Китая).
+ * IMPCOMP/IMPDOP/IMPTMP are rendered with distinct colour badges per AC #6.
+ */
+const SPECIAL_DUTY_PAYMENT_TYPES = [
+  "IMPDEMP",
+  "IMPCOMP",
+  "IMPDOP",
+  "IMPTMP",
+] as const;
+type SpecialDutyPaymentType = (typeof SPECIAL_DUTY_PAYMENT_TYPES)[number];
+
+/**
+ * Subset of fields read from a snapshot variant. All optional — the renderer
+ * falls back to «—» when essential data (value_1_number) is missing.
+ */
+export interface SpecialDutyVariant {
+  payment_type: SpecialDutyPaymentType;
+  value_1_number: number;
+  order_ref?: string | null;
+  legal_link?: string | null;
+}
+
+/**
+ * Shorten a КТС/EEK decision reference for compact badge display.
+ *   "Решение 702 от 22.06.2011 КТС (Антидемпинговые пошлины ...)" → "Реш.702 КТС"
+ *   "Постановление 688 ..." → first 18 chars + ellipsis
+ *   null/undefined/empty → ""
+ */
+export function shortenDecisionRef(orderRef: string | null | undefined): string {
+  if (!orderRef) return "";
+  const match = orderRef.match(/Решение\s+(\d+).*?КТС/i);
+  if (match) return `Реш.${match[1]} КТС`;
+  if (orderRef.length > 20) return orderRef.slice(0, 18) + "…";
+  return orderRef;
+}
+
+/**
+ * Defensive snapshot reader — returns the first applicable special-duty
+ * variant (IMPDEMP priority, then IMPCOMP/IMPDOP/IMPTMP). Returns null
+ * when no special-duty variant is present in the item data.
+ *
+ * Multiple snapshot shapes are tried in priority order:
+ *   1. `customs_rates_snapshot.rates` (Phase 1 frozen snapshot)
+ *   2. `_resolved_rates_by_payment_type[type][0]` (Phase A live resolve)
+ *   3. `tnved_user_choices_chosen.chosen_<type>_variant` (Phase A user choice)
+ */
+export function readSpecialDutyVariant(
+  item: ItemExtras
+): SpecialDutyVariant | null {
+  // Shape 1: Phase 1 customs_rates_snapshot.rates[] flat array
+  const snapshotRates = item.customs_rates_snapshot?.rates;
+  if (Array.isArray(snapshotRates)) {
+    for (const targetType of SPECIAL_DUTY_PAYMENT_TYPES) {
+      const found = snapshotRates.find(
+        (r) =>
+          isPlainObject(r) &&
+          (r as Record<string, unknown>).payment_type === targetType &&
+          typeof (r as Record<string, unknown>).value_1_number === "number"
+      );
+      if (found) return normaliseVariant(found, targetType);
+    }
+  }
+
+  // Shape 2: Phase A live-resolve grouped map
+  const grouped = item._resolved_rates_by_payment_type;
+  if (grouped && typeof grouped === "object") {
+    for (const targetType of SPECIAL_DUTY_PAYMENT_TYPES) {
+      const list = grouped[targetType];
+      if (Array.isArray(list) && list.length > 0) {
+        const first = list[0];
+        if (
+          isPlainObject(first) &&
+          typeof (first as Record<string, unknown>).value_1_number === "number"
+        ) {
+          return normaliseVariant(first, targetType);
+        }
+      }
+    }
+  }
+
+  // Shape 3: Phase A user-chosen variant per migration 304
+  const chosen = item.tnved_user_choices_chosen;
+  if (chosen) {
+    const map: Record<SpecialDutyPaymentType, unknown> = {
+      IMPDEMP: chosen.chosen_impdemp_variant,
+      IMPCOMP: chosen.chosen_impcomp_variant,
+      IMPDOP: chosen.chosen_impdop_variant,
+      IMPTMP: chosen.chosen_imptmp_variant,
+    };
+    for (const targetType of SPECIAL_DUTY_PAYMENT_TYPES) {
+      const v = map[targetType];
+      if (
+        isPlainObject(v) &&
+        typeof (v as Record<string, unknown>).value_1_number === "number"
+      ) {
+        return normaliseVariant(v, targetType);
+      }
+    }
+  }
+
+  return null;
+}
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+function normaliseVariant(
+  raw: unknown,
+  paymentType: SpecialDutyPaymentType
+): SpecialDutyVariant {
+  const r = raw as Record<string, unknown>;
+  return {
+    payment_type: paymentType,
+    value_1_number: r.value_1_number as number,
+    order_ref:
+      typeof r.order_ref === "string" && r.order_ref.length > 0
+        ? r.order_ref
+        : null,
+    legal_link:
+      typeof r.legal_link === "string" && r.legal_link.length > 0
+        ? r.legal_link
+        : null,
+  };
+}
+
+/** Tailwind-class colour scheme per payment_type (matches Req 6 AC #6). */
+const SPECIAL_DUTY_BADGE_CLASS: Record<SpecialDutyPaymentType, string> = {
+  IMPDEMP: "bg-amber-700/30 text-amber-300",
+  IMPCOMP: "bg-red-700/30 text-red-300",
+  IMPDOP: "bg-blue-700/30 text-blue-300",
+  IMPTMP: "bg-slate-700/30 text-slate-300",
+};
+
+/** Russian label for the tooltip prefix per payment_type. */
+const SPECIAL_DUTY_LABEL: Record<SpecialDutyPaymentType, string> = {
+  IMPDEMP: "Антидемпинговая пошлина",
+  IMPCOMP: "Компенсационная пошлина",
+  IMPDOP: "Специальная защитная пошлина",
+  IMPTMP: "Сезонная пошлина",
+};
+
+/**
+ * Compose a multi-line tooltip for the special-duty badge:
+ *   «Антидемпинговая пошлина
+ *    Решение 702 от 22.06.2011 КТС (...)
+ *    https://alta.ru/tamdoc/...»
+ */
+export function buildSpecialDutyTooltip(variant: SpecialDutyVariant): string {
+  const parts: string[] = [SPECIAL_DUTY_LABEL[variant.payment_type]];
+  if (variant.order_ref) parts.push(variant.order_ref);
+  if (variant.legal_link) parts.push(variant.legal_link);
+  return parts.join("\n");
+}
 
 /**
  * Logical column keys (order matches HoT column array below).
@@ -69,6 +239,7 @@ const COLUMN_KEYS = [
   "customs_duty_composite",
   "customs_util_fee",
   "customs_excise",
+  "customs_antidumping",
   "customs_psm_pts",
   "customs_notification",
   "customs_licenses",
@@ -111,6 +282,13 @@ interface RowData {
 
   customs_util_fee: number | null;
   customs_excise: number | null;
+  /**
+   * REQ-6 customs-phase-A — read-only computed value for the «Антидемпинг»
+   * column. Stores the resolved special-duty variant (priority IMPDEMP →
+   * IMPCOMP → IMPDOP → IMPTMP), or null when no special-duty applies.
+   * Editing routes through the per-item dialog.
+   */
+  customs_antidumping: SpecialDutyVariant | null;
   customs_psm_pts: string;
   customs_notification: string;
   customs_licenses: string;
@@ -170,6 +348,7 @@ function itemToRow(
 
     customs_util_fee: extras.customs_util_fee ?? null,
     customs_excise: extras.customs_excise ?? null,
+    customs_antidumping: readSpecialDutyVariant(extras),
     customs_psm_pts: extras.customs_psm_pts ?? "",
     customs_notification: extras.customs_notification ?? "",
     customs_licenses: extras.customs_licenses ?? "",
@@ -237,6 +416,10 @@ const COL_HEADERS: string[] = [
   headerWithTooltip("Пошлина", "Процент / ₽ за кг (₽ за шт требует миграции)"),
   headerWithTooltip("Утильсбор", numericTooltip),
   headerWithTooltip("Акциз", numericTooltip),
+  headerWithTooltip(
+    "Антидемпинг",
+    "Антидемпинговая / компенсационная / спец / сезонная пошлина (read-only — редактирование в карточке позиции)."
+  ),
   "ПСМ/ПТС",
   "Нотификация",
   "Лицензии",
@@ -346,6 +529,45 @@ function dutyCompositeRenderer(
 }
 
 /**
+ * REQ-6: «Антидемпинг» column renderer — read-only badge showing the
+ * applicable special-duty variant (IMPDEMP priority, then IMPCOMP/IMPDOP/
+ * IMPTMP). Em-dash «—» when no special-duty applies. Tooltip on hover
+ * shows full <Order> text and legal_link via native `title` attribute
+ * (matches Phase 1 country-of-origin pattern).
+ */
+function antidumpingRenderer(
+  instance: Handsontable,
+  td: HTMLTableCellElement,
+  row: number,
+): HTMLTableCellElement {
+  td.innerHTML = "";
+  td.classList.add("customs-antidumping-cell");
+
+  const variant = instance.getDataAtRowProp(
+    row,
+    "customs_antidumping",
+  ) as SpecialDutyVariant | null | undefined;
+
+  if (!variant) {
+    td.textContent = "—";
+    td.classList.add("customs-antidumping-cell--empty");
+    return td;
+  }
+
+  const span = document.createElement("span");
+  span.className =
+    "customs-antidumping-badge " +
+    SPECIAL_DUTY_BADGE_CLASS[variant.payment_type];
+  span.title = buildSpecialDutyTooltip(variant);
+  const shortRef = shortenDecisionRef(variant.order_ref);
+  span.textContent = shortRef
+    ? `${variant.value_1_number}% ${shortRef}`
+    : `${variant.value_1_number}%`;
+  td.appendChild(span);
+  return td;
+}
+
+/**
  * Expand-action cell renderer — draws a small `↗` button that opens the
  * per-row customs dialog (Task 8). The click is handled via event delegation
  * on the scrolling wrapper to avoid re-binding listeners on each render.
@@ -449,6 +671,13 @@ const COLUMNS: Handsontable.ColumnSettings[] = [
   },
   { data: "customs_util_fee", type: "numeric", width: 70, allowEmpty: true },
   { data: "customs_excise", type: "numeric", width: 65, allowEmpty: true },
+  {
+    data: "customs_antidumping",
+    type: "text",
+    width: 110,
+    readOnly: true,
+    allowEmpty: true,
+  },
   { data: "customs_psm_pts", type: "text", width: 75 },
   { data: "customs_notification", type: "text", width: 90 },
   { data: "customs_licenses", type: "text", width: 80 },
@@ -732,6 +961,8 @@ export function CustomsHandsontable({
         meta.renderer = dutyCompositeRenderer;
       } else if (prop === "expand") {
         meta.renderer = expandRenderer;
+      } else if (prop === "customs_antidumping") {
+        meta.renderer = antidumpingRenderer;
       }
 
       if (prop === "import_banned" && !canToggleBan) {
@@ -875,6 +1106,38 @@ export function CustomsHandsontable({
           .customs-expand-btn:hover {
             color: var(--foreground);
             border-color: var(--accent);
+          }
+          .customs-antidumping-cell {
+            text-align: center;
+          }
+          .customs-antidumping-cell--empty {
+            color: var(--muted-foreground);
+          }
+          .customs-antidumping-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 6px;
+            font-size: 11px;
+            line-height: 1.1;
+            font-weight: 600;
+            border-radius: var(--radius-sm);
+            white-space: nowrap;
+          }
+          .customs-antidumping-badge.bg-amber-700\\/30 {
+            background-color: rgb(180 83 9 / 0.30);
+            color: rgb(252 211 77);
+          }
+          .customs-antidumping-badge.bg-red-700\\/30 {
+            background-color: rgb(185 28 28 / 0.30);
+            color: rgb(252 165 165);
+          }
+          .customs-antidumping-badge.bg-blue-700\\/30 {
+            background-color: rgb(29 78 216 / 0.30);
+            color: rgb(147 197 253);
+          }
+          .customs-antidumping-badge.bg-slate-700\\/30 {
+            background-color: rgb(51 65 85 / 0.30);
+            color: rgb(203 213 225);
           }
         `}</style>
         <div

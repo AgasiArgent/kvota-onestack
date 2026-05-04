@@ -30,6 +30,7 @@ export const CUSTOMS_AVAILABLE_COLUMNS: readonly CustomsColumnSpec[] = [
   { key: "customs_duty_composite", label: "Пошлина" },
   { key: "customs_util_fee", label: "Утильсбор" },
   { key: "customs_excise", label: "Акциз" },
+  { key: "customs_antidumping", label: "Антидемпинг" },
   { key: "customs_psm_pts", label: "ПСМ/ПТС" },
   { key: "customs_notification", label: "Нотификация" },
   { key: "customs_licenses", label: "Лицензии" },
