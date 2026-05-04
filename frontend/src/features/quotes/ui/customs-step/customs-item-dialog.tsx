@@ -45,8 +45,10 @@ import {
   AutoResolveButton,
   RateBreakdown,
   SourceTimestamp,
+  SpecialDutyBlock,
   type ApiError,
   type ResolveRatesData,
+  type SpecialDutyType,
 } from "@/features/customs-rate-resolve";
 import { MeasuresList } from "@/features/customs-non-tariff-measures";
 
@@ -215,6 +217,12 @@ export function CustomsItemDialog({
     null
   );
   const [refreshing, setRefreshing] = useState(false);
+  // Selected variant per special-duty type — keyed by category_code from the
+  // resolver. Wired into the SpecialDutyBlock radio UI; persistence into
+  // tnved_user_choices is Task 10's responsibility.
+  const [specialDutySelections, setSpecialDutySelections] = useState<
+    Partial<Record<SpecialDutyType, string>>
+  >({});
   const canWrite = userRoles.some((r) => CAN_WRITE_ROLES.has(r));
 
   // Re-seed the form whenever a different row is opened. Avoids stale state
@@ -223,6 +231,7 @@ export function CustomsItemDialog({
     if (open && item) {
       setForm(stateFromItem(item));
       setResolveResult(null);
+      setSpecialDutySelections({});
     }
   }, [open, item]);
 
@@ -581,6 +590,34 @@ export function CustomsItemDialog({
                       );
                   }}
                 />
+              </div>
+            )}
+
+            {ALTA_FEATURES_ENABLED && resolveResult && (
+              <div className="flex flex-col gap-2">
+                {(["IMPDEMP", "IMPCOMP", "IMPDOP", "IMPTMP"] as const).map(
+                  (pt) => {
+                    const variants = resolveResult.rates.filter(
+                      (r) => r.payment_type === pt,
+                    );
+                    if (variants.length === 0) return null;
+                    return (
+                      <SpecialDutyBlock
+                        key={pt}
+                        variants={variants}
+                        paymentType={pt}
+                        selectedCode={specialDutySelections[pt] ?? null}
+                        onSelect={(code) =>
+                          setSpecialDutySelections((prev) => ({
+                            ...prev,
+                            [pt]: code,
+                          }))
+                        }
+                        tnvedCode={form.hs_code}
+                      />
+                    );
+                  },
+                )}
               </div>
             )}
 
