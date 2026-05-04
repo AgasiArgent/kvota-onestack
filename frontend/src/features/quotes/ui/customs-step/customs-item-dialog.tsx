@@ -7,12 +7,13 @@
  * the `↗` action button on each row of the customs handsontable.
  *
  * Mirrors the columns exposed in customs-handsontable.tsx (see COLUMN_KEYS
- * there) plus reuses the existing ItemCustomsExpenses component so testing/
- * translation/sticker costs can be managed without closing the dialog.
+ * there) plus a per-item «Сертификация» section (Phase B Wave 4 Task 10)
+ * surfacing certificates attached to the current position.
  *
  * Writes flow:
  *   - Top-level customs fields → updateQuoteItem (kvota.quote_items)
- *   - Per-item expenses → ItemCustomsExpenses (kvota.customs_item_expenses)
+ *   - Per-item certificate coverage → kvota.quote_certificates +
+ *     kvota.quote_certificate_items (via the customs-certificates feature).
  *
  * Duty has three expression modes (%, ₽/кг, ₽/шт); ₽/шт requires a column
  * that does not yet exist in the DB and is disabled, matching the inline
@@ -61,8 +62,20 @@ import {
   formatDateRussian,
   type HistoryMatch,
 } from "@/features/customs-history";
-
-import { ItemCustomsExpenses } from "./item-customs-expenses";
+import {
+  CertificateBindPopover,
+  CertificateCoverageList,
+  CertificateDetailsModal,
+  HistoryBanner as CertHistoryBanner,
+  attachCertificateItem,
+  detachCertificateItem,
+  fetchCertificateHistory,
+  listCertificates,
+  type AttachedCertView,
+  type Certificate,
+  type HistoryCertMatch,
+  type QuoteItemForSelect,
+} from "@/features/customs-certificates";
 
 function ext<T>(row: unknown): T {
   return row as T;
@@ -353,6 +366,13 @@ interface CustomsItemDialogProps {
   onOpenChange: (open: boolean) => void;
   quoteId: string;
   item: QuoteItemRow | null;
+  /**
+   * All quote items — required by the certification section (Phase B Wave 4
+   * Task 10). The bind popover needs the full list to resolve already-attached
+   * sibling positions when computing the after-attach preview, and to source
+   * `position` / `product_name` for the row labels.
+   */
+  allItems?: QuoteItemRow[];
   userRoles: string[];
   /** Called after a successful save so parents can refresh the handsontable. */
   onSaved?: () => void;
@@ -360,11 +380,37 @@ interface CustomsItemDialogProps {
 
 const CAN_WRITE_ROLES = new Set(["customs", "head_of_customs", "admin"]);
 
+/**
+ * Best-effort RUB cost basis for the cost-split preview math inside the
+ * cert / coverage UI. Mirrors `customs-step.tsx` derivation so both surfaces
+ * see the same proportional weights — authoritative shares come from the
+ * server, this is informational.
+ */
+function rubBasisOf(item: QuoteItemRow): number {
+  const proforma = Number(
+    ext<{ proforma_amount_excl_vat?: number | null }>(item)
+      .proforma_amount_excl_vat ?? 0,
+  );
+  const quantity = Number(item.quantity ?? 0);
+  return proforma * (quantity || 1);
+}
+
+function toQuoteItemForSelect(item: QuoteItemRow): QuoteItemForSelect {
+  return {
+    id: item.id,
+    position: Number(item.position ?? 0),
+    name: item.product_name ?? "",
+    product_code: item.product_code ?? null,
+    rub_basis: rubBasisOf(item),
+  };
+}
+
 export function CustomsItemDialog({
   open,
   onOpenChange,
   quoteId,
   item,
+  allItems,
   userRoles,
   onSaved,
 }: CustomsItemDialogProps) {
@@ -393,6 +439,16 @@ export function CustomsItemDialog({
   const [fieldsFromHistory, setFieldsFromHistory] = useState<
     Record<string, boolean>
   >({});
+
+  // Phase B Wave 4 Task 10 — «Сертификация» section state.
+  // `existingCerts` is the quote-wide cert list (loaded via listCertificates).
+  // `certHistoryMatch` drives the inline `<CertHistoryBanner>` (REQ-5).
+  // `certDetails` opens the read-only `<CertificateDetailsModal>` (REQ-9 AC#7).
+  const [existingCerts, setExistingCerts] = useState<Certificate[]>([]);
+  const [certHistoryMatch, setCertHistoryMatch] =
+    useState<HistoryCertMatch | null>(null);
+  const [certDetails, setCertDetails] = useState<Certificate | null>(null);
+
   const canWrite = userRoles.some((r) => CAN_WRITE_ROLES.has(r));
 
   // Re-seed the form whenever a different row is opened. Avoids stale state
@@ -406,6 +462,10 @@ export function CustomsItemDialog({
       setHistoryApplied(false);
       setHistoryDismissed(false);
       setFieldsFromHistory({});
+      // Phase B Wave 4 Task 10 — reset cert section state on row swap.
+      setExistingCerts([]);
+      setCertHistoryMatch(null);
+      setCertDetails(null);
     }
   }, [open, item]);
 
@@ -430,6 +490,54 @@ export function CustomsItemDialog({
       cancelled = true;
     };
   }, [open, formHsCode, formCountryOksm, resolveResult]);
+
+  // Phase B Wave 4 Task 10 — load the quote-wide certificate list once when
+  // the dialog opens. Authoritative attached_items[] payload comes from this
+  // list — `CertificateCoverageList` filters it down to the current item.
+  // Re-fetched after attach/detach to pick up server-recomputed shares.
+  useEffect(() => {
+    if (!open || !item) return;
+    let cancelled = false;
+    listCertificates(quoteId).then((res) => {
+      if (cancelled) return;
+      if (res.success && res.data) {
+        setExistingCerts(res.data.certificates);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, quoteId, item]);
+
+  // Phase B Wave 4 Task 10 — fetch the per-item certificate history banner
+  // (REQ-5). Loose 2-of-3 match against (hs_code, brand, supplier_id) over
+  // 12 months in the same org, excluding the current quote. Best-effort —
+  // server returns `data.match = null` on miss / DB error, never raises.
+  // Debounced via 300ms to avoid spamming the server on rapid hs_code edits.
+  const itemBrand = item?.brand ?? null;
+  const itemSupplierId = item?.supplier_id ?? null;
+  useEffect(() => {
+    if (!open || !item) return;
+    if (!formHsCode) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      fetchCertificateHistory({
+        hsCode: formHsCode,
+        brand: itemBrand ?? undefined,
+        supplierId: itemSupplierId ?? undefined,
+        currentQuoteId: quoteId,
+      }).then((res) => {
+        if (cancelled) return;
+        if (res.success && res.data) {
+          setCertHistoryMatch(res.data.match);
+        }
+      });
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [open, item, formHsCode, itemBrand, itemSupplierId, quoteId]);
 
   if (!item || !form) {
     return (
@@ -586,7 +694,95 @@ export function CustomsItemDialog({
     onOpenChange(next);
   }
 
+  // ── Phase B Wave 4 Task 10 — «Сертификация» section helpers ────────────
+  /** Re-fetch the quote-wide cert list so coverage / shares stay in sync. */
+  async function refreshCerts() {
+    const res = await listCertificates(quoteId);
+    if (res.success && res.data) {
+      setExistingCerts(res.data.certificates);
+    }
+  }
+
+  async function handleApplyHistoryCert(certId: string) {
+    if (!item) return;
+    try {
+      const res = await attachCertificateItem(certId, item.id);
+      if (!res.success) {
+        toast.error(res.error?.message ?? "Не удалось привязать сертификат");
+        return;
+      }
+      toast.success("Сертификат привязан");
+      setCertHistoryMatch(null);
+      await refreshCerts();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Не удалось привязать сертификат",
+      );
+    }
+  }
+
+  async function handleUnbindCert(certId: string) {
+    if (!item) return;
+    try {
+      const res = await detachCertificateItem(certId, item.id);
+      if (!res.success) {
+        toast.error(res.error?.message ?? "Не удалось отвязать сертификат");
+        return;
+      }
+      toast.success("Сертификат отвязан");
+      await refreshCerts();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Не удалось отвязать сертификат",
+      );
+    }
+  }
+
+  function handleBindAttached(updatedCert: Certificate) {
+    // Optimistic update from the popover — replace the matching cert in our
+    // local list, then trigger a server refresh for authoritative shares.
+    setExistingCerts((prev) =>
+      prev.map((c) => (c.id === updatedCert.id ? updatedCert : c)),
+    );
+    void refreshCerts();
+  }
+
   const readOnly = !canWrite;
+
+  // ── Derive cert-section view-models (REQ-9) ────────────────────────────
+  // Coverage list filtered to attachments touching the current item, sorted
+  // `created_at DESC` per spec. Pre-rounded share_rub / share_percent come
+  // from the server (split_cost_batch on Python side).
+  const attachedCertViews: AttachedCertView[] = item
+    ? existingCerts
+        .filter((cert) =>
+          cert.attached_items.some((a) => a.item_id === item.id),
+        )
+        .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+        .map((cert) => {
+          const att = cert.attached_items.find((a) => a.item_id === item.id);
+          return {
+            cert,
+            share_rub: att?.share_rub ?? 0,
+            share_percent: att?.share_percent ?? 0,
+          };
+        })
+    : [];
+
+  // Quote-wide siblings for the bind popover. Falls back to a singleton list
+  // (just the current item) when the parent omits `allItems` so the popover
+  // still mounts — the after-attach preview will simply be a one-row table.
+  const quoteItemsForCerts: QuoteItemForSelect[] = (allItems ?? [])
+    .map(toQuoteItemForSelect);
+  const currentItemForSelect: QuoteItemForSelect | null = item
+    ? toQuoteItemForSelect(item)
+    : null;
+  const itemRubBasis = item ? rubBasisOf(item) : 0;
+  const totalRubBasis =
+    quoteItemsForCerts.length > 0
+      ? quoteItemsForCerts.reduce((sum, it) => sum + it.rub_basis, 0)
+      : itemRubBasis;
+  const showCertSection = Boolean(form.hs_code.trim());
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -966,17 +1162,138 @@ export function CustomsItemDialog({
             />
           </section>
 
-          {/* Per-item expenses — reuses the same component rendered on the
-              customs step page. Loads/mutates on its own, independent of the
-              form save button. */}
-          <section>
-            <ItemCustomsExpenses
-              quoteId={quoteId}
-              quoteItemId={item.id}
-              itemLabel={itemLabel}
-              userRoles={userRoles}
-            />
-          </section>
+          {/* Phase B Wave 4 Task 10 — «Сертификация» section.
+              Visible only when an HS-code is set on the current item (the
+              loose 2-of-3 history match needs at least one of the three
+              keys). Mounts the per-item history banner (REQ-5), the
+              read-only coverage list (REQ-9), and the bind-popover trigger
+              (REQ-8). The unified «Расходы по таможне» section on
+              customs-step is the place to *create* certs; this section
+              is per-item read + attach. */}
+          {showCertSection && (
+            <section
+              className="space-y-3"
+              data-testid="customs-item-dialog-certification-section"
+            >
+              <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Сертификация
+              </div>
+
+              {/* History banner — loose 2-of-3 match across recent quotes. */}
+              <CertHistoryBanner
+                match={certHistoryMatch}
+                onApply={(certId) => {
+                  void handleApplyHistoryCert(certId);
+                }}
+                onCreateNew={() => {
+                  // TODO (Wave 5): wire to <CertificateModal> with preset
+                  // type/cost. For Phase B Task 10 we surface a toast so
+                  // the customs specialist still has a hint that the action
+                  // is recognized — full create flow lives on customs-step.
+                  toast.info(
+                    "Создание сертификата доступно из раздела «Расходы по таможне»",
+                  );
+                  setCertHistoryMatch(null);
+                }}
+                onDismiss={() => setCertHistoryMatch(null)}
+              />
+
+              {/* Coverage list — attachments touching THIS item only. */}
+              {attachedCertViews.length > 0 ? (
+                <CertificateCoverageList
+                  itemId={item.id}
+                  attachedCerts={attachedCertViews}
+                  totalQuoteItems={quoteItemsForCerts.length || 1}
+                  itemRubBasis={itemRubBasis}
+                  totalRubBasis={totalRubBasis}
+                  canUnbind={canWrite}
+                  onUnbind={(certId) => {
+                    void handleUnbindCert(certId);
+                  }}
+                  onOpenDetails={(cert) => setCertDetails(cert)}
+                />
+              ) : (
+                /* Empty state — amber card with «Привязать к существующему»
+                   trigger. Mirrors REQ-8 AC#3 / REQ-9 AC#8 copy. */
+                <div
+                  className="rounded-md border border-amber-900 bg-amber-950/20 px-3 py-2"
+                  data-testid="customs-item-dialog-certification-empty"
+                >
+                  <div className="text-xs text-foreground/90 mb-2">
+                    Эта позиция ещё не привязана ни к одному сертификату.
+                  </div>
+                  {canWrite && currentItemForSelect && (
+                    <CertificateBindPopover
+                      trigger={
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          data-testid="customs-item-dialog-cert-bind-trigger"
+                        >
+                          Привязать к существующему сертификату
+                        </Button>
+                      }
+                      currentItem={currentItemForSelect}
+                      allItems={quoteItemsForCerts}
+                      existingCerts={existingCerts.filter(
+                        (c) => !c.is_custom_expense,
+                      )}
+                      onAttached={handleBindAttached}
+                      onCreateNew={() => {
+                        toast.info(
+                          "Создание сертификата доступно из раздела «Расходы по таможне»",
+                        );
+                      }}
+                    />
+                  )}
+                </div>
+              )}
+
+              {/* Secondary action — always visible when the user can write.
+                  Lets the specialist attach more certs without first deleting
+                  an existing attachment. Hidden when there is nothing to
+                  attach to (popover renders its own empty-state). */}
+              {canWrite &&
+                attachedCertViews.length > 0 &&
+                currentItemForSelect && (
+                  <CertificateBindPopover
+                    trigger={
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        data-testid="customs-item-dialog-cert-bind-secondary"
+                      >
+                        + Привязать ещё сертификат
+                      </Button>
+                    }
+                    currentItem={currentItemForSelect}
+                    allItems={quoteItemsForCerts}
+                    existingCerts={existingCerts.filter(
+                      (c) => !c.is_custom_expense,
+                    )}
+                    onAttached={handleBindAttached}
+                    onCreateNew={() => {
+                      toast.info(
+                        "Создание сертификата доступно из раздела «Расходы по таможне»",
+                      );
+                    }}
+                  />
+                )}
+
+              {/* Read-only details modal — opens on «Открыть сертификат» /
+                  «Подробнее» from a coverage card. */}
+              {certDetails && (
+                <CertificateDetailsModal
+                  open={certDetails !== null}
+                  onOpenChange={(next) => {
+                    if (!next) setCertDetails(null);
+                  }}
+                  cert={certDetails}
+                  items={quoteItemsForCerts}
+                />
+              )}
+            </section>
+          )}
         </div>
 
         <DialogFooter>
