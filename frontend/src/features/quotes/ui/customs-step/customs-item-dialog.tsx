@@ -1229,41 +1229,66 @@ export function CustomsItemDialog({
                   onOpenDetails={(cert) => setCertDetails(cert)}
                 />
               ) : (
-                /* Empty state — amber card with «Привязать к существующему»
-                   trigger. Mirrors REQ-8 AC#3 / REQ-9 AC#8 copy. */
+                /* Empty state — amber card with TWO triggers (REQ-8 AC#3 /
+                   REQ-9 AC#1):
+                     • «Привязать к существующему» — opens the bind popover.
+                     • «Создать новый» (default variant) — opens the
+                       create-cert modal with the current item pre-ticked
+                       via <CertificateModal preSelectedItemIds={[item.id]}>.
+                   The exact copy «Сертификат соответствия не оформлен»
+                   matches the spec mockup (line 904) and overrides the
+                   prior placeholder text. */
                 <div
                   className="rounded-md border border-amber-900 bg-amber-950/20 px-3 py-2"
                   data-testid="customs-item-dialog-certification-empty"
                 >
                   <div className="text-xs text-foreground/90 mb-2">
-                    Эта позиция ещё не привязана ни к одному сертификату.
+                    Сертификат соответствия не оформлен
                   </div>
                   {canWrite && currentItemForSelect && (
-                    <CertificateBindPopover
-                      trigger={
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          data-testid="customs-item-dialog-cert-bind-trigger"
-                        >
-                          Привязать к существующему сертификату
-                        </Button>
-                      }
-                      currentItem={currentItemForSelect}
-                      allItems={quoteItemsForCerts}
-                      existingCerts={existingCerts.filter(
-                        (c) => !c.is_custom_expense,
-                      )}
-                      onAttached={handleBindAttached}
-                      onCreateNew={() => {
-                        // Phase B Wave 5 — REQ-8 AC#3.
-                        // Empty-state link opens the create-cert modal with
-                        // no preset; the current item lands pre-selected via
-                        // `preSelectedItemIds`.
-                        setCertModalPreset(null);
-                        setCreateCertModalOpen(true);
-                      }}
-                    />
+                    <div className="flex flex-wrap gap-2">
+                      <CertificateBindPopover
+                        trigger={
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            data-testid="customs-item-dialog-cert-bind-trigger"
+                          >
+                            Привязать к существующему
+                          </Button>
+                        }
+                        currentItem={currentItemForSelect}
+                        allItems={quoteItemsForCerts}
+                        existingCerts={existingCerts.filter(
+                          (c) => !c.is_custom_expense,
+                        )}
+                        onAttached={handleBindAttached}
+                        onCreateNew={() => {
+                          // Phase B Wave 5 — REQ-8 AC#3.
+                          // Empty-state link opens the create-cert modal
+                          // with no preset; the current item lands
+                          // pre-selected via `preSelectedItemIds`.
+                          setCertModalPreset(null);
+                          setCreateCertModalOpen(true);
+                        }}
+                      />
+                      <Button
+                        size="sm"
+                        variant="default"
+                        onClick={() => {
+                          // Phase 4 hotfix plan — direct «Создать новый»
+                          // path mirrors the popover's onCreateNew handler:
+                          // <CertificateModal preSelectedItemIds=
+                          // {[currentItemForSelect.id]}> auto-ticks the
+                          // current item, no preset.
+                          setCertModalPreset(null);
+                          setCreateCertModalOpen(true);
+                        }}
+                        data-testid="customs-item-dialog-cert-create-trigger"
+                      >
+                        Создать новый
+                      </Button>
+                    </div>
                   )}
                 </div>
               )}
