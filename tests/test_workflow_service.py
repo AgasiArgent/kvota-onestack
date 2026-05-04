@@ -1159,13 +1159,15 @@ class TestCompleteProcurementForInvoice:
                 # UPDATE chain
                 chain.update.return_value.eq.return_value.execute.return_value = \
                     MagicMock(data=[{"id": "inv-1"}])
-                # SELECT count chain (with .is_().is_())
+                # SELECT count chain — single .is_("procurement_completed_at",
+                # None). The earlier draft also filtered .is_("deleted_at", None)
+                # which doesn't exist on the invoices table and broke prod.
                 # 2 incomplete invoices remaining
                 count_resp = MagicMock()
                 count_resp.count = 2
                 count_resp.data = [{"id": "inv-2"}, {"id": "inv-3"}]
                 chain.select.return_value.eq.return_value.is_.return_value \
-                    .is_.return_value.execute.return_value = count_resp
+                    .execute.return_value = count_resp
                 return chain
             if name == "quotes":
                 # If the helper hits quotes.update() that would mean it tried
@@ -1235,12 +1237,14 @@ class TestCompleteProcurementForInvoice:
                     })
                 chain.update.return_value.eq.return_value.execute.return_value = \
                     MagicMock(data=[{"id": "inv-1"}])
-                # 0 incomplete invoices remaining → last
+                # 0 incomplete invoices remaining → last.
+                # Single .is_("procurement_completed_at", None) — invoices has
+                # no deleted_at column.
                 count_resp = MagicMock()
                 count_resp.count = 0
                 count_resp.data = []
                 chain.select.return_value.eq.return_value.is_.return_value \
-                    .is_.return_value.execute.return_value = count_resp
+                    .execute.return_value = count_resp
                 return chain
             if name == "quotes":
                 # Atomic conditional UPDATE — track the chain calls
@@ -1310,8 +1314,9 @@ class TestCompleteProcurementForInvoice:
                 count_resp = MagicMock()
                 count_resp.count = 0  # last invoice
                 count_resp.data = []
+                # Single .is_() — invoices has no deleted_at column.
                 chain.select.return_value.eq.return_value.is_.return_value \
-                    .is_.return_value.execute.return_value = count_resp
+                    .execute.return_value = count_resp
                 return chain
             if name == "quotes":
                 def update(_payload):
@@ -1338,6 +1343,167 @@ class TestCompleteProcurementForInvoice:
         # Race-loss is a valid outcome — invoice flags are stamped, no error
         assert result.success is True
         assert result.workflow_advanced is False
+
+    @patch('services.workflow_service.assign_customs_to_invoices')
+    @patch('services.workflow_service.assign_logistics_to_invoices')
+    @patch('services.workflow_service.get_supabase')
+    def test_count_query_does_not_filter_deleted_at(
+        self,
+        mock_supabase,
+        mock_assign_logistics,
+        mock_assign_customs,
+    ):
+        """Regression for prod incident with Q-202604-0061.
+
+        ``kvota.invoices`` has no ``deleted_at`` column. An earlier draft of
+        the count query filtered ``.is_("deleted_at", None)`` and PostgREST
+        returned 42703 ('column invoices.deleted_at does not exist'). The
+        helper's except branch swallowed the error and set
+        ``remaining_count = 1``, so the workflow never advanced even when
+        every sibling invoice had ``procurement_completed_at`` set.
+
+        This test fails if anyone reintroduces a ``deleted_at`` filter on
+        the invoices count query.
+        """
+        from services.workflow_service import complete_procurement_for_invoice
+
+        client = MagicMock()
+        mock_supabase.return_value = client
+
+        # Track every is_() call made on the invoices.select chain — used to
+        # assert deleted_at never appears as a filter.
+        is_calls: list[tuple] = []
+
+        def table_side_effect(name):
+            chain = MagicMock()
+            if name == "invoices":
+                # SELECT invoice (initial fetch) — passes through unchanged.
+                chain.select.return_value.eq.return_value.single.return_value \
+                    .execute.return_value = MagicMock(data={
+                        "id": "inv-1",
+                        "quote_id": "quote-1",
+                        "procurement_completed_at": None,
+                    })
+                # UPDATE invoice flags
+                chain.update.return_value.eq.return_value.execute.return_value = \
+                    MagicMock(data=[{"id": "inv-1"}])
+
+                # Count query: capture every .is_(col, val) call so we can
+                # assert no deleted_at filter is ever attempted.
+                count_chain = MagicMock()
+
+                def is_capture(col, val):
+                    is_calls.append((col, val))
+                    return count_chain  # chain returns itself for further filtering
+
+                count_chain.is_.side_effect = is_capture
+                count_chain.execute.return_value = MagicMock(count=0, data=[])
+
+                # invoices.select(...).eq(quote_id, ...).is_(...).execute()
+                chain.select.return_value.eq.return_value.is_ = is_capture
+                return chain
+            if name == "quotes":
+                def update(_payload):
+                    sub = MagicMock()
+                    sub.eq.return_value.eq.return_value.execute.return_value = \
+                        MagicMock(data=[{"id": "quote-1"}])
+                    return sub
+                chain.update.side_effect = update
+                return chain
+            if name == "workflow_transitions":
+                chain.insert.return_value.execute.return_value = \
+                    MagicMock(data=[{"id": "trans-1"}])
+                return chain
+            return chain
+
+        client.table.side_effect = table_side_effect
+        mock_assign_logistics.return_value = {"success": True, "assigned_invoices": [], "unmatched_invoice_ids": []}
+        mock_assign_customs.return_value = {"success": True, "assigned_invoices": [], "unmatched_invoice_ids": []}
+
+        result = complete_procurement_for_invoice(
+            invoice_id="inv-1",
+            actor_id="user-1",
+            actor_roles=["procurement"],
+        )
+
+        assert result.success is True
+        # The fundamental contract — no deleted_at filter on invoices.
+        filtered_columns = {col for (col, _val) in is_calls}
+        assert "deleted_at" not in filtered_columns, (
+            f"complete_procurement_for_invoice must not filter on invoices.deleted_at "
+            f"(no such column). Got is_() calls on: {filtered_columns}"
+        )
+        # And the count query must filter on procurement_completed_at IS NULL.
+        assert "procurement_completed_at" in filtered_columns, (
+            "Count query must filter on procurement_completed_at IS NULL"
+        )
+
+    @patch('services.workflow_service.assign_customs_to_invoices')
+    @patch('services.workflow_service.assign_logistics_to_invoices')
+    @patch('services.workflow_service.get_supabase')
+    def test_dual_assignment_runs_when_advancing_quote(
+        self,
+        mock_supabase,
+        mock_assign_logistics,
+        mock_assign_customs,
+    ):
+        """When this is the last invoice and quote advances, BOTH assigners
+        must have been called. Regression for prod follow-up: customs was
+        firing but logistics propagation reported as broken — the helper must
+        invoke assign_logistics_to_invoices on every per-invoice completion,
+        not just the final one.
+        """
+        from services.workflow_service import complete_procurement_for_invoice
+
+        client = MagicMock()
+        mock_supabase.return_value = client
+
+        def table_side_effect(name):
+            chain = MagicMock()
+            if name == "invoices":
+                chain.select.return_value.eq.return_value.single.return_value \
+                    .execute.return_value = MagicMock(data={
+                        "id": "inv-1",
+                        "quote_id": "quote-1",
+                        "procurement_completed_at": None,
+                    })
+                chain.update.return_value.eq.return_value.execute.return_value = \
+                    MagicMock(data=[{"id": "inv-1"}])
+                count_resp = MagicMock(count=0, data=[])
+                chain.select.return_value.eq.return_value.is_.return_value \
+                    .execute.return_value = count_resp
+                return chain
+            if name == "quotes":
+                def update(_payload):
+                    sub = MagicMock()
+                    sub.eq.return_value.eq.return_value.execute.return_value = \
+                        MagicMock(data=[{"id": "quote-1"}])
+                    return sub
+                chain.update.side_effect = update
+                return chain
+            if name == "workflow_transitions":
+                chain.insert.return_value.execute.return_value = \
+                    MagicMock(data=[{"id": "trans-1"}])
+                return chain
+            return chain
+
+        client.table.side_effect = table_side_effect
+        mock_assign_logistics.return_value = {"success": True, "assigned_invoices": [], "unmatched_invoice_ids": []}
+        mock_assign_customs.return_value = {"success": True, "assigned_invoices": [], "unmatched_invoice_ids": []}
+
+        result = complete_procurement_for_invoice(
+            invoice_id="inv-1",
+            actor_id="user-1",
+            actor_roles=["procurement"],
+        )
+
+        assert result.success is True
+        assert result.workflow_advanced is True
+        assert result.logistics_assigned is True
+        assert result.customs_assigned is True
+        # Both assigners must have fired — Q-202604-0061 incident.
+        mock_assign_logistics.assert_called_once_with("quote-1")
+        mock_assign_customs.assert_called_once_with("quote-1")
 
 
 # =============================================================================
