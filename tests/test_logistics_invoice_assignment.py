@@ -693,6 +693,164 @@ class TestAssignLogisticsToInvoices:
         assert result["assigned_invoices"] == []
         assert set(result["unmatched_invoice_ids"]) == {INVOICE_1, INVOICE_2}
 
+    # -------------------------------------------------------------------------
+    # Test 13: SLA timer columns populated alongside assigned_logistics_user
+    #
+    # Regression for prod follow-up to PR #100: the helper used to update
+    # only ``assigned_logistics_user`` and leave ``logistics_assigned_at`` /
+    # ``logistics_deadline_at`` NULL. The customs RPC writes all three (m286)
+    # so customs users saw their inboxes populate while logistics users got
+    # blank SLA timers and no deadline ordering.
+    # -------------------------------------------------------------------------
+    @patch("services.workflow_service.get_supabase")
+    @patch(
+        "services.route_logistics_assignment_service.get_logistics_manager_for_locations"
+    )
+    def test_writes_logistics_assigned_at_and_deadline(
+        self, mock_get_logistics, mock_get_sb
+    ):
+        """Each UPDATE payload must include logistics_assigned_at + _deadline_at."""
+        sb = _make_fake(
+            quote_data={
+                "id": QUOTE_ID,
+                "organization_id": ORG_ID,
+                "delivery_city": "Москва",
+            },
+            invoices_data=[
+                {"id": INVOICE_1, "pickup_country": "Китай", "logistics_sla_hours": 72},
+                {"id": INVOICE_2, "pickup_country": "Китай", "logistics_sla_hours": 72},
+            ],
+        )
+        mock_get_sb.return_value = sb
+        mock_get_logistics.return_value = MANAGER_A
+
+        result = assign_logistics_to_invoices(QUOTE_ID)
+        assert result["success"] is True
+
+        invoice_updates = sb.updates_for("invoices")
+        assert invoice_updates, "Expected at least one invoices UPDATE"
+
+        for payload, _filters in invoice_updates:
+            assert payload.get("assigned_logistics_user") == MANAGER_A
+            assert payload.get("logistics_assigned_at"), (
+                "logistics_assigned_at must be set so workspace inbox SLA timer starts"
+            )
+            assert payload.get("logistics_deadline_at"), (
+                "logistics_deadline_at must be set so workspace inbox can sort by SLA"
+            )
+            # Deadline must be strictly after the assigned_at timestamp.
+            assert payload["logistics_deadline_at"] > payload["logistics_assigned_at"]
+
+    # -------------------------------------------------------------------------
+    # Test 14: Idempotency — already-assigned invoices are skipped
+    # -------------------------------------------------------------------------
+    @patch("services.workflow_service.get_supabase")
+    @patch(
+        "services.route_logistics_assignment_service.get_logistics_manager_for_locations"
+    )
+    def test_skips_already_assigned_invoices(
+        self, mock_get_logistics, mock_get_sb
+    ):
+        """Invoices that already have assigned_logistics_user must not be re-stamped.
+
+        Without this guard, ``complete_procurement_for_invoice`` running on
+        every per-invoice completion would reset the SLA timer on every
+        sibling invoice every time, breaking deadline tracking.
+        """
+        existing_at = "2026-05-01T08:00:00+00:00"
+        sb = _make_fake(
+            quote_data={
+                "id": QUOTE_ID,
+                "organization_id": ORG_ID,
+                "delivery_city": "Москва",
+            },
+            invoices_data=[
+                # Already assigned — should NOT be touched
+                {
+                    "id": INVOICE_1,
+                    "pickup_country": "Китай",
+                    "assigned_logistics_user": MANAGER_B,
+                    "logistics_assigned_at": existing_at,
+                    "logistics_sla_hours": 72,
+                },
+                # Unassigned — SHOULD be assigned to MANAGER_A
+                {
+                    "id": INVOICE_2,
+                    "pickup_country": "Китай",
+                    "assigned_logistics_user": None,
+                    "logistics_assigned_at": None,
+                    "logistics_sla_hours": 72,
+                },
+            ],
+        )
+        mock_get_sb.return_value = sb
+        mock_get_logistics.return_value = MANAGER_A
+
+        result = assign_logistics_to_invoices(QUOTE_ID)
+        assert result["success"] is True
+
+        # Only INVOICE_2 should appear in assigned_invoices — INVOICE_1 was
+        # already assigned and skipped.
+        assigned_ids = {inv["invoice_id"] for inv in result["assigned_invoices"]}
+        assert assigned_ids == {INVOICE_2}
+
+        # The UPDATE chain must NOT have touched INVOICE_1.
+        for _payload, filters in sb.updates_for("invoices"):
+            for op, col, val in filters:
+                if op == "IN" and col == "id":
+                    assert INVOICE_1 not in val, (
+                        "Already-assigned invoice INVOICE_1 must not appear in any UPDATE"
+                    )
+
+    # -------------------------------------------------------------------------
+    # Test 15: SLA hours fallback when invoice column is NULL
+    # -------------------------------------------------------------------------
+    @patch("services.workflow_service.get_supabase")
+    @patch(
+        "services.route_logistics_assignment_service.get_logistics_manager_for_locations"
+    )
+    def test_sla_hours_fallback_to_72_when_null(
+        self, mock_get_logistics, mock_get_sb
+    ):
+        """Older rows may have NULL logistics_sla_hours despite the DB default.
+        The helper must fall back to 72 hours rather than failing the UPDATE.
+        """
+        from datetime import datetime, timedelta
+
+        sb = _make_fake(
+            quote_data={
+                "id": QUOTE_ID,
+                "organization_id": ORG_ID,
+                "delivery_city": "Москва",
+            },
+            invoices_data=[
+                {
+                    "id": INVOICE_1,
+                    "pickup_country": "Китай",
+                    "logistics_sla_hours": None,
+                },
+            ],
+        )
+        mock_get_sb.return_value = sb
+        mock_get_logistics.return_value = MANAGER_A
+
+        result = assign_logistics_to_invoices(QUOTE_ID)
+        assert result["success"] is True
+
+        invoice_updates = sb.updates_for("invoices")
+        assert len(invoice_updates) == 1
+        payload, _ = invoice_updates[0]
+
+        assigned = datetime.fromisoformat(payload["logistics_assigned_at"])
+        deadline = datetime.fromisoformat(payload["logistics_deadline_at"])
+        # Default SLA is 72 hours — expect deadline ≈ assigned + 72h
+        delta = deadline - assigned
+        assert delta == timedelta(hours=72), (
+            f"Expected 72h SLA window, got {delta} (sla_hours fallback broken)"
+        )
+        # Sanity: timestamps are in the same UTC tz family
+        assert assigned.tzinfo is not None and deadline.tzinfo is not None
+
 
 # =============================================================================
 # INTEGRATION TESTS: complete_procurement() wiring

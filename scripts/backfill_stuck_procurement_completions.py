@@ -5,8 +5,8 @@ fix/per-invoice-procurement-stage-transition refactor.
 
 For any quote where:
   - workflow_status = 'pending_procurement'
-  - deleted_at IS NULL
-  - ALL non-deleted invoices have procurement_completed_at IS NOT NULL
+  - deleted_at IS NULL (on the quote)
+  - ALL invoices have procurement_completed_at IS NOT NULL
 
 the quote should already be in pending_logistics_and_customs but isn't, because
 the legacy direct-update mutation never advanced the workflow. This script:
@@ -23,6 +23,10 @@ workflow_status='pending_procurement').
 
 Specifically targets Q-202604-0061 (INV-01 was committed by a prior browser-test
 run before the fix landed).
+
+Note: ``kvota.invoices`` has no ``deleted_at`` column — the original draft of
+this script filtered on it and silently failed for every stuck quote. Only the
+quotes table has ``deleted_at``.
 
 Usage:
     python scripts/backfill_stuck_procurement_completions.py
@@ -72,13 +76,15 @@ def fetch_stuck_quotes() -> List[Dict[str, Any]]:
 
     stuck: List[Dict[str, Any]] = []
     for quote in candidates:
-        # Step 2: count incomplete invoices for this quote
+        # Step 2: count incomplete invoices for this quote.
+        # ``invoices`` has no ``deleted_at`` column (only ``quotes`` does), so
+        # we don't filter on it here. Filtering would raise PostgREST 42703
+        # and skip every quote.
         try:
             inv_resp = (
                 supabase.table("invoices")
                 .select("id, procurement_completed_at")
                 .eq("quote_id", quote["id"])
-                .is_("deleted_at", None)
                 .execute()
             )
         except Exception as exc:

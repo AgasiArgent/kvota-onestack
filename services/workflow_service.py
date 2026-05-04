@@ -1166,7 +1166,7 @@ def is_auto_transition(
 # =============================================================================
 
 from .database import get_supabase
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from collections import Counter, defaultdict
 import services.route_logistics_assignment_service as route_logistics_service
 from services import composition_service
@@ -2514,9 +2514,13 @@ def assign_logistics_to_invoices(quote_id: str) -> Dict:
         org_id = quote.get("organization_id")
         delivery_city = quote.get("delivery_city")
 
-        # Fetch all invoices for this quote
+        # Fetch all invoices for this quote. ``assigned_logistics_user`` and
+        # ``logistics_sla_hours`` are required so we can be idempotent (skip
+        # already-assigned rows like the customs RPC does — see m286) and stamp
+        # the SLA timer columns ``logistics_assigned_at`` /
+        # ``logistics_deadline_at`` introduced by m285.
         invoices_response = supabase.table("invoices") \
-            .select("id, pickup_country") \
+            .select("id, pickup_country, assigned_logistics_user, logistics_sla_hours") \
             .eq("quote_id", quote_id) \
             .execute()
 
@@ -2534,6 +2538,14 @@ def assign_logistics_to_invoices(quote_id: str) -> Dict:
         for invoice in invoices:
             invoice_id = invoice.get("id")
             pickup_country = (invoice.get("pickup_country") or "").strip()
+
+            # Idempotency guard: skip invoices that already have a logistics
+            # user assigned. Matches the ``WHERE assigned_customs_user IS NULL``
+            # filter in m286's customs RPC. Without this, repeated calls would
+            # reset ``logistics_assigned_at`` (and the SLA timer) every time
+            # ``complete_procurement_for_invoice`` fires for a sibling invoice.
+            if invoice.get("assigned_logistics_user"):
+                continue
 
             if not pickup_country:
                 unmatched_invoice_ids.append(invoice_id)
@@ -2556,19 +2568,33 @@ def assign_logistics_to_invoices(quote_id: str) -> Dict:
                     "invoice_id": invoice_id,
                     "pickup_country": pickup_country,
                     "user_id": user_id,
+                    "sla_hours": invoice.get("logistics_sla_hours") or 72,
                 })
             else:
                 unmatched_invoice_ids.append(invoice_id)
 
-        # Batch-update invoices grouped by user_id (one UPDATE per distinct user)
+        # Batch-update invoices. We can't group by user alone any longer because
+        # each invoice now also gets ``logistics_deadline_at = now + sla_hours``,
+        # which depends on the per-row ``logistics_sla_hours``. Group by
+        # (user_id, sla_hours) instead so a single UPDATE still covers every
+        # invoice that shares both fields. N is small (typically <10 invoices
+        # per quote) so this is fine.
         if assigned_invoices:
-            user_to_invoice_ids: Dict[str, list] = defaultdict(list)
-            for inv in assigned_invoices:
-                user_to_invoice_ids[inv["user_id"]].append(inv["invoice_id"])
+            now = datetime.now(timezone.utc)
+            now_iso = now.isoformat()
 
-            for user_id, invoice_ids in user_to_invoice_ids.items():
+            grouped: Dict[Tuple[str, int], list] = defaultdict(list)
+            for inv in assigned_invoices:
+                grouped[(inv["user_id"], inv["sla_hours"])].append(inv["invoice_id"])
+
+            for (user_id, sla_hours), invoice_ids in grouped.items():
+                deadline_iso = (now + timedelta(hours=sla_hours)).isoformat()
                 supabase.table("invoices") \
-                    .update({"assigned_logistics_user": user_id}) \
+                    .update({
+                        "assigned_logistics_user": user_id,
+                        "logistics_assigned_at": now_iso,
+                        "logistics_deadline_at": deadline_iso,
+                    }) \
                     .in_("id", invoice_ids) \
                     .execute()
 
@@ -3411,12 +3437,18 @@ def complete_procurement_for_invoice(
 
     # Was this the last incomplete invoice on the quote? If yes, advance the
     # workflow_status atomically.
+    #
+    # Note: ``invoices`` does not have a ``deleted_at`` column (unlike
+    # ``quotes``). An earlier draft of this helper filtered ``.is_("deleted_at",
+    # None)`` and PostgREST returned a 42703 error caught by the except branch,
+    # which set ``remaining_count = 1`` and prevented the workflow from ever
+    # advancing — even when every invoice on the quote was already completed
+    # (Q-202604-0061 stuck for hours after the m285 cutover).
     workflow_advanced = False
     try:
         remaining = supabase.table("invoices") \
             .select("id", count="exact") \
             .eq("quote_id", quote_id) \
-            .is_("deleted_at", None) \
             .is_("procurement_completed_at", None) \
             .execute()
         # Postgrest exposes the count via .count when count='exact' is set.
