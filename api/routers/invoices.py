@@ -15,6 +15,7 @@ from api.composition import (
     verify_invoice as _verify_invoice,
 )
 from api.invoices import (
+    complete_invoice_procurement as _complete_invoice_procurement,
     delete_letter_draft as _delete_letter_draft,
     download_invoice_xls as _download_xls,
     get_letter_draft as _get_letter_draft,
@@ -93,3 +94,17 @@ async def post_procurement_unlock_reject(
 ) -> JSONResponse:
     """Reject a pending procurement-unlock request."""
     return await _reject_procurement_unlock(request, invoice_id, approval_id)
+
+
+@router.post("/{invoice_id}/complete-procurement")
+async def post_complete_procurement(
+    request: Request, invoice_id: str
+) -> JSONResponse:
+    """Complete procurement for a single invoice (КП).
+
+    Per-invoice analogue of the legacy quote-level «Завершить закупку» — stamps
+    invoice flags, runs invoice-level logistics + customs assigners, and
+    advances the parent quote workflow_status when this was the last
+    incomplete invoice (atomic, race-guarded).
+    """
+    return await _complete_invoice_procurement(request, invoice_id)

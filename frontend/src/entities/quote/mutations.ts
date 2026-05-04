@@ -1363,25 +1363,50 @@ export async function createInvoice(data: {
 /**
  * Per-invoice procurement completion (replaces legacy quote-level flag).
  *
- * `completeInvoiceProcurement` stamps the invoice as procurement-finalized
- * — locks the КП, signals logistics/customs to pick it up. Sibling
- * invoices on the same quote are unaffected.
+ * `completeInvoiceProcurement` calls the Python API endpoint, which:
+ *   1. Stamps invoice flags (procurement_completed_at + procurement_completed_by).
+ *   2. Runs the idempotent logistics + customs assigners so siblings finalized
+ *      mid-flow surface in per-user inboxes (not just the last one).
+ *   3. Atomically advances the parent quote workflow_status to
+ *      pending_logistics_and_customs when this was the last incomplete КП.
+ *
+ * The previous implementation was a direct Supabase UPDATE that bypassed the
+ * orchestration entirely — quote stage rail, logistics inbox, and customs
+ * inbox all stayed broken until a head manually intervened.
  *
  * `reopenInvoiceProcurement` is the inverse — used by the existing
  * ProcurementUnlockButton role-gated flow when typos need fixing.
  */
 export async function completeInvoiceProcurement(invoiceId: string): Promise<void> {
   const supabase = createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  const userId = auth.user?.id ?? null;
-  const { error } = await supabase
-    .from("invoices")
-    .update({
-      procurement_completed_at: new Date().toISOString(),
-      procurement_completed_by: userId,
-    } as never)
-    .eq("id", invoiceId);
-  if (error) throw error;
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (session?.access_token) {
+    headers.Authorization = `Bearer ${session.access_token}`;
+  }
+
+  const res = await fetch(
+    `/api/invoices/${invoiceId}/complete-procurement`,
+    {
+      method: "POST",
+      headers,
+      // Empty JSON body — the endpoint accepts an optional `reason` field but
+      // none is supplied from this UI path. Sending `{}` keeps the
+      // application/json content-type contract honest.
+      body: JSON.stringify({}),
+    }
+  );
+
+  if (!res.ok) {
+    const json = await res.json().catch(() => null);
+    throw new Error(
+      json?.error?.message ?? `Failed to complete procurement (HTTP ${res.status})`
+    );
+  }
 }
 
 export async function reopenInvoiceProcurement(invoiceId: string): Promise<void> {

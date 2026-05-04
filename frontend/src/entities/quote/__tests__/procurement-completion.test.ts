@@ -1,8 +1,16 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 
 /**
- * Tests for the per-invoice procurement completion mutations. Replaces the
- * legacy quote-level flag — each КП completes / re-opens independently.
+ * Tests for the per-invoice procurement completion mutations.
+ *
+ * As of fix/per-invoice-procurement-stage-transition, `completeInvoiceProcurement`
+ * is a thin wrapper over the Python API endpoint
+ * `POST /api/invoices/{id}/complete-procurement`. The endpoint orchestrates
+ * the full transition (invoice flags + logistics/customs assigners + atomic
+ * workflow advance) — the frontend just needs to authenticate and forward.
+ *
+ * `reopenInvoiceProcurement` remains a direct Supabase UPDATE used only by
+ * role-gated unlock flows.
  */
 
 vi.mock("@/shared/lib/supabase/client", () => ({
@@ -10,37 +18,41 @@ vi.mock("@/shared/lib/supabase/client", () => ({
 }));
 
 interface FakeSupabase {
-  authUserId: string | null;
+  authToken: string | null;
+  authError: Error | null;
   updatedRow: Record<string, unknown> | null;
   updatedId: string | null;
   updateError: Error | null;
-  authError: Error | null;
   auth: {
-    getUser(): Promise<
-      | { data: { user: { id: string } | null }; error: null }
-      | { data: { user: null }; error: Error }
+    getSession(): Promise<
+      | { data: { session: { access_token: string } | null }; error: null }
+      | { data: { session: null }; error: Error }
     >;
   };
   from(table: string): unknown;
 }
 
 let fakeSupabase: FakeSupabase;
+const originalFetch = globalThis.fetch;
 
 function makeFakeSupabase(): FakeSupabase {
   const state: FakeSupabase = {
-    authUserId: "user-1",
+    authToken: "tok-1",
+    authError: null,
     updatedRow: null,
     updatedId: null,
     updateError: null,
-    authError: null,
     auth: {
-      getUser: async () => {
+      getSession: async () => {
         if (state.authError) {
-          return { data: { user: null }, error: state.authError };
+          return { data: { session: null }, error: state.authError };
         }
-        return state.authUserId
-          ? { data: { user: { id: state.authUserId } }, error: null }
-          : { data: { user: null }, error: null };
+        return state.authToken
+          ? {
+              data: { session: { access_token: state.authToken } },
+              error: null,
+            }
+          : { data: { session: null }, error: null };
       },
     },
     from(table: string) {
@@ -71,34 +83,79 @@ describe("completeInvoiceProcurement", () => {
     fakeSupabase = makeFakeSupabase();
   });
 
-  it("stamps procurement_completed_at and procurement_completed_by", async () => {
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it("POSTs to /api/invoices/{id}/complete-procurement with auth header", async () => {
+    let calledUrl = "";
+    let calledHeaders: Record<string, string> = {};
+    let calledMethod = "";
+    globalThis.fetch = vi.fn(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        calledUrl = String(url);
+        calledHeaders = (init?.headers ?? {}) as Record<string, string>;
+        calledMethod = init?.method ?? "";
+        return new Response(
+          JSON.stringify({ success: true, data: { workflow_advanced: true } }),
+          { status: 200 }
+        );
+      }
+    ) as unknown as typeof fetch;
+
     const { completeInvoiceProcurement } = await import("../mutations");
     await completeInvoiceProcurement("inv-1");
-    expect(fakeSupabase.updatedId).toBe("inv-1");
-    expect(fakeSupabase.updatedRow).toMatchObject({
-      procurement_completed_by: "user-1",
-    });
-    expect(typeof fakeSupabase.updatedRow?.procurement_completed_at).toBe(
-      "string"
-    );
-    // ISO 8601-ish — at minimum starts with 4 digits + dash
-    expect(
-      String(fakeSupabase.updatedRow?.procurement_completed_at)
-    ).toMatch(/^\d{4}-/);
+
+    expect(calledUrl).toBe("/api/invoices/inv-1/complete-procurement");
+    expect(calledMethod).toBe("POST");
+    expect(calledHeaders.Authorization).toBe("Bearer tok-1");
+    expect(calledHeaders["Content-Type"]).toBe("application/json");
   });
 
-  it("falls back to null user when auth.getUser returns no session", async () => {
-    fakeSupabase.authUserId = null;
+  it("omits Authorization header when no session", async () => {
+    fakeSupabase.authToken = null;
+    let calledHeaders: Record<string, string> = {};
+    globalThis.fetch = vi.fn(
+      async (_url: string | URL | Request, init?: RequestInit) => {
+        calledHeaders = (init?.headers ?? {}) as Record<string, string>;
+        return new Response(
+          JSON.stringify({ success: true, data: {} }),
+          { status: 200 }
+        );
+      }
+    ) as unknown as typeof fetch;
+
     const { completeInvoiceProcurement } = await import("../mutations");
     await completeInvoiceProcurement("inv-2");
-    expect(fakeSupabase.updatedRow?.procurement_completed_by).toBeNull();
+
+    expect(calledHeaders.Authorization).toBeUndefined();
   });
 
-  it("propagates update errors", async () => {
-    fakeSupabase.updateError = new Error("RLS denied");
+  it("throws on non-2xx response with backend error message", async () => {
+    globalThis.fetch = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          success: false,
+          error: { code: "ALREADY_COMPLETED", message: "Already completed" },
+        }),
+        { status: 409 }
+      )
+    ) as unknown as typeof fetch;
+
     const { completeInvoiceProcurement } = await import("../mutations");
     await expect(completeInvoiceProcurement("inv-1")).rejects.toThrow(
-      "RLS denied"
+      "Already completed"
+    );
+  });
+
+  it("throws fallback message when error body is not JSON", async () => {
+    globalThis.fetch = vi.fn(async () =>
+      new Response("oops", { status: 500 })
+    ) as unknown as typeof fetch;
+
+    const { completeInvoiceProcurement } = await import("../mutations");
+    await expect(completeInvoiceProcurement("inv-1")).rejects.toThrow(
+      /HTTP 500/
     );
   });
 });

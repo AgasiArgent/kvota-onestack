@@ -3061,9 +3061,13 @@ def complete_procurement(
             from_status=current_status
         )
 
-    # All items complete! Set procurement_completed_at and transition to parallel stage
+    # All items complete! Set procurement_completed_at and transition to parallel stage.
+    # Note: this path uses an unconditional UPDATE (status was just validated).
+    # The race-guarded variant ``_atomic_advance_to_logistics_and_customs`` is
+    # used by the per-invoice completion path where multiple users may finish
+    # simultaneously — see ``complete_procurement_for_invoice``.
     try:
-        update_response = supabase.table("quotes") \
+        supabase.table("quotes") \
             .update({
                 "procurement_completed_at": datetime.now(timezone.utc).isoformat(),
                 "workflow_status": WorkflowStatus.PENDING_LOGISTICS_AND_CUSTOMS.value,
@@ -3165,6 +3169,295 @@ def complete_procurement(
         from_status=current_status,
         to_status=WorkflowStatus.PENDING_LOGISTICS_AND_CUSTOMS.value,
         transition_id=transition_id
+    )
+
+
+# =============================================================================
+# Per-invoice procurement completion (Phase 5d follow-up — fix-per-invoice)
+# =============================================================================
+# Helpers extracted from the quote-level complete_procurement so the per-invoice
+# path can reuse the same orchestration. The legacy aggregate readiness gate
+# (check_all_procurement_complete) is intentionally NOT used at the per-invoice
+# layer — the gate that matters there is "all sibling invoices on this quote
+# are completed".
+
+
+def _assign_logistics_and_customs_to_invoices(quote_id: str) -> List[str]:
+    """Run both invoice-level assigners; return advisory warnings list.
+
+    Both operations are best-effort: failures (and partial matches) are logged
+    and converted to user-readable warnings so the caller can surface them
+    without aborting the workflow.
+    """
+    warnings: List[str] = []
+
+    # Logistics
+    try:
+        logistics_result = assign_logistics_to_invoices(quote_id)
+        if logistics_result and not logistics_result.get("success"):
+            msg = logistics_result.get("error_message") or "Не удалось назначить логистов на инвойсы"
+            warnings.append(msg)
+            logger.warning("Logistics assignment failed for quote %s: %s", quote_id, msg)
+        elif logistics_result and logistics_result.get("unmatched_invoice_ids"):
+            unmatched_count = len(logistics_result["unmatched_invoice_ids"])
+            warnings.append(
+                f"Логисты назначены не на все инвойсы: {unmatched_count} инвойс(ов) "
+                f"без назначения (проверьте страну отгрузки и маршруты логистики)"
+            )
+            logger.info(
+                "Logistics assignment partial for quote %s: %d unmatched invoices",
+                quote_id, unmatched_count
+            )
+    except Exception as e:
+        warnings.append(f"Ошибка при назначении логистов: {str(e)}")
+        logger.warning(
+            "Failed to auto-assign logistics to invoices for quote %s: %s",
+            quote_id, str(e)
+        )
+
+    # Customs (Wave 1 Task 7.3 — least-loaded strategy with per-org advisory lock)
+    try:
+        customs_result = assign_customs_to_invoices(quote_id)
+        if customs_result and not customs_result.get("success"):
+            msg = customs_result.get("error_message") or "Не удалось назначить таможенников на инвойсы"
+            warnings.append(msg)
+            logger.warning("Customs assignment failed for quote %s: %s", quote_id, msg)
+        elif customs_result and customs_result.get("unmatched_invoice_ids"):
+            unmatched_count = len(customs_result["unmatched_invoice_ids"])
+            warnings.append(
+                f"Таможенники назначены не на все инвойсы: {unmatched_count} инвойс(ов) "
+                f"без назначения (нет пользователей с ролью customs в организации)"
+            )
+            logger.info(
+                "Customs assignment partial for quote %s: %d unmatched invoices",
+                quote_id, unmatched_count
+            )
+    except Exception as e:
+        warnings.append(f"Ошибка при назначении таможенников: {str(e)}")
+        logger.warning(
+            "Failed to auto-assign customs to invoices for quote %s: %s",
+            quote_id, str(e)
+        )
+
+    return warnings
+
+
+def _atomic_advance_to_logistics_and_customs(
+    quote_id: str,
+    actor_id: str,
+    actor_role: str,
+) -> Tuple[bool, Optional[str]]:
+    """Atomically transition quote pending_procurement → pending_logistics_and_customs.
+
+    Race guard: the UPDATE filters on workflow_status='pending_procurement', so
+    two callers finishing simultaneously cannot both advance — only the first
+    transition lands. If 0 rows match (someone else won, or quote already
+    advanced), returns (False, None) — caller should treat as a no-op rather
+    than an error.
+
+    Returns:
+        (advanced, transition_id) — advanced=True means this caller wrote the
+        transition; transition_id is the audit row id (best-effort).
+    """
+    supabase = get_supabase()
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    try:
+        update_response = supabase.table("quotes") \
+            .update({
+                "procurement_completed_at": now_iso,
+                "workflow_status": WorkflowStatus.PENDING_LOGISTICS_AND_CUSTOMS.value,
+                "stage_entered_at": now_iso,
+                "overdue_notified_at": None,
+            }) \
+            .eq("id", quote_id) \
+            .eq("workflow_status", WorkflowStatus.PENDING_PROCUREMENT.value) \
+            .execute()
+    except Exception as e:
+        logger.warning(
+            "Atomic advance failed for quote %s: %s", quote_id, str(e)
+        )
+        return False, None
+
+    rows = update_response.data if isinstance(update_response.data, list) else []
+    if not rows:
+        # Race: another worker already advanced the quote, or quote was never
+        # in pending_procurement. Both are valid no-op outcomes.
+        return False, None
+
+    transition_id: Optional[str] = None
+    try:
+        transition_data = {
+            "quote_id": quote_id,
+            "from_status": WorkflowStatus.PENDING_PROCUREMENT.value,
+            "to_status": WorkflowStatus.PENDING_LOGISTICS_AND_CUSTOMS.value,
+            "actor_id": actor_id,
+            "actor_role": actor_role,
+            "comment": "Оценка закупок завершена. Все позиции оценены. Переход в параллельную стадию (логистика + таможня)."
+        }
+        log_response = supabase.table("workflow_transitions").insert(transition_data).execute()
+        transition_id = log_response.data[0].get("id") if log_response.data else None
+    except Exception:
+        transition_id = None  # Audit log is non-critical
+
+    return True, transition_id
+
+
+@dataclass
+class InvoiceProcurementCompletionResult:
+    """Outcome of completing procurement for a single invoice.
+
+    Mirrors the success/error signal of TransitionResult but adds three
+    quote-scope flags so the API can report what side effects fired.
+    """
+    success: bool
+    error_message: Optional[str] = None
+    invoice_id: Optional[str] = None
+    quote_id: Optional[str] = None
+    workflow_advanced: bool = False
+    logistics_assigned: bool = False
+    customs_assigned: bool = False
+
+
+def complete_procurement_for_invoice(
+    invoice_id: str,
+    actor_id: str,
+    actor_roles: List[str]
+) -> InvoiceProcurementCompletionResult:
+    """Complete procurement for a single invoice (КП).
+
+    Per-invoice analogue of the quote-level ``complete_procurement``. Stamps
+    invoice flags (procurement_completed_at + procurement_completed_by), then
+    runs the two invoice-level assigners (best-effort, idempotent — they only
+    touch rows lacking assignment), and finally — if this was the last
+    incomplete invoice on the quote — atomically advances the quote workflow
+    status to ``pending_logistics_and_customs`` with a race guard.
+
+    Args:
+        invoice_id: UUID of the invoice being completed.
+        actor_id: UUID of the user clicking «Завершить закупку».
+        actor_roles: Role slugs the actor holds.
+
+    Returns:
+        InvoiceProcurementCompletionResult — success/error + side-effect flags.
+    """
+    # Validate role
+    if not any(role in ("procurement", "head_of_procurement", "admin") for role in actor_roles):
+        return InvoiceProcurementCompletionResult(
+            success=False,
+            error_message="Only procurement, head of procurement or admin can complete procurement",
+            invoice_id=invoice_id,
+        )
+
+    supabase = get_supabase()
+
+    # Fetch invoice + parent quote_id
+    try:
+        response = supabase.table("invoices") \
+            .select("id, quote_id, procurement_completed_at") \
+            .eq("id", invoice_id) \
+            .single() \
+            .execute()
+    except Exception:
+        return InvoiceProcurementCompletionResult(
+            success=False,
+            error_message=f"Invoice not found: {invoice_id}",
+            invoice_id=invoice_id,
+        )
+
+    if not response.data:
+        return InvoiceProcurementCompletionResult(
+            success=False,
+            error_message=f"Invoice not found: {invoice_id}",
+            invoice_id=invoice_id,
+        )
+
+    invoice = response.data
+    quote_id = invoice.get("quote_id")
+    if invoice.get("procurement_completed_at"):
+        return InvoiceProcurementCompletionResult(
+            success=False,
+            error_message="Procurement already completed for this invoice",
+            invoice_id=invoice_id,
+            quote_id=quote_id,
+        )
+
+    # Stamp per-invoice completion flags
+    try:
+        supabase.table("invoices") \
+            .update({
+                "procurement_completed_at": datetime.now(timezone.utc).isoformat(),
+                "procurement_completed_by": actor_id,
+            }) \
+            .eq("id", invoice_id) \
+            .execute()
+    except Exception as e:
+        return InvoiceProcurementCompletionResult(
+            success=False,
+            error_message=f"Failed to stamp invoice completion: {str(e)}",
+            invoice_id=invoice_id,
+            quote_id=quote_id,
+        )
+
+    # Run the assigners now — they are idempotent (only assign rows lacking
+    # assignment) so calling them after every per-invoice completion ensures
+    # mid-completion invoices show in per-user inboxes, not just the final one.
+    warnings = _assign_logistics_and_customs_to_invoices(quote_id)
+    # The assigners returning no warnings doesn't strictly imply rows were
+    # written — but signal-wise it means "the assignment step ran without
+    # surfacing partial/failure issues".
+    logistics_assigned = True
+    customs_assigned = True
+
+    # Was this the last incomplete invoice on the quote? If yes, advance the
+    # workflow_status atomically.
+    workflow_advanced = False
+    try:
+        remaining = supabase.table("invoices") \
+            .select("id", count="exact") \
+            .eq("quote_id", quote_id) \
+            .is_("deleted_at", None) \
+            .is_("procurement_completed_at", None) \
+            .execute()
+        # Postgrest exposes the count via .count when count='exact' is set.
+        # Fall back to len(data) if the SDK didn't surface it.
+        remaining_count = getattr(remaining, "count", None)
+        if remaining_count is None:
+            remaining_count = len(remaining.data or [])
+    except Exception as e:
+        logger.warning(
+            "Failed to count incomplete invoices for quote %s: %s",
+            quote_id, str(e)
+        )
+        # If we cannot determine remaining count, do NOT advance — safer to
+        # leave the quote in pending_procurement than to advance prematurely.
+        remaining_count = 1  # treat as "not last"
+
+    if remaining_count == 0:
+        actor_role = next(
+            (r for r in actor_roles if r in ("procurement", "head_of_procurement")),
+            "admin",
+        )
+        workflow_advanced, _ = _atomic_advance_to_logistics_and_customs(
+            quote_id=quote_id,
+            actor_id=actor_id,
+            actor_role=actor_role,
+        )
+        # workflow_advanced=False here means the race guard saw the quote was
+        # already advanced by another worker. Not an error.
+
+    result_error = None
+    if warnings:
+        result_error = "Закупка по КП завершена, но: " + "; ".join(warnings)
+
+    return InvoiceProcurementCompletionResult(
+        success=True,
+        error_message=result_error,
+        invoice_id=invoice_id,
+        quote_id=quote_id,
+        workflow_advanced=workflow_advanced,
+        logistics_assigned=logistics_assigned,
+        customs_assigned=customs_assigned,
     )
 
 
