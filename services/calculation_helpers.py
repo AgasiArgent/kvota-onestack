@@ -302,25 +302,76 @@ def _calc_combined_duty(item: Dict) -> float:
 
 # ============================================================================
 # REQ-4 customs_calc adapter switch (decisions.md Q1, Option B)
+# Phase A migration (Req 3 customs-tariff-completeness): use the new
+# `calculate_total_customs_pay()` aggregator instead of per-rate
+# `calculate_duty()`. The aggregator sums all import-duty payment types
+# (IMP + IMPDEMP + IMPCOMP + IMPDOP + IMPTMP) so antidumping (and other
+# special duties) correctly raise the engine's `import_tariff` percent
+# rather than being silently dropped.
 #
-# When a quote_item carries a `_resolved_customs_rate` Rate object whose
-# `source` is one of {'alta-live', 'alta-revalidate'}, route the import
-# tariff calculation through the new pure-functional `customs_calc.calculate_duty`
-# (which supports max(адвалорная, специфическая) per gotcha #3 and currency-
-# scaled specific rates). Otherwise, fall through to the legacy combined-rate
-# formula `_calc_combined_duty()` above.
+# Item input shape:
+#   * Legacy:  item['_resolved_customs_rate']           — single Rate
+#              (Phase 1 — typically IMP only). Wrapped to
+#              {rate.payment_type: rate} for the aggregator.
+#   * Phase A: item['_resolved_rates_by_payment_type']  — dict[str, Rate]
+#              with one entry per applicable payment_type (set by future
+#              UI/API caller once multi-rate selection is wired through).
 #
-# The `_resolved_customs_rate` key is set by the higher-level caller (Task 5
-# API endpoints, future). The calculation engine itself
-# (calculation_engine.py / calculation_models.py / calculation_mapper.py) is
-# NEVER modified — this adapter is the integration seam.
+# Both shapes flow through the same single `calculate_total_customs_pay()`
+# call. For backwards compat, when only the legacy single-rate shape is
+# present, the aggregator output's `total_import_duty_rub` equals
+# `calculate_duty(rate)` — so the resulting percent is identical to what
+# the per-rate path produced before this migration (regression contract:
+# tolerance Decimal('0.01₽')). Otherwise, fall through to the legacy
+# combined-rate formula `_calc_combined_duty()` above.
 #
-# Sunset: legacy path stays until all quote_items have been migrated to
-# Alta-resolved rates (Phase 5+).
+# The locked engine itself (calculation_engine.py / calculation_models.py
+# / calculation_mapper.py) is NEVER modified — this adapter is the
+# integration seam. The locked engine still receives a single
+# `import_tariff` percent; the aggregator just sources it from a complete
+# breakdown rather than a single Rate.
+#
+# Sunset: legacy combined-rate formula path stays until all quote_items
+# have been migrated to Alta-resolved rates (Phase 5+).
 # ============================================================================
 
 
 _ALTA_RESOLVED_SOURCES: frozenset[str] = frozenset({"alta-live", "alta-revalidate"})
+
+
+def _collect_alta_resolved_rates(item: Dict) -> Dict[str, Any]:
+    """Collect Alta-resolved rates from item, keyed by payment_type.
+
+    Supports both the legacy single-rate shape (`_resolved_customs_rate`)
+    and the Phase A multi-rate shape (`_resolved_rates_by_payment_type`).
+    Only rates with `source` ∈ ALTA_RESOLVED_SOURCES are kept — manual
+    or unresolved rates are dropped so the legacy fallback is taken
+    upstream.
+
+    Returns an empty dict when no Alta-resolved rate is present, so the
+    caller can route to the legacy combined-rate formula.
+    """
+    rates: Dict[str, Any] = {}
+
+    multi = item.get("_resolved_rates_by_payment_type")
+    if isinstance(multi, dict):
+        for payment_type, rate in multi.items():
+            if rate is None:
+                continue
+            if getattr(rate, "source", None) in _ALTA_RESOLVED_SOURCES:
+                rates[payment_type] = rate
+
+    single = item.get("_resolved_customs_rate")
+    if (
+        single is not None
+        and getattr(single, "source", None) in _ALTA_RESOLVED_SOURCES
+    ):
+        # Don't overwrite an entry already provided by the multi-rate
+        # shape (it carries the same payment_type and is more complete).
+        pt = getattr(single, "payment_type", None) or "IMP"
+        rates.setdefault(pt, single)
+
+    return rates
 
 
 def _resolve_import_tariff_pct(
@@ -329,52 +380,53 @@ def _resolve_import_tariff_pct(
 ) -> float:
     """Resolve the import-tariff percent for one item.
 
-    Switch by `item['_resolved_customs_rate'].source` (Q1 Option B):
-        * source ∈ {'alta-live', 'alta-revalidate'}  →  customs_calc path
-        * else (None, 'manual', missing key)         →  legacy formula
+    Switch by Alta-resolved rates on the item:
+        * Any rate with source ∈ {'alta-live', 'alta-revalidate'}
+          → aggregator path (calculate_total_customs_pay)
+        * Otherwise (None, 'manual', missing keys)
+          → legacy combined-rate formula (_calc_combined_duty)
 
-    The customs_calc path computes duty in RUB and converts back to a
-    percent-of-customs-value, where customs_value is taken from the
-    item's purchase price (consistent with the legacy formula's
-    `base_price` denominator on line 285 above).
+    The aggregator path sums every applicable import-duty payment type
+    (IMP + IMPDEMP + IMPCOMP + IMPDOP + IMPTMP) into a single
+    `total_import_duty_rub`, then converts to a percent-of-customs-value
+    so the calc engine's `import_tariff × (AY16 + T16)` semantics still
+    apply. customs_value is taken from the item's purchase price
+    (consistent with the legacy formula's `base_price` denominator on
+    line 285 above).
     """
-    resolved_rate = item.get("_resolved_customs_rate")
-    is_alta_resolved = (
-        resolved_rate is not None
-        and getattr(resolved_rate, "source", None) in _ALTA_RESOLVED_SOURCES
-    )
-
-    if not is_alta_resolved:
+    selected_rates = _collect_alta_resolved_rates(item)
+    if not selected_rates:
         # legacy combined-rate, sunset при переводе всех quote_items
         # на Alta-resolved (Phase 5+)
         return _calc_combined_duty(item)
 
-    # --- Alta-resolved path ---------------------------------------------
+    # --- Alta-resolved path (Phase A aggregator) ----------------------
     from services.currency_service import convert_amount, get_latest_rates
-    from services.customs_calc import calculate_duty
+    from services.customs_calc import calculate_total_customs_pay
 
     customs_value_rub = _customs_value_in_rub(item, quote_currency, convert_amount)
     weight_kg = safe_decimal(item.get("weight_in_kg"))
     quantity = safe_decimal(item.get("quantity"))
     currency_rates = get_latest_rates() if customs_value_rub > 0 else {}
 
-    duty_rub = calculate_duty(
-        rate=resolved_rate,
+    breakdown = calculate_total_customs_pay(
         customs_value_rub=customs_value_rub,
+        selected_rates_by_payment_type=selected_rates,
         weight_kg=weight_kg,
         quantity=quantity,
         currency_rates=currency_rates,
     )
 
-    # Convert RUB duty → percent of customs value so the calc engine's
-    # `import_tariff × (AY16 + T16)` semantics still apply. When customs
-    # value is zero (insufficient pricing data) we cannot derive a
-    # percent — fall back to 0% rather than dividing by zero. The 0%
-    # result is identical to what the legacy formula would emit for a
-    # zero-priced item, so behaviour is consistent across both paths.
+    # Convert total RUB import duty → percent of customs value so the
+    # calc engine's `import_tariff × (AY16 + T16)` semantics still
+    # apply. When customs value is zero (insufficient pricing data) we
+    # cannot derive a percent — fall back to 0% rather than dividing
+    # by zero. The 0% result is identical to what the legacy formula
+    # would emit for a zero-priced item, so behaviour is consistent
+    # across both paths.
     if customs_value_rub <= 0:
         return 0.0
-    pct = duty_rub * Decimal("100") / customs_value_rub
+    pct = breakdown.total_import_duty_rub * Decimal("100") / customs_value_rub
     return float(pct)
 
 
