@@ -22,6 +22,7 @@ import {
 } from "@/entities/quote/mutations";
 import type { QuoteItemRow } from "@/entities/quote/queries";
 import { CityAutocomplete, CountryCombobox, findCountryByCode, findCountryByName } from "@/shared/ui/geo";
+import { SearchableCombobox } from "@/shared/ui/searchable-combobox";
 import { INCOTERMS_2020 } from "@/shared/lib/incoterms";
 import { SUPPORTED_CURRENCIES } from "@/shared/lib/currencies";
 import { extractErrorMessage } from "@/shared/lib/errors";
@@ -258,12 +259,14 @@ export function InvoiceCreateModal({
             <Label>
               Поставщик <span className="text-destructive">*</span>
             </Label>
-            <select
-              value={supplierId}
-              onChange={(e) => {
-                const newSupplierId = e.target.value;
-                setSupplierId(newSupplierId);
-                setErrors((prev) => { const { supplier, ...rest } = prev; return rest; });
+            <SearchableCombobox<Supplier>
+              value={supplierId || null}
+              onChange={(newSupplierId) => {
+                setSupplierId(newSupplierId ?? "");
+                setErrors((prev) => {
+                  const { supplier: _supplier, ...rest } = prev;
+                  return rest;
+                });
                 // Auto-fill country from supplier; useEffect on countryCode
                 // then re-resolves VAT (strategy B always overwrites). Try RU
                 // locale first, fall back to EN so suppliers stored with
@@ -278,15 +281,15 @@ export function InvoiceCreateModal({
                   }
                 }
               }}
-              className={`w-full h-8 px-2.5 text-sm border rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-ring ${errors.supplier ? "border-destructive" : "border-input"}`}
-            >
-              <option value="">Выберите поставщика</option>
-              {suppliers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
+              items={suppliers}
+              getLabel={(s) => s.name}
+              getSearchableExtras={(s) => (s.country ? [s.country] : [])}
+              placeholder="Выберите поставщика"
+              searchPlaceholder="Поиск поставщика..."
+              emptyMessage="Список поставщиков пуст"
+              ariaLabel="Поставщик"
+              invalid={Boolean(errors.supplier)}
+            />
             {errors.supplier && <p className="text-xs text-destructive">{errors.supplier}</p>}
           </div>
 
@@ -294,18 +297,25 @@ export function InvoiceCreateModal({
             <Label>
               Компания-покупатель <span className="text-destructive">*</span>
             </Label>
-            <select
-              value={buyerCompanyId}
-              onChange={(e) => { setBuyerCompanyId(e.target.value); setErrors((prev) => { const { buyer, ...rest } = prev; return rest; }); }}
-              className={`w-full h-8 px-2.5 text-sm border rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-ring ${errors.buyer ? "border-destructive" : "border-input"}`}
-            >
-              <option value="">Выберите компанию</option>
-              {buyerCompanies.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name} ({b.company_code})
-                </option>
-              ))}
-            </select>
+            <SearchableCombobox<BuyerCompany>
+              value={buyerCompanyId || null}
+              onChange={(newBuyerId) => {
+                setBuyerCompanyId(newBuyerId ?? "");
+                setErrors((prev) => {
+                  const { buyer: _buyer, ...rest } = prev;
+                  return rest;
+                });
+              }}
+              items={buyerCompanies}
+              getLabel={(b) => b.name}
+              getSecondary={(b) => b.company_code}
+              getSearchableExtras={(b) => [b.company_code]}
+              placeholder="Выберите компанию"
+              searchPlaceholder="Поиск компании..."
+              emptyMessage="Список компаний пуст"
+              ariaLabel="Компания-покупатель"
+              invalid={Boolean(errors.buyer)}
+            />
             {errors.buyer && <p className="text-xs text-destructive">{errors.buyer}</p>}
           </div>
 
