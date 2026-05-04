@@ -39,3 +39,29 @@ export {
   splitCost,
   splitCostBatch,
 } from "./lib/cost-split";
+
+// UI sub-components — REQ-7 / REQ-10 (Wave 3 Task 7b)
+//
+// Per design.md §4.8.5 these stay internal-only — outside callers should
+// reach for `<CertificateModal>` / `<ExpenseModal>` (Task 7c) instead.
+// They are exported here so sibling UI files in this feature folder
+// (`certificate-modal.tsx`, `expense-modal.tsx`, `certificate-bind-popover.tsx`)
+// can import from the public surface without crossing the FSD boundary
+// via deep relative paths.
+export {
+  PositionsMultiSelect,
+  filterItems,
+  toggleId,
+  allFilteredSelected,
+  nextSelectionAfterToggleAll,
+} from "./ui/positions-multi-select";
+export type { PositionsMultiSelectProps } from "./ui/positions-multi-select";
+export {
+  LivePreviewPanel,
+  computePreviewRows,
+  formatPercent,
+} from "./ui/live-preview-panel";
+export type {
+  LivePreviewPanelProps,
+  PreviewRow,
+} from "./ui/live-preview-panel";
