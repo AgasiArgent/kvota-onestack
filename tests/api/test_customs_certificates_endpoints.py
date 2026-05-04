@@ -103,6 +103,11 @@ class _Stub:
         self._queue: list[tuple[str, list]] = []
         self.insert_calls: list[tuple[str, list | dict]] = []
         self.delete_calls: list[tuple[str, list]] = []
+        # Phase B Wave 5 hotfix — record (table, columns_string) for every
+        # SELECT so regression tests can assert the helper queries only
+        # against columns that exist on the target table (caught the
+        # ``currency_of_quote`` 42703 prod regression).
+        self.select_calls: list[tuple[str, str]] = []
         self._current_table: str | None = None
         self._mode: str | None = None
 
@@ -114,7 +119,9 @@ class _Stub:
         self._mode = None
         return self
 
-    def select(self, *_a, **_kw):
+    def select(self, *args, **_kw):
+        cols = args[0] if args else ""
+        self.select_calls.append((self._current_table or "", cols))
         return self
 
     def insert(self, payload):
@@ -774,3 +781,181 @@ class TestDeleteCertificateHandler:
             resp = _run(delete_certificate_handler(req, "missing"))
         assert resp.status_code == 404
         assert _body(resp)["error"]["code"] == "NOT_FOUND"
+
+
+# ===========================================================================
+# Schema-drift guard — Phase B Wave 5 hotfix regression
+# ===========================================================================
+#
+# Bug: ``_verify_quote_in_org`` and ``_compute_attached_items_payload`` were
+# selecting ``currency_of_quote`` from ``kvota.quotes`` — a column that lives
+# only on ``kvota.quote_versions`` and as a calc-engine variable, NOT on
+# ``kvota.quotes``. PostgREST raised 42703 → 500 on every Phase B
+# cert/expense API call once deployed to prod.
+#
+# These tests are parameter-scoped — they only assert the SELECT column
+# lists target the right schema. Approach (c) per the hotfix plan: capture
+# ``.select(...)`` args on the existing ``_Stub`` and verify they contain
+# only columns from a hardcoded whitelist mirrored from
+# ``frontend/src/shared/types/database.types.ts``'s ``quotes`` Row type.
+# Approach (b) (a real PostgREST-style 42703 mock) was rejected as too
+# invasive for the hand-rolled stub style this suite uses.
+# ===========================================================================
+
+
+# Subset of ``Database['kvota']['Tables']['quotes']['Row']`` keys actually
+# referenced from ``api/customs.py``. Mirrored verbatim from
+# ``frontend/src/shared/types/database.types.ts:4440-4561``. If a future
+# migration drops one of these columns, regenerate types first
+# (``cd frontend && npm run db:types``) and update this whitelist.
+_QUOTES_COLUMNS_WHITELIST: frozenset[str] = frozenset({
+    "id",
+    "organization_id",
+    "currency",
+    "deleted_at",
+})
+
+
+class TestSchemaDriftGuards:
+    """Regression: verify customs helpers select only real ``quotes`` columns.
+
+    Approach: every passing happy-path test in the suite already exercises
+    these helpers via fluent Supabase mock. Re-run the simplest happy paths
+    here while watching ``stub.select_calls`` to assert no helper asks for a
+    column not in ``_QUOTES_COLUMNS_WHITELIST``.
+    """
+
+    @staticmethod
+    def _quotes_select_calls(stub: _Stub) -> list[str]:
+        """Return the raw column-string for every ``.select(...)`` call
+        that targeted the ``quotes`` table."""
+        return [cols for table, cols in stub.select_calls if table == "quotes"]
+
+    @staticmethod
+    def _parse_columns(select_str: str) -> set[str]:
+        """Parse a PostgREST ``.select('a, b, c')`` string into a column
+        set. Strips whitespace and ignores embedded join syntax (none of
+        the customs helpers use joins on ``quotes``)."""
+        return {c.strip() for c in select_str.split(",") if c.strip()}
+
+    @patch("api.customs.get_user_role_codes")
+    def test_verify_quote_in_org_only_selects_real_columns(self, mock_roles):
+        """``_verify_quote_in_org`` must NOT request ``currency_of_quote``.
+
+        Repro of the prod 42703 bug — exercised through
+        ``create_certificate_handler`` which is the entry point of every
+        Phase B mutation.
+        """
+        from api.customs import create_certificate_handler
+
+        mock_roles.return_value = ["customs"]
+        stub = _Stub()
+        stub.stage("quotes", [_quote_row()])
+        stub.stage(
+            "quote_items",
+            [{"id": "item-1", "quote_id": "quote-1"}],
+        )
+        stub.stage(
+            "quote_certificates",
+            [_cert_row(cert_id="cert-new")],
+        )
+        stub.stage("quote_certificate_items", [{"id": "att-1"}])
+        # _compute_attached_items_payload reads the quote currency too
+        stub.stage("quotes", [{"currency": "RUB"}])
+        stub.stage("quote_items", [_quote_item("item-1")])
+
+        with patch("api.customs.get_supabase", return_value=stub):
+            req = _make_request(
+                body={
+                    "quote_id": "quote-1",
+                    "type": "ДС ТР ТС",
+                    "cost_rub": 100.0,
+                    "item_ids": ["item-1"],
+                }
+            )
+            resp = _run(create_certificate_handler(req))
+
+        assert resp.status_code == 200, _body(resp)
+
+        # Every column requested from ``quotes`` must be in the whitelist.
+        for select_str in self._quotes_select_calls(stub):
+            cols = self._parse_columns(select_str)
+            unknown = cols - _QUOTES_COLUMNS_WHITELIST
+            assert not unknown, (
+                f"customs.py SELECT against `quotes` requests unknown "
+                f"columns {sorted(unknown)} — prod will return 42703. "
+                f"Whitelist: {sorted(_QUOTES_COLUMNS_WHITELIST)}"
+            )
+
+    @patch("api.customs.get_user_role_codes")
+    def test_compute_attached_items_payload_only_selects_real_columns(
+        self, mock_roles
+    ):
+        """``_compute_attached_items_payload`` separately reads the quote
+        currency — guard that path too via ``list_certificates_handler``."""
+        from api.customs import list_certificates_handler
+
+        mock_roles.return_value = ["customs"]
+        stub = _Stub()
+        # Org check
+        stub.stage("quotes", [_quote_row()])
+        # Certificates list
+        stub.stage(
+            "quote_certificates",
+            [_cert_row(cert_id="cert-A", cost_rub=10000.0)],
+        )
+        # Attached item ids
+        stub.stage(
+            "quote_certificate_items",
+            [{"item_id": "item-1", "created_at": "2026-04-01T09:00:00+00:00"}],
+        )
+        # _compute_attached_items_payload — quote currency lookup
+        stub.stage("quotes", [{"currency": "RUB"}])
+        # _compute_attached_items_payload — items
+        stub.stage(
+            "quote_items",
+            [_quote_item("item-1", price=100.0, qty=10)],
+        )
+
+        with patch("api.customs.get_supabase", return_value=stub):
+            req = _make_request(query_params={"quote_id": "quote-1"})
+            resp = _run(list_certificates_handler(req))
+
+        assert resp.status_code == 200, _body(resp)
+
+        for select_str in self._quotes_select_calls(stub):
+            cols = self._parse_columns(select_str)
+            unknown = cols - _QUOTES_COLUMNS_WHITELIST
+            assert not unknown, (
+                f"_compute_attached_items_payload SELECT against `quotes` "
+                f"requests unknown columns {sorted(unknown)} — prod will "
+                f"return 42703. Whitelist: "
+                f"{sorted(_QUOTES_COLUMNS_WHITELIST)}"
+            )
+
+    def test_currency_of_quote_is_not_requested_anywhere(self):
+        """Belt-and-suspenders: scan ``api/customs.py`` source for the
+        bad column name. A future copy-paste mistake will fail this test
+        before reaching CI/prod.
+        """
+        import api.customs as customs_module
+
+        source_path = customs_module.__file__
+        assert source_path is not None
+        with open(source_path, encoding="utf-8") as f:
+            src = f.read()
+
+        # Allowed sites: docstrings/comments referencing the bug.
+        # The literal must not appear inside any ``.select(...)`` call.
+        # Cheap heuristic: search inside lines that contain ".select(".
+        offending = [
+            line.strip()
+            for line in src.splitlines()
+            if ".select(" in line and "currency_of_quote" in line
+        ]
+        assert not offending, (
+            "api/customs.py has `currency_of_quote` inside a .select(...) "
+            "call. That column does NOT exist on kvota.quotes — only on "
+            "kvota.quote_versions. Use 'currency' instead. "
+            f"Offending line(s): {offending}"
+        )

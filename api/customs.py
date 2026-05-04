@@ -1750,10 +1750,17 @@ def _parse_cost_rub(value) -> tuple[float | None, JSONResponse | None]:
 
 
 def _verify_quote_in_org(supabase, quote_id: str, org_id: str) -> dict | None:
-    """Verify quote exists, belongs to org, not soft-deleted. Returns row or None."""
+    """Verify quote exists, belongs to org, not soft-deleted. Returns row or None.
+
+    Note: ``kvota.quotes`` exposes only ``currency`` — it does **not** have a
+    ``currency_of_quote`` column (that name is a calc-engine variable plus a
+    ``quote_versions`` row column, never a ``quotes`` column). Selecting the
+    wrong name causes PostgREST 42703 → 500 on every Phase B cert/expense
+    call.
+    """
     res = (
         supabase.table("quotes")
-        .select("id, organization_id, currency_of_quote, currency")
+        .select("id, organization_id, currency")
         .eq("id", quote_id)
         .eq("organization_id", org_id)
         .is_("deleted_at", None)
@@ -1834,15 +1841,13 @@ def _compute_attached_items_payload(
 
     quote_res = (
         supabase.table("quotes")
-        .select("currency_of_quote, currency")
+        .select("currency")
         .eq("id", quote_id)
         .limit(1)
         .execute()
     )
     quote_row = (quote_res.data or [{}])[0]
-    quote_currency = (
-        quote_row.get("currency_of_quote") or quote_row.get("currency") or "USD"
-    )
+    quote_currency = quote_row.get("currency") or "USD"
 
     items_res = (
         supabase.table("quote_items")

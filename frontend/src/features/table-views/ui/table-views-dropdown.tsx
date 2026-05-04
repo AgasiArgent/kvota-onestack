@@ -27,9 +27,32 @@ import {
   type AvailableColumn,
 } from "./table-views-settings-dialog";
 
+/**
+ * Minimal shape for a virtual, client-side "system" view rendered in its
+ * own «Системные» group at the top of the dropdown. Different from
+ * {@link TableView} (which represents real `user_table_views` rows) — system
+ * views never round-trip to the database. The customs registry uses
+ * `SystemView` from `@/features/customs-certificates`; this local shape is
+ * the structural intersection so the dropdown stays decoupled from any
+ * particular feature module.
+ */
+export interface SystemViewOption {
+  /** Synthetic ID (e.g. `system:all`); collisions with UUID rows impossible. */
+  readonly id: string;
+  /** Russian label rendered in the menu. */
+  readonly label: string;
+}
+
 interface TableViewsDropdownProps {
   /** All views available to this user (personal + org-shared) for the table. */
   views: readonly TableView[];
+  /**
+   * Optional virtual "system" views rendered above personal/shared in their
+   * own «Системные» group (REQ-11 AC#4). Synthetic IDs (e.g. `system:all`)
+   * do not collide with UUID rows in `user_table_views`, so URL persistence
+   * (`?customs_view=<id>`) keeps working without a DB migration.
+   */
+  systemViews?: readonly SystemViewOption[];
   /** Currently selected view id, or null to show all columns. */
   activeViewId: string | null;
   /** Called when the user selects a different view (or clears selection). */
@@ -58,6 +81,7 @@ interface TableViewsDropdownProps {
  */
 export function TableViewsDropdown({
   views,
+  systemViews = [],
   activeViewId,
   onViewChange,
   onViewsRefresh,
@@ -83,8 +107,17 @@ export function TableViewsDropdown({
     () => views.find((v) => v.id === activeViewId) ?? null,
     [views, activeViewId]
   );
+  // Resolve the trigger label across both groups — system views first so
+  // their Russian label wins when the active id is synthetic
+  // (`system:tariffs-nds`, etc.). Falls back to TableView.name, then to the
+  // «Все колонки» default when nothing matches.
+  const activeSystemView = useMemo(
+    () => systemViews.find((v) => v.id === activeViewId) ?? null,
+    [systemViews, activeViewId]
+  );
 
-  const triggerLabel = activeView ? activeView.name : "Все колонки";
+  const triggerLabel =
+    activeSystemView?.label ?? activeView?.name ?? "Все колонки";
 
   function handleOpenSettings() {
     if (activeView) {
@@ -110,16 +143,42 @@ export function TableViewsDropdown({
           }
         />
         <DropdownMenuContent className="w-64" align="start">
-          <DropdownMenuItem onClick={() => onViewChange(null)}>
-            <div className="flex items-center gap-2 flex-1">
-              {activeViewId === null ? (
-                <Check size={14} className="text-accent" />
-              ) : (
-                <span className="inline-block w-3.5" />
-              )}
-              <span>Все колонки</span>
-            </div>
-          </DropdownMenuItem>
+          {/* «Системные» group — REQ-11 AC#4. Rendered ONLY when the parent
+              passes `systemViews`; otherwise the generic «Все колонки → null»
+              row below is the clear-filter affordance. When system views
+              ARE wired, the first system view (typically `system:all`) is
+              the canonical «Все колонки» preset — REQ-11 AC#7. */}
+          {systemViews.length > 0 ? (
+            <>
+              <DropdownMenuLabel>Системные</DropdownMenuLabel>
+              {systemViews.map((view) => (
+                <DropdownMenuItem
+                  key={view.id}
+                  onClick={() => onViewChange(view.id)}
+                >
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    {view.id === activeViewId ? (
+                      <Check size={14} className="text-accent" />
+                    ) : (
+                      <span className="inline-block w-3.5" />
+                    )}
+                    <span className="truncate">{view.label}</span>
+                  </div>
+                </DropdownMenuItem>
+              ))}
+            </>
+          ) : (
+            <DropdownMenuItem onClick={() => onViewChange(null)}>
+              <div className="flex items-center gap-2 flex-1">
+                {activeViewId === null ? (
+                  <Check size={14} className="text-accent" />
+                ) : (
+                  <span className="inline-block w-3.5" />
+                )}
+                <span>Все колонки</span>
+              </div>
+            </DropdownMenuItem>
+          )}
 
           {personalViews.length > 0 && (
             <>
