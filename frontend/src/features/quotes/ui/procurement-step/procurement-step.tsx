@@ -86,6 +86,13 @@ export function ProcurementStep({
   const [preselectedItemIds, setPreselectedItemIds] = useState<string[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [buyerCompanies, setBuyerCompanies] = useState<BuyerCompany[]>([]);
+  // Bumped after «Назначить в КП» from the lower QuotePositionsList; routed
+  // into every InvoiceCard's load() effect via `externalRefreshKey` so the
+  // КПП re-fetches its supplier-side invoice_items without an F5. router.refresh()
+  // alone wouldn't help — InvoiceCard fetches invoice_items client-side and
+  // its load() effect only depends on stable invoice.id + a local refreshKey
+  // it doesn't expose. (МОЗ-91 / РОЗ-104.)
+  const [invoiceItemsRefreshKey, setInvoiceItemsRefreshKey] = useState(0);
   // Phase 5d: coverage-derived readiness. Map: quote_item_id → has at least
   // one covering invoice_item in its selected invoice with non-null
   // purchase_price_original. Post-migration 284 this replaces reading the
@@ -239,6 +246,7 @@ export function ProcurementStep({
           items={items}
           invoices={invoices}
           onCreateInvoiceWithItems={handleCreateInvoiceWithItems}
+          onAssigned={() => setInvoiceItemsRefreshKey((k) => k + 1)}
         />
 
         {invoices.map((invoice) => (
@@ -249,6 +257,7 @@ export function ProcurementStep({
             quote={quote}
             defaultExpanded={invoices.length === 1}
             userRoles={userRoles}
+            externalRefreshKey={invoiceItemsRefreshKey}
           />
         ))}
 

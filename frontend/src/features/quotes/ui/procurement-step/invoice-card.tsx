@@ -118,6 +118,17 @@ interface InvoiceCardProps {
   coverageSummaryByItem?: Record<string, string>;
   defaultExpanded?: boolean;
   userRoles?: string[];
+  /**
+   * Counter bumped by the parent (procurement-step) when an external
+   * mutation invalidates the supplier-side positions fetched by this card.
+   * Today's only trigger is «Назначить в КП» from QuotePositionsList — a
+   * sibling component that can't reach this card's local refreshKey, so
+   * the parent forwards a refresh signal via prop instead. Including it in
+   * the load() effect's dep array forces a re-fetch of invoice_items +
+   * coverage labels + sales-side join, mirroring the onMutated path used
+   * by procurement-handsontable mutations.
+   */
+  externalRefreshKey?: number;
 }
 
 const numberFmtInline = new Intl.NumberFormat("ru-RU", {
@@ -136,6 +147,7 @@ export function InvoiceCard({
   coverageSummaryByItem: coverageOverride,
   defaultExpanded = false,
   userRoles = [],
+  externalRefreshKey = 0,
 }: InvoiceCardProps) {
   const router = useRouter();
   const [expanded, setExpanded] = useState(defaultExpanded);
@@ -541,7 +553,7 @@ export function InvoiceCard({
     return () => {
       cancelled = true;
     };
-  }, [invoice.id, invoiceItemsOverride, refreshKey]);
+  }, [invoice.id, invoiceItemsOverride, refreshKey, externalRefreshKey]);
 
   const supplierName =
     (invoice.supplier as { name: string } | null)?.name ?? "\u2014";
