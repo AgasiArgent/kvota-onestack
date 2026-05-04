@@ -29,7 +29,6 @@ import {
 } from "./customs-columns";
 import { CustomsExpenses } from "./customs-expenses";
 import { CustomsNotes } from "./customs-notes";
-import { CUSTOMS_SYSTEM_VIEWS } from "./customs-views";
 import { EntityNotesPanel } from "@/entities/entity-note";
 import type { EntityNoteCardData } from "@/entities/entity-note/ui/entity-note-card";
 import { CustomsInfoBlock } from "./customs-info-block";
@@ -413,12 +412,6 @@ export function CustomsStep({
           <div className="flex items-center justify-end">
             <TableViewsDropdown
               views={views}
-              // Phase B Wave 5 hotfix — REQ-11 AC#4: render the 4 virtual
-              // system views in their own «Системные» group above the
-              // user's personal/shared views. Pre-hotfix the constant was
-              // imported only by the table filter and hint banner, never
-              // reaching the dropdown menu.
-              systemViews={CUSTOMS_SYSTEM_VIEWS}
               activeViewId={activeViewId}
               onViewChange={handleViewChange}
               onViewsRefresh={handleViewsRefresh}
