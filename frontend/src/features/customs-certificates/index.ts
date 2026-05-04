@@ -76,3 +76,34 @@ export { CertificateCard } from "./ui/certificate-card";
 export type { CertificateCardProps } from "./ui/certificate-card";
 export { CustomExpenseCard } from "./ui/custom-expense-card";
 export type { CustomExpenseCardProps } from "./ui/custom-expense-card";
+
+// UI components — Wave 3 Task 7f (REQ-5 HistoryBanner + REQ-6 section orchestrator)
+//
+// `HistoryBanner` is the per-item dialog cue that surfaces the loose 2-of-3
+// match returned by `GET /api/customs/certificates/history`.
+// `CertificatesSection` is the unified «Расходы по таможне» section that
+// replaces the Phase A `<QuoteCustomsExpenses />` + `<ItemCustomsExpenses />`
+// split — see design.md §4.8.4 + §4.9 for wiring details.
+export { HistoryBanner } from "./ui/history-banner";
+export type { HistoryBannerProps } from "./ui/history-banner";
+export { CertificatesSection } from "./ui/certificates-section";
+export type { CertificatesSectionProps } from "./ui/certificates-section";
+
+// UI components — Wave 3 Task 7e (REQ-9 — per-item dialog read-only coverage
+// list + read-only details modal). The list renders inside
+// `customs-item-dialog.tsx` (Wave 4 Task 10) under the «Сертификация»
+// section; the modal opens on cert-card click («Открыть сертификат» /
+// «Подробнее»).
+export { CertificateCoverageList } from "./ui/certificate-coverage-list";
+export type {
+  AttachedCertView,
+  CertificateCoverageListProps,
+} from "./ui/certificate-coverage-list";
+export {
+  CertificateDetailsBody,
+  CertificateDetailsModal,
+} from "./ui/certificate-details-modal";
+export type {
+  CertificateDetailsBodyProps,
+  CertificateDetailsModalProps,
+} from "./ui/certificate-details-modal";
