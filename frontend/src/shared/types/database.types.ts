@@ -4050,6 +4050,8 @@ export type Database = {
           country_of_origin_oksm: number | null
           has_origin_certificate: boolean
           has_fta_certificate: boolean
+          customs_manual_override: boolean
+          customs_manual_rate_payload: Json | null
         }
         Insert: {
           id?: string
@@ -4125,6 +4127,8 @@ export type Database = {
           country_of_origin_oksm?: number | null
           has_origin_certificate?: boolean
           has_fta_certificate?: boolean
+          customs_manual_override?: boolean
+          customs_manual_rate_payload?: Json | null
         }
         Update: {
           id?: string
@@ -4200,6 +4204,8 @@ export type Database = {
           country_of_origin_oksm?: number | null
           has_origin_certificate?: boolean
           has_fta_certificate?: boolean
+          customs_manual_override?: boolean
+          customs_manual_rate_payload?: Json | null
         }
         Relationships: []
       }
