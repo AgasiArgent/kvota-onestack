@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useCallback, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { HotTable } from "@handsontable/react";
 import { registerAllModules } from "handsontable/registry";
 import Handsontable from "handsontable";
@@ -10,11 +10,84 @@ import { Badge } from "@/components/ui/badge";
 import { updateQuoteItem } from "@/entities/quote/mutations";
 import type { QuoteItemRow } from "@/entities/quote/queries";
 import type { CustomsAutofillSuggestion } from "@/features/customs-autofill";
+import type { SystemView } from "@/features/customs-certificates";
+import { CustomsViewHintBanner } from "@/features/customs-certificates";
+
+import { CUSTOMS_AVAILABLE_COLUMNS } from "./customs-columns";
+import { isSystemViewId, resolveSystemView } from "./customs-views";
 
 import "handsontable/styles/handsontable.css";
 import "handsontable/styles/ht-theme-main.css";
 
 registerAllModules();
+
+// ---------------------------------------------------------------------------
+// REQ-11 (Phase B Wave 4 Task 11) — synthetic `system:*` view resolver.
+//
+// The customs items registry exposes 4 client-side virtual views (see
+// `./customs-views.ts`). This file owns the URL → view → column-filter
+// resolution so the table can react to `?customs_view=` directly,
+// without waiting for the parent (`customs-step.tsx`) to thread a prop
+// through. UUID rows from `kvota.user_table_views` keep the old prop-based
+// path — only `system:*` IDs trigger the override.
+//
+// Helpers are exported so the unit-test suite can exercise them without
+// rendering the full Handsontable (no jsdom in this workspace — see
+// `__tests__/customs-antidumping.test.ts`). All three helpers are pure.
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve the active **system** view from a raw URL param.
+ *
+ * Returns the matching {@link SystemView} when:
+ *   - `viewParam` matches the `system:*` synthetic-ID pattern AND
+ *   - the ID corresponds to a known entry in `CUSTOMS_SYSTEM_VIEWS`.
+ *
+ * Returns `null` for everything else — UUIDs from `user_table_views`,
+ * `null`/`undefined`/empty strings, and unknown `system:*` sub-ids
+ * (graceful degradation per REQ-11 AC#7). Callers compose this with the
+ * existing user-view lookup performed in `customs-step.tsx`.
+ */
+export function resolveActiveSystemView(
+  viewParam: string | null | undefined,
+): SystemView | null {
+  if (!isSystemViewId(viewParam)) return null;
+  return resolveSystemView(viewParam);
+}
+
+/**
+ * Compute the visible column list passed to {@link filterColumns}.
+ *
+ * Precedence:
+ *   1. If a system view is active, its `visibleColumnIds` win — the
+ *      `system:all` row enumerates every column so the result matches
+ *      the no-filter behaviour, just routed through `filterColumns`.
+ *   2. Otherwise the prop from `customs-step.tsx` (a UUID-based user
+ *      view's columns, or `undefined` for «show all») is returned
+ *      unchanged.
+ *
+ * The function is pure so unit tests can assert routing without
+ * rendering Handsontable.
+ */
+export function effectiveVisibleColumns(
+  activeSystemView: SystemView | null,
+  visibleColumnsProp: readonly string[] | undefined,
+): readonly string[] | undefined {
+  if (activeSystemView !== null) return activeSystemView.visibleColumnIds;
+  return visibleColumnsProp;
+}
+
+/**
+ * Whether the {@link CustomsViewHintBanner} should be mounted above the
+ * Handsontable. The banner self-collapses to `null` for the default
+ * `system:all` view and for `null` inputs, so this predicate just guards
+ * against rendering an empty wrapper element.
+ */
+export function shouldRenderHintBanner(
+  activeSystemView: SystemView | null,
+): boolean {
+  return activeSystemView !== null && activeSystemView.id !== "system:all";
+}
 
 function ext<T>(row: unknown): T {
   return row as T;
@@ -755,12 +828,27 @@ export function CustomsHandsontable({
   onExpandRow,
   visibleColumns,
 }: CustomsHandsontableProps) {
+  // REQ-11 — read the `?customs_view=` URL param directly so the table
+  // reacts to synthetic `system:*` IDs without depending on the parent
+  // re-threading them through `visibleColumns`. UUID values fall back to
+  // the existing prop-based path (see `effectiveVisibleColumns`).
+  const searchParams = useSearchParams();
+  const viewParam = searchParams?.get("customs_view") ?? null;
+  const activeSystemView = useMemo(
+    () => resolveActiveSystemView(viewParam),
+    [viewParam],
+  );
+  const resolvedVisibleColumns = useMemo(
+    () => effectiveVisibleColumns(activeSystemView, visibleColumns),
+    [activeSystemView, visibleColumns],
+  );
+
   // Resolve the column set: either filtered or the full default set.
   // Memoized against the serialized key list so we don't rebuild on every render.
-  const visibleKey = visibleColumns?.join("|") ?? "";
+  const visibleKey = resolvedVisibleColumns?.join("|") ?? "";
   const { colHeaders, colDefs, visibleKeys } = useMemo(() => {
-    if (visibleColumns && visibleColumns.length > 0) {
-      const { headers, columns } = filterColumns(visibleColumns);
+    if (resolvedVisibleColumns && resolvedVisibleColumns.length > 0) {
+      const { headers, columns } = filterColumns(resolvedVisibleColumns);
       const keys = columns.map((c) => String(c.data));
       return { colHeaders: headers, colDefs: columns, visibleKeys: keys };
     }
@@ -1032,6 +1120,14 @@ export function CustomsHandsontable({
           Числовые столбцы — значение за единицу товара.
         </span>
       </div>
+
+      {/* REQ-11 AC#9 — hint banner above the table when a non-default
+          system view hides one or more columns. Self-collapses to null
+          for `null` / `system:all` so unconditional mount is safe. */}
+      <CustomsViewHintBanner
+        currentView={activeSystemView}
+        allColumns={CUSTOMS_AVAILABLE_COLUMNS}
+      />
 
       <div className="ht-theme-main">
         <style>{`
