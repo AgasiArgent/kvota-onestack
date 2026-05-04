@@ -24,6 +24,7 @@ import type { QuoteStep } from "@/entities/quote/types";
 // queries.ts which transitively pulls `next/headers` from supabase/server.ts.
 // Pulling that into a Client Component (this file) breaks the Turbopack build.
 import { STATUS_LABELS, STATUS_BADGE_STYLES } from "@/entities/quote/status-labels";
+import { canViewQuoteFinancials } from "@/shared/lib/roles";
 import { DeleteMenu } from "./delete-menu/delete-menu";
 
 const PLAN_FACT_ROLES = ["finance", "admin", "top_manager"];
@@ -108,6 +109,8 @@ export function QuoteStickyHeader({
         }).format(totalAmount)
       : null;
 
+  // Margin is hidden for procurement / logistics / customs roles (МОЗ-60).
+  const showFinancials = canViewQuoteFinancials(userRoles);
   const profit = quote.profit_quote_currency ?? null;
   const revenue = quote.revenue_no_vat_quote_currency ?? null;
   const marginPercent =
@@ -115,7 +118,9 @@ export function QuoteStickyHeader({
       ? (profit / revenue) * 100
       : null;
   const marginDisplay =
-    marginPercent != null ? `${marginPercent.toFixed(1)}%` : null;
+    showFinancials && marginPercent != null
+      ? `${marginPercent.toFixed(1)}%`
+      : null;
 
   const currency = quote.currency ?? "";
 

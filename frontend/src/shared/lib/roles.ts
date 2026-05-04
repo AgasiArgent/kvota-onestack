@@ -192,3 +192,31 @@ const COMPOSITION_EDIT_ROLES = [
 export function canEditComposition(roles: string[]): boolean {
   return roles.some((r) => COMPOSITION_EDIT_ROLES.includes(r));
 }
+
+/**
+ * Roles allowed to view quote financial summary (Прибыль / Маржа / Наценка)
+ * on the quote profile header. Procurement / logistics / customs roles are
+ * intentionally excluded — they don't need (and shouldn't see) margin info.
+ *
+ * Issue МОЗ-60: a procurement manager (МОЗ) flagged that they shouldn't be
+ * able to see profit/margin/markup of a quote.
+ */
+const QUOTE_FINANCIALS_ROLES = [
+  "admin",
+  "top_manager",
+  "finance",
+  "sales",
+  "head_of_sales",
+  "quote_controller",
+  "spec_controller",
+  "currency_controller",
+];
+
+/**
+ * Returns true if the user may see quote financial figures (profit, margin,
+ * markup) on the quote detail page. Excludes procurement, logistics, customs
+ * and their leads.
+ */
+export function canViewQuoteFinancials(roles: string[]): boolean {
+  return roles.some((r) => QUOTE_FINANCIALS_ROLES.includes(r));
+}
