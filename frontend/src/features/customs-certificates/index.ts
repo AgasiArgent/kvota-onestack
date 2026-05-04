@@ -124,3 +124,10 @@ export type {
   AfterAttachPreviewRow,
   CertificateBindPopoverProps,
 } from "./ui/certificate-bind-popover";
+
+// UI components — Wave 4 Task 8 (REQ-11 AC#9-#11). Hint banner shown above
+// the customs Handsontable when the active system view is anything other
+// than «Все колонки» — explains which columns are currently hidden and
+// surfaces the disabled «Создать свой вид» CTA pointing at Phase C.
+export { CustomsViewHintBanner } from "./ui/customs-view-hint-banner";
+export type { CustomsViewHintBannerProps } from "./ui/customs-view-hint-banner";
