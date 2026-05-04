@@ -1,24 +1,22 @@
 // @vitest-environment jsdom
 /**
- * Phase 1a hotfix plan — proof-of-concept jsdom test for `<TableViewsDropdown>`.
+ * Phase 1a / Phase 3 hotfix plan — jsdom regression suite for `<TableViewsDropdown>`.
  *
- * Purpose:
- * - Prove that the new jsdom + @testing-library/react + @testing-library/user-event
- *   substrate works on the current code (post-revert state, before the
- *   Phase 3 dropdown fix).
- * - Establish the file-naming convention (`*.dom.test.tsx`) and the
- *   `// @vitest-environment jsdom` docblock that future DOM-dependent tests
- *   must follow.
- * - Reproduce or rule-out the Base UI #31 crash on trigger click in jsdom.
- *
- * The reverted hotfix (de3fd4d0) added a `systemViews?` prop and rendered
- * a 4-item «Системные» group above personal/shared. That prop is GONE on
- * main right now, so we cannot directly mount the broken pattern from
- * outside the component. Instead we exercise the dropdown in its current
- * shape — render + click — which is sufficient to prove (a) the substrate
- * works and (b) the trigger click does not throw on the current code.
- *
- * Phase 3 will add tests that drive the new prop wiring once the fix lands.
+ * History:
+ * - Phase 1a (2026-05-04) introduced this file as the proof-of-concept for
+ *   the new jsdom + @testing-library/react + @testing-library/user-event
+ *   substrate. The original Base UI #31 reproduction case was authored as
+ *   `it.skip(...)` because the markup error escaped the test boundary as a
+ *   raw React/Base UI throw — see commit log of `dropdown-jsdom.dom.test.tsx`.
+ * - Phase 3 (2026-05-04) wrapped each `<DropdownMenuLabel>` in a
+ *   `<DropdownMenuGroup>` (Base UI `<Menu.Group>`), eliminating the
+ *   `MenuGroupRootContext is missing` throw. The previously-skipped test
+ *   was flipped to plain `it(...)` and now passes — it stays in the suite
+ *   as the regression guard.
+ * - Phase 3 also folded `CUSTOMS_SYSTEM_VIEWS` into the `views` prop with a
+ *   `is_system: true` flag rather than introducing a separate `systemViews?`
+ *   prop. The new tests below verify that flag-based grouping renders the
+ *   «Системные» heading and routes click events through `onViewChange`.
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -27,7 +25,10 @@ import userEvent from "@testing-library/user-event";
 
 import type { TableView } from "@/entities/table-view";
 
-import { TableViewsDropdown } from "../ui/table-views-dropdown";
+import {
+  TableViewsDropdown,
+  type DropdownTableView,
+} from "../ui/table-views-dropdown";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -70,6 +71,45 @@ const sharedView: TableView = {
   name: "Общий вид",
   isShared: true,
   organizationId: "org-1",
+};
+
+// Phase 3 fixtures — synthetic «Системные» views adapted to the
+// `DropdownTableView` shape (the dropdown's view model). These mirror the
+// production constant `CUSTOMS_SYSTEM_VIEWS` from
+// `frontend/src/features/quotes/ui/customs-step/customs-views.ts` after
+// the customs-step adapter normalises `SystemView` → `DropdownTableView`.
+const systemViewAll: DropdownTableView = {
+  id: "system:all",
+  userId: "system",
+  tableKey: "customs",
+  name: "Все колонки",
+  filters: {},
+  sort: null,
+  visibleColumns: ["sku", "name"],
+  isShared: false,
+  organizationId: null,
+  isDefault: false,
+  createdAt: "1970-01-01T00:00:00.000Z",
+  updatedAt: "1970-01-01T00:00:00.000Z",
+  is_system: true,
+};
+
+const systemViewTariffs: DropdownTableView = {
+  ...systemViewAll,
+  id: "system:tariffs-nds",
+  name: "Тарифы и НДС",
+};
+
+const systemViewDocuments: DropdownTableView = {
+  ...systemViewAll,
+  id: "system:documents",
+  name: "Документы и сертификаты",
+};
+
+const systemViewIdentification: DropdownTableView = {
+  ...systemViewAll,
+  id: "system:identification",
+  name: "Только идентификация",
 };
 
 function renderDropdown(overrides: Partial<React.ComponentProps<typeof TableViewsDropdown>> = {}) {
@@ -116,48 +156,97 @@ describe("TableViewsDropdown — DOM behaviour (jsdom substrate)", () => {
   });
 
   /**
-   * Phase 1a discovery (2026-05-04 — DOCUMENTED, NOT GREEN): in the current
-   * post-revert code, `<TableViewsDropdown>` uses `<DropdownMenuLabel>`
-   * (Base UI's `<Menu.GroupLabel>`) WITHOUT wrapping each labelled section
-   * in `<Menu.Group>`. Opening the menu throws:
+   * Regression guard for the Base UI #31 «MenuGroupRootContext is missing»
+   * crash. Pre-Phase 3, `<TableViewsDropdown>` rendered
+   * `<DropdownMenuLabel>` (Base UI `<Menu.GroupLabel>`) at the top level of
+   * the popup, which threw on first paint of the menu because Menu group
+   * parts must live inside a `<Menu.Group>`.
    *
-   *   "Base UI: MenuGroupRootContext is missing. Menu group parts must be
-   *    used within <Menu.Group>."
-   *
-   * This is a real, pre-existing bug invisible to the SSR-only test
-   * substrate (`renderToString` never mounts the popup). It validates the
-   * Phase 1a thesis: jsdom + RTL CAN catch the Base UI #31 class of bug
-   * that SSR cannot.
-   *
-   * `it.skip` rather than `it.fails`: the React error escapes the test
-   * boundary as an Unhandled Exception (jsdom's loose error semantics),
-   * which vitest 4 surfaces as a non-zero exit even when `it.fails`
-   * captures the throw. Skipping keeps `npm test` exit 0 while preserving
-   * the test body for Phase 3 to flip back to plain `it(...)` once the
-   * `<DropdownMenuLabel>` markup is wrapped in `<DropdownMenuGroup>`.
-   *
-   * Phase 3 acceptance: change `it.skip` → `it`, run `npm test`, observe
-   * the test green. That test then becomes the regression guard for the
-   * Phase B dropdown shipping.
+   * Phase 3 wrapped each labelled section in `<DropdownMenuGroup>`; this
+   * test ensures the wrapper stays in place. If a future refactor unwraps
+   * a label, this test fails on `await user.click(trigger)` with the
+   * original Base UI throw.
    */
-  it.skip(
-    "opens the menu on trigger click without crashing (Base UI #31 reproduction — Phase 3 will un-skip)",
-    async () => {
-      const user = userEvent.setup();
-      const { onViewChange } = renderDropdown();
+  it("opens the menu on trigger click without crashing (Base UI #31 regression)", async () => {
+    const user = userEvent.setup();
+    const { onViewChange } = renderDropdown();
 
-      const trigger = screen.getByRole("button", { name: /Все колонки/ });
-      await user.click(trigger);
+    const trigger = screen.getByRole("button", { name: /Все колонки/ });
+    await user.click(trigger);
 
-      // After click, the personal-view item should be reachable in the DOM —
-      // Base UI mounts the popup via portal into document.body. If the click
-      // crashes (Base UI #31 / portal mount mismatch), this query throws.
-      const personalItem = await screen.findByText(personalView.name);
-      expect(personalItem).toBeInTheDocument();
+    // After click, the personal-view item should be reachable in the DOM —
+    // Base UI mounts the popup via portal into document.body. If the click
+    // crashes (Base UI #31 / portal mount mismatch), this query throws.
+    const personalItem = await screen.findByText(personalView.name);
+    expect(personalItem).toBeInTheDocument();
 
-      // Click the personal view to confirm the click handler fires.
-      await user.click(personalItem);
-      expect(onViewChange).toHaveBeenCalledWith(personalView.id);
-    }
-  );
+    // Click the personal view to confirm the click handler fires.
+    await user.click(personalItem);
+    expect(onViewChange).toHaveBeenCalledWith(personalView.id);
+  });
+
+  /**
+   * Phase 3 acceptance — REQ-11 AC#4: the dropdown groups system views
+   * under «Системные» heading above any user views. Mounting with the 4
+   * production `CUSTOMS_SYSTEM_VIEWS` plus a personal/shared row should
+   * render all 4 names + the «Системные» / «Личные» / «Общие» labels in
+   * the popup.
+   */
+  it("renders 4 system views grouped under «Системные»", async () => {
+    const user = userEvent.setup();
+    renderDropdown({
+      views: [
+        systemViewAll,
+        systemViewTariffs,
+        systemViewDocuments,
+        systemViewIdentification,
+        personalView,
+        sharedView,
+      ],
+    });
+
+    await user.click(screen.getByRole("button", { name: /Все колонки/ }));
+
+    // Wait on the «Системные» heading — it only appears inside the popup
+    // (never in the trigger), so this is a reliable signal that the menu
+    // finished mounting.
+    expect(await screen.findByText("Системные")).toBeInTheDocument();
+
+    // All 3 group headings render — proves grouping survived the click.
+    expect(screen.getByText("Личные")).toBeInTheDocument();
+    expect(screen.getByText("Общие")).toBeInTheDocument();
+
+    // System view names — the systemViewAll name "Все колонки" duplicates
+    // the static «Все колонки» menu item label, so we assert via
+    // getAllByText (≥ 2). The other 3 system view names are unique.
+    expect(screen.getAllByText(systemViewAll.name).length).toBeGreaterThanOrEqual(
+      2
+    );
+    expect(screen.getByText(systemViewTariffs.name)).toBeInTheDocument();
+    expect(screen.getByText(systemViewDocuments.name)).toBeInTheDocument();
+    expect(screen.getByText(systemViewIdentification.name)).toBeInTheDocument();
+  });
+
+  /**
+   * Phase 3 acceptance — clicking a system view in the dropdown forwards
+   * the synthetic `system:*` id to the parent's `onViewChange` callback.
+   * The parent is responsible for URL persistence (see customs-step.tsx
+   * `handleViewChange`); the dropdown only emits the id.
+   */
+  it("clicking a system view fires onViewChange with the synthetic system:* id", async () => {
+    const user = userEvent.setup();
+    const { onViewChange } = renderDropdown({
+      views: [
+        systemViewAll,
+        systemViewTariffs,
+        personalView,
+      ],
+    });
+
+    await user.click(screen.getByRole("button", { name: /Все колонки/ }));
+    const tariffsItem = await screen.findByText(systemViewTariffs.name);
+    await user.click(tariffsItem);
+
+    expect(onViewChange).toHaveBeenCalledWith("system:tariffs-nds");
+  });
 });

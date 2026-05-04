@@ -1,4 +1,7 @@
-export { TableViewsDropdown } from "./ui/table-views-dropdown";
+export {
+  TableViewsDropdown,
+  type DropdownTableView,
+} from "./ui/table-views-dropdown";
 export {
   TableViewsSettingsDialog,
   type AvailableColumn,

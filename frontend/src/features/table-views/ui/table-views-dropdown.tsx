@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -27,9 +28,24 @@ import {
   type AvailableColumn,
 } from "./table-views-settings-dialog";
 
+/**
+ * View shape accepted by the dropdown. Real `TableView` rows from
+ * `kvota.user_table_views` come through unchanged; synthetic «Системные»
+ * presets (e.g. `CUSTOMS_SYSTEM_VIEWS`) must be adapted by the caller to
+ * this shape and tagged with `is_system: true` so the dropdown renders
+ * them in the «Системные» group above personal/shared rows.
+ */
+export type DropdownTableView = TableView & { readonly is_system?: boolean };
+
 interface TableViewsDropdownProps {
-  /** All views available to this user (personal + org-shared) for the table. */
-  views: readonly TableView[];
+  /**
+   * All views available to this user, in any order. The dropdown groups them
+   * internally into «Системные» (is_system === true), «Личные» (isShared
+   * === false), and «Общие» (isShared === true). Synthetic system views
+   * MUST be adapted by callers to the `DropdownTableView` shape — see
+   * `customs-step.tsx` for the canonical conversion of `CUSTOMS_SYSTEM_VIEWS`.
+   */
+  views: readonly DropdownTableView[];
   /** Currently selected view id, or null to show all columns. */
   activeViewId: string | null;
   /** Called when the user selects a different view (or clears selection). */
@@ -73,11 +89,18 @@ export function TableViewsDropdown({
     | { kind: "edit"; view: TableView }
   >({ kind: "closed" });
 
-  const personalViews = useMemo(
-    () => views.filter((v) => !v.isShared),
+  const systemViews = useMemo(
+    () => views.filter((v) => v.is_system === true),
     [views]
   );
-  const sharedViews = useMemo(() => views.filter((v) => v.isShared), [views]);
+  const personalViews = useMemo(
+    () => views.filter((v) => v.is_system !== true && !v.isShared),
+    [views]
+  );
+  const sharedViews = useMemo(
+    () => views.filter((v) => v.is_system !== true && v.isShared),
+    [views]
+  );
 
   const activeView = useMemo(
     () => views.find((v) => v.id === activeViewId) ?? null,
@@ -121,48 +144,76 @@ export function TableViewsDropdown({
             </div>
           </DropdownMenuItem>
 
+          {systemViews.length > 0 && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>Системные</DropdownMenuLabel>
+                {systemViews.map((view) => (
+                  <DropdownMenuItem
+                    key={view.id}
+                    onClick={() => onViewChange(view.id)}
+                  >
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      {view.id === activeViewId ? (
+                        <Check size={14} className="text-accent" />
+                      ) : (
+                        <span className="inline-block w-3.5" />
+                      )}
+                      <span className="truncate">{view.name}</span>
+                    </div>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuGroup>
+            </>
+          )}
+
           {personalViews.length > 0 && (
             <>
               <DropdownMenuSeparator />
-              <DropdownMenuLabel>Личные</DropdownMenuLabel>
-              {personalViews.map((view) => (
-                <DropdownMenuItem
-                  key={view.id}
-                  onClick={() => onViewChange(view.id)}
-                >
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    {view.id === activeViewId ? (
-                      <Check size={14} className="text-accent" />
-                    ) : (
-                      <span className="inline-block w-3.5" />
-                    )}
-                    <span className="truncate">{view.name}</span>
-                  </div>
-                </DropdownMenuItem>
-              ))}
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>Личные</DropdownMenuLabel>
+                {personalViews.map((view) => (
+                  <DropdownMenuItem
+                    key={view.id}
+                    onClick={() => onViewChange(view.id)}
+                  >
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      {view.id === activeViewId ? (
+                        <Check size={14} className="text-accent" />
+                      ) : (
+                        <span className="inline-block w-3.5" />
+                      )}
+                      <span className="truncate">{view.name}</span>
+                    </div>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuGroup>
             </>
           )}
 
           {sharedViews.length > 0 && (
             <>
               <DropdownMenuSeparator />
-              <DropdownMenuLabel>Общие</DropdownMenuLabel>
-              {sharedViews.map((view) => (
-                <DropdownMenuItem
-                  key={view.id}
-                  onClick={() => onViewChange(view.id)}
-                >
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    {view.id === activeViewId ? (
-                      <Check size={14} className="text-accent" />
-                    ) : (
-                      <span className="inline-block w-3.5" />
-                    )}
-                    <Users size={12} className="text-muted-foreground shrink-0" />
-                    <span className="truncate">{view.name}</span>
-                  </div>
-                </DropdownMenuItem>
-              ))}
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>Общие</DropdownMenuLabel>
+                {sharedViews.map((view) => (
+                  <DropdownMenuItem
+                    key={view.id}
+                    onClick={() => onViewChange(view.id)}
+                  >
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      {view.id === activeViewId ? (
+                        <Check size={14} className="text-accent" />
+                      ) : (
+                        <span className="inline-block w-3.5" />
+                      )}
+                      <Users size={12} className="text-muted-foreground shrink-0" />
+                      <span className="truncate">{view.name}</span>
+                    </div>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuGroup>
             </>
           )}
 
