@@ -208,6 +208,7 @@ export function QuotePositionsList({
             <TableHead>Наименование</TableHead>
             <TableHead className="w-48">В КП</TableHead>
             <TableHead className="w-20 text-right">Кол-во</TableHead>
+            <TableHead className="w-20">Ед. Изм</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -228,7 +229,10 @@ export function QuotePositionsList({
                     onCheckedChange={() => toggleItem(item.id)}
                   />
                 </TableCell>
-                <TableCell className="truncate max-w-28">
+                <TableCell
+                  className="truncate max-w-28"
+                  title={item.brand ?? undefined}
+                >
                   {item.brand ?? "\u2014"}
                 </TableCell>
                 <TableCell className="truncate max-w-40 font-mono text-xs">
@@ -262,6 +266,9 @@ export function QuotePositionsList({
                 </TableCell>
                 <TableCell className="text-right font-mono">
                   {qtyFmt.format(item.quantity)}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {item.unit ?? "\u2014"}
                 </TableCell>
               </TableRow>
             );
