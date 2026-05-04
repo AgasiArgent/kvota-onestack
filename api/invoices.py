@@ -9,6 +9,9 @@ DELETE /api/invoices/{id}/letter-draft/{draft_id}      — Delete unsent draft
 GET    /api/invoices/{id}/letter-drafts/history       — Fetch all sent drafts
 POST   /api/invoices/{id}/procurement-unlock-request  — Request unlock approval
                                                          for a procurement-locked quote
+POST   /api/invoices/{id}/complete-procurement        — Per-invoice procurement
+                                                         completion (advances quote
+                                                         workflow_status when last)
 
 Auth: JWT via ApiAuthMiddleware (request.state.api_user).
 Roles: procurement, admin, head_of_procurement
@@ -485,4 +488,90 @@ async def request_procurement_unlock(request, id: str) -> JSONResponse:
             },
         },
         status_code=201,
+    )
+
+
+# ============================================================================
+# POST /api/invoices/{id}/complete-procurement
+# ============================================================================
+
+
+async def complete_invoice_procurement(request, id: str) -> JSONResponse:
+    """Complete procurement for a single invoice (КП).
+
+    Path: POST /api/invoices/{id}/complete-procurement
+    Params:
+        reason: str (optional) — currently unused; reserved for audit trail.
+    Returns:
+        success: bool
+        data:
+            workflow_advanced: bool — True if THIS call atomically advanced the
+              parent quote from pending_procurement to pending_logistics_and_customs.
+            logistics_assigned: bool — True if the logistics assigner ran without
+              surfacing failures (rows may already have had assignment).
+            customs_assigned: bool — same as above for customs.
+    Side Effects:
+        - Stamps invoices.procurement_completed_at + procurement_completed_by.
+        - Calls assign_logistics_to_invoices(quote_id) — idempotent partial
+          assignment for siblings still lacking logistics.
+        - Calls assign_customs_to_invoices(quote_id) — idempotent partial
+          assignment for siblings still lacking customs.
+        - When this was the last incomplete invoice on the quote, atomically
+          advances quotes.workflow_status (race-guarded conditional UPDATE).
+        - Inserts a workflow_transitions audit row on advance.
+    Roles: procurement, head_of_procurement, admin
+    Errors:
+        401 — Authentication required
+        403 — Procurement role required
+        404 — Invoice not found (or not in user's organization)
+        409 — Procurement already completed for this invoice
+    """
+    user, err = _get_procurement_user(request)
+    if err:
+        return err
+
+    _, err = _verify_invoice_ownership(id, user["org_id"])
+    if err:
+        return err
+
+    # Body is optional. We accept an empty body or `{ "reason": "..." }`.
+    # The reason field is reserved for future audit logging and is currently
+    # not propagated further; ignore parse errors.
+    try:
+        await request.json()
+    except Exception:
+        pass
+
+    from services.workflow_service import complete_procurement_for_invoice
+
+    result = complete_procurement_for_invoice(
+        invoice_id=id,
+        actor_id=user["id"],
+        actor_roles=list(user["role_slugs"]),
+    )
+
+    if not result.success:
+        # Distinguish "already completed" (409) from other errors (500).
+        message = result.error_message or "Failed to complete procurement"
+        if "already completed" in message.lower():
+            return JSONResponse(
+                {"success": False, "error": {"code": "ALREADY_COMPLETED", "message": message}},
+                status_code=409,
+            )
+        return JSONResponse(
+            {"success": False, "error": {"code": "COMPLETION_FAILED", "message": message}},
+            status_code=500,
+        )
+
+    return JSONResponse(
+        {
+            "success": True,
+            "data": {
+                "workflow_advanced": result.workflow_advanced,
+                "logistics_assigned": result.logistics_assigned,
+                "customs_assigned": result.customs_assigned,
+            },
+            "warning": result.error_message,  # Advisory warnings (assignment partial/failure)
+        },
+        status_code=200,
     )

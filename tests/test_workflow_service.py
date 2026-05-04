@@ -1045,6 +1045,302 @@ class TestProcurementAutoTransition:
 
 
 # =============================================================================
+# Per-invoice procurement completion (fix: per-invoice → quote stage transition)
+# =============================================================================
+
+
+class TestCompleteProcurementForInvoice:
+    """Tests for ``complete_procurement_for_invoice`` — per-invoice analogue
+    of ``complete_procurement`` that bridges per-КП UI to the workflow_service
+    orchestration (assigners + atomic quote transition).
+    """
+
+    def test_helper_importable(self):
+        from services.workflow_service import complete_procurement_for_invoice
+        assert callable(complete_procurement_for_invoice)
+
+    def test_result_dataclass_importable(self):
+        from services.workflow_service import InvoiceProcurementCompletionResult
+        # All flags default to False/None; success must be supplied.
+        result = InvoiceProcurementCompletionResult(success=True)
+        assert result.success is True
+        assert result.workflow_advanced is False
+        assert result.logistics_assigned is False
+        assert result.customs_assigned is False
+
+    @patch('services.workflow_service.get_supabase')
+    def test_rejects_wrong_role(self, mock_supabase):
+        from services.workflow_service import complete_procurement_for_invoice
+
+        result = complete_procurement_for_invoice(
+            invoice_id="inv-1",
+            actor_id="user-1",
+            actor_roles=["sales"],
+        )
+
+        assert result.success is False
+        assert result.error_message and "procurement" in result.error_message.lower()
+        # No DB calls should have been made
+        mock_supabase.assert_not_called()
+
+    @patch('services.workflow_service.get_supabase')
+    def test_invoice_not_found(self, mock_supabase):
+        from services.workflow_service import complete_procurement_for_invoice
+
+        client = MagicMock()
+        mock_supabase.return_value = client
+        client.table.return_value.select.return_value.eq.return_value \
+            .single.return_value.execute.return_value = MagicMock(data=None)
+
+        result = complete_procurement_for_invoice(
+            invoice_id="inv-missing",
+            actor_id="user-1",
+            actor_roles=["procurement"],
+        )
+
+        assert result.success is False
+        assert "not found" in (result.error_message or "").lower()
+
+    @patch('services.workflow_service.get_supabase')
+    def test_already_completed(self, mock_supabase):
+        from services.workflow_service import complete_procurement_for_invoice
+
+        client = MagicMock()
+        mock_supabase.return_value = client
+        client.table.return_value.select.return_value.eq.return_value \
+            .single.return_value.execute.return_value = MagicMock(data={
+                "id": "inv-1",
+                "quote_id": "quote-1",
+                "procurement_completed_at": "2026-05-01T10:00:00Z",
+            })
+
+        result = complete_procurement_for_invoice(
+            invoice_id="inv-1",
+            actor_id="user-1",
+            actor_roles=["procurement"],
+        )
+
+        assert result.success is False
+        assert "already" in (result.error_message or "").lower()
+        assert result.quote_id == "quote-1"
+
+    @patch('services.workflow_service.assign_customs_to_invoices')
+    @patch('services.workflow_service.assign_logistics_to_invoices')
+    @patch('services.workflow_service.get_supabase')
+    def test_not_last_invoice_does_not_advance_quote(
+        self,
+        mock_supabase,
+        mock_assign_logistics,
+        mock_assign_customs,
+    ):
+        """When sibling invoices remain incomplete, assigners fire but the
+        quote workflow_status is NOT advanced."""
+        from services.workflow_service import complete_procurement_for_invoice
+
+        client = MagicMock()
+        mock_supabase.return_value = client
+
+        # Track sequence of table() calls so we can fail loudly if
+        # the helper attempts to UPDATE quotes (advance) when it shouldn't.
+        update_quote_calls = {"count": 0}
+
+        def table_side_effect(name):
+            chain = MagicMock()
+            if name == "invoices":
+                # 1st call: SELECT invoice (initial fetch)
+                # 2nd call: UPDATE invoice flags
+                # 3rd call: SELECT count remaining
+                chain.select.return_value.eq.return_value.single.return_value \
+                    .execute.return_value = MagicMock(data={
+                        "id": "inv-1",
+                        "quote_id": "quote-1",
+                        "procurement_completed_at": None,
+                    })
+                # UPDATE chain
+                chain.update.return_value.eq.return_value.execute.return_value = \
+                    MagicMock(data=[{"id": "inv-1"}])
+                # SELECT count chain (with .is_().is_())
+                # 2 incomplete invoices remaining
+                count_resp = MagicMock()
+                count_resp.count = 2
+                count_resp.data = [{"id": "inv-2"}, {"id": "inv-3"}]
+                chain.select.return_value.eq.return_value.is_.return_value \
+                    .is_.return_value.execute.return_value = count_resp
+                return chain
+            if name == "quotes":
+                # If the helper hits quotes.update() that would mean it tried
+                # to advance the quote — assert this does NOT happen here.
+                update_quote_calls["count"] += 1
+                return chain
+            return chain
+
+        client.table.side_effect = table_side_effect
+
+        # Assigners return clean success (no warnings)
+        mock_assign_logistics.return_value = {
+            "success": True,
+            "assigned_invoices": [],
+            "unmatched_invoice_ids": [],
+        }
+        mock_assign_customs.return_value = {
+            "success": True,
+            "assigned_invoices": [],
+            "unmatched_invoice_ids": [],
+        }
+
+        result = complete_procurement_for_invoice(
+            invoice_id="inv-1",
+            actor_id="user-1",
+            actor_roles=["procurement"],
+        )
+
+        assert result.success is True
+        assert result.workflow_advanced is False
+        assert update_quote_calls["count"] == 0, (
+            "Quote should NOT be touched when sibling invoices remain"
+        )
+        # Assigners were both called for partial-state propagation
+        mock_assign_logistics.assert_called_once_with("quote-1")
+        mock_assign_customs.assert_called_once_with("quote-1")
+
+    @patch('services.workflow_service.assign_customs_to_invoices')
+    @patch('services.workflow_service.assign_logistics_to_invoices')
+    @patch('services.workflow_service.get_supabase')
+    def test_last_invoice_advances_quote_atomically(
+        self,
+        mock_supabase,
+        mock_assign_logistics,
+        mock_assign_customs,
+    ):
+        """When this is the last incomplete invoice, helper atomically
+        advances the quote workflow_status."""
+        from services.workflow_service import (
+            complete_procurement_for_invoice,
+            WorkflowStatus,
+        )
+
+        client = MagicMock()
+        mock_supabase.return_value = client
+
+        update_quote_calls: list[dict] = []
+
+        def table_side_effect(name):
+            chain = MagicMock()
+            if name == "invoices":
+                chain.select.return_value.eq.return_value.single.return_value \
+                    .execute.return_value = MagicMock(data={
+                        "id": "inv-1",
+                        "quote_id": "quote-1",
+                        "procurement_completed_at": None,
+                    })
+                chain.update.return_value.eq.return_value.execute.return_value = \
+                    MagicMock(data=[{"id": "inv-1"}])
+                # 0 incomplete invoices remaining → last
+                count_resp = MagicMock()
+                count_resp.count = 0
+                count_resp.data = []
+                chain.select.return_value.eq.return_value.is_.return_value \
+                    .is_.return_value.execute.return_value = count_resp
+                return chain
+            if name == "quotes":
+                # Atomic conditional UPDATE — track the chain calls
+                def update(payload):
+                    update_quote_calls.append(payload)
+                    sub = MagicMock()
+                    # .eq("id", quote_id).eq("workflow_status", PENDING_PROCUREMENT)
+                    sub.eq.return_value.eq.return_value.execute.return_value = \
+                        MagicMock(data=[{"id": "quote-1"}])
+                    return sub
+                chain.update.side_effect = update
+                return chain
+            if name == "workflow_transitions":
+                chain.insert.return_value.execute.return_value = \
+                    MagicMock(data=[{"id": "trans-1"}])
+                return chain
+            return chain
+
+        client.table.side_effect = table_side_effect
+
+        mock_assign_logistics.return_value = {"success": True, "assigned_invoices": [], "unmatched_invoice_ids": []}
+        mock_assign_customs.return_value = {"success": True, "assigned_invoices": [], "unmatched_invoice_ids": []}
+
+        result = complete_procurement_for_invoice(
+            invoice_id="inv-1",
+            actor_id="user-1",
+            actor_roles=["procurement"],
+        )
+
+        assert result.success is True
+        assert result.workflow_advanced is True
+        # Verify the atomic UPDATE payload included workflow_status transition
+        assert len(update_quote_calls) == 1
+        payload = update_quote_calls[0]
+        assert payload["workflow_status"] == WorkflowStatus.PENDING_LOGISTICS_AND_CUSTOMS.value
+        assert payload["procurement_completed_at"] is not None
+        assert payload["stage_entered_at"] is not None
+
+    @patch('services.workflow_service.assign_customs_to_invoices')
+    @patch('services.workflow_service.assign_logistics_to_invoices')
+    @patch('services.workflow_service.get_supabase')
+    def test_race_condition_lost_returns_advanced_false_no_error(
+        self,
+        mock_supabase,
+        mock_assign_logistics,
+        mock_assign_customs,
+    ):
+        """Race: another worker already advanced the quote concurrently.
+        The conditional UPDATE matches 0 rows; helper must return
+        workflow_advanced=False but success=True (no error)."""
+        from services.workflow_service import complete_procurement_for_invoice
+
+        client = MagicMock()
+        mock_supabase.return_value = client
+
+        def table_side_effect(name):
+            chain = MagicMock()
+            if name == "invoices":
+                chain.select.return_value.eq.return_value.single.return_value \
+                    .execute.return_value = MagicMock(data={
+                        "id": "inv-1",
+                        "quote_id": "quote-1",
+                        "procurement_completed_at": None,
+                    })
+                chain.update.return_value.eq.return_value.execute.return_value = \
+                    MagicMock(data=[{"id": "inv-1"}])
+                count_resp = MagicMock()
+                count_resp.count = 0  # last invoice
+                count_resp.data = []
+                chain.select.return_value.eq.return_value.is_.return_value \
+                    .is_.return_value.execute.return_value = count_resp
+                return chain
+            if name == "quotes":
+                def update(_payload):
+                    sub = MagicMock()
+                    # 0 rows match — race lost
+                    sub.eq.return_value.eq.return_value.execute.return_value = \
+                        MagicMock(data=[])
+                    return sub
+                chain.update.side_effect = update
+                return chain
+            return chain
+
+        client.table.side_effect = table_side_effect
+
+        mock_assign_logistics.return_value = {"success": True, "assigned_invoices": [], "unmatched_invoice_ids": []}
+        mock_assign_customs.return_value = {"success": True, "assigned_invoices": [], "unmatched_invoice_ids": []}
+
+        result = complete_procurement_for_invoice(
+            invoice_id="inv-1",
+            actor_id="user-1",
+            actor_roles=["procurement"],
+        )
+
+        # Race-loss is a valid outcome — invoice flags are stamped, no error
+        assert result.success is True
+        assert result.workflow_advanced is False
+
+
+# =============================================================================
 # WF-003: AUTO-TRANSITION LOGISTICS+CUSTOMS COMPLETE TESTS
 # =============================================================================
 
