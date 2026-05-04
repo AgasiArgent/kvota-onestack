@@ -103,17 +103,25 @@ class TestGetKanban:
         assert payload["error"]["code"] == "INVALID_STATUS"
 
     @patch("api.procurement.get_supabase")
-    def test_happy_path_groups_cards_by_substatus(self, mock_get_sb):
-        """Two quotes, three cards: q1 has two brands (two cards), q2 has one unbranded card."""
+    def test_regular_procurement_with_assignments_sees_only_own_brand_cards(self, mock_get_sb):
+        """Regular МОЗ scope: caller sees only brand-slices they own AND past distribution.
+
+        Mix of cards covering all filter dimensions:
+        - q1/Siemens (searching_supplier, item assigned to caller)   → visible
+        - q1/ABB    (searching_supplier, item assigned to other)     → filtered out (not owned)
+        - q2/''     (waiting_prices, no assignee)                    → filtered out (not owned)
+        - q3/Siemens (distributing, item assigned to caller)         → filtered out (distributing column hidden from МОЗ)
+
+        Verifies the visible card retains the full payload (manager_name, МОЗ
+        names, invoice totals from invoice_items) so we don't regress shape.
+        """
         three_days_ago = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
 
-        # qbs rows — one per (quote, brand). q1 has both Siemens (distributing)
-        # and ABB (distributing); q2 has '' (waiting_prices).
         qbs_rows = [
             {
                 "quote_id": "q1",
                 "brand": "Siemens",
-                "substatus": "distributing",
+                "substatus": "searching_supplier",
                 "updated_at": three_days_ago,
                 "quotes": {
                     "id": "q1",
@@ -127,7 +135,7 @@ class TestGetKanban:
             {
                 "quote_id": "q1",
                 "brand": "ABB",
-                "substatus": "distributing",
+                "substatus": "searching_supplier",
                 "updated_at": three_days_ago,
                 "quotes": {
                     "id": "q1",
@@ -152,19 +160,33 @@ class TestGetKanban:
                     "customers": {"name": "Beta"},
                 },
             },
+            {
+                "quote_id": "q3",
+                "brand": "Siemens",
+                "substatus": "distributing",
+                "updated_at": three_days_ago,
+                "quotes": {
+                    "id": "q3",
+                    "idn_quote": "Q-202604-0003",
+                    "workflow_status": "pending_procurement",
+                    "organization_id": "org-1",
+                    "created_by": "creator-1",
+                    "customers": {"name": "Gamma"},
+                },
+            },
         ]
         history_rows = [
             {
                 "quote_id": "q1",
                 "brand": "Siemens",
-                "to_substatus": "distributing",
+                "to_substatus": "searching_supplier",
                 "transitioned_at": three_days_ago,
                 "reason": "",
             },
             {
                 "quote_id": "q1",
                 "brand": "ABB",
-                "to_substatus": "distributing",
+                "to_substatus": "searching_supplier",
                 "transitioned_at": three_days_ago,
                 "reason": "",
             },
@@ -175,13 +197,21 @@ class TestGetKanban:
                 "transitioned_at": three_days_ago,
                 "reason": "price delayed",
             },
+            {
+                "quote_id": "q3",
+                "brand": "Siemens",
+                "to_substatus": "distributing",
+                "transitioned_at": three_days_ago,
+                "reason": "",
+            },
         ]
-        # Items: q1 has 1 Siemens item (qty 2, assigned u1) + 1 ABB item (qty 5, assigned u2);
-        # q2 has 1 unbranded item (qty 1, no assignee).
+        # q1/Siemens assigned to caller (user-1); q1/ABB assigned to u2;
+        # q2 unassigned; q3/Siemens assigned to caller but in distributing.
         quote_items_rows = [
-            {"id": "item-1", "quote_id": "q1", "brand": "Siemens", "quantity": 2, "assigned_procurement_user": "u1"},
+            {"id": "item-1", "quote_id": "q1", "brand": "Siemens", "quantity": 2, "assigned_procurement_user": "user-1"},
             {"id": "item-2", "quote_id": "q1", "brand": "ABB", "quantity": 5, "assigned_procurement_user": "u2"},
             {"id": "item-3", "quote_id": "q2", "brand": None, "quantity": 1, "assigned_procurement_user": None},
+            {"id": "item-4", "quote_id": "q3", "brand": "Siemens", "quantity": 4, "assigned_procurement_user": "user-1"},
         ]
         invoices_rows = [
             {
@@ -202,7 +232,8 @@ class TestGetKanban:
                 "purchase_price_original": 100.0,
                 "purchase_currency": "USD",
             },
-            # (q1 via inv-1, ABB): 50 × 5 = 250
+            # (q1 via inv-1, ABB): 50 × 5 = 250 — present in source data, but
+            # the ABB card is scope-filtered out so its sum should not appear.
             {
                 "invoice_id": "inv-1",
                 "brand": "ABB",
@@ -213,7 +244,7 @@ class TestGetKanban:
         ]
         user_profiles_rows = [
             {"user_id": "creator-1", "full_name": "Алиса Петрова"},
-            {"user_id": "u1", "full_name": "Борис Сидоров"},
+            {"user_id": "user-1", "full_name": "Борис Сидоров"},
             {"user_id": "u2", "full_name": "Виктор Орлов"},
         ]
 
@@ -268,18 +299,18 @@ class TestGetKanban:
             "prices_ready",
         }
 
-        # q1 contributes TWO cards to distributing (one per brand).
-        distributing_cards = cols["distributing"]
-        assert len(distributing_cards) == 2
+        # МОЗ never sees the «Распределение» column.
+        assert cols["distributing"] == []
 
-        by_brand = {c["brand"]: c for c in distributing_cards}
-        assert set(by_brand.keys()) == {"Siemens", "ABB"}
-
-        siemens_card = by_brand["Siemens"]
+        # Only q1/Siemens passes the scope filter.
+        searching = cols["searching_supplier"]
+        assert len(searching) == 1
+        siemens_card = searching[0]
         assert siemens_card["quote_id"] == "q1"
+        assert siemens_card["brand"] == "Siemens"
         assert siemens_card["idn_quote"] == "Q-202604-0001"
         assert siemens_card["customer_name"] == "Acme"
-        assert siemens_card["procurement_substatus"] == "distributing"
+        assert siemens_card["procurement_substatus"] == "searching_supplier"
         assert siemens_card["days_in_state"] == 3
         assert siemens_card["manager_name"] == "Алиса Петрова"
         assert siemens_card["procurement_user_names"] == ["Борис Сидоров"]
@@ -287,25 +318,261 @@ class TestGetKanban:
             {"invoice_number": "INV-01-Q-202604-0001", "currency": "USD", "total": 200.0}
         ]
 
-        abb_card = by_brand["ABB"]
-        assert abb_card["procurement_user_names"] == ["Виктор Орлов"]
-        assert abb_card["invoice_sums"] == [
-            {"invoice_number": "INV-01-Q-202604-0001", "currency": "USD", "total": 250.0}
+        # q2 (no assignment) and q1/ABB (other user's brand) are scoped out.
+        assert cols["waiting_prices"] == []
+        assert cols["prices_ready"] == []
+
+    @patch("api.procurement.get_supabase")
+    def test_regular_procurement_with_no_assignment_sees_no_cards(self, mock_get_sb):
+        """Regular МОЗ with zero owned items: every column returns empty.
+
+        Items exist for the org's quotes but none are assigned to the caller,
+        so the scope filter strips every card. Distribution cards are also
+        suppressed regardless of ownership.
+        """
+        three_days_ago = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
+
+        qbs_rows = [
+            {
+                "quote_id": "q1",
+                "brand": "Siemens",
+                "substatus": "searching_supplier",
+                "updated_at": three_days_ago,
+                "quotes": {
+                    "id": "q1",
+                    "idn_quote": "Q-202604-0001",
+                    "workflow_status": "pending_procurement",
+                    "organization_id": "org-1",
+                    "created_by": "creator-1",
+                    "customers": {"name": "Acme"},
+                },
+            },
+            {
+                "quote_id": "q1",
+                "brand": "ABB",
+                "substatus": "distributing",
+                "updated_at": three_days_ago,
+                "quotes": {
+                    "id": "q1",
+                    "idn_quote": "Q-202604-0001",
+                    "workflow_status": "pending_procurement",
+                    "organization_id": "org-1",
+                    "created_by": "creator-1",
+                    "customers": {"name": "Acme"},
+                },
+            },
+        ]
+        # All items assigned to other procurement users — caller user-1 owns nothing.
+        quote_items_rows = [
+            {"id": "item-1", "quote_id": "q1", "brand": "Siemens", "quantity": 2, "assigned_procurement_user": "u2"},
+            {"id": "item-2", "quote_id": "q1", "brand": "ABB", "quantity": 5, "assigned_procurement_user": "u3"},
         ]
 
-        # q2 — unbranded card in waiting_prices.
-        assert len(cols["waiting_prices"]) == 1
-        q2_card = cols["waiting_prices"][0]
-        assert q2_card["quote_id"] == "q2"
-        assert q2_card["brand"] == ""
-        assert q2_card["latest_reason"] == "price delayed"
-        assert q2_card["manager_name"] is None
-        assert q2_card["procurement_user_names"] == []
-        assert q2_card["invoice_sums"] == []
+        sb = MagicMock()
 
-        # Empty columns remain empty.
+        def table_side_effect(name: str):
+            tbl = MagicMock()
+            if name == "organization_members":
+                tbl.select.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
+                    {"organization_id": "org-1"}
+                ]
+            elif name == "user_roles":
+                tbl.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = [
+                    {"roles": {"slug": "procurement"}}
+                ]
+            elif name == "quote_brand_substates":
+                tbl.select.return_value.eq.return_value.eq.return_value.is_.return_value.execute.return_value.data = qbs_rows
+            elif name == "status_history":
+                tbl.select.return_value.in_.return_value.order.return_value.execute.return_value.data = []
+            elif name == "quote_items":
+                tbl.select.return_value.in_.return_value.execute.return_value.data = quote_items_rows
+            elif name == "invoices":
+                tbl.select.return_value.in_.return_value.execute.return_value.data = []
+            elif name == "invoice_items":
+                tbl.select.return_value.in_.return_value.execute.return_value.data = []
+            elif name == "user_profiles":
+                tbl.select.return_value.in_.return_value.execute.return_value.data = []
+            return tbl
+
+        sb.table.side_effect = table_side_effect
+        mock_get_sb.return_value = sb
+
+        req = _make_request(query={"status": "pending_procurement"})
+        resp = _run(get_kanban(req))
+        assert resp.status_code == 200
+
+        import json
+
+        payload = json.loads(resp.body)
+        assert payload["success"] is True
+        cols = payload["data"]["columns"]
+        assert cols["distributing"] == []
         assert cols["searching_supplier"] == []
+        assert cols["waiting_prices"] == []
         assert cols["prices_ready"] == []
+
+    @patch("api.procurement.get_supabase")
+    def test_head_of_procurement_sees_org_wide_cards(self, mock_get_sb):
+        """head_of_procurement bypasses the per-user assignment filter.
+
+        Even with zero items assigned to the caller, every org card is
+        visible — including the «Распределение» column that МОЗ never sees.
+        """
+        three_days_ago = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
+
+        qbs_rows = [
+            {
+                "quote_id": "q1",
+                "brand": "Siemens",
+                "substatus": "distributing",
+                "updated_at": three_days_ago,
+                "quotes": {
+                    "id": "q1",
+                    "idn_quote": "Q-202604-0001",
+                    "workflow_status": "pending_procurement",
+                    "organization_id": "org-1",
+                    "created_by": "creator-1",
+                    "customers": {"name": "Acme"},
+                },
+            },
+            {
+                "quote_id": "q1",
+                "brand": "ABB",
+                "substatus": "searching_supplier",
+                "updated_at": three_days_ago,
+                "quotes": {
+                    "id": "q1",
+                    "idn_quote": "Q-202604-0001",
+                    "workflow_status": "pending_procurement",
+                    "organization_id": "org-1",
+                    "created_by": "creator-1",
+                    "customers": {"name": "Acme"},
+                },
+            },
+        ]
+        # No items assigned to caller user-1; broader scope ignores ownership.
+        quote_items_rows = [
+            {"id": "item-1", "quote_id": "q1", "brand": "Siemens", "quantity": 2, "assigned_procurement_user": "u2"},
+            {"id": "item-2", "quote_id": "q1", "brand": "ABB", "quantity": 5, "assigned_procurement_user": "u3"},
+        ]
+
+        sb = MagicMock()
+
+        def table_side_effect(name: str):
+            tbl = MagicMock()
+            if name == "organization_members":
+                tbl.select.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
+                    {"organization_id": "org-1"}
+                ]
+            elif name == "user_roles":
+                tbl.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = [
+                    {"roles": {"slug": "head_of_procurement"}}
+                ]
+            elif name == "quote_brand_substates":
+                tbl.select.return_value.eq.return_value.eq.return_value.is_.return_value.execute.return_value.data = qbs_rows
+            elif name == "status_history":
+                tbl.select.return_value.in_.return_value.order.return_value.execute.return_value.data = []
+            elif name == "quote_items":
+                tbl.select.return_value.in_.return_value.execute.return_value.data = quote_items_rows
+            elif name == "invoices":
+                tbl.select.return_value.in_.return_value.execute.return_value.data = []
+            elif name == "invoice_items":
+                tbl.select.return_value.in_.return_value.execute.return_value.data = []
+            elif name == "user_profiles":
+                tbl.select.return_value.in_.return_value.execute.return_value.data = []
+            return tbl
+
+        sb.table.side_effect = table_side_effect
+        mock_get_sb.return_value = sb
+
+        req = _make_request(query={"status": "pending_procurement"})
+        resp = _run(get_kanban(req))
+        assert resp.status_code == 200
+
+        import json
+
+        payload = json.loads(resp.body)
+        cols = payload["data"]["columns"]
+
+        distributing = cols["distributing"]
+        assert len(distributing) == 1
+        assert distributing[0]["quote_id"] == "q1"
+        assert distributing[0]["brand"] == "Siemens"
+
+        searching = cols["searching_supplier"]
+        assert len(searching) == 1
+        assert searching[0]["brand"] == "ABB"
+
+    @patch("api.procurement.get_supabase")
+    def test_procurement_senior_sees_org_wide_cards(self, mock_get_sb):
+        """procurement_senior also bypasses the per-user assignment filter.
+
+        Mirrors `test_head_of_procurement_sees_org_wide_cards` for the
+        third role in `_BROADER_SCOPE_ROLES`.
+        """
+        three_days_ago = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
+
+        qbs_rows = [
+            {
+                "quote_id": "q1",
+                "brand": "Siemens",
+                "substatus": "distributing",
+                "updated_at": three_days_ago,
+                "quotes": {
+                    "id": "q1",
+                    "idn_quote": "Q-202604-0001",
+                    "workflow_status": "pending_procurement",
+                    "organization_id": "org-1",
+                    "created_by": "creator-1",
+                    "customers": {"name": "Acme"},
+                },
+            },
+        ]
+        # Item assigned to a different user — senior sees it anyway.
+        quote_items_rows = [
+            {"id": "item-1", "quote_id": "q1", "brand": "Siemens", "quantity": 2, "assigned_procurement_user": "u2"},
+        ]
+
+        sb = MagicMock()
+
+        def table_side_effect(name: str):
+            tbl = MagicMock()
+            if name == "organization_members":
+                tbl.select.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
+                    {"organization_id": "org-1"}
+                ]
+            elif name == "user_roles":
+                tbl.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = [
+                    {"roles": {"slug": "procurement_senior"}}
+                ]
+            elif name == "quote_brand_substates":
+                tbl.select.return_value.eq.return_value.eq.return_value.is_.return_value.execute.return_value.data = qbs_rows
+            elif name == "status_history":
+                tbl.select.return_value.in_.return_value.order.return_value.execute.return_value.data = []
+            elif name == "quote_items":
+                tbl.select.return_value.in_.return_value.execute.return_value.data = quote_items_rows
+            elif name == "invoices":
+                tbl.select.return_value.in_.return_value.execute.return_value.data = []
+            elif name == "invoice_items":
+                tbl.select.return_value.in_.return_value.execute.return_value.data = []
+            elif name == "user_profiles":
+                tbl.select.return_value.in_.return_value.execute.return_value.data = []
+            return tbl
+
+        sb.table.side_effect = table_side_effect
+        mock_get_sb.return_value = sb
+
+        req = _make_request(query={"status": "pending_procurement"})
+        resp = _run(get_kanban(req))
+        assert resp.status_code == 200
+
+        import json
+
+        payload = json.loads(resp.body)
+        cols = payload["data"]["columns"]
+        # Distributing card is visible — broader scope keeps it.
+        assert len(cols["distributing"]) == 1
+        assert cols["distributing"][0]["quote_id"] == "q1"
 
 
 # ----------------------------------------------------------------------------
