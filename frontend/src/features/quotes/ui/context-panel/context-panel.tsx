@@ -8,6 +8,7 @@ import { ContactDropdownSelect } from "./contact-dropdown-select";
 import { AddressDropdownSelect } from "./address-dropdown-select";
 import type { ParticipantRow } from "./participants-block";
 import { ROLE_LABELS_RU } from "@/entities/user/types";
+import { canViewQuoteFinancials } from "@/shared/lib/roles";
 import type { QuoteContextData } from "./queries";
 
 const DELIVERY_METHOD_LABELS: Record<string, string> = {
@@ -48,15 +49,18 @@ function formatPercent(value: number | null): string {
 interface ContextPanelProps {
   quote: QuoteDetailRow;
   data: QuoteContextData;
+  userRoles: string[];
 }
 
-export function ContextPanel({ quote, data }: ContextPanelProps) {
+export function ContextPanel({ quote, data, userRoles }: ContextPanelProps) {
+  const showFinancials = canViewQuoteFinancials(userRoles);
   return (
     <div className="mx-6 mt-3 mb-1 rounded-lg border border-border bg-muted/30 p-4">
       <QuoteInfoBlock
         quote={quote}
         salesManager={data.salesManager}
         participants={data.participants}
+        showFinancials={showFinancials}
       />
     </div>
   );
@@ -70,10 +74,12 @@ function QuoteInfoBlock({
   quote,
   salesManager,
   participants,
+  showFinancials,
 }: {
   quote: QuoteDetailRow;
   salesManager: QuoteContextData["salesManager"];
   participants: ParticipantRow[];
+  showFinancials: boolean;
 }) {
   const currency = quote.currency ?? "USD";
   const profit = quote.profit_quote_currency ?? null;
@@ -89,8 +95,15 @@ function QuoteInfoBlock({
       ? (profit / cogs) * 100
       : null;
 
+  // When financials are hidden (procurement / logistics / customs roles), the
+  // grid collapses from 4 to 3 columns so the remaining sections fill the
+  // panel evenly instead of leaving a blank slot. МОЗ-60.
+  const gridClass = showFinancials
+    ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
+    : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6";
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+    <div className={gridClass}>
       {/* Client */}
       <div className="space-y-2 min-w-0">
         <div className="flex items-center gap-2 mb-2">
@@ -180,30 +193,32 @@ function QuoteInfoBlock({
         </InfoRow>
       </div>
 
-      {/* Financials */}
-      <div className="space-y-2">
-        <div className="flex items-center gap-2 mb-2">
-          <TrendingUp size={14} className="text-muted-foreground" />
-          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-            Финансы
-          </h4>
+      {/* Financials — hidden for procurement / logistics / customs (МОЗ-60) */}
+      {showFinancials && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 mb-2">
+            <TrendingUp size={14} className="text-muted-foreground" />
+            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              Финансы
+            </h4>
+          </div>
+          <InfoRow label="Прибыль">
+            <span className="text-sm font-medium">
+              {formatMoney(profit, currency)}
+            </span>
+          </InfoRow>
+          <InfoRow label="Маржа">
+            <span className="text-sm font-medium">
+              {formatPercent(marginPercent)}
+            </span>
+          </InfoRow>
+          <InfoRow label="Наценка">
+            <span className="text-sm font-medium">
+              {formatPercent(markupPercent)}
+            </span>
+          </InfoRow>
         </div>
-        <InfoRow label="Прибыль">
-          <span className="text-sm font-medium">
-            {formatMoney(profit, currency)}
-          </span>
-        </InfoRow>
-        <InfoRow label="Маржа">
-          <span className="text-sm font-medium">
-            {formatPercent(marginPercent)}
-          </span>
-        </InfoRow>
-        <InfoRow label="Наценка">
-          <span className="text-sm font-medium">
-            {formatPercent(markupPercent)}
-          </span>
-        </InfoRow>
-      </div>
+      )}
 
       {/* Participants */}
       <div className="space-y-2 min-w-0">
