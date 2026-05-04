@@ -55,6 +55,12 @@ import {
   type SpecialDutyType,
 } from "@/features/customs-rate-resolve";
 import { MeasuresList } from "@/features/customs-non-tariff-measures";
+import {
+  HistoryBanner,
+  fetchHistory,
+  formatDateRussian,
+  type HistoryMatch,
+} from "@/features/customs-history";
 
 import { ItemCustomsExpenses } from "./item-customs-expenses";
 
@@ -374,6 +380,19 @@ export function CustomsItemDialog({
   const [specialDutySelections, setSpecialDutySelections] = useState<
     Partial<Record<SpecialDutyType, string>>
   >({});
+  // REQ-10 customs-phase-A — history suggestion (Task 11). Fetched once on
+  // dialog open for new items without an existing snapshot. Banner is rendered
+  // until the user applies or dismisses it.
+  const [historySuggestion, setHistorySuggestion] =
+    useState<HistoryMatch | null>(null);
+  const [historyApplied, setHistoryApplied] = useState(false);
+  const [historyDismissed, setHistoryDismissed] = useState(false);
+  // Map of FormState keys → true when the value was filled by «Применить».
+  // Drives the inline `📅 DD.MM.YYYY` badges next to applied fields. A field
+  // is removed from this map as soon as the user edits it manually.
+  const [fieldsFromHistory, setFieldsFromHistory] = useState<
+    Record<string, boolean>
+  >({});
   const canWrite = userRoles.some((r) => CAN_WRITE_ROLES.has(r));
 
   // Re-seed the form whenever a different row is opened. Avoids stale state
@@ -383,8 +402,34 @@ export function CustomsItemDialog({
       setForm(stateFromItem(item));
       setResolveResult(null);
       setSpecialDutySelections({});
+      setHistorySuggestion(null);
+      setHistoryApplied(false);
+      setHistoryDismissed(false);
+      setFieldsFromHistory({});
     }
   }, [open, item]);
+
+  // Fetch history when dialog opens for an item with hs_code + country set.
+  // Skipped when an Auto resolver result is already on screen (the user is
+  // mid-flow and a banner would only add noise).
+  const formHsCode = form?.hs_code;
+  const formCountryOksm = form?.country_of_origin_oksm ?? null;
+  useEffect(() => {
+    if (!open) return;
+    if (!formHsCode || !formCountryOksm) return;
+    if (resolveResult) return;
+
+    let cancelled = false;
+    fetchHistory(formHsCode, formCountryOksm).then((res) => {
+      if (cancelled) return;
+      if (res.success && res.data) {
+        setHistorySuggestion(res.data);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, formHsCode, formCountryOksm, resolveResult]);
 
   if (!item || !form) {
     return (
@@ -400,6 +445,77 @@ export function CustomsItemDialog({
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => (prev ? { ...prev, [key]: value } : prev));
+    // Clear the «from history» badge for this field whenever the user edits
+    // it manually — keeps the badge honest as a "this came from history"
+    // indicator. Applied via the dedicated `applyHistory` helper below.
+    setFieldsFromHistory((prev) => {
+      if (!prev[key as string]) return prev;
+      const next = { ...prev };
+      delete next[key as string];
+      return next;
+    });
+  }
+
+  /**
+   * Copy the history suggestion into form state.
+   *
+   * Two paths:
+   *  - Manual override: rehydrate the full `manual_rate_payload` so the
+   *    user lands on the same Manual-mode slots they had last time.
+   *  - Auto mode: hs_code + country are already in the form (the suggestion
+   *    was looked up by exactly those keys), so we just mark them touched.
+   *    Variant-level chosen_variants are surfaced via the resolver UI when
+   *    the user clicks «Автоподбор» — re-applying them here would require
+   *    fabricating a synthetic ResolveRatesData which is out of scope.
+   */
+  function applyHistory(h: HistoryMatch) {
+    const touched: Record<string, boolean> = {};
+
+    if (h.manual_override && h.manual_rate_payload) {
+      const p = h.manual_rate_payload;
+      setForm((prev) => {
+        if (!prev) return prev;
+        const value1 =
+          typeof p.value_1_number === "number"
+            ? String(p.value_1_number)
+            : prev.duty_value_1;
+        const value2 =
+          typeof p.value_2_number === "number"
+            ? String(p.value_2_number)
+            : prev.duty_value_2;
+        return {
+          ...prev,
+          duty_manual_mode: true,
+          duty_rate_type:
+            (p.duty_rate_type as DutyRateType | undefined) ??
+            prev.duty_rate_type,
+          duty_value_1: value1,
+          duty_unit_1:
+            (p.value_1_unit as DutyUnit | undefined) ?? prev.duty_unit_1,
+          duty_value_2: value2,
+          duty_unit_2:
+            (p.value_2_unit as DutyUnit | undefined) ?? prev.duty_unit_2,
+          duty_sign: (p.sign_1 as DutySign | undefined) ?? prev.duty_sign,
+        };
+      });
+      touched.duty_manual_mode = true;
+      touched.duty_rate_type = true;
+      touched.duty_value_1 = true;
+      touched.duty_unit_1 = true;
+      if (p.value_2_number != null) {
+        touched.duty_value_2 = true;
+        touched.duty_unit_2 = true;
+      }
+      if (p.sign_1) touched.duty_sign = true;
+    } else {
+      // Auto mode — chosen_variants drive the resolver UI when «Автоподбор»
+      // is clicked. The lookup keys (hs_code, country) are already on the
+      // form; mark them so the user sees they came from history.
+      touched.hs_code = true;
+      touched.country_of_origin_oksm = true;
+    }
+
+    setFieldsFromHistory(touched);
   }
 
   async function handleSave() {
@@ -483,9 +599,30 @@ export function CustomsItemDialog({
         </DialogHeader>
 
         <div className="flex flex-col gap-6">
+          {/* REQ-10 Phase A — history suggestion banner. Surfaces the most
+              recent (org, tnved_code, country) choice so the customs
+              specialist can re-apply previous selections in one click. */}
+          {historySuggestion && !historyApplied && !historyDismissed && (
+            <HistoryBanner
+              suggestion={historySuggestion}
+              onApply={() => {
+                applyHistory(historySuggestion);
+                setHistoryApplied(true);
+              }}
+              onDismiss={() => setHistoryDismissed(true)}
+            />
+          )}
+
           {/* Core customs classification */}
           <section className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="Код ТН ВЭД">
+            <Field
+              label="Код ТН ВЭД"
+              badge={
+                fieldsFromHistory["hs_code"] && historySuggestion
+                  ? formatDateRussian(historySuggestion.created_at)
+                  : null
+              }
+            >
               <div className="flex gap-2">
                 <Input
                   value={form.hs_code}
@@ -506,7 +643,18 @@ export function CustomsItemDialog({
               </div>
             </Field>
 
-            <Field label="Пошлина" className="sm:col-span-2">
+            <Field
+              label="Пошлина"
+              className="sm:col-span-2"
+              badge={
+                (fieldsFromHistory["duty_value_1"] ||
+                  fieldsFromHistory["duty_manual_mode"] ||
+                  fieldsFromHistory["duty_rate_type"]) &&
+                historySuggestion
+                  ? formatDateRussian(historySuggestion.created_at)
+                  : null
+              }
+            >
               <DutyRateInput
                 form={form}
                 update={update}
@@ -601,7 +749,15 @@ export function CustomsItemDialog({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Field label="Страна происхождения">
+              <Field
+                label="Страна происхождения"
+                badge={
+                  fieldsFromHistory["country_of_origin_oksm"] &&
+                  historySuggestion
+                    ? formatDateRussian(historySuggestion.created_at)
+                    : null
+                }
+              >
                 <CustomsCountryDropdown
                   value={form.country_of_origin_oksm}
                   onChange={(oksm) => update("country_of_origin_oksm", oksm)}
@@ -851,14 +1007,31 @@ function Field({
   label,
   className,
   children,
+  badge,
 }: {
   label: string;
   className?: string;
   children: React.ReactNode;
+  /**
+   * REQ-10 Phase A — `📅 DD.MM.YYYY` indicator next to the label when the
+   * value was filled from history. Badge disappears as soon as the user
+   * edits the field (cleared by `update()` in customs-item-dialog).
+   */
+  badge?: string | null;
 }) {
   return (
     <label className={`flex flex-col gap-1 ${className ?? ""}`.trim()}>
-      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      <span className="text-xs font-medium text-muted-foreground inline-flex items-center gap-2">
+        {label}
+        {badge ? (
+          <span
+            data-testid="field-history-badge"
+            className="text-[10px] text-blue-400 inline-flex items-center gap-1"
+          >
+            📅 {badge}
+          </span>
+        ) : null}
+      </span>
       {children}
     </label>
   );
