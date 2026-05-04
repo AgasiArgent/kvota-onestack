@@ -200,20 +200,44 @@ def _cert_row(
     }
 
 
-def _quote_item(item_id: str, quote_id: str = "quote-1",
-                price: float = 1000.0, qty: int = 10) -> dict:
-    """RUB-priced quote_item — short-circuits the currency conversion path so
-    tests don't need to mock convert_amount/rate fetcher.
+def _qi_compute_row(item_id: str, quote_id: str = "quote-1",
+                    qty: int = 10,
+                    composition_selected_invoice_id: str | None = "inv-1") -> dict:
+    """Row shape returned by ``_compute_attached_items_payload`` Query 1
+    (``quote_items.select('id, composition_selected_invoice_id, quantity')``).
+    Post-Phase 5d the price columns moved off ``quote_items`` — those are
+    fetched via the embedded ``invoice_item_coverage`` join (see
+    ``_coverage_row`` below). Helper kept distinct from the upstream
+    ``_verify_items_in_quote`` row (which only returns ``{id, quote_id}``).
     """
     return {
         "id": item_id,
         "quote_id": quote_id,
-        "purchase_price_original": price,
-        "purchase_currency": "RUB",
-        "currency_of_base_price": "RUB",
+        "composition_selected_invoice_id": composition_selected_invoice_id,
         "quantity": qty,
-        "base_price_vat": price,
-        "created_at": "2026-04-01T09:00:00+00:00",
+    }
+
+
+def _coverage_row(quote_item_id: str, *,
+                  invoice_item_id: str = "inv-item-1",
+                  ratio: float = 1.0,
+                  purchase_price_original: float = 1000.0,
+                  purchase_currency: str = "RUB",
+                  invoice_quantity: int = 10) -> dict:
+    """Row shape returned by ``_compute_attached_items_payload`` Query 2
+    (``invoice_item_coverage`` joined with ``invoice_items!inner(...)``).
+    Default values yield a single 1.0-ratio coverage row in RUB so tests
+    short-circuit the currency conversion path.
+    """
+    return {
+        "quote_item_id": quote_item_id,
+        "ratio": ratio,
+        "invoice_items": {
+            "id": invoice_item_id,
+            "purchase_price_original": purchase_price_original,
+            "purchase_currency": purchase_currency,
+            "quantity": invoice_quantity,
+        },
     }
 
 
@@ -248,12 +272,20 @@ class TestCreateCertificateHandler:
         stub.stage("quote_certificate_items", [
             {"id": "att-1"}, {"id": "att-2"},
         ])
-        # 5. _compute_attached_items_payload: quote currency lookup
-        stub.stage("quotes", [{"currency_of_quote": "RUB", "currency": "RUB"}])
-        # 6. _compute_attached_items_payload: quote_items lookup
+        # 5. _compute_attached_items_payload Query 1: quote_items IDs
         stub.stage("quote_items", [
-            _quote_item("item-1", price=100.0, qty=10),
-            _quote_item("item-2", price=200.0, qty=5),
+            _qi_compute_row("item-1", qty=10),
+            _qi_compute_row("item-2", qty=5),
+        ])
+        # 6. _compute_attached_items_payload Query 2: invoice_item_coverage
+        #    JOIN invoice_items. Each quote_item gets one 1.0-ratio coverage
+        #    row in RUB → basis = price × invoice_qty (item-1 = 1000,
+        #    item-2 = 1000 → equal split path).
+        stub.stage("invoice_item_coverage", [
+            _coverage_row("item-1", purchase_price_original=100.0,
+                          invoice_quantity=10),
+            _coverage_row("item-2", purchase_price_original=200.0,
+                          invoice_quantity=5),
         ])
 
         with patch("api.customs.get_supabase", return_value=stub):
@@ -521,12 +553,12 @@ class TestListCertificatesHandler:
             "quote_certificate_items",
             [{"item_id": "item-1", "created_at": "2026-04-01T09:00:00+00:00"}],
         )
-        # Cert A: attached items payload — quote currency
-        stub.stage("quotes", [{"currency_of_quote": "RUB",
-                              "currency": "RUB"}])
-        # Cert A: attached items payload — items
-        stub.stage("quote_items",
-                   [_quote_item("item-1", price=100.0, qty=10)])
+        # Cert A: _compute_attached_items_payload Query 1 — quote_items IDs
+        stub.stage("quote_items", [_qi_compute_row("item-1", qty=10)])
+        # Cert A: _compute_attached_items_payload Query 2 — coverage join
+        stub.stage("invoice_item_coverage",
+                   [_coverage_row("item-1", purchase_price_original=100.0,
+                                  invoice_quantity=10)])
         # Cert B: no attachments
         stub.stage("quote_certificate_items", [])
 
@@ -604,13 +636,17 @@ class TestAttachItemHandler:
                  "created_at": "2026-04-01T10:00:00+00:00"},
             ],
         )
-        # _compute_attached_items_payload — quote currency
-        stub.stage("quotes",
-                   [{"currency_of_quote": "RUB", "currency": "RUB"}])
-        # quote_items lookup
+        # _compute_attached_items_payload Query 1 — quote_items IDs
         stub.stage("quote_items", [
-            _quote_item("item-1", price=100.0, qty=10),
-            _quote_item("item-2", price=200.0, qty=5),
+            _qi_compute_row("item-1", qty=10),
+            _qi_compute_row("item-2", qty=5),
+        ])
+        # _compute_attached_items_payload Query 2 — coverage join
+        stub.stage("invoice_item_coverage", [
+            _coverage_row("item-1", purchase_price_original=100.0,
+                          invoice_quantity=10),
+            _coverage_row("item-2", purchase_price_original=200.0,
+                          invoice_quantity=5),
         ])
 
         with patch("api.customs.get_supabase", return_value=stub):
@@ -691,11 +727,12 @@ class TestDetachItemHandler:
             [{"item_id": "item-2",
               "created_at": "2026-04-01T10:00:00+00:00"}],
         )
-        # _compute_attached_items_payload
-        stub.stage("quotes",
-                   [{"currency_of_quote": "RUB", "currency": "RUB"}])
-        stub.stage("quote_items",
-                   [_quote_item("item-2", price=200.0, qty=5)])
+        # _compute_attached_items_payload Query 1 — quote_items IDs
+        stub.stage("quote_items", [_qi_compute_row("item-2", qty=5)])
+        # _compute_attached_items_payload Query 2 — coverage join
+        stub.stage("invoice_item_coverage",
+                   [_coverage_row("item-2", purchase_price_original=200.0,
+                                  invoice_quantity=5)])
 
         with patch("api.customs.get_supabase", return_value=stub):
             req = _make_request()
@@ -774,3 +811,161 @@ class TestDeleteCertificateHandler:
             resp = _run(delete_certificate_handler(req, "missing"))
         assert resp.status_code == 404
         assert _body(resp)["error"]["code"] == "NOT_FOUND"
+
+
+# ===========================================================================
+# _compute_attached_items_payload — direct helper tests for the
+# invoice_item_coverage JOIN rewrite (Phase 2b of customs Phase B hotfix).
+# ===========================================================================
+
+
+class TestComputeAttachedItemsPayload:
+    """Direct tests for the helper that derives per-item RUB shares.
+
+    Post-Phase 5d migration: pricing columns moved off ``quote_items`` to
+    ``invoice_items``. The helper now joins through ``invoice_item_coverage``
+    instead of selecting prices directly. These tests exercise the helper's
+    DB shape contract independently of HTTP handlers.
+    """
+
+    def test_single_item_share_matches_manual_computation(self):
+        """1 attached item, 1 coverage row, ratio=1.0 → cert_cost lands on
+        that item entirely (single-item path in ``split_cost_batch``)."""
+        from decimal import Decimal
+
+        from api.customs import _compute_attached_items_payload
+
+        stub = _Stub()
+        # Query 1
+        stub.stage("quote_items", [_qi_compute_row("item-1", qty=10)])
+        # Query 2 — basis = 250.0 × 4 × 1.0 = 1000 RUB
+        stub.stage("invoice_item_coverage", [
+            _coverage_row("item-1",
+                          purchase_price_original=250.0,
+                          purchase_currency="RUB",
+                          invoice_quantity=4,
+                          ratio=1.0),
+        ])
+
+        cert_row = {"cost_rub": 12500.0, "quote_id": "quote-1"}
+        payload = _compute_attached_items_payload(
+            stub, cert_row, ["item-1"]
+        )
+
+        # Single attached item → cert_cost lands on that item entirely
+        # (``split_cost_batch`` n=1 short-circuit, no rounding).
+        assert len(payload) == 1
+        assert payload[0]["item_id"] == "item-1"
+        assert Decimal(str(payload[0]["share_rub"])) == Decimal("12500")
+        assert payload[0]["share_percent"] == 100.0
+
+    def test_multi_items_shares_sum_to_cert_cost(self):
+        """3 attached items, different bases → kopek-exact sum to cert_cost."""
+        from decimal import Decimal
+
+        from api.customs import _compute_attached_items_payload
+
+        stub = _Stub()
+        stub.stage("quote_items", [
+            _qi_compute_row("item-1"),
+            _qi_compute_row("item-2"),
+            _qi_compute_row("item-3"),
+        ])
+        # Basis: item-1 = 1000, item-2 = 2000, item-3 = 3000 (RUB).
+        # cert_cost = 12345.67 → proportional split, residual on last.
+        stub.stage("invoice_item_coverage", [
+            _coverage_row("item-1",
+                          purchase_price_original=100.0,
+                          invoice_quantity=10),
+            _coverage_row("item-2",
+                          purchase_price_original=200.0,
+                          invoice_quantity=10),
+            _coverage_row("item-3",
+                          purchase_price_original=300.0,
+                          invoice_quantity=10),
+        ])
+
+        cert_cost = Decimal("12345.67")
+        cert_row = {"cost_rub": float(cert_cost), "quote_id": "quote-1"}
+        payload = _compute_attached_items_payload(
+            stub, cert_row, ["item-1", "item-2", "item-3"]
+        )
+
+        # Sum-to-cert_cost invariant (REQ-3 AC#7 — last absorbs residual).
+        total = sum((Decimal(str(it["share_rub"])) for it in payload),
+                    Decimal("0"))
+        assert total == cert_cost
+        assert len(payload) == 3
+        # Order preserved
+        assert [it["item_id"] for it in payload] == [
+            "item-1", "item-2", "item-3",
+        ]
+
+    def test_mixed_currencies_convert_amount_called_per_non_rub_item(self):
+        """Items in EUR + USD trigger ``convert_amount`` once per non-RUB
+        item (one round per currency × item, not per coverage row)."""
+        from decimal import Decimal
+
+        from api.customs import _compute_attached_items_payload
+
+        stub = _Stub()
+        stub.stage("quote_items", [
+            _qi_compute_row("item-eur"),
+            _qi_compute_row("item-usd"),
+            _qi_compute_row("item-rub"),
+        ])
+        stub.stage("invoice_item_coverage", [
+            _coverage_row("item-eur",
+                          purchase_currency="EUR",
+                          purchase_price_original=10.0,
+                          invoice_quantity=2),  # 20 EUR
+            _coverage_row("item-usd",
+                          purchase_currency="USD",
+                          purchase_price_original=15.0,
+                          invoice_quantity=4),  # 60 USD
+            _coverage_row("item-rub",
+                          purchase_currency="RUB",
+                          purchase_price_original=500.0,
+                          invoice_quantity=2),  # 1000 RUB — short-circuit
+        ])
+
+        # Mock convert_amount to (a) prove RUB short-circuits (no call) and
+        # (b) deterministically return EUR→100 RUB / USD per unit currency.
+        from unittest.mock import MagicMock as _MM
+        mock_convert = _MM(
+            side_effect=lambda amt, src, dst: (
+                amt * Decimal("100") if src == "EUR" else
+                amt * Decimal("80") if src == "USD" else
+                amt
+            )
+        )
+        with patch(
+            "services.currency_service.convert_amount", mock_convert
+        ):
+            cert_row = {"cost_rub": 10000.0, "quote_id": "quote-1"}
+            payload = _compute_attached_items_payload(
+                stub, cert_row, ["item-eur", "item-usd", "item-rub"]
+            )
+
+        # convert_amount called exactly twice (EUR + USD; RUB short-circuits).
+        assert mock_convert.call_count == 2
+        called_currencies = {call.args[1] for call in mock_convert.call_args_list}
+        assert called_currencies == {"EUR", "USD"}
+        # cert_cost preserved exactly across the 3-way split.
+        total = sum(
+            (Decimal(str(it["share_rub"])) for it in payload), Decimal("0")
+        )
+        assert total == Decimal("10000")
+        assert len(payload) == 3
+
+    def test_empty_attached_item_ids_returns_empty_no_db_calls(self):
+        """Early-return preserved: zero items → no DB execute() invoked."""
+        from api.customs import _compute_attached_items_payload
+
+        stub = MagicMock()
+        cert_row = {"cost_rub": 5000.0, "quote_id": "quote-1"}
+        payload = _compute_attached_items_payload(stub, cert_row, [])
+
+        assert payload == []
+        # No table()/select()/execute() chain ever touched the stub.
+        stub.table.assert_not_called()
