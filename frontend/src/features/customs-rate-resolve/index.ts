@@ -14,6 +14,13 @@ export type {
 } from "./ui/special-duty-block";
 export { resolveRates } from "./api/resolve-rates";
 export type { ResolveRatesRequest } from "./api/resolve-rates";
+export { formatDutyFormula, formatRub } from "./lib/duty-formula";
+export type {
+  DutyRateType,
+  DutySign,
+  DutyUnit,
+  DutyFormulaArgs,
+} from "./lib/duty-formula";
 export {
   paymentTypeLabel,
   PAYMENT_TYPE_LABELS,

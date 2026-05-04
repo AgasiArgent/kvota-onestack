@@ -46,7 +46,11 @@ import {
   RateBreakdown,
   SourceTimestamp,
   SpecialDutyBlock,
+  formatDutyFormula,
   type ApiError,
+  type DutyRateType,
+  type DutySign,
+  type DutyUnit,
   type ResolveRatesData,
   type SpecialDutyType,
 } from "@/features/customs-rate-resolve";
@@ -83,9 +87,33 @@ interface CustomsExtras {
   country_of_origin_oksm?: number | null;
   has_origin_certificate?: boolean | null;
   has_fta_certificate?: boolean | null;
+  // REQ-4 customs-phase-A — manual combined-rate snapshot.
+  // JSONB compatible with Alta `Rate` dataclass (3-slot model). Saved into
+  // `quote_versions.input_variables.customs_rates[item_id].manual_rate` by
+  // the calc-engine adapter; UI mirrors the structure here for round-trip.
+  customs_manual_override?: boolean | null;
+  customs_manual_rate_payload?: ManualRatePayload | null;
 }
 
-interface FormState {
+/**
+ * Snapshot shape persisted when Manual mode is active.
+ *
+ * Mirrors `services.alta_client.Rate` field-for-field so the
+ * calc-engine adapter can deserialize without a translation layer.
+ * Currency may be null for percent / RUB-denominated rates.
+ */
+export interface ManualRatePayload {
+  duty_rate_type: DutyRateType;
+  value_1_number: number | null;
+  value_1_unit: string | null;
+  value_1_currency: string | null;
+  value_2_number: number | null;
+  value_2_unit: string | null;
+  value_2_currency: string | null;
+  sign_1: DutySign;
+}
+
+export interface FormState {
   hs_code: string;
   duty_mode: DutyMode;
   duty_value: string;
@@ -108,6 +136,14 @@ interface FormState {
   country_of_origin_oksm: number | null;
   has_origin_certificate: boolean;
   has_fta_certificate: boolean;
+  // REQ-4 customs-phase-A — manual combined-rate input
+  duty_manual_mode: boolean;
+  duty_rate_type: DutyRateType;
+  duty_value_1: string;
+  duty_unit_1: DutyUnit;
+  duty_value_2: string;
+  duty_unit_2: DutyUnit;
+  duty_sign: DutySign;
 }
 
 function stateFromItem(item: QuoteItemRow): FormState {
@@ -119,6 +155,16 @@ function stateFromItem(item: QuoteItemRow): FormState {
 
   const numToStr = (n: number | null | undefined): string =>
     n == null ? "" : String(n);
+
+  // REQ-4: re-hydrate Manual mode from snapshot when present so the user
+  // sees what they entered last time. Falls back to Auto / simple defaults.
+  const manualPayload = extras.customs_manual_rate_payload ?? null;
+  const manualOverride = Boolean(extras.customs_manual_override);
+  const initialUnit1: DutyUnit =
+    (manualPayload?.value_1_unit as DutyUnit | undefined) ??
+    (mode === "perKg" ? "EUR/kg" : "percent");
+  const initialUnit2: DutyUnit =
+    (manualPayload?.value_2_unit as DutyUnit | undefined) ?? "EUR/kg";
 
   return {
     hs_code: extras.hs_code ?? "",
@@ -142,6 +188,13 @@ function stateFromItem(item: QuoteItemRow): FormState {
     country_of_origin_oksm: extras.country_of_origin_oksm ?? null,
     has_origin_certificate: Boolean(extras.has_origin_certificate),
     has_fta_certificate: Boolean(extras.has_fta_certificate),
+    duty_manual_mode: manualOverride,
+    duty_rate_type: manualPayload?.duty_rate_type ?? "simple",
+    duty_value_1: numToStr(manualPayload?.value_1_number ?? compositeValue),
+    duty_unit_1: initialUnit1,
+    duty_value_2: numToStr(manualPayload?.value_2_number),
+    duty_unit_2: initialUnit2,
+    duty_sign: manualPayload?.sign_1 ?? null,
   };
 }
 
@@ -152,12 +205,108 @@ function parseNumOrNull(s: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function buildUpdates(form: FormState): Record<string, unknown> {
-  const dutyValue = parseNumOrNull(form.duty_value);
+/**
+ * Extract currency code (EUR / USD / RUB) from a unit token like "EUR/kg",
+ * "USD/pc", "RUB/l". Returns null for the bare "percent" unit.
+ */
+function unitCurrency(unit: DutyUnit | string): string | null {
+  if (unit === "percent") return null;
+  const sep = unit.indexOf("/");
+  if (sep <= 0) return null;
+  return unit.slice(0, sep);
+}
+
+/**
+ * Build the JSONB payload stored when Manual mode is active.
+ *
+ * Shape mirrors `services.alta_client.Rate` so the calc-engine adapter
+ * can deserialize without translation. For "simple" / "specific" only
+ * slot 1 is filled; for "combined" both slots plus `sign_1` are present.
+ */
+export function buildManualRatePayload(
+  form: Pick<
+    FormState,
+    | "duty_rate_type"
+    | "duty_value_1"
+    | "duty_unit_1"
+    | "duty_value_2"
+    | "duty_unit_2"
+    | "duty_sign"
+  >,
+): ManualRatePayload {
+  const value1 = parseNumOrNull(form.duty_value_1);
+  const value2 =
+    form.duty_rate_type === "combined"
+      ? parseNumOrNull(form.duty_value_2)
+      : null;
+  return {
+    duty_rate_type: form.duty_rate_type,
+    value_1_number: value1,
+    value_1_unit: form.duty_unit_1,
+    value_1_currency: unitCurrency(form.duty_unit_1),
+    value_2_number: value2,
+    value_2_unit: form.duty_rate_type === "combined" ? form.duty_unit_2 : null,
+    value_2_currency:
+      form.duty_rate_type === "combined"
+        ? unitCurrency(form.duty_unit_2)
+        : null,
+    sign_1: form.duty_rate_type === "combined" ? form.duty_sign : null,
+  };
+}
+
+export function buildUpdates(form: FormState): Record<string, unknown> {
+  // Auto mode (or legacy rows) — keep the existing two-column duty
+  // representation untouched; customs_manual_* stay null.
+  if (!form.duty_manual_mode) {
+    const dutyValue = parseNumOrNull(form.duty_value);
+    const dutyColumns =
+      form.duty_mode === "perKg"
+        ? { customs_duty: null, customs_duty_per_kg: dutyValue }
+        : { customs_duty: dutyValue, customs_duty_per_kg: null };
+
+    return {
+      hs_code: form.hs_code.trim() || null,
+      ...dutyColumns,
+      customs_util_fee: parseNumOrNull(form.customs_util_fee),
+      customs_excise: parseNumOrNull(form.customs_excise),
+      customs_psm_pts: form.customs_psm_pts.trim() || null,
+      customs_notification: form.customs_notification.trim() || null,
+      customs_licenses: form.customs_licenses.trim() || null,
+      customs_eco_fee: parseNumOrNull(form.customs_eco_fee),
+      customs_honest_mark: form.customs_honest_mark.trim() || null,
+      import_banned: form.import_banned,
+      import_ban_reason: form.import_banned
+        ? form.import_ban_reason.trim() || null
+        : null,
+      license_ds_required: form.license_ds_required,
+      license_ds_cost: form.license_ds_required
+        ? parseNumOrNull(form.license_ds_cost)
+        : null,
+      license_ss_required: form.license_ss_required,
+      license_ss_cost: form.license_ss_required
+        ? parseNumOrNull(form.license_ss_cost)
+        : null,
+      license_sgr_required: form.license_sgr_required,
+      license_sgr_cost: form.license_sgr_required
+        ? parseNumOrNull(form.license_sgr_cost)
+        : null,
+      country_of_origin_oksm: form.country_of_origin_oksm,
+      has_origin_certificate: form.has_origin_certificate,
+      has_fta_certificate: form.has_fta_certificate,
+      customs_manual_override: false,
+      customs_manual_rate_payload: null,
+    };
+  }
+
+  // Manual mode — derive the legacy customs_duty / customs_duty_per_kg
+  // pair from slot 1 so the calc-engine continues to compute, and stash
+  // the full 3-slot payload in customs_manual_rate_payload for round-trip.
+  const payload = buildManualRatePayload(form);
+  const value1 = payload.value_1_number;
   const dutyColumns =
-    form.duty_mode === "perKg"
-      ? { customs_duty: null, customs_duty_per_kg: dutyValue }
-      : { customs_duty: dutyValue, customs_duty_per_kg: null };
+    form.duty_unit_1 === "percent"
+      ? { customs_duty: value1, customs_duty_per_kg: null }
+      : { customs_duty: null, customs_duty_per_kg: value1 };
 
   return {
     hs_code: form.hs_code.trim() || null,
@@ -188,6 +337,8 @@ function buildUpdates(form: FormState): Record<string, unknown> {
     country_of_origin_oksm: form.country_of_origin_oksm,
     has_origin_certificate: form.has_origin_certificate,
     has_fta_certificate: form.has_fta_certificate,
+    customs_manual_override: true,
+    customs_manual_rate_payload: payload,
   };
 }
 
@@ -355,47 +506,17 @@ export function CustomsItemDialog({
               </div>
             </Field>
 
-            <Field label="Пошлина">
-              <div className="flex gap-2">
-                <Input
-                  type="number"
-                  inputMode="decimal"
-                  step="0.01"
-                  min="0"
-                  value={form.duty_value}
-                  onChange={(e) => update("duty_value", e.target.value)}
-                  disabled={readOnly || saving}
-                  className="flex-1"
-                  placeholder="0"
-                />
-                <div
-                  role="group"
-                  aria-label="Тип пошлины"
-                  className="inline-flex overflow-hidden rounded-md border border-border bg-card"
-                >
-                  <ChipButton
-                    active={form.duty_mode === "pct"}
-                    disabled={readOnly || saving}
-                    onClick={() => update("duty_mode", "pct")}
-                  >
-                    %
-                  </ChipButton>
-                  <ChipButton
-                    active={form.duty_mode === "perKg"}
-                    disabled={readOnly || saving}
-                    onClick={() => update("duty_mode", "perKg")}
-                  >
-                    ₽/кг
-                  </ChipButton>
-                  <ChipButton
-                    active={false}
-                    disabled
-                    title="Требуется миграция: колонка customs_duty_per_pc"
-                  >
-                    ₽/шт
-                  </ChipButton>
-                </div>
-              </div>
+            <Field label="Пошлина" className="sm:col-span-2">
+              <DutyRateInput
+                form={form}
+                update={update}
+                readOnly={readOnly}
+                saving={saving}
+                weightKg={
+                  (item as { weight_kg?: number | null }).weight_kg ?? null
+                }
+                customsValue={extractCustomsValue(item)}
+              />
             </Field>
 
             <Field label="Утильсбор, ₽">
@@ -773,6 +894,278 @@ function ChipButton({
       {children}
     </button>
   );
+}
+
+/**
+ * REQ-4 Phase A — Manual duty-rate input + Auto/Manual toggle.
+ *
+ * - Auto branch reuses the existing two-button (% / ₽/кг) chip group, untouched
+ *   so calc-engine reads `customs_duty` / `customs_duty_per_kg` as before.
+ * - Manual branch renders a chip-toggle for rate type
+ *   (Простая / Комбинированная / Специфическая) plus 1-2 input slots
+ *   with unit selectors and a live formula preview below.
+ *
+ * When ALTA_FEATURES_ENABLED=false the Auto/Manual toggle is hidden and
+ * Manual mode is forced — defensive flag-aware behavior per Req 4 AC #3.
+ */
+const DUTY_UNIT_OPTIONS: Array<{ value: DutyUnit; label: string }> = [
+  { value: "percent", label: "%" },
+  { value: "EUR/kg", label: "EUR/кг" },
+  { value: "USD/kg", label: "USD/кг" },
+  { value: "USD/pc", label: "USD/шт" },
+  { value: "RUB/l", label: "₽/л" },
+  { value: "EUR/l", label: "EUR/л" },
+  { value: "USD/l", label: "USD/л" },
+];
+
+function DutyRateInput({
+  form,
+  update,
+  readOnly,
+  saving,
+  weightKg,
+  customsValue,
+}: {
+  form: FormState;
+  update: <K extends keyof FormState>(key: K, value: FormState[K]) => void;
+  readOnly: boolean;
+  saving: boolean;
+  weightKg: number | null;
+  customsValue: number | null;
+}) {
+  // Defensive flag-off: when Alta features are disabled, only Manual mode
+  // is available — the Auto resolver is unreachable so the toggle is hidden
+  // and Manual mode is implicitly selected.
+  const showAutoToggle = ALTA_FEATURES_ENABLED;
+  const isManual = !showAutoToggle || form.duty_manual_mode;
+  const value1 = parseNumOrNull(form.duty_value_1);
+  const value2 = parseNumOrNull(form.duty_value_2);
+  const previewText = formatDutyFormula({
+    rate_type: form.duty_rate_type,
+    value_1: value1,
+    unit_1: form.duty_unit_1,
+    value_2: value2,
+    unit_2: form.duty_unit_2,
+    sign: form.duty_sign,
+    customs_value: customsValue,
+    weight_kg: weightKg,
+  });
+
+  return (
+    <div className="flex flex-col gap-2">
+      {showAutoToggle && (
+        <div
+          role="group"
+          aria-label="Режим ввода"
+          className="inline-flex overflow-hidden rounded-md border border-border bg-card self-start"
+        >
+          <ChipButton
+            active={!form.duty_manual_mode}
+            disabled={readOnly || saving}
+            onClick={() => update("duty_manual_mode", false)}
+          >
+            Auto
+          </ChipButton>
+          <ChipButton
+            active={form.duty_manual_mode}
+            disabled={readOnly || saving}
+            onClick={() => update("duty_manual_mode", true)}
+          >
+            Manual
+          </ChipButton>
+        </div>
+      )}
+
+      {isManual ? (
+        <div className="flex flex-col gap-2 rounded-md border border-border bg-muted/10 p-2">
+          {/* Rate-type chip toggle */}
+          <div
+            role="group"
+            aria-label="Тип ставки"
+            className="inline-flex overflow-hidden rounded-md border border-border bg-card self-start"
+          >
+            <ChipButton
+              active={form.duty_rate_type === "simple"}
+              disabled={readOnly || saving}
+              onClick={() => update("duty_rate_type", "simple")}
+            >
+              Простая
+            </ChipButton>
+            <ChipButton
+              active={form.duty_rate_type === "combined"}
+              disabled={readOnly || saving}
+              onClick={() => update("duty_rate_type", "combined")}
+            >
+              Комбинированная
+            </ChipButton>
+            <ChipButton
+              active={form.duty_rate_type === "specific"}
+              disabled={readOnly || saving}
+              onClick={() => update("duty_rate_type", "specific")}
+            >
+              Специфическая
+            </ChipButton>
+          </div>
+
+          {/* Slot 1 */}
+          <DutySlotRow
+            value={form.duty_value_1}
+            onValueChange={(v) => update("duty_value_1", v)}
+            unit={form.duty_unit_1}
+            onUnitChange={(u) => update("duty_unit_1", u)}
+            // Specific cannot be "percent" — only specific currency units.
+            allowPercent={form.duty_rate_type !== "specific"}
+            disabled={readOnly || saving}
+          />
+
+          {/* Combined: sign selector + slot 2 */}
+          {form.duty_rate_type === "combined" && (
+            <>
+              <select
+                aria-label="Связь между slot 1 и slot 2"
+                value={form.duty_sign ?? ">"}
+                onChange={(e) =>
+                  update("duty_sign", e.target.value as DutySign)
+                }
+                disabled={readOnly || saving}
+                className="self-start rounded-md border border-border bg-card text-sm px-2 py-1"
+              >
+                <option value=">">но не менее</option>
+                <option value="+">плюс</option>
+              </select>
+              <DutySlotRow
+                value={form.duty_value_2}
+                onValueChange={(v) => update("duty_value_2", v)}
+                unit={form.duty_unit_2}
+                onUnitChange={(u) => update("duty_unit_2", u)}
+                allowPercent
+                disabled={readOnly || saving}
+              />
+            </>
+          )}
+
+          {/* Live preview formula */}
+          <div
+            data-testid="duty-formula-preview"
+            className="text-xs font-mono text-amber-300 mt-1 break-words"
+          >
+            {previewText}
+          </div>
+        </div>
+      ) : (
+        // Auto branch — the legacy single-input + (% / ₽/кг) chip pair.
+        // Unchanged behavior: calc-engine reads customs_duty /
+        // customs_duty_per_kg directly. AutoResolveButton + RateBreakdown
+        // continue to render in the section below.
+        <div className="flex gap-2">
+          <Input
+            type="number"
+            inputMode="decimal"
+            step="0.01"
+            min="0"
+            value={form.duty_value}
+            onChange={(e) => update("duty_value", e.target.value)}
+            disabled={readOnly || saving}
+            className="flex-1"
+            placeholder="0"
+          />
+          <div
+            role="group"
+            aria-label="Тип пошлины"
+            className="inline-flex overflow-hidden rounded-md border border-border bg-card"
+          >
+            <ChipButton
+              active={form.duty_mode === "pct"}
+              disabled={readOnly || saving}
+              onClick={() => update("duty_mode", "pct")}
+            >
+              %
+            </ChipButton>
+            <ChipButton
+              active={form.duty_mode === "perKg"}
+              disabled={readOnly || saving}
+              onClick={() => update("duty_mode", "perKg")}
+            >
+              ₽/кг
+            </ChipButton>
+            <ChipButton
+              active={false}
+              disabled
+              title="Требуется миграция: колонка customs_duty_per_pc"
+            >
+              ₽/шт
+            </ChipButton>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DutySlotRow({
+  value,
+  onValueChange,
+  unit,
+  onUnitChange,
+  allowPercent,
+  disabled,
+}: {
+  value: string;
+  onValueChange: (v: string) => void;
+  unit: DutyUnit;
+  onUnitChange: (u: DutyUnit) => void;
+  allowPercent: boolean;
+  disabled: boolean;
+}) {
+  const options = allowPercent
+    ? DUTY_UNIT_OPTIONS
+    : DUTY_UNIT_OPTIONS.filter((o) => o.value !== "percent");
+  return (
+    <div className="flex gap-2">
+      <Input
+        type="number"
+        inputMode="decimal"
+        step="0.01"
+        min="0"
+        value={value}
+        onChange={(e) => onValueChange(e.target.value)}
+        disabled={disabled}
+        className="flex-1"
+        placeholder="0"
+        aria-label="Значение ставки"
+      />
+      <select
+        aria-label="Единица ставки"
+        value={unit}
+        onChange={(e) => onUnitChange(e.target.value as DutyUnit)}
+        disabled={disabled}
+        className="rounded-md border border-border bg-card text-sm px-2 py-1"
+      >
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+/**
+ * Best-effort customs_value extraction for the live preview.
+ *
+ * Prefers an explicit RUB-denominated field if the row carries one, then
+ * falls back to proforma_amount_excl_vat which represents purchase price
+ * × quantity in the proforma currency. Returns null when nothing is
+ * available — callers render "—" rather than a misleading number.
+ */
+function extractCustomsValue(item: QuoteItemRow): number | null {
+  const row = item as Record<string, unknown>;
+  const rub = row.customs_value_rub ?? row.customs_value;
+  if (typeof rub === "number" && Number.isFinite(rub)) return rub;
+  const proforma = row.proforma_amount_excl_vat;
+  if (typeof proforma === "number" && Number.isFinite(proforma)) return proforma;
+  return null;
 }
 
 function LicenseRow({
