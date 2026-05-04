@@ -5816,7 +5816,7 @@ export type Database = {
           id: string
           tnved_code: string
           payment_type: string
-          country_or_areal: string | null
+          country_or_areal: string
           valid_from: string
           valid_to: string | null
           value_1_number: number | null
@@ -5838,12 +5838,22 @@ export type Database = {
           last_used_at: string
           created_at: string
           updated_at: string
+          revalidate_failure_count: number
+          revalidate_failed_at: string | null
+          description: string
+          category_code: string
+          category_ru: string | null
+          condition_text: string | null
+          legal_document: string | null
+          legal_link: string | null
+          order_ref: string | null
+          is_default: boolean
         }
         Insert: {
           id?: string
           tnved_code: string
           payment_type: string
-          country_or_areal?: string | null
+          country_or_areal?: string
           valid_from: string
           valid_to?: string | null
           value_1_number?: number | null
@@ -5865,12 +5875,22 @@ export type Database = {
           last_used_at?: string
           created_at?: string
           updated_at?: string
+          revalidate_failure_count?: number
+          revalidate_failed_at?: string | null
+          description?: string
+          category_code?: string
+          category_ru?: string | null
+          condition_text?: string | null
+          legal_document?: string | null
+          legal_link?: string | null
+          order_ref?: string | null
+          is_default?: boolean
         }
         Update: {
           id?: string
           tnved_code?: string
           payment_type?: string
-          country_or_areal?: string | null
+          country_or_areal?: string
           valid_from?: string
           valid_to?: string | null
           value_1_number?: number | null
@@ -5890,6 +5910,70 @@ export type Database = {
           source?: string
           source_fetched_at?: string
           last_used_at?: string
+          created_at?: string
+          updated_at?: string
+          revalidate_failure_count?: number
+          revalidate_failed_at?: string | null
+          description?: string
+          category_code?: string
+          category_ru?: string | null
+          condition_text?: string | null
+          legal_document?: string | null
+          legal_link?: string | null
+          order_ref?: string | null
+          is_default?: boolean
+        }
+        Relationships: []
+      }
+      tnved_user_choices: {
+        Row: {
+          id: string
+          organization_id: string
+          user_id: string
+          tnved_code: string
+          country_oksm: number
+          chosen_imp_variant: Json | null
+          chosen_impdemp_variant: Json | null
+          chosen_impcomp_variant: Json | null
+          chosen_impdop_variant: Json | null
+          chosen_imptmp_variant: Json | null
+          chosen_nds_variant: Json | null
+          manual_override: boolean
+          manual_rate_payload: Json | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          user_id: string
+          tnved_code: string
+          country_oksm: number
+          chosen_imp_variant?: Json | null
+          chosen_impdemp_variant?: Json | null
+          chosen_impcomp_variant?: Json | null
+          chosen_impdop_variant?: Json | null
+          chosen_imptmp_variant?: Json | null
+          chosen_nds_variant?: Json | null
+          manual_override?: boolean
+          manual_rate_payload?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          user_id?: string
+          tnved_code?: string
+          country_oksm?: number
+          chosen_imp_variant?: Json | null
+          chosen_impdemp_variant?: Json | null
+          chosen_impcomp_variant?: Json | null
+          chosen_impdop_variant?: Json | null
+          chosen_imptmp_variant?: Json | null
+          chosen_nds_variant?: Json | null
+          manual_override?: boolean
+          manual_rate_payload?: Json | null
           created_at?: string
           updated_at?: string
         }
