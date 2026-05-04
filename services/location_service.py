@@ -910,8 +910,11 @@ def get_location_stats(organization_id: str) -> Dict[str, Any]:
     try:
         supabase = _get_supabase()
 
-        # Get all locations
-        result = supabase.table("locations").select("is_active, is_hub, is_customs_point, country")\
+        # Get all locations.
+        # Note: `is_hub` and `is_customs_point` boolean columns were replaced
+        # by the `location_type` enum (migration 287). Hub count = rows where
+        # location_type='hub'; customs count = rows where location_type='customs'.
+        result = supabase.table("locations").select("is_active, location_type, country")\
             .eq("organization_id", organization_id)\
             .execute()
 
@@ -928,8 +931,8 @@ def get_location_stats(organization_id: str) -> Dict[str, Any]:
         total = len(result.data)
         active = sum(1 for row in result.data if row.get("is_active", True))
         inactive = total - active
-        hubs = sum(1 for row in result.data if row.get("is_hub", False))
-        customs_points = sum(1 for row in result.data if row.get("is_customs_point", False))
+        hubs = sum(1 for row in result.data if row.get("location_type") == "hub")
+        customs_points = sum(1 for row in result.data if row.get("location_type") == "customs")
 
         # Count by country
         by_country = {}

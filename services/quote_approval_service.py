@@ -477,9 +477,12 @@ def get_quotes_pending_approval(
     supabase = get_supabase()
 
     try:
-        # Get all quotes in workflow stages
+        # Get all quotes in workflow stages.
+        # customer_name is on the related customers table (FK from customer_id);
+        # use a PostgREST embed instead of selecting a non-existent quotes column.
         result = supabase.table('quotes').select(
-            'id, idn_quote, customer_name, total_amount, currency, status, approvals, created_at'
+            'id, idn_quote, total_amount, currency, status, approvals, created_at,'
+            ' customer:customers(name)'
         ).eq('organization_id', organization_id) \
           .in_('status', ['draft', 'pending_review', 'pending_procurement', 'pending_logistics',
                           'pending_customs', 'pending_sales', 'pending_control']) \
@@ -498,6 +501,10 @@ def get_quotes_pending_approval(
                 # Add department-specific metadata
                 quote['department'] = department
                 quote['department_name'] = DEPARTMENT_NAMES[department]
+                # Flatten the embedded customer name back onto the dict so
+                # downstream consumers continue to read `customer_name` directly.
+                customer = quote.get('customer') or {}
+                quote['customer_name'] = customer.get('name')
                 pending_quotes.append(quote)
 
         return pending_quotes
