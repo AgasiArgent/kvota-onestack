@@ -16,6 +16,12 @@ export function DepartmentSection({ department }: Props) {
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
+        <div className="flex justify-between">
+          <span className="text-text-muted text-sm">Отдел</span>
+          <span className="text-sm font-medium">
+            {department.name ?? "—"}
+          </span>
+        </div>
         <div className="flex justify-between items-start">
           <span className="text-text-muted text-sm">Роли</span>
           <div className="flex flex-wrap gap-1.5 justify-end">

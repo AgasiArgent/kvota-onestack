@@ -57,6 +57,7 @@ export async function fetchUserSalesGroupId(
 }
 
 export interface UserDepartment {
+  name: string | null;
   roles: Array<{ name: string; slug: string }>;
   supervisor: { full_name: string } | null;
 }
@@ -81,20 +82,33 @@ export async function fetchUserDepartment(
 ): Promise<UserDepartment> {
   const supabase = await createClient();
 
-  // Fetch roles
-  const { data: roleRows } = await supabase
-    .from("user_roles")
-    .select("roles!inner(name, slug)")
-    .eq("user_id", userId)
-    .eq("organization_id", orgId);
+  // Fetch roles + department in parallel — independent reads
+  const [roleResult, profileResult] = await Promise.all([
+    supabase
+      .from("user_roles")
+      .select("roles!inner(name, slug)")
+      .eq("user_id", userId)
+      .eq("organization_id", orgId),
+    supabase
+      .from("user_profiles")
+      .select("department_id, departments(name)")
+      .eq("user_id", userId)
+      .eq("organization_id", orgId)
+      .maybeSingle(),
+  ]);
 
-  const roles = (roleRows ?? []).map((row) => {
+  const roles = (roleResult.data ?? []).map((row) => {
     const r = row.roles as unknown as { name: string; slug: string };
     return {
       name: ROLE_LABELS_RU[r.slug] ?? r.name,
       slug: r.slug,
     };
   });
+
+  const departmentRow = profileResult.data as
+    | { departments: { name: string } | null }
+    | null;
+  const departmentName = departmentRow?.departments?.name ?? null;
 
   // Fetch supervisor from organization_members (supervisor_id not in generated types yet)
   const { data: membership } = await supabase
@@ -183,7 +197,7 @@ export async function fetchUserDepartment(
     }
   }
 
-  return { roles, supervisor };
+  return { name: departmentName, roles, supervisor };
 }
 
 /**
