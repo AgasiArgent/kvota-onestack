@@ -23,8 +23,14 @@ from services.workflow_service import transition_substatus
 
 logger = logging.getLogger(__name__)
 
-_PROCUREMENT_ROLES = {"procurement", "admin", "head_of_procurement"}
-_READ_HISTORY_ROLES = {"procurement", "admin", "head_of_procurement", "sales", "head_of_sales"}
+_PROCUREMENT_ROLES = {"procurement", "procurement_senior", "admin", "head_of_procurement"}
+_READ_HISTORY_ROLES = {"procurement", "procurement_senior", "admin", "head_of_procurement", "sales", "head_of_sales"}
+
+# Roles that grant org-wide kanban visibility. Regular `procurement` (МОЗ) is
+# excluded — they only see brand-slices where they personally own at least one
+# item AND the slice has moved past distribution. Distribution is a senior task;
+# regular МОЗ has no business with the «Распределение» column.
+_BROADER_SCOPE_ROLES = {"admin", "head_of_procurement", "procurement_senior"}
 
 # Fixed set of procurement sub-statuses — matches migration 274 check constraint
 _PROCUREMENT_SUBSTATUSES = ("distributing", "searching_supplier", "waiting_prices", "prices_ready")
@@ -206,6 +212,34 @@ async def get_kanban(request) -> JSONResponse:
             qid = str(it.get("quote_id"))
             brand = it.get("brand") or ""
             items_by_key.setdefault((qid, brand), []).append(it)
+
+    # Per-user scope filter (МОЗ visibility).
+    # Org-wide scope is reserved for admin / head_of_procurement /
+    # procurement_senior. Regular `procurement` (МОЗ) only sees brand-slices
+    # where they personally own at least one item AND the slice has progressed
+    # past «Распределение» — distribution belongs to senior, and a stray
+    # distributing card would expose the «Распределить» button to МОЗ
+    # (which the assignBrandGroup server action rejects anyway, but the
+    # button shouldn't appear in the first place).
+    has_broader_scope = bool(user["role_slugs"] & _BROADER_SCOPE_ROLES)
+    if not has_broader_scope:
+        own_brand_keys: set[tuple[str, str]] = set()
+        for (qid, brand), items in items_by_key.items():
+            for it in items:
+                if str(it.get("assigned_procurement_user") or "") == user["id"]:
+                    own_brand_keys.add((qid, brand))
+                    break
+        qbs_rows = [
+            r
+            for r in qbs_rows
+            if (
+                (r.get("substatus") or "distributing") != "distributing"
+                and (str(r.get("quote_id")), r.get("brand") or "") in own_brand_keys
+            )
+        ]
+        # Recompute quote_ids set so downstream batch fetches don't waste work
+        # on quotes the user can't see. Keeps invoice/history queries scoped.
+        quote_ids = list({str(r["quote_id"]) for r in qbs_rows if r.get("quote_id")})
 
     # Batch-fetch supplier invoices for these quotes.
     invoice_meta_by_id: dict[str, dict] = {}  # inv_id -> {invoice_number, currency, quote_id}
