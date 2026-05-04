@@ -1,0 +1,70 @@
+[
+  {
+    "name": "single item — 100%",
+    "items": [
+      { "purchase_price_original": "1000", "purchase_currency": "RUB", "quantity": "1", "currency_rate_to_rub": "1" }
+    ],
+    "item_values": ["1000.00"],
+    "cert_cost": "12500.00",
+    "expected_shares": ["12500.00"],
+    "notes": "REQ-3 AC#6: single attached item gets full cert_cost without rounding."
+  },
+  {
+    "name": "two equal items — 50/50",
+    "items": [
+      { "purchase_price_original": "100", "purchase_currency": "RUB", "quantity": "1", "currency_rate_to_rub": "1" },
+      { "purchase_price_original": "100", "purchase_currency": "RUB", "quantity": "1", "currency_rate_to_rub": "1" }
+    ],
+    "item_values": ["100.00", "100.00"],
+    "cert_cost": "12500.00",
+    "expected_shares": ["6250.00", "6250.00"],
+    "notes": "Even split — last item absorbs zero residual."
+  },
+  {
+    "name": "three items — 150k/350k/90k of 590k, cert 12500",
+    "items": [
+      { "purchase_price_original": "150000", "purchase_currency": "RUB", "quantity": "1", "currency_rate_to_rub": "1" },
+      { "purchase_price_original": "350000", "purchase_currency": "RUB", "quantity": "1", "currency_rate_to_rub": "1" },
+      { "purchase_price_original":  "90000", "purchase_currency": "RUB", "quantity": "1", "currency_rate_to_rub": "1" }
+    ],
+    "item_values": ["150000.00", "350000.00", "90000.00"],
+    "cert_cost": "12500.00",
+    "expected_shares": ["3177.97", "7415.25", "1906.78"],
+    "notes": "Proportional with rounding; last share = 12500 - 3177.97 - 7415.25 = 1906.78."
+  },
+  {
+    "name": "all items zero value — equal split fallback",
+    "items": [
+      { "purchase_price_original": "0", "purchase_currency": "RUB", "quantity": "1", "currency_rate_to_rub": "1" },
+      { "purchase_price_original": "0", "purchase_currency": "RUB", "quantity": "1", "currency_rate_to_rub": "1" },
+      { "purchase_price_original": "0", "purchase_currency": "RUB", "quantity": "1", "currency_rate_to_rub": "1" }
+    ],
+    "item_values": ["0.00", "0.00", "0.00"],
+    "cert_cost": "100.00",
+    "expected_shares": ["33.33", "33.33", "33.34"],
+    "notes": "REQ-3 AC#5: total basis == 0 → equal split cert_cost / N; last absorbs residual."
+  },
+  {
+    "name": "rounding residual absorbed by last (10₽ split across 3)",
+    "items": [
+      { "purchase_price_original": "1", "purchase_currency": "RUB", "quantity": "1", "currency_rate_to_rub": "1" },
+      { "purchase_price_original": "1", "purchase_currency": "RUB", "quantity": "1", "currency_rate_to_rub": "1" },
+      { "purchase_price_original": "1", "purchase_currency": "RUB", "quantity": "1", "currency_rate_to_rub": "1" }
+    ],
+    "item_values": ["1.00", "1.00", "1.00"],
+    "cert_cost": "10.00",
+    "expected_shares": ["3.33", "3.33", "3.34"],
+    "notes": "REQ-3 AC#7: 10/3 = 3.33333…; first two = 3.33, last = 10 - 6.66 = 3.34."
+  },
+  {
+    "name": "large numbers — no drift",
+    "items": [
+      { "purchase_price_original": "5000", "purchase_currency": "USD", "quantity": "100", "currency_rate_to_rub":  "95.5" },
+      { "purchase_price_original": "1200", "purchase_currency": "EUR", "quantity":  "50", "currency_rate_to_rub": "102.3" }
+    ],
+    "item_values": ["47750000.00", "6138000.00"],
+    "cert_cost": "999999.99",
+    "expected_shares": ["886097.08", "113902.91"],
+    "notes": "Multi-currency basis: 5000*100*95.5=47750000, 1200*50*102.3=6138000; share1 = (47750000/53888000) * 999999.99 = 886097.0814… → ROUND_HALF_UP 0.01 → 886097.08; last = 999999.99 - 886097.08 = 113902.91."
+  }
+]
