@@ -107,3 +107,9 @@ export type {
   CertificateDetailsBodyProps,
   CertificateDetailsModalProps,
 } from "./ui/certificate-details-modal";
+
+// UI — modals (Wave 3 Task 7c, REQ-7 + REQ-10)
+export { CertificateModal } from "./ui/certificate-modal";
+export type { CertificateModalProps } from "./ui/certificate-modal";
+export { ExpenseModal } from "./ui/expense-modal";
+export type { ExpenseModalProps } from "./ui/expense-modal";
