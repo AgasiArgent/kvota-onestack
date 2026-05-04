@@ -458,8 +458,6 @@ export function ProcurementHandsontable({
           "border:none;background:none;color:#a1a1aa;cursor:pointer;font-size:14px;padding:2px 4px;margin-right:2px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;";
         btn.dataset.action = action;
         btn.dataset.rowId = rowIdAttr;
-        btn.dataset.hoverColor = hoverColor;
-        btn.dataset.hoverBg = hoverBg;
         btn.addEventListener("mouseenter", () => {
           btn.style.color = hoverColor;
           btn.style.backgroundColor = hoverBg;
