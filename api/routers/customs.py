@@ -16,6 +16,7 @@ from api.customs import (
     create_quote_expense as _create_quote_expense,
     delete_item_expense as _delete_item_expense,
     delete_quote_expense as _delete_quote_expense,
+    history_lookup_handler as _history_lookup_handler,
     non_tariff_measures_handler as _non_tariff_measures_handler,
     resolve_rates_handler as _resolve_rates_handler,
 )
@@ -99,3 +100,16 @@ async def post_classify(
 async def post_classify_select(request: Request) -> JSONResponse:
     """Record customs-specialist's chosen code — see classify_select_handler."""
     return await _classify_select_handler(request)
+
+
+# Phase A Req 10 — history lookup for repeating (org, tnved_code, country)
+
+
+@router.get("/items/history")
+async def get_items_history(
+    request: Request,
+    tnved_code: str,
+    country_oksm: int,
+) -> JSONResponse:
+    """Find last customs choice for repeating (org, code, country) — see history_lookup_handler."""
+    return await _history_lookup_handler(request, tnved_code, country_oksm)

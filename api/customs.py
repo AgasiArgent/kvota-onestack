@@ -254,6 +254,36 @@ async def bulk_update_items(request: Request, quote_id: str) -> JSONResponse:
             }
         ).eq("id", item_id).eq("quote_id", quote_id).execute()
 
+        # Phase A Req 10 — fire-and-forget audit log of customs choice.
+        # Only logs when both tnved_code (10-digit hs_code) and country_oksm
+        # are present in the payload. UI will populate proper chosen_variants
+        # in Task 11; for now we record the (org, code, country) triple so
+        # subsequent identical inputs surface a history banner. Errors must
+        # never block the user-visible save (mirror of classifier audit log).
+        country_oksm_raw = item.get("country_of_origin_oksm")
+        log_tnved_code = (hs_code or "").strip()
+        if log_tnved_code and _TNVED_RE.match(log_tnved_code) and country_oksm_raw:
+            try:
+                country_oksm_int = int(country_oksm_raw)
+            except (TypeError, ValueError):
+                country_oksm_int = None
+            if country_oksm_int and country_oksm_int > 0:
+                try:
+                    from services.customs_user_choices import log_choice
+
+                    log_choice(
+                        organization_id=user["org_id"],
+                        user_id=user["id"],
+                        tnved_code=log_tnved_code,
+                        country_oksm=country_oksm_int,
+                        chosen_variants={},
+                        manual_override=bool(item.get("manual_override", False)),
+                        manual_rate_payload=item.get("manual_rate_payload"),
+                    )
+                except Exception:
+                    # Never block save on audit-log failure.
+                    pass
+
     return JSONResponse({"success": True})
 
 
@@ -1633,6 +1663,89 @@ async def classify_handler(request: Request, alta_client) -> JSONResponse:
             "request_id": outcome.request_id,
         },
     })
+
+
+async def history_lookup_handler(
+    request: Request,
+    tnved_code: str,
+    country_oksm: int,
+) -> JSONResponse:
+    """Find last user choice for (org, tnved_code, country) — Phase A Req 10.
+
+    Path: GET /api/customs/items/history?tnved_code=...&country_oksm=...
+    Auth: dual — JWT (Next.js) or legacy session (FastHTML).
+    Params (query string):
+        tnved_code: str (required) — 10-digit ТН ВЭД code
+        country_oksm: int (required) — ОКСМ digital code
+    Returns:
+        Success (200, match found): {success: true, data: {
+            user_id, user_email, created_at, chosen_variants,
+            manual_override, manual_rate_payload, is_actual
+        }}
+        Success (200, no match): {success: true, data: null}
+        Errors:
+            - 401 UNAUTHORIZED — missing auth
+            - 403 FORBIDDEN — non-customs role
+            - 400 BAD_REQUEST — invalid tnved_code / country_oksm
+
+    Side Effects: read-only — no DB writes.
+    Roles: customs, admin, head_of_customs.
+
+    Used by the Phase A history banner inside the customs item dialog
+    (Task 11) — surfaces the previous customs choice for the same code +
+    country combination so the specialist can re-apply the chosen
+    variants without re-deriving them from scratch.
+    """
+    user, role_codes = _resolve_dual_auth(request)
+    if not user or not user.get("org_id"):
+        return _err("UNAUTHORIZED", "Not authenticated", 401)
+    if not (set(role_codes) & _CUSTOMS_ROLES):
+        return _err("FORBIDDEN", "Forbidden", 403)
+
+    tnved_code = (tnved_code or "").strip()
+    if not _TNVED_RE.match(tnved_code):
+        return _err(
+            "BAD_REQUEST",
+            f"tnved_code must be a 10-digit ТН ВЭД code (got {tnved_code!r})",
+            400,
+        )
+    if not isinstance(country_oksm, int) or country_oksm <= 0:
+        return _err(
+            "BAD_REQUEST",
+            f"country_oksm must be a positive integer (got {country_oksm!r})",
+            400,
+        )
+
+    from services.customs_user_choices import (
+        _serialize_rate as _serialize_history_rate,
+        find_recent,
+    )
+
+    match = find_recent(
+        organization_id=user["org_id"],
+        tnved_code=tnved_code,
+        country_oksm=country_oksm,
+    )
+    if match is None:
+        return JSONResponse({"success": True, "data": None})
+
+    return JSONResponse(
+        {
+            "success": True,
+            "data": {
+                "user_id": match.user_id,
+                "user_email": match.user_email,
+                "created_at": match.created_at.isoformat(),
+                "chosen_variants": {
+                    pt: _serialize_history_rate(rate)
+                    for pt, rate in match.chosen_variants.items()
+                },
+                "manual_override": match.manual_override,
+                "manual_rate_payload": match.manual_rate_payload,
+                "is_actual": match.is_actual,
+            },
+        }
+    )
 
 
 async def classify_select_handler(request: Request) -> JSONResponse:
