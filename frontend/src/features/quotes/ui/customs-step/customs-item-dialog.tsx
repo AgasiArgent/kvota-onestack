@@ -66,6 +66,7 @@ import {
   CertificateBindPopover,
   CertificateCoverageList,
   CertificateDetailsModal,
+  CertificateModal,
   HistoryBanner as CertHistoryBanner,
   attachCertificateItem,
   detachCertificateItem,
@@ -449,6 +450,17 @@ export function CustomsItemDialog({
     useState<HistoryCertMatch | null>(null);
   const [certDetails, setCertDetails] = useState<Certificate | null>(null);
 
+  // Phase B Wave 5 cleanup — «Создать новый» wires straight to <CertificateModal>.
+  //   - HistoryBanner («Прежний сертификат истёк…») passes a `{type, cost_rub}`
+  //     preset so the new doc inherits the prior values (REQ-5 AC#9 / REQ-7 AC#3).
+  //   - BindPopover empty-state link opens the modal with no preset, but with
+  //     the current item ticked in the multi-select (REQ-8 AC#3 «Создать новый
+  //     с pre-selected текущей позицией»).
+  const [createCertModalOpen, setCreateCertModalOpen] = useState(false);
+  const [certModalPreset, setCertModalPreset] = useState<
+    { type?: string; cost_rub?: number } | null
+  >(null);
+
   const canWrite = userRoles.some((r) => CAN_WRITE_ROLES.has(r));
 
   // Re-seed the form whenever a different row is opened. Avoids stale state
@@ -466,6 +478,10 @@ export function CustomsItemDialog({
       setExistingCerts([]);
       setCertHistoryMatch(null);
       setCertDetails(null);
+      // Phase B Wave 5 cleanup — close the new-cert modal too so a row swap
+      // never leaves the modal open against a stale item context.
+      setCreateCertModalOpen(false);
+      setCertModalPreset(null);
     }
   }, [open, item]);
 
@@ -1185,14 +1201,14 @@ export function CustomsItemDialog({
                 onApply={(certId) => {
                   void handleApplyHistoryCert(certId);
                 }}
-                onCreateNew={() => {
-                  // TODO (Wave 5): wire to <CertificateModal> with preset
-                  // type/cost. For Phase B Task 10 we surface a toast so
-                  // the customs specialist still has a hint that the action
-                  // is recognized — full create flow lives on customs-step.
-                  toast.info(
-                    "Создание сертификата доступно из раздела «Расходы по таможне»",
-                  );
+                onCreateNew={(presetFromHistory) => {
+                  // Phase B Wave 5 — REQ-5 AC#9 / REQ-7 AC#3.
+                  // Open the create-cert modal pre-filled with the prior
+                  // {type, cost_rub} from the expired match. The current
+                  // item is also pre-selected so the new cert covers it
+                  // by default; user enters fresh number / dates only.
+                  setCertModalPreset(presetFromHistory);
+                  setCreateCertModalOpen(true);
                   setCertHistoryMatch(null);
                 }}
                 onDismiss={() => setCertHistoryMatch(null)}
@@ -1240,9 +1256,12 @@ export function CustomsItemDialog({
                       )}
                       onAttached={handleBindAttached}
                       onCreateNew={() => {
-                        toast.info(
-                          "Создание сертификата доступно из раздела «Расходы по таможне»",
-                        );
+                        // Phase B Wave 5 — REQ-8 AC#3.
+                        // Empty-state link opens the create-cert modal with
+                        // no preset; the current item lands pre-selected via
+                        // `preSelectedItemIds`.
+                        setCertModalPreset(null);
+                        setCreateCertModalOpen(true);
                       }}
                     />
                   )}
@@ -1273,9 +1292,11 @@ export function CustomsItemDialog({
                     )}
                     onAttached={handleBindAttached}
                     onCreateNew={() => {
-                      toast.info(
-                        "Создание сертификата доступно из раздела «Расходы по таможне»",
-                      );
+                      // Phase B Wave 5 — REQ-8 AC#3 (secondary trigger).
+                      // Same pre-selection contract as the empty-state
+                      // variant above.
+                      setCertModalPreset(null);
+                      setCreateCertModalOpen(true);
                     }}
                   />
                 )}
@@ -1290,6 +1311,36 @@ export function CustomsItemDialog({
                   }}
                   cert={certDetails}
                   items={quoteItemsForCerts}
+                />
+              )}
+
+              {/* Phase B Wave 5 cleanup — full create-cert flow embedded in the
+                  per-item dialog so the customs specialist never has to leave
+                  the row to issue a new document. Two entry points feed it:
+                    1. HistoryBanner «Создать новый» (preset = {type, cost_rub}
+                       from the expired match — REQ-5 AC#9 / REQ-7 AC#3).
+                    2. BindPopover empty-state link (no preset; the current
+                       item is pre-selected via preSelectedItemIds — REQ-8
+                       AC#3).
+                  Refresh-on-success keeps the coverage list authoritative. */}
+              {currentItemForSelect && (
+                <CertificateModal
+                  open={createCertModalOpen}
+                  onOpenChange={(next) => {
+                    setCreateCertModalOpen(next);
+                    if (!next) setCertModalPreset(null);
+                  }}
+                  quoteId={quoteId}
+                  items={quoteItemsForCerts.length > 0
+                    ? quoteItemsForCerts
+                    : [currentItemForSelect]}
+                  preset={certModalPreset ?? undefined}
+                  preSelectedItemIds={[currentItemForSelect.id]}
+                  onCreated={() => {
+                    setCreateCertModalOpen(false);
+                    setCertModalPreset(null);
+                    void refreshCerts();
+                  }}
                 />
               )}
             </section>

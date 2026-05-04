@@ -297,6 +297,101 @@ describe("CertificateModal — module surface", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Phase B Wave 5 cleanup — preset + preSelectedItemIds props
+// ---------------------------------------------------------------------------
+
+describe("CertificateModal — preset + preSelectedItemIds props (Wave 5)", () => {
+  it("does not throw when rendered with a preset prop", () => {
+    // REQ-5 AC#9 / REQ-7 AC#3 — opening from the HistoryBanner «Создать
+    // новый» surfaces a preset of {type, cost_rub} so the customs
+    // specialist re-issues the document without retyping identical fields.
+    const html = renderToString(
+      <CertificateModal
+        open={false}
+        onOpenChange={() => {}}
+        quoteId="quote-1"
+        items={ITEMS}
+        preset={{ type: "ДС ТР ТС", cost_rub: 12500 }}
+      />,
+    );
+    expect(typeof html).toBe("string");
+  });
+
+  it("does not throw when rendered with a partial preset (type only)", () => {
+    // Both fields on `preset` are independently optional.
+    const html = renderToString(
+      <CertificateModal
+        open={false}
+        onOpenChange={() => {}}
+        quoteId="quote-1"
+        items={ITEMS}
+        preset={{ type: "СС" }}
+      />,
+    );
+    expect(typeof html).toBe("string");
+  });
+
+  it("does not throw when rendered with a partial preset (cost only)", () => {
+    const html = renderToString(
+      <CertificateModal
+        open={false}
+        onOpenChange={() => {}}
+        quoteId="quote-1"
+        items={ITEMS}
+        preset={{ cost_rub: 999 }}
+      />,
+    );
+    expect(typeof html).toBe("string");
+  });
+
+  it("does not throw when rendered with preSelectedItemIds", () => {
+    // REQ-8 AC#3 — opening from the BindPopover empty-state «Создать новый»
+    // pre-ticks the current item in the multi-select.
+    const html = renderToString(
+      <CertificateModal
+        open={false}
+        onOpenChange={() => {}}
+        quoteId="quote-1"
+        items={ITEMS}
+        preSelectedItemIds={[ITEM_A.id]}
+      />,
+    );
+    expect(typeof html).toBe("string");
+  });
+
+  it("does not throw with both preset and preSelectedItemIds together", () => {
+    // The dialog passes both — preset from HistoryBanner + the current item
+    // pre-selected unconditionally — so this combination must mount cleanly.
+    const html = renderToString(
+      <CertificateModal
+        open={true}
+        onOpenChange={() => {}}
+        quoteId="quote-1"
+        items={ITEMS}
+        preset={{ type: "EUR.1", cost_rub: 7500 }}
+        preSelectedItemIds={[ITEM_A.id, ITEM_B.id]}
+      />,
+    );
+    expect(typeof html).toBe("string");
+  });
+
+  it("ignores a non-finite cost_rub in the preset (defensive)", () => {
+    // Defensive: a NaN / Infinity coming out of bad upstream data should
+    // not crash the modal — it should fall back to an empty cost field.
+    const html = renderToString(
+      <CertificateModal
+        open={false}
+        onOpenChange={() => {}}
+        quoteId="quote-1"
+        items={ITEMS}
+        preset={{ type: "СС", cost_rub: Number.NaN }}
+      />,
+    );
+    expect(typeof html).toBe("string");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // API integration via mocked createCertificate
 // ---------------------------------------------------------------------------
 

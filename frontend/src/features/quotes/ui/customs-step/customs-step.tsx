@@ -472,6 +472,13 @@ export function CustomsStep({
         }}
         quoteId={quote.id}
         item={items.find((it) => it.id === expandedRowId) ?? null}
+        // Phase B Wave 5 cleanup — pass the full quote-items array so the
+        // dialog's BindPopover after-attach preview / Сертификация section
+        // can resolve sibling positions (REQ-8 AC#7 «derived RUB-суммы» across
+        // all attachments). Internally the dialog adapts QuoteItemRow →
+        // QuoteItemForSelect; if omitted, the popover falls back to a
+        // singleton list of just the current item.
+        allItems={items}
         userRoles={userRoles}
         onSaved={() => router.refresh()}
       />

@@ -389,12 +389,71 @@ describe("CustomsItemDialog — orphan removal (Phase A → Phase B migration)",
     expect(src).toContain("CertificateBindPopover");
     expect(src).toContain("CertificateCoverageList");
     expect(src).toContain("CertificateDetailsModal");
+    // Phase B Wave 5 cleanup — CertificateModal is now mounted inside the
+    // per-item dialog so «Создать новый» actions go straight to the create
+    // flow without a navigation away.
+    expect(src).toContain("CertificateModal");
     // Aliased import — the existing Phase A HistoryBanner from
     // customs-history shadows the cert-version, so the new banner enters
     // under an alias.
     expect(src).toContain("HistoryBanner as CertHistoryBanner");
     expect(src).toContain("listCertificates");
     expect(src).toContain("fetchCertificateHistory");
+  });
+
+  it("wires HistoryBanner and BindPopover «Создать новый» to <CertificateModal>", async () => {
+    // Phase B Wave 5 — the prior toast-only placeholder is gone; «Создать
+    // новый» now opens the create-cert modal with a preset (HistoryBanner)
+    // or a pre-selected current item (BindPopover empty-state).
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const dialogPath = path.resolve(
+      __dirname,
+      "..",
+      "customs-item-dialog.tsx",
+    );
+    const src = await fs.readFile(dialogPath, "utf-8");
+    // The placeholder toast must be gone — both BindPopover variants and
+    // HistoryBanner.onCreateNew used to surface this exact string.
+    expect(src).not.toContain(
+      "Создание сертификата доступно из раздела «Расходы по таможне»",
+    );
+    // The two state hooks driving the modal must exist.
+    expect(src).toContain("createCertModalOpen");
+    expect(src).toContain("certModalPreset");
+    // The modal mount must wire preset + preSelectedItemIds.
+    expect(src).toContain("preset={certModalPreset");
+    expect(src).toContain("preSelectedItemIds={[currentItemForSelect.id]}");
+  });
+
+  it("accepts the new allItems prop on the dialog", async () => {
+    // Phase B Wave 5 — customs-step now passes the full quote items array
+    // through so BindPopover's after-attach preview shows all sibling
+    // positions, not just the current one.
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const dialogPath = path.resolve(
+      __dirname,
+      "..",
+      "customs-item-dialog.tsx",
+    );
+    const src = await fs.readFile(dialogPath, "utf-8");
+    expect(src).toContain("allItems?: QuoteItemRow[]");
+    expect(src).toContain("toQuoteItemForSelect");
+  });
+
+  it("customs-step.tsx passes allItems through to the dialog", async () => {
+    // Phase B Wave 5 — the dialog mount in customs-step.tsx must forward
+    // the full QuoteItemRow[] so the Сертификация section sees siblings.
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const stepPath = path.resolve(
+      __dirname,
+      "..",
+      "customs-step.tsx",
+    );
+    const src = await fs.readFile(stepPath, "utf-8");
+    expect(src).toContain("allItems={items}");
   });
 
   it("renders the «Сертификация» section guard when hs_code is set", async () => {

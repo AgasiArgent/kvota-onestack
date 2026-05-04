@@ -335,6 +335,24 @@ export interface CertificateModalProps {
    * the cert to a local list or trigger a re-fetch.
    */
   onCreated?: (cert: Certificate) => void;
+  /**
+   * Optional pre-fill values applied on the rising edge of `open`.
+   *
+   * Used by REQ-5 AC#9 / REQ-7 AC#3 — when the cost-aware history banner
+   * surfaces an expired match, clicking «Создать новый» opens the modal
+   * pre-filled with the prior `type` and `cost_rub` so the customs
+   * specialist can re-issue the document without re-typing identical
+   * fields. The user still enters fresh `number` / `issued_at` /
+   * `valid_until`. Both fields are independently optional.
+   */
+  preset?: { type?: string; cost_rub?: number };
+  /**
+   * Optional list of item ids ticked in the multi-select on the rising
+   * edge of `open`. Used by REQ-8 — when the per-item dialog's
+   * «Создать новый» action opens the modal, the current item is
+   * pre-selected so the user only needs to confirm.
+   */
+  preSelectedItemIds?: string[];
 }
 
 const TYPE_FIELD_NAME = "type";
@@ -346,6 +364,8 @@ export function CertificateModal({
   quoteId,
   items,
   onCreated,
+  preset,
+  preSelectedItemIds,
 }: CertificateModalProps) {
   const [type, setType] = useState("");
   const [number, setNumber] = useState("");
@@ -367,23 +387,32 @@ export function CertificateModal({
   // Reset all form state when the modal opens. Mirrors `create-customer-dialog`
   // — closing the modal does not clear state immediately, so re-opening with a
   // fresh slate requires this on `open` rising-edge.
+  //
+  // `preset` and `preSelectedItemIds` are applied on the same rising-edge so
+  // the pre-fill survives the reset that would otherwise clear them. Editing
+  // the prefilled value mid-session won't be clobbered — `wasOpenRef` ensures
+  // we only reset when going from closed → open, not on every render.
   const wasOpenRef = useRef(false);
   useEffect(() => {
     if (open && !wasOpenRef.current) {
-      setType("");
+      setType(preset?.type ?? "");
       setNumber("");
       setIssuer("");
       setLegalDoc("");
       setIssuedAt("");
       setValidUntil("");
-      setCostRub("");
+      setCostRub(
+        preset?.cost_rub != null && Number.isFinite(preset.cost_rub)
+          ? String(preset.cost_rub)
+          : "",
+      );
       setNotes("");
-      setSelectedIds([]);
+      setSelectedIds(preSelectedItemIds ?? []);
       setSubmitting(false);
       setErrorField(null);
     }
     wasOpenRef.current = open;
-  }, [open]);
+  }, [open, preset, preSelectedItemIds]);
 
   const selectedItems = useMemo(
     () => items.filter((it) => selectedIds.includes(it.id)),
