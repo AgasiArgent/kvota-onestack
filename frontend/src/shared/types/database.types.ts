@@ -3861,6 +3861,81 @@ export type Database = {
         }
         Relationships: []
       }
+      quote_certificate_items: {
+        Row: {
+          id: string
+          certificate_id: string
+          item_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          certificate_id: string
+          item_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          certificate_id?: string
+          item_id?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      quote_certificates: {
+        Row: {
+          id: string
+          quote_id: string
+          type: string
+          number: string | null
+          issuer: string | null
+          legal_doc: string | null
+          issued_at: string | null
+          valid_until: string | null
+          cost_rub: number
+          notes: string | null
+          display_name: string | null
+          is_custom_expense: boolean
+          created_at: string
+          updated_at: string
+          created_by: string | null
+        }
+        Insert: {
+          id?: string
+          quote_id: string
+          type: string
+          number?: string | null
+          issuer?: string | null
+          legal_doc?: string | null
+          issued_at?: string | null
+          valid_until?: string | null
+          cost_rub?: number
+          notes?: string | null
+          display_name?: string | null
+          is_custom_expense?: boolean
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+        }
+        Update: {
+          id?: string
+          quote_id?: string
+          type?: string
+          number?: string | null
+          issuer?: string | null
+          legal_doc?: string | null
+          issued_at?: string | null
+          valid_until?: string | null
+          cost_rub?: number
+          notes?: string | null
+          display_name?: string | null
+          is_custom_expense?: boolean
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+        }
+        Relationships: []
+      }
       quote_change_requests: {
         Row: {
           id: string
