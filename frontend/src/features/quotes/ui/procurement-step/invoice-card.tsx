@@ -7,6 +7,14 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ProcurementItemsEditor } from "./procurement-items-editor";
 import type { ProcurementEditorItem } from "./procurement-handsontable";
@@ -249,6 +257,12 @@ export function InvoiceCard({
   } | null>(null);
   const [addPositionsOpen, setAddPositionsOpen] = useState(false);
   const [addCargoOpen, setAddCargoOpen] = useState(false);
+  // Confirmation dialog gating «Завершить закупку». Stage transition is hard
+  // to undo (locks the КП for editing, advances kanban) — explicit confirm
+  // prevents accidental clicks. `completing` blocks double-submit while the
+  // mutation is in flight.
+  const [completeConfirmOpen, setCompleteConfirmOpen] = useState(false);
+  const [completing, setCompleting] = useState(false);
 
   // Procurement completion now lives PER invoice (migration 298). Reading
   // off `quote.procurement_completed_at` was the legacy behaviour — kept
@@ -657,6 +671,58 @@ export function InvoiceCard({
     }
   }
 
+  async function handleCompleteProcurement() {
+    setCompleting(true);
+    try {
+      await completeInvoiceProcurement(invoice.id);
+      toast.success("Закупка по КП завершена");
+      // Best-effort kanban advance for any brand-slice that's
+      // now fully covered by completed invoices.
+      try {
+        const { advancedSlices } =
+          await notifyInvoiceCompletedForKanban(invoice.id);
+        for (const s of advancedSlices) {
+          toast.info(
+            `Карточка «${s.brand || "без бренда"}» автоматически переведена в «${SUBSTATUS_LABELS_RU[s.to as keyof typeof SUBSTATUS_LABELS_RU] ?? s.to}»`
+          );
+        }
+      } catch (err) {
+        console.error(
+          "[invoice-card] kanban advance failed:",
+          err
+        );
+      }
+      setCompleteConfirmOpen(false);
+      router.refresh();
+      setRefreshKey((k) => k + 1);
+    } catch (err) {
+      console.error(
+        "[invoice-card] complete procurement failed:",
+        err
+      );
+      toast.error(
+        extractErrorMessage(err) ?? "Не удалось завершить закупку"
+      );
+    } finally {
+      setCompleting(false);
+    }
+  }
+
+  // Guard: a КП with zero positions OR zero priced positions has nothing
+  // to send to logistics — completing it would advance the workflow on an
+  // empty record, which is the destructive footgun the QA bug reproduces.
+  // Counts only non-null, strictly positive supplier prices.
+  const positionsWithPriceCount = invoiceItems.reduce(
+    (count, item) =>
+      item.purchase_price_original != null && item.purchase_price_original > 0
+        ? count + 1
+        : count,
+    0
+  );
+  const hasNoPositions = invoiceItems.length === 0;
+  const hasNoPricedPositions = positionsWithPriceCount === 0;
+  const cannotComplete = hasNoPositions || hasNoPricedPositions;
+
   const sentAt = invoice.sent_at;
   const hasSentAt = sentAt != null;
 
@@ -828,38 +894,7 @@ export function InvoiceCard({
               variant="default"
               size="sm"
               className="bg-blue-600 text-white hover:bg-blue-700 text-xs"
-              onClick={async () => {
-                try {
-                  await completeInvoiceProcurement(invoice.id);
-                  toast.success("Закупка по КП завершена");
-                  // Best-effort kanban advance for any brand-slice that's
-                  // now fully covered by completed invoices.
-                  try {
-                    const { advancedSlices } =
-                      await notifyInvoiceCompletedForKanban(invoice.id);
-                    for (const s of advancedSlices) {
-                      toast.info(
-                        `Карточка «${s.brand || "без бренда"}» автоматически переведена в «${SUBSTATUS_LABELS_RU[s.to as keyof typeof SUBSTATUS_LABELS_RU] ?? s.to}»`
-                      );
-                    }
-                  } catch (err) {
-                    console.error(
-                      "[invoice-card] kanban advance failed:",
-                      err
-                    );
-                  }
-                  router.refresh();
-                  setRefreshKey((k) => k + 1);
-                } catch (err) {
-                  console.error(
-                    "[invoice-card] complete procurement failed:",
-                    err
-                  );
-                  toast.error(
-                    extractErrorMessage(err) ?? "Не удалось завершить закупку"
-                  );
-                }
-              }}
+              onClick={() => setCompleteConfirmOpen(true)}
               title="Закрыть закупку по этому КП и передать его в логистику / таможню"
             >
               <CheckCircle2 size={14} className="mr-1" />
@@ -1545,6 +1580,61 @@ export function InvoiceCard({
           void fetchCargoPlaces(invoice.id).then(setCargoPlaces);
         }}
       />
+
+      {/* Confirmation dialog for «Завершить закупку». Stage transition is
+          hard to undo (KP locks for editing, kanban advances, downstream
+          stages start) — explicit confirmation prevents accidental clicks
+          (РОЗ-159 / МОЗ-146). The dialog also blocks completion when the
+          КП has no positions or no priced positions: there's nothing to
+          send to logistics, so the action would only advance an empty
+          record. */}
+      <Dialog
+        open={completeConfirmOpen}
+        onOpenChange={(next) => {
+          if (completing) return;
+          setCompleteConfirmOpen(next);
+        }}
+      >
+        <DialogContent className="sm:max-w-md z-[200]" showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Завершить закупку?</DialogTitle>
+            <DialogDescription>
+              {cannotComplete
+                ? hasNoPositions
+                  ? `КПП ${invoice.invoice_number} не содержит позиций. Добавьте позиции, прежде чем завершать закупку.`
+                  : `В КПП ${invoice.invoice_number} ни у одной позиции не указана цена закупки. Заполните цены, прежде чем завершать закупку.`
+                : `Закупка по КПП ${invoice.invoice_number} будет завершена. КП перейдёт на этап логистики. Изменения после этого требуют отдельного одобрения. Продолжить?`}
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setCompleteConfirmOpen(false)}
+              disabled={completing}
+            >
+              Отмена
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleCompleteProcurement}
+              disabled={completing || cannotComplete}
+            >
+              {completing ? (
+                <>
+                  <Loader2 size={14} className="mr-1 animate-spin" />
+                  Завершение…
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 size={14} className="mr-1" />
+                  Завершить закупку
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
