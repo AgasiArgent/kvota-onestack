@@ -14,8 +14,10 @@ import pytest
 
 from services.alta_client import Rate
 from services.customs_calc import (
+    CustomsPayBreakdown,
     calculate_customs_fee,
     calculate_duty,
+    calculate_total_customs_pay,
     calculate_util_fee,
 )
 
@@ -381,3 +383,276 @@ def test_calculate_util_fee_for_87_extended_code():
     result = calculate_util_fee("8703210000", 1500, 5)
     assert isinstance(result, Decimal)
     assert result >= Decimal("0")
+
+
+# ---------------------------------------------------------------------------
+# calculate_total_customs_pay — Phase A aggregator (REQ-3)
+# ---------------------------------------------------------------------------
+
+
+def test_calculate_total_only_imp():
+    """Only IMP=10%, no NDS rate → default 22% applied to (customs_value + imp)."""
+    rate_imp = _make_rate(value_1_number=10.0, value_1_unit="percent")
+    breakdown = calculate_total_customs_pay(
+        customs_value_rub=Decimal("100000"),
+        selected_rates_by_payment_type={"IMP": rate_imp},
+        weight_kg=None,
+        quantity=None,
+        currency_rates={},
+    )
+    assert isinstance(breakdown, CustomsPayBreakdown)
+    # Per-type sums
+    assert breakdown.imp_rub == Decimal("10000.00")
+    assert breakdown.impdemp_rub == Decimal("0")
+    assert breakdown.impcomp_rub == Decimal("0")
+    assert breakdown.impdop_rub == Decimal("0")
+    assert breakdown.imptmp_rub == Decimal("0")
+    assert breakdown.akc_rub == Decimal("0")
+    # Aggregates
+    assert breakdown.total_import_duty_rub == Decimal("10000.00")
+    assert breakdown.nds_base_rub == Decimal("110000.00")
+    assert breakdown.nds_pct == Decimal("22")  # default
+    assert breakdown.nds_rub == Decimal("24200.0000")
+    assert breakdown.customs_fee_rub == Decimal("0")
+    assert breakdown.total_customs_pay_rub == Decimal("134200.0000")
+
+
+def test_calculate_total_imp_nds():
+    """IMP+NDS rates: nds_base = customs_value + imp; NDS pct from rate."""
+    rate_imp = _make_rate(value_1_number=10.0, value_1_unit="percent")
+    rate_nds = _make_rate(
+        payment_type="NDS",
+        value_1_number=10.0,  # льготная категория
+        value_1_unit="percent",
+    )
+    breakdown = calculate_total_customs_pay(
+        customs_value_rub=Decimal("100000"),
+        selected_rates_by_payment_type={"IMP": rate_imp, "NDS": rate_nds},
+        weight_kg=None,
+        quantity=None,
+        currency_rates={},
+    )
+    # imp = 10000, nds_base = 110000, nds_pct = 10
+    assert breakdown.imp_rub == Decimal("10000.00")
+    assert breakdown.total_import_duty_rub == Decimal("10000.00")
+    assert breakdown.nds_base_rub == Decimal("110000.00")
+    assert breakdown.nds_pct == Decimal("10")
+    # 110000 × 10/100 = 11000
+    assert breakdown.nds_rub == Decimal("11000.0")
+    assert breakdown.total_customs_pay_rub == Decimal("121000.0")
+
+
+def test_calculate_total_imp_impdemp_nds():
+    """IMPDEMP включается в nds_base — антидемпинг увеличивает НДС."""
+    rate_imp = _make_rate(value_1_number=10.0, value_1_unit="percent")
+    rate_impdemp = _make_rate(
+        payment_type="IMPDEMP",
+        value_1_number=19.4,
+        value_1_unit="percent",
+    )
+    rate_nds = _make_rate(
+        payment_type="NDS",
+        value_1_number=22.0,
+        value_1_unit="percent",
+    )
+    breakdown = calculate_total_customs_pay(
+        customs_value_rub=Decimal("100000"),
+        selected_rates_by_payment_type={
+            "IMP": rate_imp,
+            "IMPDEMP": rate_impdemp,
+            "NDS": rate_nds,
+        },
+        weight_kg=None,
+        quantity=None,
+        currency_rates={},
+    )
+    # imp = 10000, impdemp = 19400, total_duty = 29400
+    # nds_base = 100000 + 29400 = 129400; nds = 129400 × 22% = 28468
+    # total = 129400 + 28468 = 157868
+    assert breakdown.imp_rub == Decimal("10000.00")
+    assert breakdown.impdemp_rub == Decimal("19400.00")
+    assert breakdown.total_import_duty_rub == Decimal("29400.00")
+    assert breakdown.nds_base_rub == Decimal("129400.00")
+    assert breakdown.nds_pct == Decimal("22")
+    assert breakdown.nds_rub == Decimal("28468.0000")
+    assert breakdown.total_customs_pay_rub == Decimal("157868.0000")
+
+
+def test_calculate_total_imp_akc_nds():
+    """Акциз учтён в nds_base (и в total) but NOT в total_import_duty."""
+    rate_imp = _make_rate(value_1_number=10.0, value_1_unit="percent")
+    rate_akc = _make_rate(
+        payment_type="AKC",
+        value_1_number=5.0,
+        value_1_unit="percent",
+    )
+    rate_nds = _make_rate(
+        payment_type="NDS",
+        value_1_number=22.0,
+        value_1_unit="percent",
+    )
+    breakdown = calculate_total_customs_pay(
+        customs_value_rub=Decimal("100000"),
+        selected_rates_by_payment_type={
+            "IMP": rate_imp,
+            "AKC": rate_akc,
+            "NDS": rate_nds,
+        },
+        weight_kg=None,
+        quantity=None,
+        currency_rates={},
+    )
+    # imp = 10000, akc = 5000
+    # total_import_duty = 10000 (akc NOT included — it's a separate aggregate)
+    # nds_base = 100000 + 10000 + 5000 = 115000
+    # nds = 115000 × 22% = 25300; total = 115000 + 25300 = 140300
+    assert breakdown.imp_rub == Decimal("10000.00")
+    assert breakdown.akc_rub == Decimal("5000.00")
+    assert breakdown.total_import_duty_rub == Decimal("10000.00")
+    assert breakdown.nds_base_rub == Decimal("115000.00")
+    assert breakdown.nds_rub == Decimal("25300.0000")
+    assert breakdown.total_customs_pay_rub == Decimal("140300.0000")
+
+
+def test_calculate_total_imp_impdemp_akc_nds():
+    """Все 4 типа в nds_base: IMP + IMPDEMP в total_duty, AKC отдельно."""
+    rate_imp = _make_rate(value_1_number=10.0, value_1_unit="percent")
+    rate_impdemp = _make_rate(
+        payment_type="IMPDEMP",
+        value_1_number=19.4,
+        value_1_unit="percent",
+    )
+    rate_akc = _make_rate(
+        payment_type="AKC",
+        value_1_number=5.0,
+        value_1_unit="percent",
+    )
+    rate_nds = _make_rate(
+        payment_type="NDS",
+        value_1_number=22.0,
+        value_1_unit="percent",
+    )
+    breakdown = calculate_total_customs_pay(
+        customs_value_rub=Decimal("100000"),
+        selected_rates_by_payment_type={
+            "IMP": rate_imp,
+            "IMPDEMP": rate_impdemp,
+            "AKC": rate_akc,
+            "NDS": rate_nds,
+        },
+        weight_kg=None,
+        quantity=None,
+        currency_rates={},
+    )
+    # imp = 10000, impdemp = 19400, akc = 5000
+    # total_import_duty = 29400; nds_base = 100000 + 29400 + 5000 = 134400
+    # nds = 134400 × 22% = 29568; total = 134400 + 29568 = 163968
+    assert breakdown.imp_rub == Decimal("10000.00")
+    assert breakdown.impdemp_rub == Decimal("19400.00")
+    assert breakdown.akc_rub == Decimal("5000.00")
+    assert breakdown.total_import_duty_rub == Decimal("29400.00")
+    assert breakdown.nds_base_rub == Decimal("134400.00")
+    assert breakdown.nds_rub == Decimal("29568.0000")
+    assert breakdown.total_customs_pay_rub == Decimal("163968.0000")
+
+
+def test_calculate_total_combined_rate_imp():
+    """Combined-rate IMP с двумя slots (>=, max выбран корректно)."""
+    rate_imp_combined = _make_rate(
+        value_1_number=10.0,
+        value_1_unit="percent",
+        value_2_number=0.04,
+        value_2_unit="166",  # kg
+        value_2_currency="EUR",
+        sign_1=">",
+    )
+    breakdown = calculate_total_customs_pay(
+        customs_value_rub=Decimal("100000"),
+        selected_rates_by_payment_type={"IMP": rate_imp_combined},
+        weight_kg=Decimal("500"),
+        quantity=Decimal("0"),
+        currency_rates={"EUR": Decimal("100")},
+    )
+    # ad_valorem = 100000 × 10% = 10000
+    # specific = 500 × 0.04 × 100 = 2000
+    # max(10000, 2000) = 10000
+    assert breakdown.imp_rub == Decimal("10000.00")
+    assert breakdown.total_import_duty_rub == Decimal("10000.00")
+    assert breakdown.nds_base_rub == Decimal("110000.00")
+    assert breakdown.nds_pct == Decimal("22")  # default (no NDS rate provided)
+    assert breakdown.nds_rub == Decimal("24200.0000")
+    assert breakdown.total_customs_pay_rub == Decimal("134200.0000")
+
+
+# ---------------------------------------------------------------------------
+# calculate_total_customs_pay — edge cases
+# ---------------------------------------------------------------------------
+
+
+def test_calculate_total_missing_nds_uses_default_22pct():
+    """No NDS rate in map → default 22% applied to nds_base."""
+    rate_imp = _make_rate(value_1_number=5.0, value_1_unit="percent")
+    breakdown = calculate_total_customs_pay(
+        customs_value_rub=Decimal("200000"),
+        selected_rates_by_payment_type={"IMP": rate_imp},
+        weight_kg=None,
+        quantity=None,
+        currency_rates={},
+    )
+    # imp = 200000 × 5% = 10000; nds_base = 210000
+    # nds = 210000 × 22% = 46200 (default)
+    assert breakdown.nds_pct == Decimal("22")
+    assert breakdown.imp_rub == Decimal("10000.00")
+    assert breakdown.nds_base_rub == Decimal("210000.00")
+    assert breakdown.nds_rub == Decimal("46200.0000")
+
+
+def test_calculate_total_zero_customs_value_returns_zeros():
+    """customs_value=0 → all derived amounts are 0 (except optional fee)."""
+    rate_imp = _make_rate(value_1_number=10.0, value_1_unit="percent")
+    rate_nds = _make_rate(
+        payment_type="NDS",
+        value_1_number=22.0,
+        value_1_unit="percent",
+    )
+    breakdown = calculate_total_customs_pay(
+        customs_value_rub=Decimal("0"),
+        selected_rates_by_payment_type={"IMP": rate_imp, "NDS": rate_nds},
+        weight_kg=None,
+        quantity=None,
+        currency_rates={},
+        customs_fee_rub=Decimal("775"),
+    )
+    assert breakdown.customs_value_rub == Decimal("0")
+    assert breakdown.imp_rub == Decimal("0.00")
+    assert breakdown.total_import_duty_rub == Decimal("0.00")
+    assert breakdown.nds_base_rub == Decimal("0.00")
+    assert breakdown.nds_rub == Decimal("0.0000")
+    # total = nds_base + nds + customs_fee = 0 + 0 + 775
+    assert breakdown.customs_fee_rub == Decimal("775")
+    assert breakdown.total_customs_pay_rub == Decimal("775.0000")
+
+
+def test_calculate_total_combined_rate_no_weight_skips_specific_part():
+    """weight_kg=None → specific part = 0, combined `>` returns ad_valorem."""
+    rate_imp_combined = _make_rate(
+        value_1_number=10.0,
+        value_1_unit="percent",
+        value_2_number=0.04,
+        value_2_unit="166",  # kg — but weight_kg=None
+        value_2_currency="EUR",
+        sign_1=">",
+    )
+    breakdown = calculate_total_customs_pay(
+        customs_value_rub=Decimal("100000"),
+        selected_rates_by_payment_type={"IMP": rate_imp_combined},
+        weight_kg=None,
+        quantity=None,
+        currency_rates={"EUR": Decimal("100")},
+    )
+    # ad_valorem = 10000; specific = 0 × 0.04 × 100 = 0
+    # max(10000, 0) = 10000 — only ad-valorem effectively counts
+    assert breakdown.imp_rub == Decimal("10000.00")
+    assert breakdown.total_import_duty_rub == Decimal("10000.00")
+    assert breakdown.nds_base_rub == Decimal("110000.00")
+    assert breakdown.total_customs_pay_rub == Decimal("134200.0000")

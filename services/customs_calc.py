@@ -32,6 +32,7 @@ Reference: `.kiro/specs/customs-phase-1-rates-and-measures/{requirements,design,
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 
 from services.alta_client import Rate
@@ -365,3 +366,148 @@ def calculate_util_fee(
     # billed) until the real ПП 81 formula is wired in. Caller-side
     # contracts (tests, calc engine) accept any non-negative Decimal.
     return _ZERO
+
+
+# ---------------------------------------------------------------------------
+# Phase A — НДС-base aggregator (REQ-3 customs-tariff-completeness)
+# ---------------------------------------------------------------------------
+
+# Default НДС rate when the resolver did not return an NDS variant
+# (atypical but possible for niche TN VED groups). Per ПП РФ — стандартная
+# ставка с 2026-01-01 = 22%; льготные 10% / 0% применяются по списку.
+_DEFAULT_NDS_PCT = Decimal("22")
+
+
+@dataclass(frozen=True)
+class CustomsPayBreakdown:
+    """Полный breakdown тарифных платежей для одной позиции КП.
+
+    Per-payment-type sums are populated from the corresponding `Rate`
+    in `selected_rates_by_payment_type`. Missing payment types default
+    to `Decimal('0')` so downstream consumers always see all fields.
+
+    Aggregates:
+      * `total_import_duty_rub` = imp + impdemp + impcomp + impdop + imptmp
+      * `nds_base_rub`          = customs_value + total_import_duty + akc
+      * `nds_rub`               = nds_base × nds_pct / 100
+      * `total_customs_pay_rub` = nds_base + nds + customs_fee
+    """
+
+    customs_value_rub: Decimal
+
+    # Per-payment-type sums (Decimal('0') if no rate provided for the type)
+    imp_rub:     Decimal   # IMP — базовая ввозная пошлина
+    impdemp_rub: Decimal   # IMPDEMP — антидемпинг
+    impcomp_rub: Decimal   # IMPCOMP — компенсационная
+    impdop_rub:  Decimal   # IMPDOP — специальная защитная
+    imptmp_rub:  Decimal   # IMPTMP — сезонная
+    akc_rub:     Decimal   # AKC — акциз
+
+    # Aggregates
+    total_import_duty_rub: Decimal
+    nds_base_rub:          Decimal
+    nds_pct:               Decimal
+    nds_rub:               Decimal
+
+    customs_fee_rub:       Decimal
+    total_customs_pay_rub: Decimal
+
+
+def calculate_total_customs_pay(
+    *,
+    customs_value_rub: Decimal,
+    selected_rates_by_payment_type: dict[str, Rate],
+    weight_kg: Decimal | None,
+    quantity: Decimal | None,
+    currency_rates: dict[str, Decimal],
+    customs_fee_rub: Decimal = _ZERO,
+) -> CustomsPayBreakdown:
+    """Aggregate per-payment-type duties + compute НДС-base + final.
+
+    Per-type amount calculation reuses existing `calculate_duty()` for
+    each rate present in `selected_rates_by_payment_type`. Payment
+    types missing from the map default to `Decimal('0')` in the output
+    breakdown. The NDS base intentionally includes ALL import duty
+    types (IMP + IMPDEMP + IMPCOMP + IMPDOP + IMPTMP) plus AKC — this
+    corrects the underestimated НДС that previously omitted antidumping
+    from the base.
+
+    Args:
+        customs_value_rub: Таможенная стоимость в рублях.
+        selected_rates_by_payment_type: Map payment_type → Rate, e.g.
+            `{"IMP": rate_imp, "IMPDEMP": rate_imd, "NDS": rate_nds}`.
+            The customs specialist selects a single Rate per type
+            upstream (UI radio-selection) — this aggregator does NOT
+            pick defaults.
+        weight_kg: Масса нетто (None → treated as Decimal('0') so any
+            specific part of a combined rate evaluates to 0; ad-valorem
+            slot still applies normally — combined `>` returns
+            `max(ad_valorem, 0) == ad_valorem`).
+        quantity: Количество единиц (None → treated as Decimal('0')).
+        currency_rates: ISO-4217 → RUB rate map for per-kg / per-piece
+            specific duties (e.g. `{"EUR": Decimal("95.5")}`).
+        customs_fee_rub: Таможенный сбор по ПП РФ (per-quote, обычно).
+            Defaults to 0 so per-item callers can omit it and apply
+            the fee once at the quote level.
+
+    Returns:
+        `CustomsPayBreakdown` with all fields populated.
+
+    Raises:
+        ValueError: propagated from `calculate_duty()` for unsupported
+            rate shapes (unknown sign, inconsistent slot/currency,
+            unsupported OKEI code, missing currency in `currency_rates`).
+    """
+    # Normalise None → 0 so `calculate_duty()` (which requires Decimal)
+    # receives valid input. Specific parts of combined rates evaluate
+    # to 0 in that case, ad-valorem slots still apply normally.
+    weight = weight_kg if weight_kg is not None else _ZERO
+    qty = quantity if quantity is not None else _ZERO
+
+    def _amount_for(payment_type: str) -> Decimal:
+        rate = selected_rates_by_payment_type.get(payment_type)
+        if rate is None:
+            return _ZERO
+        return calculate_duty(
+            rate=rate,
+            customs_value_rub=customs_value_rub,
+            weight_kg=weight,
+            quantity=qty,
+            currency_rates=currency_rates,
+        )
+
+    imp     = _amount_for("IMP")
+    impdemp = _amount_for("IMPDEMP")
+    impcomp = _amount_for("IMPCOMP")
+    impdop  = _amount_for("IMPDOP")
+    imptmp  = _amount_for("IMPTMP")
+    akc     = _amount_for("AKC")
+
+    total_import_duty = imp + impdemp + impcomp + impdop + imptmp
+    nds_base = customs_value_rub + total_import_duty + akc
+
+    nds_rate = selected_rates_by_payment_type.get("NDS")
+    nds_pct = (
+        _to_decimal(nds_rate.value_1_number)
+        if nds_rate is not None and nds_rate.value_1_number is not None
+        else _DEFAULT_NDS_PCT
+    )
+    nds = nds_base * nds_pct / _HUNDRED
+
+    total = nds_base + nds + customs_fee_rub
+
+    return CustomsPayBreakdown(
+        customs_value_rub=customs_value_rub,
+        imp_rub=imp,
+        impdemp_rub=impdemp,
+        impcomp_rub=impcomp,
+        impdop_rub=impdop,
+        imptmp_rub=imptmp,
+        akc_rub=akc,
+        total_import_duty_rub=total_import_duty,
+        nds_base_rub=nds_base,
+        nds_pct=nds_pct,
+        nds_rub=nds,
+        customs_fee_rub=customs_fee_rub,
+        total_customs_pay_rub=total,
+    )
