@@ -427,12 +427,26 @@ export function ProcurementHandsontable({
       // Undo-merge = inverse: a single source diverges back into N children.
       const UNDO_MERGE_SVG = `${SVG_OPEN}<path d="M12 3v10"/><path d="M12 13l-5 -5"/><path d="M12 13l5 -5"/><path d="M3 8h6"/><path d="M21 8h-6"/>${SVG_CLOSE}`;
 
+      // Action buttons carry their identity via `data-action` + `data-row-id`
+      // attributes. Click is delegated to the wrapper (см. below), so each
+      // button is a pure DOM marker — no closure binding the click handler
+      // to `rowId` captured at render-time. This is the same pattern customs-
+      // handsontable uses (`data-customs-expand`).
+      //
+      // МОЗ-108: the previous closure-bound `btn.onclick` made the ✕ button
+      // dead — Handsontable detaches and rebuilds td contents on every
+      // re-render (incl. the explicit `hot.render()` we trigger when the
+      // split/merge maps load), which can leave stale buttons in DOM with
+      // closures that early-return because their captured `rowId` no longer
+      // matches the current row index. Reading `data-row-id` from the
+      // clicked element at click time avoids the entire stale-closure class.
       const makeIcon = (
         content: string,
         title: string,
         hoverColor: string,
         hoverBg: string,
-        onClick: () => void
+        action: string,
+        rowIdAttr: string
       ): HTMLButtonElement => {
         const btn = document.createElement("button");
         btn.type = "button";
@@ -442,6 +456,8 @@ export function ProcurementHandsontable({
         btn.innerHTML = content;
         btn.style.cssText =
           "border:none;background:none;color:#a1a1aa;cursor:pointer;font-size:14px;padding:2px 4px;margin-right:2px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;";
+        btn.dataset.action = action;
+        btn.dataset.rowId = rowIdAttr;
         btn.addEventListener("mouseenter", () => {
           btn.style.color = hoverColor;
           btn.style.backgroundColor = hoverBg;
@@ -450,10 +466,6 @@ export function ProcurementHandsontable({
           btn.style.color = "#a1a1aa";
           btn.style.backgroundColor = "transparent";
         });
-        btn.onclick = (e) => {
-          e.stopPropagation();
-          onClick();
-        };
         tooltipMgr.attach(btn, title);
         return btn;
       };
@@ -461,9 +473,14 @@ export function ProcurementHandsontable({
       // Split icon — visible only when this row is a 1:1 candidate.
       if (rowId && splitableRef.current?.[rowId] && onSplitRowRef.current) {
         td.appendChild(
-          makeIcon(SPLIT_SVG, "Разделить позицию", "#1f2937", "#e5e7eb", () => {
-            onSplitRowRef.current?.(rowId);
-          })
+          makeIcon(
+            SPLIT_SVG,
+            "Разделить позицию",
+            "#1f2937",
+            "#e5e7eb",
+            "split",
+            rowId
+          )
         );
       }
 
@@ -475,9 +492,8 @@ export function ProcurementHandsontable({
             "Объединить с другими позициями",
             "#1f2937",
             "#e5e7eb",
-            () => {
-              onMergeRowRef.current?.(rowId);
-            }
+            "merge",
+            rowId
           )
         );
       }
@@ -485,9 +501,14 @@ export function ProcurementHandsontable({
       // Undo-split icon — visible on any row that's a split child.
       if (rowId && splitChildRef.current?.[rowId] && onUndoSplitRowRef.current) {
         td.appendChild(
-          makeIcon(UNDO_SPLIT_SVG, "Отменить разделение", "#1f2937", "#e5e7eb", () => {
-            onUndoSplitRowRef.current?.(rowId);
-          })
+          makeIcon(
+            UNDO_SPLIT_SVG,
+            "Отменить разделение",
+            "#1f2937",
+            "#e5e7eb",
+            "undo-split",
+            rowId
+          )
         );
       }
 
@@ -499,21 +520,79 @@ export function ProcurementHandsontable({
         onUndoMergeRowRef.current
       ) {
         td.appendChild(
-          makeIcon(UNDO_MERGE_SVG, "Отменить объединение", "#1f2937", "#e5e7eb", () => {
-            onUndoMergeRowRef.current?.(rowId);
-          })
+          makeIcon(
+            UNDO_MERGE_SVG,
+            "Отменить объединение",
+            "#1f2937",
+            "#e5e7eb",
+            "undo-merge",
+            rowId
+          )
         );
       }
 
-      // Unassign — always last, distinctive red hover.
-      const unassignBtn = makeIcon(
-        "✕",
-        "Убрать из КП",
-        "#dc2626",
-        "#fee2e2",
-        () => {
-          if (!rowId || pendingOps.current.has(`unassign-${rowId}`)) return;
-          pendingOps.current.add(`unassign-${rowId}`);
+      // Unassign — always last, distinctive red hover. Only render when we
+      // have a valid rowId to bind to; without one the button can't dispatch
+      // anything useful, and rendering it would just create a dead element.
+      if (rowId) {
+        const unassignBtn = makeIcon(
+          "✕",
+          "Убрать из КП",
+          "#dc2626",
+          "#fee2e2",
+          "unassign",
+          rowId
+        );
+        // Distinctive padding for the unassign vs the structural icons.
+        unassignBtn.style.padding = "2px 6px";
+        td.appendChild(unassignBtn);
+      }
+    },
+    // The renderer reads from refs (kept fresh above), so its own deps stay
+    // minimal. Capturing the maps directly here was the source of the
+    // stale-closure bug that hid the ↪ icon after data loaded.
+    []
+  );
+
+  /**
+   * Delegated click handler for action buttons inside the row-actions cell.
+   * Reads the action and row id from data-attributes on the clicked
+   * element — bypassing any stale closure on the button itself. Mirrors
+   * the `data-customs-expand` pattern in customs-handsontable.
+   *
+   * МОЗ-108: switching from `btn.onclick = (...) => {...}` (closure-captured
+   * rowId) to delegated dispatch via DOM data-attributes fixes the dead ×
+   * button. The previous closure could read a stale rowId after re-renders;
+   * the new dispatch reads the current rowId from the DOM at click time.
+   */
+  const handleRowActionClick = useCallback(
+    (e: Event) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      const btn = target.closest<HTMLElement>("button[data-action][data-row-id]");
+      if (!btn) return;
+      e.stopPropagation();
+      const action = btn.dataset.action;
+      const rowId = btn.dataset.rowId;
+      if (!action || !rowId) return;
+
+      switch (action) {
+        case "split":
+          onSplitRowRef.current?.(rowId);
+          break;
+        case "merge":
+          onMergeRowRef.current?.(rowId);
+          break;
+        case "undo-split":
+          onUndoSplitRowRef.current?.(rowId);
+          break;
+        case "undo-merge":
+          onUndoMergeRowRef.current?.(rowId);
+          break;
+        case "unassign": {
+          const lockKey = `unassign-${rowId}`;
+          if (pendingOps.current.has(lockKey)) return;
+          pendingOps.current.add(lockKey);
           unassignInvoiceItem(rowId)
             .then(() => {
               toast.success("Позиция убрана из КП");
@@ -529,16 +608,11 @@ export function ProcurementHandsontable({
                 extractErrorMessage(err) ?? "Не удалось убрать позицию"
               );
             })
-            .finally(() => pendingOps.current.delete(`unassign-${rowId}`));
+            .finally(() => pendingOps.current.delete(lockKey));
+          break;
         }
-      );
-      // Distinctive padding for the unassign vs the structural icons.
-      unassignBtn.style.padding = "2px 6px";
-      td.appendChild(unassignBtn);
+      }
     },
-    // The renderer reads from refs (kept fresh above), so its own deps stay
-    // minimal. Capturing the maps directly here was the source of the
-    // stale-closure bug that hid the ↪ icon after data loaded.
     [router]
   );
 
@@ -722,7 +796,25 @@ export function ProcurementHandsontable({
   }
 
   return (
-    <div className="ht-theme-main">
+    <div
+      className="ht-theme-main"
+      ref={(el) => {
+        if (!el) return;
+        // Single delegated click listener for all action-cell buttons.
+        // Re-attached idempotently each callback ref invocation; remove first
+        // to avoid duplicate handlers across React re-renders. Mirrors the
+        // customs-handsontable wiring (см. ../customs-step/customs-handsontable
+        // → handleExpandClick).
+        el.removeEventListener(
+          "click",
+          handleRowActionClick as EventListener
+        );
+        el.addEventListener(
+          "click",
+          handleRowActionClick as EventListener
+        );
+      }}
+    >
       <style>{`
         .locked-cell { background-color: var(--muted, #f4f4f5) !important; }
         .moq-warning { background-color: #fef3c7 !important; position: relative; }
