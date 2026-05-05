@@ -1022,7 +1022,10 @@ export function CustomsHandsontable({
   );
 
   const canToggleBan = useMemo(
-    () => userRoles.some((r) => ["customs", "head_of_customs", "admin"].includes(r)),
+    () =>
+      userRoles.some((r) =>
+        ["customs", "head_of_customs", "head_of_logistics", "admin"].includes(r),
+      ),
     [userRoles],
   );
 
