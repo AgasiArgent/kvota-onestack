@@ -178,6 +178,49 @@ export function InvoiceCard({
       ? String((invoice as { vat_rate?: number | null }).vat_rate)
       : ""
   );
+  // VAT autofill from kvota.vat_rates_by_country (РОЗ-95, МОЗ-82). Fires on
+  // pickup-country change. Conservative: never overwrites a manually-entered
+  // or saved value — autofill only when the local vat_rate is empty.
+  // Persists the autofilled value to the invoice when the saved field is also
+  // unset, so the page reload picks up the same number.
+  useEffect(() => {
+    if (!pickupCountryCodeLocal) return;
+    // Empty-only guard: respect any existing local value (saved or typed).
+    if (vatRateLocal.trim() !== "") return;
+
+    let cancelled = false;
+    const supabase = createClient();
+    void supabase
+      .from("vat_rates_by_country")
+      .select("rate")
+      .eq("country_code", pickupCountryCodeLocal)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (cancelled || error || !data) return;
+        const rateRaw = (data as { rate: number | string }).rate;
+        const rateNum =
+          typeof rateRaw === "number" ? rateRaw : parseFloat(String(rateRaw));
+        if (!Number.isFinite(rateNum)) return;
+        // Re-check the guard inside the resolver — the user may have started
+        // typing during the network round-trip. We must not stomp that value.
+        setVatRateLocal((prev) => (prev.trim() === "" ? String(rateNum) : prev));
+        // Persist only if the saved invoice value is also unset; otherwise the
+        // local state diverged from the DB intentionally.
+        const saved =
+          (invoice as { vat_rate?: number | null }).vat_rate ?? null;
+        if (saved === null) {
+          void handleSaveInvoiceField({ vat_rate: rateNum });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+    // Only re-run on country change. vatRateLocal is intentionally read at
+    // effect-time to gate the fetch, but adding it to deps would re-fire the
+    // effect on every keystroke and could re-write a value the user just
+    // cleared. handleSaveInvoiceField is a stable closure read at call-time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickupCountryCodeLocal]);
   const [fetchedInvoiceItems, setFetchedInvoiceItems] = useState<
     InvoiceItemRow[]
   >([]);
