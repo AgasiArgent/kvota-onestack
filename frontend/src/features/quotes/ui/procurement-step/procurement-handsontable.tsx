@@ -833,6 +833,32 @@ export function ProcurementHandsontable({
         ref={hotRef}
         data={initialData}
         licenseKey="non-commercial-and-evaluation"
+        // МОЗ-109..114 — fix cell-click jumping to wrong row.
+        //
+        // The procurement КП card chain has multiple sticky / scrollable
+        // ancestors (QuoteStickyHeader at top:0, ProcurementActionBar at
+        // top:[52px], plus the page-level overflow-y-auto on
+        // QuoteDetailShell), AND the immediate parent <div className="overflow-x-auto">
+        // in invoice-card.tsx. Handsontable's `getScrollableElement` walks
+        // up the DOM and returns the FIRST ancestor with overflow:auto on
+        // ANY axis (handsontable v17 dist line 6033). It picks the
+        // `overflow-x-auto` wrapper — but vertical scroll never happens on
+        // that element; the user actually scrolls the outer page container.
+        //
+        // With the wrong scroll element pinned, the column header overlay's
+        // sticky transform tracks scrollTop=0 forever, while the click
+        // coordinates resolve relative to the actual viewport scroll → the
+        // visual selection lands ~441px above the click point. (Reproduced
+        // 2026-05-05: click y=1127.5, selection landed y=686.)
+        //
+        // `preventOverflow: 'horizontal'` tells HoT to use rootWindow as
+        // the scrollable element for the TOP overlay specifically (dist
+        // line 24095: `preventOverflow === 'horizontal' && type === CLONE_TOP
+        // → mainTableScrollableElement = rootWindow`). This bypasses the
+        // auto-detection bug without removing the parent overflow wrapper
+        // (which the page layout still relies on for narrow-viewport
+        // horizontal scroll handling).
+        preventOverflow="horizontal"
         colHeaders={[
           "Бренд",
           "Артикул",
