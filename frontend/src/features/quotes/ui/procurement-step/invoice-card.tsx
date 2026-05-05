@@ -182,12 +182,24 @@ export function InvoiceCard({
     InvoiceItemRow[]
   >([]);
   const [fetchedCoverage, setFetchedCoverage] = useState<Record<string, string>>({});
-  // Sales-side columns (product_code, product_name) joined from the linked
-  // quote_items via invoice_item_coverage. Read-only in the procurement
-  // handsontable; let the procurement manager see what sales recorded
-  // alongside their own supplier-side fields.
+  // Sales-side columns (product_code, product_name, name_en) joined from
+  // the linked quote_items via invoice_item_coverage. Read-only in the
+  // procurement handsontable; let the procurement manager see what sales
+  // recorded alongside their own supplier-side fields.
+  // `name_en` propagates to the letter-draft composer so EN-language
+  // letters render translated position names when sales has filled it
+  // (РОЗ-117 / МОЗ-104). The XLS export already reads `name_en` via the
+  // same coverage join in services/xls_export_service.py.
   const [salesByItemId, setSalesByItemId] = useState<
-    Record<string, { product_code: string; product_name: string; unit: string }>
+    Record<
+      string,
+      {
+        product_code: string;
+        product_name: string;
+        unit: string;
+        name_en: string | null;
+      }
+    >
   >({});
   const [invoiceItemsLoading, setInvoiceItemsLoading] = useState(
     invoiceItemsOverride === undefined
@@ -349,7 +361,11 @@ export function InvoiceCard({
         // Step 2: fetch the quote_items referenced by the coverage rows.
         // product_code and product_name fuel the read-only sales-side
         // columns in the procurement handsontable; product_name + quantity
-        // also drive the split/merge coverage label below.
+        // also drive the split/merge coverage label below. `name_en` is
+        // forwarded to the letter-draft composer so EN-language letters
+        // render the translated position name when sales has filled it
+        // (РОЗ-117 / МОЗ-104 — without this, EN letters fell back to the
+        // Russian product_name silently).
         const referencedQiIds = Array.from(
           new Set(
             (cov ?? []).map((r) => (r as { quote_item_id: string }).quote_item_id)
@@ -362,12 +378,13 @@ export function InvoiceCard({
             product_name: string;
             quantity: number;
             unit: string | null;
+            name_en: string | null;
           }
         >();
         if (referencedQiIds.length > 0) {
           const { data: qis } = await supabase
             .from("quote_items")
-            .select("id, product_code, product_name, quantity, unit")
+            .select("id, product_code, product_name, quantity, unit, name_en")
             .in("id", referencedQiIds);
           for (const qi of (qis ?? []) as Array<{
             id: string;
@@ -375,12 +392,14 @@ export function InvoiceCard({
             product_name: string;
             quantity: number;
             unit: string | null;
+            name_en: string | null;
           }>) {
             qiById.set(qi.id, {
               product_code: qi.product_code,
               product_name: qi.product_name,
               quantity: qi.quantity,
               unit: qi.unit,
+              name_en: qi.name_en,
             });
           }
         }
@@ -394,6 +413,7 @@ export function InvoiceCard({
             product_name: string;
             quantity: number;
             unit: string;
+            name_en: string | null;
           }>
         >();
         const iiByQi = new Map<string, string[]>();
@@ -411,6 +431,7 @@ export function InvoiceCard({
             product_name: qi?.product_name ?? "",
             quantity: Number(qi?.quantity ?? 0),
             unit: qi?.unit ?? "",
+            name_en: qi?.name_en ?? null,
           });
           coverageByIi.set(row.invoice_item_id, list);
 
@@ -425,13 +446,25 @@ export function InvoiceCard({
         // " / " padding when one of the joined items has no product_code.
         // ``unit`` (Ед. Изм) is taken from the first covering quote_item —
         // merged rows must share unit by construction (validated elsewhere).
+        // ``name_en`` follows the same join shape: NULLs are skipped so a
+        // partially-translated merge still surfaces the parts that have a
+        // translation; result is null only when no covering quote_item has
+        // a translation set (composer falls back to product_name).
         const salesMap: Record<
           string,
-          { product_code: string; product_name: string; unit: string }
+          {
+            product_code: string;
+            product_name: string;
+            unit: string;
+            name_en: string | null;
+          }
         > = {};
         for (const ii of rows) {
           const covers = coverageByIi.get(ii.id) ?? [];
           if (covers.length === 0) continue;
+          const enParts = covers
+            .map((c) => c.name_en)
+            .filter((v): v is string => Boolean(v));
           salesMap[ii.id] = {
             product_code: covers
               .map((c) => c.product_code)
@@ -442,6 +475,7 @@ export function InvoiceCard({
               .filter(Boolean)
               .join(" / "),
             unit: covers[0]?.unit ?? "",
+            name_en: enParts.length > 0 ? enParts.join(" / ") : null,
           };
         }
 
@@ -1492,6 +1526,10 @@ export function InvoiceCard({
             // The composer reads `product_code`, `product_name`, `quantity`,
             // `brand`, and optional `name_en` from each row. Other QuoteItemRow
             // fields are unused by the template; cast keeps the shape happy.
+            // `name_en` originates on quote_items (filled by sales) and is
+            // joined via invoice_item_coverage in salesByItemId. When sales
+            // hasn't filled it the composer falls back to product_name —
+            // mirrors the XLS export's `_get_item_name` behavior.
             id: ii.id,
             quote_id: invoice.quote_id,
             product_code: sales?.product_code ?? ii.supplier_sku ?? "",
@@ -1499,6 +1537,7 @@ export function InvoiceCard({
               ii.product_name ||
               sales?.product_name ||
               "",
+            name_en: sales?.name_en ?? null,
             quantity: ii.quantity,
             brand: ii.brand ?? "",
           } as unknown as QuoteItemRow;
