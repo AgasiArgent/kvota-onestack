@@ -766,28 +766,45 @@ export function InvoiceCard({
             </span>
           )}
 
-          {pickupLocationLabel && (
-            <span className="text-xs text-muted-foreground truncate hidden sm:inline">
+          {/* Header chips below duplicate the editable form fields rendered in
+              the «Параметры отгрузки» / «Грузовые места» sections when the
+              card is expanded. Hide them on expand to avoid the «Часть не
+              возможно прочесть» overflow + visual redundancy reported in
+              МОЗ-94 / РОЗ-107/108. Collapsed state keeps them as preview. */}
+          {!expanded && pickupLocationLabel && (
+            <span
+              data-testid="invoice-card-header-pickup-location"
+              className="text-xs text-muted-foreground truncate hidden sm:inline"
+            >
               {pickupLocationLabel}
             </span>
           )}
 
-          {supplierIncoterms && (
-            <span className="text-xs text-muted-foreground truncate hidden sm:inline">
+          {!expanded && supplierIncoterms && (
+            <span
+              data-testid="invoice-card-header-incoterms"
+              className="text-xs text-muted-foreground truncate hidden sm:inline"
+            >
               Условия: {supplierIncoterms}
             </span>
           )}
 
-          {hasInvoiceWeight && (
-            <span className="text-xs text-muted-foreground tabular-nums shrink-0 hidden sm:inline">
+          {!expanded && hasInvoiceWeight && (
+            <span
+              data-testid="invoice-card-header-weight"
+              className="text-xs text-muted-foreground tabular-nums shrink-0 hidden sm:inline"
+            >
               {invoice.total_weight_kg != null && <>{numberFmt.format(invoice.total_weight_kg)}&nbsp;кг</>}
               {invoice.total_weight_kg != null && invoice.total_volume_m3 != null && " · "}
               {invoice.total_volume_m3 != null && <>{numberFmt.format(invoice.total_volume_m3)}&nbsp;м&sup3;</>}
             </span>
           )}
 
-          {hasCargoPlaces && (
-            <span className="text-xs text-muted-foreground tabular-nums shrink-0 hidden sm:inline">
+          {!expanded && hasCargoPlaces && (
+            <span
+              data-testid="invoice-card-header-cargo-summary"
+              className="text-xs text-muted-foreground tabular-nums shrink-0 hidden sm:inline"
+            >
               {cargoPlaces.length} мест &middot; {numberFmt.format(cargoWeight)} кг &middot; {cargoVolume.toFixed(2)} м&sup3;
             </span>
           )}
