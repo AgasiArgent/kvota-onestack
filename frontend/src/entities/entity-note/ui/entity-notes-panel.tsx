@@ -67,6 +67,7 @@ const DEFAULT_TITLE: Record<EntityNoteEntityType, string> = {
   quote: "Заметки по КП",
   customer: "Заметки о клиенте",
   invoice: "Комментарии к инвойсу",
+  supplier: "Заметки о поставщике",
 };
 
 function sortNotes(notes: EntityNoteCardData[]): EntityNoteCardData[] {

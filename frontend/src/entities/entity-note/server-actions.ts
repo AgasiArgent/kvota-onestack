@@ -24,7 +24,11 @@ import { getSessionUser } from "@/entities/user";
  *                            invoices don't have a standalone route.
  */
 
-export type EntityNoteEntityType = "quote" | "customer" | "invoice";
+export type EntityNoteEntityType =
+  | "quote"
+  | "customer"
+  | "invoice"
+  | "supplier";
 
 function defaultRevalidatePath(
   entityType: EntityNoteEntityType,
@@ -32,7 +36,8 @@ function defaultRevalidatePath(
 ): string | null {
   if (entityType === "quote") return `/quotes/${entityId}`;
   if (entityType === "customer") return `/customers/${entityId}`;
-  return null; // invoice: caller-provided only
+  if (entityType === "supplier") return `/suppliers/${entityId}`;
+  return null; // invoice: caller-provided only (no standalone route)
 }
 
 function doRevalidate(
