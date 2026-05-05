@@ -21,6 +21,7 @@ export const ACTIVE_ROLES = [
   "head_of_sales",
   "head_of_procurement",
   "head_of_logistics",
+  "head_of_customs",
 ] as const;
 
 export type RoleCode = (typeof ACTIVE_ROLES)[number];

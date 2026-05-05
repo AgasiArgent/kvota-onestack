@@ -416,7 +416,7 @@ export function LogisticsStep({
           initialNotes={quoteNotes}
           currentUser={{ id: userId, roles: userRoles ?? [] }}
           title="Заметки логистов по КП"
-          defaultVisibleTo={["logistics", "head_of_logistics", "sales", "procurement"]}
+          defaultVisibleTo={["logistics", "head_of_logistics", "head_of_customs", "sales", "procurement"]}
         />
       )}
     </div>
