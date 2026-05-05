@@ -425,7 +425,11 @@ export function CustomsStep({
   const canEditCustoms = useMemo(
     () =>
       userRoles.some(
-        (r) => r === "customs" || r === "head_of_customs" || r === "admin",
+        (r) =>
+          r === "customs" ||
+          r === "head_of_customs" ||
+          r === "head_of_logistics" || // dual-hat: logistics lead also handles customs in this org
+          r === "admin",
       ),
     [userRoles],
   );

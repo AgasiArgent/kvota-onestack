@@ -116,8 +116,20 @@ const ROLE_ACTION_STATUSES: Record<string, string[]> = {
   procurement_senior: ["pending_procurement"],
   head_of_procurement: ["pending_procurement"],
   logistics: ["pending_logistics", "pending_logistics_and_customs"],
-  head_of_logistics: ["pending_logistics", "pending_logistics_and_customs"],
+  // head_of_logistics ↔ head_of_customs: in this org one person typically
+  // wears both hats, so each "head_of" role covers the other's workflow
+  // statuses (and also each other's allowed steps below).
+  head_of_logistics: [
+    "pending_logistics",
+    "pending_logistics_and_customs",
+    "pending_customs",
+  ],
   customs: ["pending_customs", "pending_logistics_and_customs"],
+  head_of_customs: [
+    "pending_customs",
+    "pending_logistics_and_customs",
+    "pending_logistics",
+  ],
   quote_controller: ["pending_quote_control"],
   spec_controller: ["pending_spec_control"],
   top_manager: ["pending_approval"],
@@ -321,9 +333,12 @@ export const ROLE_ALLOWED_STEPS: Record<string, QuoteStep[]> = {
     "plan-fact",
   ],
   logistics: ["logistics", "documents"],
-  head_of_logistics: ["logistics", "documents"],
+  // head_of_logistics ↔ head_of_customs: cross-permission — the same person
+  // typically holds both roles in this org, so each lead sees the other's
+  // step. Avoid having to log out / impersonate to switch contexts.
+  head_of_logistics: ["logistics", "customs", "documents"],
   customs: ["customs", "documents"],
-  head_of_customs: ["customs", "documents"],
+  head_of_customs: ["customs", "logistics", "documents"],
   quote_controller: ["control", "cost-analysis", "documents"],
   spec_controller: ["specification", "control", "cost-analysis", "documents"],
   finance: ["cost-analysis", "documents", "plan-fact"],

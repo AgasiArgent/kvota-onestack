@@ -38,6 +38,7 @@ const ROLE_LABELS_RU: Record<string, string> = {
   head_of_sales: "Руководитель продаж",
   head_of_procurement: "Руководитель закупок",
   head_of_logistics: "Руководитель логистики",
+  head_of_customs: "Руководитель таможни",
 };
 
 interface PersonInfo {

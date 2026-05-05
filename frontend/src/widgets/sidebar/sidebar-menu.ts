@@ -116,14 +116,16 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
       href: "/procurement/kanban",
     });
   }
-  if (hasRole("logistics", "head_of_logistics")) {
+  // head_of_customs / head_of_logistics are dual-hat roles in this org —
+  // each lead's queue surfaces both function's links.
+  if (hasRole("logistics", "head_of_logistics", "head_of_customs")) {
     mainItems.push({
       icon: Truck,
       label: "Очередь логистики",
       href: "/workspace/logistics",
     });
   }
-  if (hasRole("customs", "head_of_customs")) {
+  if (hasRole("customs", "head_of_customs", "head_of_logistics")) {
     mainItems.push({
       icon: Anchor,
       label: "Очередь таможни",
@@ -180,7 +182,7 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
       href: "/locations",
     });
   }
-  if (hasRole("customs", "head_of_customs", "finance")) {
+  if (hasRole("customs", "head_of_customs", "head_of_logistics", "finance")) {
     registries.push({
       icon: FileText,
       label: "Таможенные декларации",

@@ -47,6 +47,7 @@ export const ROLE_COLORS: Record<string, string> = {
   spec_controller: "bg-teal-100 text-teal-700",
   head_of_sales: "bg-indigo-100 text-indigo-700",
   head_of_procurement: "bg-orange-100 text-orange-700",
+  head_of_customs: "bg-purple-100 text-purple-700",
   head_of_logistics: "bg-lime-100 text-lime-700",
 };
 

@@ -379,7 +379,14 @@ interface CustomsItemDialogProps {
   onSaved?: () => void;
 }
 
-const CAN_WRITE_ROLES = new Set(["customs", "head_of_customs", "admin"]);
+// head_of_logistics added — dual-hat role (one person typically holds both
+// head_of_logistics and head_of_customs in this org).
+const CAN_WRITE_ROLES = new Set([
+  "customs",
+  "head_of_customs",
+  "head_of_logistics",
+  "admin",
+]);
 
 /**
  * Best-effort RUB cost basis for the cost-split preview math inside the

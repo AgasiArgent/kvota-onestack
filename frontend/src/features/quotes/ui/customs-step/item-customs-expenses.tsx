@@ -20,7 +20,14 @@ interface ItemCustomsExpensesProps {
   userRoles: string[];
 }
 
-const CAN_WRITE_ROLES = new Set(["customs", "head_of_customs", "admin"]);
+// head_of_logistics added — dual-hat role (one person typically holds both
+// head_of_logistics and head_of_customs in this org).
+const CAN_WRITE_ROLES = new Set([
+  "customs",
+  "head_of_customs",
+  "head_of_logistics",
+  "admin",
+]);
 
 const RUB_FORMATTER = new Intl.NumberFormat("ru-RU", {
   style: "currency",

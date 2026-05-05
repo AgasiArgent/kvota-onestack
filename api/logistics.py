@@ -29,7 +29,7 @@ from services.role_service import get_user_role_codes
 
 logger = logging.getLogger(__name__)
 
-_LOGISTICS_ROLES = {"logistics", "head_of_logistics", "admin"}
+_LOGISTICS_ROLES = {"logistics", "head_of_logistics", "admin", "head_of_customs"}
 _LOCATION_TYPES = {"supplier", "hub", "customs", "own_warehouse", "client"}
 
 

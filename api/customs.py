@@ -42,7 +42,7 @@ from services.role_service import get_user_role_codes
 
 logger = logging.getLogger(__name__)
 
-_CUSTOMS_ROLES = {"customs", "admin", "head_of_customs"}
+_CUSTOMS_ROLES = {"customs", "admin", "head_of_customs", "head_of_logistics"}
 
 # Phase B Req 1 AC#6 + Req 2 AC#10 — read-side role list for certificates.
 # Writes (POST/DELETE on /certificates) remain gated by `_CUSTOMS_ROLES`;
@@ -50,7 +50,7 @@ _CUSTOMS_ROLES = {"customs", "admin", "head_of_customs"}
 # roles so sales/finance/top-manager can see attached docs without granting
 # them edit rights. Frozenset for safe module-level reuse.
 _CERT_READ_ROLES: frozenset[str] = frozenset({
-    "customs", "admin", "head_of_customs",
+    "customs", "admin", "head_of_customs", "head_of_logistics",
     "sales", "quote_controller", "spec_controller", "finance", "top_manager",
 })
 _READY_STATUSES = {
