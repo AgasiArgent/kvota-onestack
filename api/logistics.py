@@ -6,7 +6,8 @@ logistics-customs-redesign spec (design.md §6.1).
 
 Auth: dual — JWT (Next.js) via ApiAuthMiddleware (request.state.api_user),
 or legacy session (FastHTML) via Starlette's SessionMiddleware.
-Roles: logistics, head_of_logistics, admin.
+Roles: logistics, head_of_logistics, admin, head_of_customs.
+head_of_customs added per PR #105 — dual-hat role in this org.
 
 Endpoints:
   - Route segments CRUD + reorder (one route per invoice)
@@ -176,7 +177,7 @@ async def create_segment(request: Request) -> JSONResponse:
         notes: str (optional)
     Returns:
         data: created segment row
-    Roles: logistics, head_of_logistics, admin.
+    Roles: logistics, head_of_logistics, admin, head_of_customs.
     """
     auth = _authorize(request)
     if isinstance(auth, JSONResponse):
@@ -247,7 +248,7 @@ async def list_segments(request: Request) -> JSONResponse:
         invoice_id: str (required)
     Returns:
         data: list of segment rows, ordered by sequence_order ASC
-    Roles: logistics, head_of_logistics, admin.
+    Roles: logistics, head_of_logistics, admin, head_of_customs.
     """
     auth = _authorize(request)
     if isinstance(auth, JSONResponse):
@@ -282,7 +283,7 @@ async def update_segment(request: Request, segment_id: str) -> JSONResponse:
         carrier, notes
     Returns:
         data: updated segment row
-    Roles: logistics, head_of_logistics, admin.
+    Roles: logistics, head_of_logistics, admin, head_of_customs.
     """
     auth = _authorize(request)
     if isinstance(auth, JSONResponse):
@@ -330,7 +331,7 @@ async def delete_segment(request: Request, segment_id: str) -> JSONResponse:
 
     Path: DELETE /api/logistics/segments/{id}
     Returns: { success: true }
-    Roles: logistics, head_of_logistics, admin.
+    Roles: logistics, head_of_logistics, admin, head_of_customs.
     """
     auth = _authorize(request)
     if isinstance(auth, JSONResponse):
@@ -360,7 +361,7 @@ async def reorder_segments(request: Request) -> JSONResponse:
         sequence: list[str] (required) — segment ids in desired order (1-based)
     Returns:
         data: list of updated segments ordered by new sequence_order
-    Roles: logistics, head_of_logistics, admin.
+    Roles: logistics, head_of_logistics, admin, head_of_customs.
     """
     auth = _authorize(request)
     if isinstance(auth, JSONResponse):
@@ -443,7 +444,7 @@ async def create_expense(request: Request) -> JSONResponse:
         notes: str (optional)
     Returns:
         data: created expense row
-    Roles: logistics, head_of_logistics, admin.
+    Roles: logistics, head_of_logistics, admin, head_of_customs.
     """
     auth = _authorize(request)
     if isinstance(auth, JSONResponse):
@@ -488,7 +489,7 @@ async def delete_expense(request: Request, expense_id: str) -> JSONResponse:
 
     Path: DELETE /api/logistics/expenses/{id}
     Returns: { success: true }
-    Roles: logistics, head_of_logistics, admin.
+    Roles: logistics, head_of_logistics, admin, head_of_customs.
     """
     auth = _authorize(request)
     if isinstance(auth, JSONResponse):
@@ -532,7 +533,7 @@ async def list_templates(request: Request) -> JSONResponse:
     Path: GET /api/logistics/templates
     Returns:
         data: list of templates (each with nested segments ordered by sequence_order ASC)
-    Roles: logistics, head_of_logistics, admin.
+    Roles: logistics, head_of_logistics, admin, head_of_customs.
     """
     auth = _authorize(request)
     if isinstance(auth, JSONResponse):
@@ -575,7 +576,7 @@ async def create_template(request: Request) -> JSONResponse:
             (required, non-empty)
     Returns:
         data: created template row with nested segments
-    Roles: logistics, head_of_logistics, admin.
+    Roles: logistics, head_of_logistics, admin, head_of_customs.
     """
     auth = _authorize(request)
     if isinstance(auth, JSONResponse):
@@ -654,7 +655,7 @@ async def update_template(request: Request, template_id: str) -> JSONResponse:
         - Updates logistics_route_templates row (name, description)
         - DELETEs all logistics_route_template_segments for this template,
           INSERTs the new segments (sequence_order starts at 1).
-    Roles: logistics, head_of_logistics, admin.
+    Roles: logistics, head_of_logistics, admin, head_of_customs.
     """
     auth = _authorize(request)
     if isinstance(auth, JSONResponse):
@@ -727,7 +728,7 @@ async def delete_template(request: Request, template_id: str) -> JSONResponse:
 
     Path: DELETE /api/logistics/templates/{id}
     Returns: { success: true }
-    Roles: logistics, head_of_logistics, admin.
+    Roles: logistics, head_of_logistics, admin, head_of_customs.
     """
     auth = _authorize(request)
     if isinstance(auth, JSONResponse):
@@ -771,7 +772,7 @@ async def apply_template(request: Request, template_id: str) -> JSONResponse:
             invoice are deleted before materializing.
     Returns:
         data: list of newly created segment rows
-    Roles: logistics, head_of_logistics, admin.
+    Roles: logistics, head_of_logistics, admin, head_of_customs.
     """
     auth = _authorize(request)
     if isinstance(auth, JSONResponse):
@@ -907,7 +908,7 @@ async def complete(request: Request) -> JSONResponse:
     Side Effects:
         - Sets logistics_completed_at = NOW() on the invoice.
         - Sets logistics_completed_by = user.id
-    Roles: logistics, head_of_logistics, admin.
+    Roles: logistics, head_of_logistics, admin, head_of_customs.
     """
     auth = _authorize(request)
     if isinstance(auth, JSONResponse):
@@ -973,7 +974,7 @@ async def acknowledge_review(request: Request) -> JSONResponse:
         invoice_id: str (required)
     Returns:
         data: { invoice_id, logistics_needs_review_since: null }
-    Roles: logistics, head_of_logistics, admin.
+    Roles: logistics, head_of_logistics, admin, head_of_customs.
     """
     auth = _authorize(request)
     if isinstance(auth, JSONResponse):
