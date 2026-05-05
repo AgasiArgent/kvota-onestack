@@ -1,6 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/shared/lib/supabase/server";
 import type { LocationType } from "@/entities/location/ui/location-chip";
+import type { LocationOption } from "@/entities/location/lib/format";
 
 /**
  * Location queries — minimal shape for Route Constructor pickers
@@ -9,14 +10,6 @@ import type { LocationType } from "@/entities/location/ui/location-chip";
  * Read-only; org-scoped via RLS + explicit filter (defense in depth).
  * Mutations live in admin-ops, not here.
  */
-
-export interface LocationOption {
-  id: string;
-  country: string;
-  iso2?: string;
-  city?: string;
-  type: LocationType;
-}
 
 interface LocationRow {
   id: string;

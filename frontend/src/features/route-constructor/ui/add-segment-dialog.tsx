@@ -14,15 +14,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchableCombobox } from "@/shared/ui/searchable-combobox";
-import type { LocationOption, LocationType } from "@/entities/location";
-
-const LOCATION_TYPE_LABEL: Record<LocationType, string> = {
-  supplier: "Поставщики",
-  hub: "Хабы",
-  customs: "Таможня",
-  own_warehouse: "Склады",
-  client: "Клиенты",
-};
+import {
+  LOCATION_TYPE_LABEL,
+  formatLocationLabel,
+  type LocationOption,
+} from "@/entities/location";
 
 interface AddSegmentDialogProps {
   open: boolean;
@@ -34,11 +30,6 @@ interface AddSegmentDialogProps {
     to_location_id: string;
     label: string | null;
   }) => Promise<void>;
-}
-
-function formatLocationLabel(loc: LocationOption): string {
-  if (loc.city && loc.country) return `${loc.country} · ${loc.city}`;
-  return loc.country || "—";
 }
 
 /**

@@ -5,18 +5,12 @@ import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type {
-  LocationOption,
-  LocationType,
+import { SearchableCombobox } from "@/shared/ui/searchable-combobox";
+import {
+  LOCATION_TYPE_LABEL,
+  formatLocationLabel,
+  type LocationOption,
 } from "@/entities/location";
 import { LocationChip } from "@/entities/location/ui/location-chip";
 import type {
@@ -124,29 +118,6 @@ export function SegmentDetailsPanel({
 // Fields (from/to, days, cost, carrier, label, notes)
 // ---------------------------------------------------------------------------
 
-const LOCATION_TYPE_ORDER: readonly LocationType[] = [
-  "supplier",
-  "hub",
-  "customs",
-  "own_warehouse",
-  "client",
-];
-
-function locationTypeLabel(type: LocationType): string {
-  switch (type) {
-    case "supplier":
-      return "Поставщики";
-    case "hub":
-      return "Хабы";
-    case "customs":
-      return "Таможня";
-    case "own_warehouse":
-      return "Склады";
-    case "client":
-      return "Клиенты";
-  }
-}
-
 interface SegmentFieldsProps {
   segment: LogisticsSegment;
   locations: LocationOption[];
@@ -180,11 +151,6 @@ function SegmentFields({
     setMainCost(String(segment.mainCostRub ?? 0));
   }, [segment.id, segment.label, segment.carrier, segment.notes, segment.transitDays, segment.mainCostRub]);
 
-  const locationsByType = LOCATION_TYPE_ORDER.map((type) => ({
-    type,
-    items: locations.filter((l) => l.type === type),
-  })).filter((g) => g.items.length > 0);
-
   function patch(patch: SegmentPatch, local?: Partial<LogisticsSegment>) {
     if (local && onLocalUpdate) onLocalUpdate(segment.id, local);
     startTransition(async () => {
@@ -202,19 +168,34 @@ function SegmentFields({
     });
   }
 
-  function handleLocationChange(side: "from" | "to", value: string) {
+  function handleLocationChange(side: "from" | "to", value: string | null) {
+    // Combobox is non-clearable (DB column is NOT NULL) — guard against
+    // an unexpected null emission rather than PATCHing a value the API rejects.
+    // Both branches below are "impossible" under the current contract, so a
+    // hit means a real regression — surface via console.warn instead of a
+    // silent return so it shows up in DevTools.
+    if (!value) {
+      console.warn(
+        `[SegmentDetailsPanel] handleLocationChange(${side}) got falsy value with clearable=false`,
+      );
+      return;
+    }
     const selected = locations.find((l) => l.id === value);
-    const local: Partial<LogisticsSegment> = selected
-      ? {
-          [side === "from" ? "fromLocation" : "toLocation"]: {
-            id: selected.id,
-            country: selected.country,
-            iso2: selected.iso2,
-            city: selected.city,
-            type: selected.type,
-          },
-        }
-      : {};
+    if (!selected) {
+      console.warn(
+        `[SegmentDetailsPanel] handleLocationChange(${side}): combobox emitted id ${value} but no matching location in items list`,
+      );
+      return;
+    }
+    const local: Partial<LogisticsSegment> = {
+      [side === "from" ? "fromLocation" : "toLocation"]: {
+        id: selected.id,
+        country: selected.country,
+        iso2: selected.iso2,
+        city: selected.city,
+        type: selected.type,
+      },
+    };
     patch(
       side === "from"
         ? { from_location_id: value }
@@ -254,54 +235,34 @@ function SegmentFields({
   return (
     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
       <Field label="Откуда">
-        <Select
-          value={segment.fromLocation?.id ?? ""}
-          onValueChange={(v) => handleLocationChange("from", String(v))}
+        <SearchableCombobox
+          ariaLabel="Локация отправления"
+          value={segment.fromLocation?.id ?? null}
+          onChange={(v) => handleLocationChange("from", v)}
+          items={locations}
+          getLabel={formatLocationLabel}
+          getSecondary={(loc) => LOCATION_TYPE_LABEL[loc.type]}
+          getSearchableExtras={(loc) => [LOCATION_TYPE_LABEL[loc.type], loc.city ?? ""]}
+          placeholder="Выберите локацию…"
+          emptyMessage="Нет локаций — создайте их в «Справочниках»."
+          clearable={false}
           disabled={disabled}
-        >
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder="Выберите локацию…" />
-          </SelectTrigger>
-          <SelectContent>
-            {locationsByType.map((group) => (
-              <SelectGroup key={group.type}>
-                <div className="px-2 pt-1 pb-0.5 text-[11px] font-semibold uppercase tracking-wide text-text-subtle">
-                  {locationTypeLabel(group.type)}
-                </div>
-                {group.items.map((loc) => (
-                  <SelectItem key={loc.id} value={loc.id}>
-                    {formatLocationLabel(loc)}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            ))}
-          </SelectContent>
-        </Select>
+        />
       </Field>
       <Field label="Куда">
-        <Select
-          value={segment.toLocation?.id ?? ""}
-          onValueChange={(v) => handleLocationChange("to", String(v))}
+        <SearchableCombobox
+          ariaLabel="Локация назначения"
+          value={segment.toLocation?.id ?? null}
+          onChange={(v) => handleLocationChange("to", v)}
+          items={locations}
+          getLabel={formatLocationLabel}
+          getSecondary={(loc) => LOCATION_TYPE_LABEL[loc.type]}
+          getSearchableExtras={(loc) => [LOCATION_TYPE_LABEL[loc.type], loc.city ?? ""]}
+          placeholder="Выберите локацию…"
+          emptyMessage="Нет локаций — создайте их в «Справочниках»."
+          clearable={false}
           disabled={disabled}
-        >
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder="Выберите локацию…" />
-          </SelectTrigger>
-          <SelectContent>
-            {locationsByType.map((group) => (
-              <SelectGroup key={group.type}>
-                <div className="px-2 pt-1 pb-0.5 text-[11px] font-semibold uppercase tracking-wide text-text-subtle">
-                  {locationTypeLabel(group.type)}
-                </div>
-                {group.items.map((loc) => (
-                  <SelectItem key={loc.id} value={loc.id}>
-                    {formatLocationLabel(loc)}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            ))}
-          </SelectContent>
-        </Select>
+        />
       </Field>
 
       <Field label="Транзит (дней)">
@@ -362,11 +323,6 @@ function SegmentFields({
       </Field>
     </div>
   );
-}
-
-function formatLocationLabel(loc: LocationOption): string {
-  if (loc.city && loc.country) return `${loc.country} · ${loc.city}`;
-  return loc.country || "—";
 }
 
 function Field({
