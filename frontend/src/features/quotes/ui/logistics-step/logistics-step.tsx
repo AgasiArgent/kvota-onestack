@@ -40,17 +40,19 @@ interface LogisticsStepProps {
   userId?: string;
   userRoles?: string[];
   quoteNotes?: EntityNoteCardData[];
-  invoiceNotesById?: Record<string, EntityNoteCardData[]>;
 }
 
 // Narrow shape returned by the `logistics_route_segments` query below.
 // We cast here because the new tables are not yet in generated db types.
+// from/to_location_id are non-nullable in the DB (migration 288:26-27); a
+// previous version of this interface marked them nullable, which masked an
+// API/UX bug where segments were created without locations and got a 500.
 interface SegmentRowShape {
   id: string;
   invoice_id: string;
   sequence_order: number;
-  from_location_id: string | null;
-  to_location_id: string | null;
+  from_location_id: string;
+  to_location_id: string;
   label: string | null;
   transit_days: number | null;
   main_cost_rub: number | string | null;
@@ -117,7 +119,6 @@ export function LogisticsStep({
   userId,
   userRoles,
   quoteNotes = [],
-  invoiceNotesById = {},
 }: LogisticsStepProps) {
   const [activeInvoiceId, setActiveInvoiceId] = useState<string | null>(
     invoices[0]?.id ?? null,
@@ -416,20 +417,6 @@ export function LogisticsStep({
           currentUser={{ id: userId, roles: userRoles ?? [] }}
           title="Заметки логистов по КП"
           defaultVisibleTo={["logistics", "head_of_logistics", "sales", "procurement"]}
-        />
-      )}
-
-      {userId && activeInvoiceId && (
-        <EntityNotesPanel
-          key={activeInvoiceId}
-          entityType="invoice"
-          entityId={activeInvoiceId}
-          initialNotes={invoiceNotesById[activeInvoiceId] ?? []}
-          currentUser={{ id: userId, roles: userRoles ?? [] }}
-          title="Комментарий логиста для закупок"
-          subtitle="Видит закупки и руководитель закупок"
-          defaultVisibleTo={["procurement", "head_of_procurement"]}
-          revalidatePath={`/quotes/${quote.id}`}
         />
       )}
     </div>

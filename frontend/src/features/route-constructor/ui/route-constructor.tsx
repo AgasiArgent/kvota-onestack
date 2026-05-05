@@ -14,6 +14,7 @@ import {
 } from "@/entities/logistics-segment";
 import type { LogisticsTemplate } from "@/entities/logistics-template";
 import { applyLogisticsTemplate } from "@/entities/logistics-template";
+import { AddSegmentDialog } from "./add-segment-dialog";
 import { NewSegmentButton } from "./new-segment-button";
 import { RouteTotalsCard } from "./route-totals-card";
 import { SegmentDetailsPanel } from "./segment-details-panel";
@@ -59,6 +60,7 @@ export function RouteConstructor({
   const [selectedId, setSelectedId] = useState<string | null>(
     initialSegments[0]?.id ?? null,
   );
+  const [addOpen, setAddOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   // Re-sync when server props change (e.g. after refresh)
@@ -81,25 +83,31 @@ export function RouteConstructor({
     );
   }
 
-  function handleAdd() {
-    startTransition(async () => {
-      try {
-        const res = await createSegment({
-          invoice_id: invoiceId,
-          sequence_order: segments.length + 1,
-          label: "Новый сегмент",
-          revalidate_path: revalidatePath,
-        });
-        if (res?.segment_id) {
-          setSelectedId(res.segment_id);
-        }
-        router.refresh();
-      } catch (err) {
-        toast.error(
-          err instanceof Error ? err.message : "Не удалось добавить сегмент",
-        );
+  // Dialog awaits this; it must throw on failure so the modal stays open.
+  async function handleCreateSegment(input: {
+    from_location_id: string;
+    to_location_id: string;
+    label: string | null;
+  }) {
+    try {
+      const res = await createSegment({
+        invoice_id: invoiceId,
+        sequence_order: segments.length + 1,
+        from_location_id: input.from_location_id,
+        to_location_id: input.to_location_id,
+        label: input.label ?? undefined,
+        revalidate_path: revalidatePath,
+      });
+      if (res?.segment_id) {
+        setSelectedId(res.segment_id);
       }
-    });
+      router.refresh();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Не удалось добавить сегмент",
+      );
+      throw err;
+    }
   }
 
   function handleDelete(id: string) {
@@ -186,7 +194,10 @@ export function RouteConstructor({
             onApply={handleApplyTemplate}
             disabled={disabled || isPending}
           />
-          <NewSegmentButton onClick={handleAdd} disabled={disabled || isPending} />
+          <NewSegmentButton
+            onClick={() => setAddOpen(true)}
+            disabled={disabled || isPending || locations.length === 0}
+          />
         </div>
       </div>
 
@@ -210,6 +221,13 @@ export function RouteConstructor({
           disabled={disabled || isPending}
         />
       </div>
+
+      <AddSegmentDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        locations={locations}
+        onSubmit={handleCreateSegment}
+      />
     </div>
   );
 }
