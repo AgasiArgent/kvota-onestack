@@ -19,8 +19,9 @@ handlers were deleted in the same PR per REQ-2 AC#16 (no-dead-code rule).
 
 Auth: dual — JWT (Next.js) via ApiAuthMiddleware (request.state.api_user),
 or legacy session (FastHTML) via Starlette's SessionMiddleware.
-Roles: customs, admin, head_of_customs (write); plus sales,
+Roles: customs, admin, head_of_customs, head_of_logistics (write); plus sales,
 quote_controller, spec_controller, finance, top_manager (read on certificates).
+head_of_logistics added per PR #105 — dual-hat role in this org.
 """
 
 from __future__ import annotations
@@ -206,7 +207,7 @@ async def bulk_update_items(request: Request, quote_id: str) -> JSONResponse:
     Side Effects:
         - Updates hs_code, customs_duty, license_* fields on quote_items rows
           scoped to the given quote_id.
-    Roles: customs, admin, head_of_customs.
+    Roles: customs, admin, head_of_customs, head_of_logistics.
 
     Response envelope mirrors the legacy FastHTML dict return (no ``data``
     wrapper) for byte-identical compatibility with existing UI callers.
@@ -374,7 +375,7 @@ async def autofill_handler(
         ``rate_resolver.resolve_rate``, that function may UPDATE
         ``tnved_rates.last_used_at`` (cron revalidation hint) — see
         ``services/rate_resolver.py``.
-    Roles: customs, admin, head_of_customs.
+    Roles: customs, admin, head_of_customs, head_of_logistics.
 
     Strategy: for each (brand, product_code) pair, fetch the newest
     quote_items row WHERE hs_code IS NOT NULL and the hit belongs to the
@@ -770,7 +771,7 @@ async def resolve_rates_handler(request: Request, alta_client) -> JSONResponse:
           in Phase 1 because we don't compute amounts — see caveat above.)
         - rate_resolver may UPDATE kvota.tnved_rates SET last_used_at = now().
         - May trigger an Alta API call on cache miss — counts against packet quota.
-    Roles: customs, admin, head_of_customs.
+    Roles: customs, admin, head_of_customs, head_of_logistics.
     """
     started = time.monotonic()
 
@@ -1003,7 +1004,7 @@ async def non_tariff_measures_handler(
     Side Effects: triggers a billed Alta API call (gotcha #5: ~3₽/call,
         billed separately from Такса). Endpoint is invoked only when the UI
         explicitly asks for measures — never on every customs page render.
-    Roles: customs, admin, head_of_customs.
+    Roles: customs, admin, head_of_customs, head_of_logistics.
     """
     started = time.monotonic()
 
@@ -1386,7 +1387,7 @@ async def classify_handler(request: Request, alta_client) -> JSONResponse:
           retries via stable request_id).
         - Writes one audit row per item to kvota.tnved_classification_log
           (method='express'). chosen_code is filled by /select later.
-    Roles: customs, admin, head_of_customs.
+    Roles: customs, admin, head_of_customs, head_of_logistics.
     """
     user, role_codes = _resolve_dual_auth(request)
     if not user or not user.get("org_id"):
@@ -1502,7 +1503,7 @@ async def history_lookup_handler(
             - 400 BAD_REQUEST — invalid tnved_code / country_oksm
 
     Side Effects: read-only — no DB writes.
-    Roles: customs, admin, head_of_customs.
+    Roles: customs, admin, head_of_customs, head_of_logistics.
 
     Used by the Phase A history banner inside the customs item dialog
     (Task 11) — surfaces the previous customs choice for the same code +
@@ -1582,7 +1583,7 @@ async def classify_select_handler(request: Request) -> JSONResponse:
     Side Effects:
         - UPDATE kvota.quote_items SET hs_code = chosen_code WHERE id=...
         - INSERT into kvota.tnved_classification_log with chosen_code set.
-    Roles: customs, admin, head_of_customs.
+    Roles: customs, admin, head_of_customs, head_of_logistics.
     """
     user, role_codes = _resolve_dual_auth(request)
     if not user or not user.get("org_id"):
@@ -2018,7 +2019,7 @@ async def create_certificate_handler(request: Request) -> JSONResponse:
         - INSERT len(item_ids) rows into kvota.quote_certificate_items
         - On any item-attachment failure, DELETE the just-created cert
           (manual rollback — Supabase Python client lacks transactions).
-    Roles: customs, admin, head_of_customs.
+    Roles: customs, admin, head_of_customs, head_of_logistics.
     """
     user, err = _require_cert_write_auth(request)
     if err:
@@ -2157,7 +2158,7 @@ async def list_certificates_handler(request: Request) -> JSONResponse:
             - 401 UNAUTHORIZED / 403 FORBIDDEN
             - 404 NOT_FOUND — quote missing or different org
     Side Effects: read-only.
-    Roles: customs, admin, head_of_customs, sales, quote_controller,
+    Roles: customs, admin, head_of_customs, head_of_logistics, sales, quote_controller,
            spec_controller, finance, top_manager.
     """
     user, err = _require_cert_read_auth(request)
@@ -2235,7 +2236,7 @@ async def attach_item_handler(request: Request, cert_id: str) -> JSONResponse:
             - 422 NOT_IN_QUOTE — item_id from a different quote
             - 500 INTERNAL — DB write failure
     Side Effects: INSERT 1 row into kvota.quote_certificate_items.
-    Roles: customs, admin, head_of_customs.
+    Roles: customs, admin, head_of_customs, head_of_logistics.
     """
     user, err = _require_cert_write_auth(request)
     if err:
@@ -2308,7 +2309,7 @@ async def detach_item_handler(
             - 401 UNAUTHORIZED / 403 FORBIDDEN
             - 404 NOT_FOUND — cert missing (or wrong org) or attachment missing
     Side Effects: DELETE 1 row from kvota.quote_certificate_items.
-    Roles: customs, admin, head_of_customs.
+    Roles: customs, admin, head_of_customs, head_of_logistics.
     """
     user, err = _require_cert_write_auth(request)
     if err:
@@ -2354,7 +2355,7 @@ async def delete_certificate_handler(
     Side Effects:
         - DELETE 1 row from kvota.quote_certificates
         - Cascades to N rows in kvota.quote_certificate_items.
-    Roles: customs, admin, head_of_customs.
+    Roles: customs, admin, head_of_customs, head_of_logistics.
     """
     user, err = _require_cert_write_auth(request)
     if err:
@@ -2391,7 +2392,7 @@ async def history_certificate_handler(request: Request) -> JSONResponse:
             - 400 VALIDATION_ERROR — missing current_quote_id
             - 401 UNAUTHORIZED / 403 FORBIDDEN
     Side Effects: read-only.
-    Roles: customs, admin, head_of_customs, sales, quote_controller,
+    Roles: customs, admin, head_of_customs, head_of_logistics, sales, quote_controller,
            spec_controller, finance, top_manager.
     """
     user, err = _require_cert_read_auth(request)
