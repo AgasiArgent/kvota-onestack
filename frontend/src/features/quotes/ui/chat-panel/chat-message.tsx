@@ -8,45 +8,72 @@ const ROLE_BADGE_COLORS: Record<string, string> = {
   sales: "bg-blue-100 text-blue-700",
   head_of_sales: "bg-blue-100 text-blue-700",
   procurement: "bg-amber-100 text-amber-700",
+  procurement_senior: "bg-amber-100 text-amber-700",
   head_of_procurement: "bg-amber-100 text-amber-700",
   logistics: "bg-green-100 text-green-700",
   head_of_logistics: "bg-green-100 text-green-700",
   customs: "bg-purple-100 text-purple-700",
+  head_of_customs: "bg-purple-100 text-purple-700",
   finance: "bg-emerald-100 text-emerald-700",
+  head_of_finance: "bg-emerald-100 text-emerald-700",
+  currency_controller: "bg-emerald-100 text-emerald-700",
   admin: "bg-slate-100 text-slate-700",
   quote_controller: "bg-indigo-100 text-indigo-700",
   spec_controller: "bg-indigo-100 text-indigo-700",
   top_manager: "bg-slate-100 text-slate-700",
+  training_manager: "bg-slate-100 text-slate-700",
 };
 
 const ROLE_AVATAR_COLORS: Record<string, string> = {
   sales: "bg-blue-500",
   head_of_sales: "bg-blue-500",
   procurement: "bg-amber-500",
+  procurement_senior: "bg-amber-500",
   head_of_procurement: "bg-amber-500",
   logistics: "bg-green-500",
   head_of_logistics: "bg-green-500",
   customs: "bg-purple-500",
+  head_of_customs: "bg-purple-500",
   finance: "bg-emerald-500",
+  head_of_finance: "bg-emerald-500",
+  currency_controller: "bg-emerald-500",
   admin: "bg-slate-500",
   quote_controller: "bg-indigo-500",
   spec_controller: "bg-indigo-500",
   top_manager: "bg-slate-500",
+  training_manager: "bg-slate-500",
 };
 
-const ROLE_LABELS: Record<string, string> = {
+/**
+ * Russian short labels for role badges in chat-bubble headers.
+ *
+ * Kept abbreviated (e.g. "Рук. продаж" not "Руководитель продаж") because the
+ * badge sits inline with the user's name and the timestamp inside a 260px-wide
+ * bubble — full labels wrap and break the layout.
+ *
+ * Must cover every active role slug in the system (see
+ * `entities/user/types.ts` ACTIVE_ROLES + extras like `currency_controller`,
+ * `training_manager`). Missing slugs fell back to the raw English slug after a
+ * page refresh — see fix/rop-test/chat-role-labels-complete.
+ */
+export const ROLE_LABELS: Record<string, string> = {
   sales: "Продажи",
   head_of_sales: "Рук. продаж",
   procurement: "Закупки",
+  procurement_senior: "Ст. закупщик",
   head_of_procurement: "Рук. закупок",
   logistics: "Логистика",
   head_of_logistics: "Рук. логистики",
   customs: "Таможня",
+  head_of_customs: "Рук. таможни",
   finance: "Финансы",
+  head_of_finance: "Рук. финансов",
+  currency_controller: "Контроль валют",
   admin: "Админ",
   quote_controller: "Контроль КП",
   spec_controller: "Контроль спец.",
   top_manager: "Руководитель",
+  training_manager: "Обучение",
 };
 
 /**
