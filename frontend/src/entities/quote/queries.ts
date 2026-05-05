@@ -962,11 +962,13 @@ export async function fetchFilterOptions(
   // Fetch all organization users grouped by role for the Participants filter.
   // This is deliberately broad — show every eligible user, not just those
   // already assigned to a quote.
+  // head_of_logistics ↔ head_of_customs: dual-hat in this org (PR #105). Both
+  // leads participate in both functions, so each appears in both groups.
   const ROLE_GROUPS: Record<keyof ParticipantsOptions, string[]> = {
     sales: ["sales", "head_of_sales"],
     procurement: ["procurement", "procurement_senior", "head_of_procurement"],
-    logistics: ["logistics", "head_of_logistics"],
-    customs: ["customs"],
+    logistics: ["logistics", "head_of_logistics", "head_of_customs"],
+    customs: ["customs", "head_of_customs", "head_of_logistics"],
   };
 
   async function fetchUsersByRoleSlugs(slugs: string[]): Promise<{ id: string; full_name: string }[]> {

@@ -506,7 +506,7 @@ export function CustomsStep({
             initialNotes={quoteNotes}
             currentUser={{ id: userId, roles: userRoles }}
             title="Заметки таможни по КП"
-            defaultVisibleTo={["customs", "head_of_customs", "sales", "procurement"]}
+            defaultVisibleTo={["customs", "head_of_customs", "head_of_logistics", "sales", "procurement"]}
           />
         )}
 

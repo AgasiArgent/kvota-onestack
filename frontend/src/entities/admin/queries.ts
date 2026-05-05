@@ -162,6 +162,7 @@ export async function fetchAllRoles(orgId: string): Promise<RoleOption[]> {
     "head_of_sales",
     "head_of_procurement",
     "head_of_logistics",
+    "head_of_customs",
   ]);
 
   return (data ?? [])
