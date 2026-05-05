@@ -52,10 +52,13 @@ export async function fetchLocations(orgId: string): Promise<LocationOption[]> {
     .order("country", { ascending: true })
     .order("city", { ascending: true, nullsFirst: true });
 
+  // Surface real errors instead of masking them as "no locations" — a
+  // silent [] return rendered the same empty-state UI for genuine empty
+  // org and for Supabase / RLS / network errors. Server Components catch
+  // throws via error.tsx; matches the project's Server Action convention
+  // (apiServerClient + entities/*/server-actions.ts both throw on failure).
   if (error) {
-    // eslint-disable-next-line no-console
-    console.error("[fetchLocations]", error);
-    return [];
+    throw new Error(`fetchLocations: ${error.message}`);
   }
   return (data ?? []).map(mapRow as (r: unknown) => LocationOption);
 }
@@ -80,9 +83,7 @@ export async function fetchLocationsByTypes(
     .order("city", { ascending: true, nullsFirst: true });
 
   if (error) {
-    // eslint-disable-next-line no-console
-    console.error("[fetchLocationsByTypes]", error);
-    return [];
+    throw new Error(`fetchLocationsByTypes: ${error.message}`);
   }
   return (data ?? []).map(mapRow as (r: unknown) => LocationOption);
 }
