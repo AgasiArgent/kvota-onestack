@@ -1,0 +1,54 @@
+{
+  "feature_name": "customs-shared-certificates",
+  "created_at": "2026-05-04T00:30:00+00:00",
+  "updated_at": "2026-05-04T07:00:00+00:00",
+  "language": "ru",
+  "phase": "tasks-generated",
+  "approvals": {
+    "requirements": { "generated": true, "approved": true, "generated_at": "2026-05-04", "approved_at": "2026-05-04" },
+    "design": { "generated": true, "approved": true, "generated_at": "2026-05-04", "approved_at": "2026-05-04" },
+    "tasks": { "generated": true, "approved": true, "generated_at": "2026-05-04", "approved_at": "2026-05-04" }
+  },
+  "ready_for_implementation": true,
+  "context": {
+    "phase_lineage": "Phase B (after customs-tariff-completeness Phase A — completed 2026-05-03, 12 tasks merged to origin/main, last commit c1b45017)",
+    "ui_mockup": "docs/mockups/customs-after-phases.html (v3 approved by user 2026-05-03; Phase B sections at lines 111, 881-960)",
+    "worktree": "/Users/andreynovikov/workspace/tech/projects/kvota/onestack-customs-phase1",
+    "branch": "main",
+    "scope_summary": "Shared certificates entity (kvota.quote_certificates + M2M) with proportional cost split (always — no UI choice), valid_until expiry tracking with explicit user prompt, cost-aware history autofill (12-month window, loose match), unified UI section 'Расходы по таможне' with two action buttons replacing existing 'Сертификаты на КП' + 'Общие расходы по таможне', modal with multi-select positions + live preview, popover 'Привязать к существующему' from per-item dialog, per-item read-only certificate coverage list, 'Свой расход' custom expense option (same table, is_custom_expense flag), and TableViewsDropdown integration with 4 system views (existing component at frontend/src/features/table-views/ — REUSE).",
+    "locked_files": [
+      "calculation_engine.py",
+      "calculation_models.py",
+      "calculation_mapper.py"
+    ],
+    "key_extension_points": {
+      "db_new_tables": "kvota.quote_certificates (cert metadata) + kvota.quote_certificate_items (M2M) — migration 306. Plus kvota.quote_view_preferences.customs_columns_view TEXT NULLABLE — migration 307.",
+      "backend_api": "api/customs.py — new POST /certificates, GET /certificates, POST /certificates/{id}/items, DELETE /certificates/{id}/items/{item_id}, DELETE /certificates/{id}, GET /certificates/history",
+      "backend_history": "services/quote_certificates_history.py — mirror tnved_user_choices pattern from Phase A",
+      "shared_helper": "frontend/src/shared/lib/cost-split.ts + services/cost_split.py — synchronized proportional split helper used by both backend and frontend with parity tests",
+      "frontend_feature": "frontend/src/features/customs-certificates/ — new FSD feature (api/model/ui/lib) mirroring frontend/src/features/customs-history/ pattern",
+      "frontend_dialog": "frontend/src/features/quotes/ui/customs-step/customs-item-dialog.tsx — extend with read-only «Привязанные сертификаты» list section + «Привязать существующий» popover trigger",
+      "frontend_section": "frontend/src/features/quotes/ui/customs-step/customs-step.tsx — replace 'Сертификаты на КП' + 'Общие расходы' sections with unified 'Расходы по таможне'",
+      "frontend_table_views": "REUSE existing frontend/src/features/table-views/ component — register 4 system views into customs-handsontable.tsx toolbar (do NOT build new component)"
+    },
+    "out_of_scope": [
+      "Phase C: Расширенные нетарифные требования (санитарка / ветконтроль / IP / параллельный импорт)",
+      "Phase C: Тип сертификата происхождения enum (CT-1/EUR.1/Form A) — пока type — свободный TEXT",
+      "Phase C: «Честный знак» selectbox групп",
+      "Phase C: ОТТС / ОТТС МУ",
+      "Phase D: Россельхознадзор, Минкульт, военка",
+      "Phase B: Custom column drag-and-drop / user-editable views (только 4 системных view)",
+      "Phase B: Mobile UI (desktop-only)"
+    ],
+    "feature_flag_awareness": "Phase B не зависит от ALTA_FEATURES_ENABLED (это про сертификаты, не Alta API). UI работает в обоих состояниях flag.",
+    "design_system_compliance": "Read design-system.md before any UI work. Use .btn BEM classes (no raw button styles). Inter font. Constrained type scale (11/12/14/16/18/20/24px). Constrained spacing scale (4/6/8/12/16/20/24/32/48px). No `transition: all`, no `transform: translateY()` on hover. No inline `style=` for colors/fonts/spacing — use CSS vars or classes. Searchable Combobox for ALL dropdowns (project-wide standard, memory feedback_searchable_select.md re-confirmed 2026-05-01).",
+    "phase_a_precedents": {
+      "audit_log_pattern": "kvota.tnved_classification_log + tnved_user_choices",
+      "history_lookup_pattern": "GET /api/customs/items/history (Phase A, services/customs_user_choices.py)",
+      "fsd_pattern": "frontend/src/features/customs-history/ — model/api/lib/ui structure",
+      "live_preview_pattern": "duty-formula.ts + RateBreakdown — реактивный пересчёт",
+      "manual_toggle_pattern": "Auto/Manual radio toggle в customs-item-dialog.tsx Phase A",
+      "date_format_helper": "formatDateRussian (DD.MM.YYYY) from frontend/src/features/customs-history/lib/format-date.ts — REUSE"
+    }
+  }
+}

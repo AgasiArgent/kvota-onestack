@@ -1250,16 +1250,16 @@ def generate_plan_fact_from_deal(
             'bank_commission_percent': calc_vars.get('bank_commission_percent', 0),
         }
 
-        # Step 4: Get calculation results for totals
-        if quote_id:
-            calc_result = supabase.table('quote_item_calculations') \
-                .select('*') \
-                .eq('quote_id', quote_id) \
-                .execute()
-
-            calc_items = calc_result.data if calc_result.data else []
-        else:
-            calc_items = []
+        # Step 4: Calculation result totals are no longer aggregated here.
+        # The original code queried `quote_item_calculations`, a table that
+        # never existed in the kvota schema (caught by tools/check_select_columns.py
+        # during Phase B 2026-05-04). The only callers of this function live in
+        # legacy-fasthtml/finance_lifecycle.py (archived 2026-04-20, not loaded
+        # at runtime) and signature-only smoke tests, so the broken query was
+        # never exercised in production. We fall back to empty totals; if a
+        # future feature needs per-item totals it should read the canonical
+        # `quote_calculation_results` / `quote_calculation_summaries` tables.
+        calc_items = []
 
         # Calculate totals from items
         total_purchase = Decimal('0')
@@ -1540,17 +1540,14 @@ def get_plan_fact_generation_preview(deal_id: str) -> Dict[str, Any]:
                 .execute()
 
             calc_vars = vars_result.data[0] if vars_result.data else {}
-
-            # Get calculation totals
-            calc_result = supabase.table('quote_item_calculations') \
-                .select('purchase_price_total, logistics_total, customs_duty_total, customs_processing_total, sales_price_total_with_vat') \
-                .eq('quote_id', quote_id) \
-                .execute()
-
-            calc_items = calc_result.data if calc_result.data else []
         else:
             calc_vars = {}
-            calc_items = []
+
+        # `quote_item_calculations` table never existed; see the matching
+        # comment in generate_plan_fact_from_deal above. Preview falls back
+        # to zero totals — only legacy-fasthtml callers ever reached this
+        # branch and that file is archived as of 2026-04-20.
+        calc_items: List[Dict[str, Any]] = []
 
         preview['source_data'] = {
             'advance_from_client': calc_vars.get('advance_from_client', 100),

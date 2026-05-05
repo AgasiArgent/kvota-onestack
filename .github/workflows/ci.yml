@@ -30,6 +30,14 @@ jobs:
           pip install -r requirements.txt
           pip install pytest pytest-asyncio
 
+      - name: Schema-drift lint
+        # Verifies every supabase.table('X').select('a, b') in services/ + api/ matches
+        # the committed frontend/src/shared/types/database.types.ts snapshot.
+        # NOTE: db:types regeneration requires SSH to beget-kvota and runs locally
+        # before commit (see feedback_regen_types_before_schema_drop). CI only
+        # validates the committed schema snapshot against current queries.
+        run: python3 tools/check_select_columns.py
+
       - name: Run tests
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
