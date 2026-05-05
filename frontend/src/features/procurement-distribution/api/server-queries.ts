@@ -143,21 +143,25 @@ export async function fetchDistributionData(
 /**
  * Distribution metrics shared by the sidebar badge, the page header, and the
  * kanban "Распределение" column. Derived from the single source-of-truth
- * `fetchDistributionData` so all three surfaces always agree.
+ * `fetchDistributionData`.
  *
  * Units:
- *   - quoteCount:      unique quotes (заявки) — UX-friendly aggregate
+ *   - quoteCount:      unique quotes (заявки) — used by the sidebar badge so
+ *                      it matches the /quotes «Требует действия» group count.
  *   - brandSliceCount: distinct (quote × brand) pairs — matches the cards
  *                      rendered on the distribution page AND the kanban
- *                      "Распределение" column count (1 card = 1 brand slice)
- *   - itemCount:       total unassigned, available positions across all quotes
+ *                      "Распределение" column count (1 card = 1 brand slice).
+ *                      Surfaced in the page header subtitle.
+ *   - itemCount:       total unassigned, available positions across all quotes.
  */
-export async function fetchDistributionMetrics(orgId: string): Promise<{
-  quoteCount: number;
-  brandSliceCount: number;
-  itemCount: number;
-}> {
-  const quotes = await fetchDistributionData(orgId);
+/**
+ * Pure aggregation over already-fetched distribution data. Split from
+ * `fetchDistributionMetrics` so it can be exercised in tests without
+ * touching Supabase.
+ */
+export function aggregateDistributionMetrics(
+  quotes: ReadonlyArray<QuoteWithBrandGroups>
+): { quoteCount: number; brandSliceCount: number; itemCount: number } {
   const brandSliceCount = quotes.reduce(
     (sum, q) => sum + q.brandGroups.length,
     0
@@ -169,13 +173,29 @@ export async function fetchDistributionMetrics(orgId: string): Promise<{
   return { quoteCount: quotes.length, brandSliceCount, itemCount };
 }
 
+export async function fetchDistributionMetrics(orgId: string): Promise<{
+  quoteCount: number;
+  brandSliceCount: number;
+  itemCount: number;
+}> {
+  const quotes = await fetchDistributionData(orgId);
+  return aggregateDistributionMetrics(quotes);
+}
+
 /**
- * Sidebar badge count for "Распределение". Returns the brand-slice count
- * (= cards on the distribution page = kanban "Распределение" column count)
- * so the sidebar, page header, and kanban column never diverge when a quote
- * has 2+ brands at the distribution stage.
+ * Sidebar badge count for "Распределение". Returns the unique-quote count
+ * so the sidebar number matches the «Требует вашего действия» group on
+ * /quotes (which counts whole quotes, one row per quote).
+ *
+ * Why quotes, not brand-slices: РОЗ-57 — the sidebar previously returned
+ * brandSliceCount, which made e.g. "5" show up there while /quotes showed
+ * "4" for the same logical bucket of pending_procurement quotes. Testers
+ * read the two surfaces as the same thing and reported the divergence as
+ * a bug. The distribution page itself still surfaces both numbers in its
+ * header subtitle (4 заявки · 5 карточек), so power users can drill in
+ * without losing the brand-slice signal.
  */
 export async function fetchUnassignedItemCount(orgId: string): Promise<number> {
-  const { brandSliceCount } = await fetchDistributionMetrics(orgId);
-  return brandSliceCount;
+  const { quoteCount } = await fetchDistributionMetrics(orgId);
+  return quoteCount;
 }

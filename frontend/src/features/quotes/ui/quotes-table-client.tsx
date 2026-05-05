@@ -11,6 +11,7 @@ import {
   type FilterOptions,
 } from "@/shared/ui/data-table";
 import type { QuoteListItem } from "@/entities/quote";
+import { workflowStatusLabel } from "@/shared/lib/workflow-statuses";
 
 import { CreateQuoteDialog } from "./create-quote-dialog";
 import { useState, useEffect } from "react";
@@ -120,12 +121,6 @@ export function QuotesTableClient({
     }
   }, []);
 
-  const statusLabelMap = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const s of filterOptions.statuses) map.set(s.value, s.label);
-    return map;
-  }, [filterOptions.statuses]);
-
   const columns = useMemo<readonly DataTableColumn<QuoteListItem>[]>(
     () => [
       {
@@ -189,7 +184,7 @@ export function QuotesTableClient({
         label: "Статус",
         accessor: (q) => (
           <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
-            {statusLabelMap.get(q.workflow_status) ?? q.workflow_status}
+            {workflowStatusLabel(q.workflow_status)}
           </span>
         ),
         sortKey: "workflow_status",
@@ -287,7 +282,7 @@ export function QuotesTableClient({
         width: "120px",
       },
     ],
-    [router, statusLabelMap]
+    [router]
   );
 
   // Build filter options keyed by column key for the DataTable
