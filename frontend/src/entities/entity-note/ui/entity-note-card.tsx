@@ -169,12 +169,16 @@ function NoteActions({
         <MoreHorizontal size={14} strokeWidth={2} />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-44">
-        <DropdownMenuItem onSelect={onTogglePin}>
+        {/* Base UI's Menu.Item fires onClick, NOT onSelect (Radix convention).
+            Using onSelect here was a silent dead handler — kebab Удалить /
+            Закрепить did nothing in production. Match the rest of the
+            codebase's DropdownMenuItem usage (onClick). */}
+        <DropdownMenuItem onClick={onTogglePin}>
           <Pin size={14} strokeWidth={2} className="mr-2" aria-hidden />
           {pinned ? "Открепить" : "Закрепить"}
         </DropdownMenuItem>
         <DropdownMenuItem
-          onSelect={onDelete}
+          onClick={onDelete}
           className="text-error focus:text-error focus:bg-error-bg"
         >
           Удалить
