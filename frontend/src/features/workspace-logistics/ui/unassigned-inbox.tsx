@@ -146,7 +146,7 @@ function UnassignedRow({
           <Tooltip>
             <TooltipTrigger
               render={
-                <span className="text-sm text-text-muted truncate cursor-default" />
+                <span className="text-sm text-text-muted truncate block max-w-[200px] cursor-default" />
               }
             >
               {invoice.customerName}
