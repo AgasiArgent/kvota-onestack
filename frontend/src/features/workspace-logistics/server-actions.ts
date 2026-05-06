@@ -27,6 +27,7 @@ export async function reassignInvoice(
 ): Promise<void> {
   const user = await getSessionUser();
   if (!user) throw new Error("Unauthorized");
+  if (!user.orgId) throw new Error("No organization context");
 
   // head_of_logistics ↔ head_of_customs are dual-hat (PR #105): either head
   // role can reassign in BOTH domains.
@@ -47,18 +48,30 @@ export async function reassignInvoice(
   // Workspace stats and SLA averages count off the *_assigned_at timestamp,
   // not the *_user UUID. Stamp it on assign, clear it on unassign — same
   // contract the legacy Python workflow honoured.
+  //
+  // Org scoping: the legacy Python /workflow/reassign endpoint scoped writes
+  // by organization_id. The strangler-fig migration to a Server Action
+  // dropped that filter, leaving cross-org reassignment possible by guessing
+  // an invoice UUID. Restore the filter here. `.select()` after `.update()`
+  // returns the affected rows; an empty array means the invoice was not in
+  // this user's org (or the id is wrong) — surface as Forbidden either way.
   const admin = createAdminClient();
   const updates: Record<string, string | null> = {
     [userCol]: newUserId,
     [assignedAtCol]: newUserId ? new Date().toISOString() : null,
   };
-  const { error } = await admin
+  const { data, error } = await admin
     .from("invoices")
     .update(updates)
-    .eq("id", invoiceId);
+    .eq("id", invoiceId)
+    .eq("organization_id", user.orgId)
+    .select("id");
   if (error) {
     console.error("[reassignInvoice] update failed:", error);
     throw new Error(error.message ?? "Failed to reassign");
+  }
+  if (!data || data.length === 0) {
+    throw new Error("Forbidden");
   }
 
   revalidatePath(`/workspace/${domain}`);
