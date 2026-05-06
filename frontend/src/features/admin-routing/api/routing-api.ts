@@ -151,13 +151,21 @@ export async function createTenderStep(
   if (error) throw error;
 }
 
-export async function deleteTenderStep(stepId: string): Promise<void> {
+export async function deleteTenderStep(
+  stepId: string,
+  orgId: string,
+): Promise<void> {
   const client = getUntypedClient();
 
+  // Defense in depth: tender_routing_chain has RLS policies that filter by
+  // organization_id (migration 225), but adding an explicit filter here
+  // means the delete cannot affect another org even if RLS is ever
+  // misconfigured. orgId is required from the caller.
   const { error } = await client
     .from("tender_routing_chain")
     .delete()
-    .eq("id", stepId);
+    .eq("id", stepId)
+    .eq("organization_id", orgId);
 
   if (error) throw error;
 }
@@ -185,6 +193,24 @@ export async function assignUnassignedItem(
   brand: string | null
 ): Promise<void> {
   const supabase = getClient();
+
+  // Defense in depth: quote_items has RLS enabled (migration 042) but no
+  // direct organization_id column — org-scope is enforced via the
+  // quote_items → quotes FK join. Pre-check ownership through the join
+  // before mutating, mirroring PR #129's reassignInvoice pattern.
+  const { data: ownership, error: ownershipError } = await supabase
+    .from("quote_items")
+    .select("id, quotes!inner(organization_id)")
+    .eq("id", itemId)
+    .eq("quotes.organization_id", orgId)
+    .maybeSingle();
+  if (ownershipError) {
+    console.error("[assignUnassignedItem] ownership check failed:", ownershipError);
+    throw new Error("Failed to assign item");
+  }
+  if (!ownership) {
+    throw new Error("Forbidden");
+  }
 
   const { error } = await supabase
     .from("quote_items")

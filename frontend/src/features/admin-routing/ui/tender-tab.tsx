@@ -48,7 +48,7 @@ export function TenderTab({ steps, orgId }: Props) {
   async function handleDelete(stepId: string) {
     setDeletingId(stepId);
     try {
-      await deleteTenderStep(stepId);
+      await deleteTenderStep(stepId, orgId);
       toast.success("Шаг удалён");
       router.refresh();
     } catch (err) {
