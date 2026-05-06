@@ -953,6 +953,50 @@ async def complete(request: Request) -> JSONResponse:
     if not res.data:
         return _err("INTERNAL_ERROR", "Failed to complete logistics", 500)
     row = res.data[0]
+
+    # Roll up per-invoice completion to the quote level. The
+    # `quotes.logistics_completed_at` column is what
+    # ``services.workflow_service.check_and_auto_transition_to_sales_review``
+    # reads to decide whether to advance the quote out of the parallel
+    # ``pending_logistics_and_customs`` stage. Without this rollup, the
+    # quote would stay stuck even after every invoice is logistics-done.
+    quote_id = invoice.get("quote_id")
+    if quote_id:
+        sibling_res = (
+            sb.table("invoices")
+            .select("id, logistics_completed_at")
+            .eq("quote_id", quote_id)
+            .execute()
+        )
+        siblings = sibling_res.data or []
+        all_done = bool(siblings) and all(
+            inv.get("logistics_completed_at") for inv in siblings
+        )
+        if all_done:
+            sb.table("quotes").update(
+                {
+                    "logistics_completed_at": now_iso,
+                    "logistics_completed_by": user["id"],
+                }
+            ).eq("id", quote_id).execute()
+            # Try auto-advance to pending_sales_review when customs is also done.
+            # Lazy import to avoid the api → services → api cycle that the
+            # workflow module otherwise drags in.
+            try:
+                from services.workflow_service import (
+                    check_and_auto_transition_to_sales_review,
+                )
+
+                check_and_auto_transition_to_sales_review(quote_id, user["id"])
+            except Exception as e:  # noqa: BLE001
+                # The invoice-level write succeeded; failing the auto-advance
+                # check should not roll back the user's primary action.
+                logger.warning(
+                    "logistics.complete: auto-transition check failed for quote %s: %s",
+                    quote_id,
+                    e,
+                )
+
     return _ok(
         {
             "invoice_id": row["id"],
