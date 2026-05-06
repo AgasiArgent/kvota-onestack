@@ -17,6 +17,42 @@ async function getCurrentUserId(): Promise<string> {
   return user.id;
 }
 
+/**
+ * Sanitize Supabase/PostgrestError objects before they escape this module.
+ * Raw error.message can include constraint names, column names, table names,
+ * and other DB internals. Log the detailed error for ops/dev visibility,
+ * throw a short labelled string for the UI/toast layer.
+ */
+function failOperation(action: string, error: unknown): never {
+  console.error(`[routing-api] ${action} failed:`, error);
+  throw new Error(`${action} failed`);
+}
+
+/**
+ * Verify a user is a member of the given organization. Used to gate
+ * mutations that take a `userId` parameter, preventing confused-deputy
+ * attacks where an admin in org A could assign org B's users into org A's
+ * routing.
+ */
+async function assertUserInOrg(userId: string, orgId: string): Promise<void> {
+  const supabase = getClient();
+  const { data, error } = await supabase
+    .from("user_roles")
+    .select("user_id")
+    .eq("user_id", userId)
+    .eq("organization_id", orgId)
+    .limit(1);
+  if (error) failOperation("user membership check", error);
+  if (!data || data.length === 0) {
+    throw new Error("User is not a member of this organization");
+  }
+}
+
+// Postgres SQLSTATE for unique_violation. PostgrestError.code surfaces this
+// for any unique constraint conflict — used instead of message-string
+// matching, which breaks silently if a constraint is renamed.
+const PG_UNIQUE_VIOLATION = "23505";
+
 // ---------- Brand Assignment Mutations ----------
 
 export async function createBrandAssignment(
@@ -26,6 +62,7 @@ export async function createBrandAssignment(
 ): Promise<void> {
   const supabase = getClient();
   const currentUserId = await getCurrentUserId();
+  await assertUserInOrg(userId, orgId);
 
   const { error } = await supabase.from("brand_assignments").insert({
     organization_id: orgId,
@@ -34,7 +71,7 @@ export async function createBrandAssignment(
     created_by: currentUserId,
   });
 
-  if (error) throw error;
+  if (error) failOperation("create brand assignment", error);
 }
 
 export async function updateBrandAssignment(
@@ -43,6 +80,7 @@ export async function updateBrandAssignment(
   orgId: string
 ): Promise<void> {
   const supabase = getClient();
+  await assertUserInOrg(userId, orgId);
 
   const { error } = await supabase
     .from("brand_assignments")
@@ -50,7 +88,7 @@ export async function updateBrandAssignment(
     .eq("id", assignmentId)
     .eq("organization_id", orgId);
 
-  if (error) throw error;
+  if (error) failOperation("update brand assignment", error);
 }
 
 export async function deleteBrandAssignment(
@@ -65,7 +103,7 @@ export async function deleteBrandAssignment(
     .eq("id", assignmentId)
     .eq("organization_id", orgId);
 
-  if (error) throw error;
+  if (error) failOperation("delete brand assignment", error);
 }
 
 // ---------- Group Assignment Mutations ----------
@@ -77,6 +115,7 @@ export async function createGroupAssignment(
 ): Promise<void> {
   const supabase = getClient();
   const currentUserId = await getCurrentUserId();
+  await assertUserInOrg(userId, orgId);
 
   const { error } = await supabase
     .from("route_procurement_group_assignments")
@@ -87,7 +126,7 @@ export async function createGroupAssignment(
       created_by: currentUserId,
     });
 
-  if (error) throw error;
+  if (error) failOperation("create group assignment", error);
 }
 
 export async function updateGroupAssignment(
@@ -96,6 +135,7 @@ export async function updateGroupAssignment(
   orgId: string
 ): Promise<void> {
   const supabase = getClient();
+  await assertUserInOrg(userId, orgId);
 
   const { error } = await supabase
     .from("route_procurement_group_assignments")
@@ -103,7 +143,7 @@ export async function updateGroupAssignment(
     .eq("id", assignmentId)
     .eq("organization_id", orgId);
 
-  if (error) throw error;
+  if (error) failOperation("update group assignment", error);
 }
 
 export async function deleteGroupAssignment(
@@ -118,7 +158,7 @@ export async function deleteGroupAssignment(
     .eq("id", assignmentId)
     .eq("organization_id", orgId);
 
-  if (error) throw error;
+  if (error) failOperation("delete group assignment", error);
 }
 
 // ---------- Tender Chain Mutations ----------
@@ -138,6 +178,10 @@ export async function createTenderStep(
   roleLabel: string
 ): Promise<void> {
   const currentUserId = await getCurrentUserId();
+  // Verify the assigned user belongs to this org. Without this check, an
+  // admin in org A could insert org B's user as a tender step — confused-
+  // deputy: the user then appears in org A's routing without consent.
+  await assertUserInOrg(userId, orgId);
   const client = getUntypedClient();
 
   const { error } = await client.from("tender_routing_chain").insert({
@@ -148,7 +192,7 @@ export async function createTenderStep(
     created_by: currentUserId,
   });
 
-  if (error) throw error;
+  if (error) failOperation("create tender step", error);
 }
 
 export async function deleteTenderStep(
@@ -167,7 +211,7 @@ export async function deleteTenderStep(
     .eq("id", stepId)
     .eq("organization_id", orgId);
 
-  if (error) throw error;
+  if (error) failOperation("delete tender step", error);
 }
 
 export async function reorderTenderSteps(
@@ -189,10 +233,7 @@ export async function reorderTenderSteps(
     .select("id")
     .in("id", [stepA.id, stepB.id])
     .eq("organization_id", orgId);
-  if (ownershipError) {
-    console.error("[reorderTenderSteps] ownership check failed:", ownershipError);
-    throw new Error("Failed to reorder steps");
-  }
+  if (ownershipError) failOperation("reorder tender steps ownership check", ownershipError);
   if (!owned || owned.length !== 2) {
     throw new Error("Forbidden");
   }
@@ -202,10 +243,7 @@ export async function reorderTenderSteps(
     p_step_a: stepA.id,
     p_step_b: stepB.id,
   });
-  if (error) {
-    console.error("[reorderTenderSteps] swap failed:", error);
-    throw new Error("Failed to reorder steps");
-  }
+  if (error) failOperation("reorder tender steps", error);
 }
 
 // ---------- Unassigned Item Mutations ----------
@@ -229,20 +267,17 @@ export async function assignUnassignedItem(
     .eq("id", itemId)
     .eq("quotes.organization_id", orgId)
     .maybeSingle();
-  if (ownershipError) {
-    console.error("[assignUnassignedItem] ownership check failed:", ownershipError);
-    throw new Error("Failed to assign item");
-  }
-  if (!ownership) {
-    throw new Error("Forbidden");
-  }
+  if (ownershipError) failOperation("assign item ownership check", ownershipError);
+  if (!ownership) throw new Error("Forbidden");
+
+  await assertUserInOrg(userId, orgId);
 
   const { error } = await supabase
     .from("quote_items")
     .update({ assigned_procurement_user: userId })
     .eq("id", itemId);
 
-  if (error) throw error;
+  if (error) failOperation("assign item", error);
 
   if (createBrandRule && brand) {
     const currentUserId = await getCurrentUserId();
@@ -255,9 +290,15 @@ export async function assignUnassignedItem(
         created_by: currentUserId,
       });
 
-    // Ignore duplicate constraint errors
-    if (brandError && !brandError.message.includes("unique_brand_per_org")) {
-      throw brandError;
+    // 23505 = unique_violation. brand_assignments has UNIQUE(organization_id,
+    // brand) — re-asserting an existing brand→user mapping is intentional in
+    // the "create brand rule" UX and should not error. Other unique conflicts
+    // shouldn't fire on a fresh INSERT, so 23505 here is safe to swallow.
+    // Replaces the prior `error.message.includes("unique_brand_per_org")`
+    // string match, which silently broke if the constraint were ever renamed.
+    const code = (brandError as { code?: string } | null)?.code;
+    if (brandError && code !== PG_UNIQUE_VIOLATION) {
+      failOperation("create brand rule", brandError);
     }
   }
 }
@@ -314,7 +355,7 @@ export async function fetchSalesGroups(orgId: string): Promise<SalesGroup[]> {
     .select("id, name")
     .order("name");
 
-  if (error) throw error;
+  if (error) failOperation("fetch sales groups", error);
 
   return (data ?? []).map((row) => ({
     id: row.id,
