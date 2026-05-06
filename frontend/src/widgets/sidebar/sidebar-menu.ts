@@ -117,15 +117,31 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
     });
   }
   // head_of_customs / head_of_logistics are dual-hat roles in this org —
-  // each lead's queue surfaces both function's links.
-  if (hasRole("logistics", "head_of_logistics", "head_of_customs")) {
+  // each lead's queue surfaces both function's links. top_manager has full
+  // head-tier access at the page level (PR #126), so they get both nav
+  // entries too — otherwise the page is reachable only by typing the URL.
+  if (
+    hasRole(
+      "logistics",
+      "head_of_logistics",
+      "head_of_customs",
+      "top_manager",
+    )
+  ) {
     mainItems.push({
       icon: Truck,
       label: "Очередь логистики",
       href: "/workspace/logistics",
     });
   }
-  if (hasRole("customs", "head_of_customs", "head_of_logistics")) {
+  if (
+    hasRole(
+      "customs",
+      "head_of_customs",
+      "head_of_logistics",
+      "top_manager",
+    )
+  ) {
     mainItems.push({
       icon: Anchor,
       label: "Очередь таможни",

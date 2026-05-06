@@ -301,11 +301,19 @@ async def _process_invoice_sla(
             if _try_mark_sent(sb, invoice_id, overdue_kind):
                 if org_id is None:
                     org_id = _quote_org_id(sb, quote_id)
-                head_slug = (
-                    "head_of_logistics" if side == "logistics" else "head_of_customs"
-                )
+                # head_of_logistics ↔ head_of_customs are dual-hat (PR #105):
+                # either head role oversees BOTH domains, so notify both lists
+                # for any SLA breach regardless of side. Dedupe in case a user
+                # holds both roles.
                 recipients = (
-                    _head_user_ids_for_org(sb, org_id, head_slug) if org_id else []
+                    list(
+                        dict.fromkeys(
+                            _head_user_ids_for_org(sb, org_id, "head_of_logistics")
+                            + _head_user_ids_for_org(sb, org_id, "head_of_customs")
+                        )
+                    )
+                    if org_id
+                    else []
                 )
                 text = _format_sla_message(
                     kind=overdue_kind,
