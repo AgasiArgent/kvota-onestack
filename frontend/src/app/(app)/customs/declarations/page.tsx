@@ -7,7 +7,18 @@ import {
 import { DeclarationsTable } from "@/features/customs-declarations";
 import type { CustomsDeclarationItem } from "@/entities/customs-declaration";
 
-const ALLOWED_ROLES = ["customs", "admin", "finance"];
+// Mirror sidebar-menu.ts — sidebar advertises this link to head_of_customs
+// + head_of_logistics + finance (dual-hat per PR #105) and top_manager
+// (head-tier access per PR #126). Without these slugs the page silently
+// redirects to / for users the nav promised access to.
+const ALLOWED_ROLES = [
+  "customs",
+  "head_of_customs",
+  "head_of_logistics",
+  "admin",
+  "top_manager",
+  "finance",
+];
 
 export default async function CustomsDeclarationsPage() {
   const user = await getSessionUser();
