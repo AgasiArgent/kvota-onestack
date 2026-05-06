@@ -38,15 +38,24 @@ export default async function CustomerDetailPage({ params, searchParams }: Props
   const user = await getSessionUser();
   if (!user?.orgId) redirect("/login");
 
-  // Resolve salesGroupId only for sales-only users (non-sales users don't
-  // need it — their typeahead bypasses the assigned-customers gate). Done
-  // in parallel with the customer + access fetch to keep the page snappy.
-  const [customer, hasAccess, salesGroupId] = await Promise.all([
+  // Resolve salesGroupId BEFORE the access check. canAccessCustomer needs
+  // it to expand head_of_sales visibility to group members' assignments;
+  // running it in parallel with this fetch (the previous shape) caused
+  // every РОП to be denied access to subordinate customers (G1 / РОП-1).
+  // Non-sales-only roles never hit the assigned-customers gate, so we
+  // skip the lookup for them.
+  const salesGroupId = isSalesOnly(user.roles)
+    ? await fetchUserSalesGroupId(user.id, user.orgId)
+    : null;
+
+  const [customer, hasAccess] = await Promise.all([
     fetchCustomerDetail(id, user.orgId),
-    canAccessCustomer(id, { id: user.id, roles: user.roles, orgId: user.orgId }),
-    isSalesOnly(user.roles)
-      ? fetchUserSalesGroupId(user.id, user.orgId)
-      : Promise.resolve(null),
+    canAccessCustomer(id, {
+      id: user.id,
+      roles: user.roles,
+      orgId: user.orgId,
+      salesGroupId,
+    }),
   ]);
   if (!customer || !hasAccess) notFound();
 

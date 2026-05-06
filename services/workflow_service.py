@@ -171,13 +171,13 @@ ALLOWED_TRANSITIONS: List[StatusTransition] = [
     StatusTransition(
         WorkflowStatus.DRAFT,
         WorkflowStatus.PENDING_PROCUREMENT,
-        ["sales", "admin"],
+        ["sales", "head_of_sales", "admin"],
         requires_comment=False
     ),
     StatusTransition(
         WorkflowStatus.DRAFT,
         WorkflowStatus.CANCELLED,
-        ["sales", "admin"],
+        ["sales", "head_of_sales", "admin"],
         requires_comment=True
     ),
 
@@ -199,13 +199,13 @@ ALLOWED_TRANSITIONS: List[StatusTransition] = [
     StatusTransition(
         WorkflowStatus.PENDING_PROCUREMENT,
         WorkflowStatus.DRAFT,  # Return to draft
-        ["sales", "admin"],
+        ["sales", "head_of_sales", "admin"],
         requires_comment=True
     ),
     StatusTransition(
         WorkflowStatus.PENDING_PROCUREMENT,
         WorkflowStatus.CANCELLED,
-        ["sales", "admin"],
+        ["sales", "head_of_sales", "admin"],
         requires_comment=True
     ),
     # Return to quote control after revision (Feature: multi-department return)
@@ -226,7 +226,7 @@ ALLOWED_TRANSITIONS: List[StatusTransition] = [
     StatusTransition(
         WorkflowStatus.PENDING_LOGISTICS,
         WorkflowStatus.CANCELLED,
-        ["sales", "admin"],
+        ["sales", "head_of_sales", "admin"],
         requires_comment=True
     ),
     # Return to quote control after revision (Feature: multi-department return)
@@ -262,7 +262,7 @@ ALLOWED_TRANSITIONS: List[StatusTransition] = [
     StatusTransition(
         WorkflowStatus.PENDING_CUSTOMS,
         WorkflowStatus.CANCELLED,
-        ["sales", "admin"],
+        ["sales", "head_of_sales", "admin"],
         requires_comment=True
     ),
     # Return to quote control after revision (Feature: multi-department return)
@@ -277,33 +277,33 @@ ALLOWED_TRANSITIONS: List[StatusTransition] = [
     StatusTransition(
         WorkflowStatus.PENDING_SALES_REVIEW,
         WorkflowStatus.PENDING_QUOTE_CONTROL,
-        ["sales", "admin"],
+        ["sales", "head_of_sales", "admin"],
         requires_comment=False
     ),
     StatusTransition(
         WorkflowStatus.PENDING_SALES_REVIEW,
         WorkflowStatus.DRAFT,  # Return to draft for re-evaluation
-        ["sales", "admin"],
+        ["sales", "head_of_sales", "admin"],
         requires_comment=True
     ),
     StatusTransition(
         WorkflowStatus.PENDING_SALES_REVIEW,
         WorkflowStatus.CANCELLED,
-        ["sales", "admin"],
+        ["sales", "head_of_sales", "admin"],
         requires_comment=True
     ),
     # Feature: Approval justification workflow - sales can submit with justification directly to pending_approval
     StatusTransition(
         WorkflowStatus.PENDING_SALES_REVIEW,
         WorkflowStatus.PENDING_APPROVAL,  # Submit with justification (when needs_justification=true)
-        ["sales", "sales_manager", "admin"],
+        ["sales", "sales_manager", "head_of_sales", "admin"],
         requires_comment=True  # Justification is required
     ),
     # Return to client negotiation after partial price recalc
     StatusTransition(
         WorkflowStatus.PENDING_SALES_REVIEW,
         WorkflowStatus.CLIENT_NEGOTIATION,
-        ["sales", "admin"],
+        ["sales", "head_of_sales", "admin"],
         requires_comment=False
     ),
 
@@ -401,49 +401,49 @@ ALLOWED_TRANSITIONS: List[StatusTransition] = [
     StatusTransition(
         WorkflowStatus.APPROVED,
         WorkflowStatus.SENT_TO_CLIENT,
-        ["sales", "admin"],
+        ["sales", "head_of_sales", "admin"],
         requires_comment=False
     ),
     StatusTransition(
         WorkflowStatus.APPROVED,
         WorkflowStatus.PENDING_SPEC_CONTROL,  # Client accepted directly
-        ["sales", "admin"],
+        ["sales", "head_of_sales", "admin"],
         requires_comment=False
     ),
     StatusTransition(
         WorkflowStatus.APPROVED,
         WorkflowStatus.CLIENT_NEGOTIATION,
-        ["sales", "admin"],
+        ["sales", "head_of_sales", "admin"],
         requires_comment=False
     ),
     StatusTransition(
         WorkflowStatus.APPROVED,
         WorkflowStatus.REJECTED,  # Client rejected
-        ["sales", "admin"],
+        ["sales", "head_of_sales", "admin"],
         requires_comment=True
     ),
     StatusTransition(
         WorkflowStatus.APPROVED,
         WorkflowStatus.PENDING_LOGISTICS,  # Client requests logistics change
-        ["sales", "admin"],
+        ["sales", "head_of_sales", "admin"],
         requires_comment=False
     ),
     StatusTransition(
         WorkflowStatus.APPROVED,
         WorkflowStatus.PENDING_PROCUREMENT,  # Client requests add item or full recalc
-        ["sales", "admin"],
+        ["sales", "head_of_sales", "admin"],
         requires_comment=False
     ),
     StatusTransition(
         WorkflowStatus.APPROVED,
         WorkflowStatus.PENDING_SALES_REVIEW,  # Client requests price change
-        ["sales", "admin"],
+        ["sales", "head_of_sales", "admin"],
         requires_comment=False
     ),
     StatusTransition(
         WorkflowStatus.APPROVED,
         WorkflowStatus.CANCELLED,
-        ["sales", "admin"],
+        ["sales", "head_of_sales", "admin"],
         requires_comment=True
     ),
 
@@ -451,44 +451,44 @@ ALLOWED_TRANSITIONS: List[StatusTransition] = [
     StatusTransition(
         WorkflowStatus.SENT_TO_CLIENT,
         WorkflowStatus.CLIENT_NEGOTIATION,
-        ["sales", "admin"],
+        ["sales", "head_of_sales", "admin"],
         requires_comment=False
     ),
     StatusTransition(
         WorkflowStatus.SENT_TO_CLIENT,
         WorkflowStatus.PENDING_SPEC_CONTROL,  # Client accepted immediately
-        ["sales", "admin"],
+        ["sales", "head_of_sales", "admin"],
         requires_comment=False
     ),
     StatusTransition(
         WorkflowStatus.SENT_TO_CLIENT,
         WorkflowStatus.REJECTED,  # Client rejected
-        ["sales", "admin"],
+        ["sales", "head_of_sales", "admin"],
         requires_comment=True
     ),
     StatusTransition(
         WorkflowStatus.SENT_TO_CLIENT,
         WorkflowStatus.CANCELLED,
-        ["sales", "admin"],
+        ["sales", "head_of_sales", "admin"],
         requires_comment=True
     ),
     # Partial recalc transitions from SENT_TO_CLIENT
     StatusTransition(
         WorkflowStatus.SENT_TO_CLIENT,
         WorkflowStatus.PENDING_LOGISTICS,  # Client requests logistics change
-        ["sales", "admin"],
+        ["sales", "head_of_sales", "admin"],
         requires_comment=False
     ),
     StatusTransition(
         WorkflowStatus.SENT_TO_CLIENT,
         WorkflowStatus.PENDING_PROCUREMENT,  # Client requests add item or full recalc
-        ["sales", "admin"],
+        ["sales", "head_of_sales", "admin"],
         requires_comment=False
     ),
     StatusTransition(
         WorkflowStatus.SENT_TO_CLIENT,
         WorkflowStatus.PENDING_SALES_REVIEW,  # Client requests price change
-        ["sales", "admin"],
+        ["sales", "head_of_sales", "admin"],
         requires_comment=False
     ),
 
@@ -496,44 +496,44 @@ ALLOWED_TRANSITIONS: List[StatusTransition] = [
     StatusTransition(
         WorkflowStatus.CLIENT_NEGOTIATION,
         WorkflowStatus.PENDING_SPEC_CONTROL,  # Client accepted version
-        ["sales", "admin"],
+        ["sales", "head_of_sales", "admin"],
         requires_comment=False
     ),
     StatusTransition(
         WorkflowStatus.CLIENT_NEGOTIATION,
         WorkflowStatus.PENDING_QUOTE_CONTROL,  # New version needs re-review
-        ["sales", "admin"],
+        ["sales", "head_of_sales", "admin"],
         requires_comment=False
     ),
     StatusTransition(
         WorkflowStatus.CLIENT_NEGOTIATION,
         WorkflowStatus.REJECTED,  # Client rejected
-        ["sales", "admin"],
+        ["sales", "head_of_sales", "admin"],
         requires_comment=True
     ),
     StatusTransition(
         WorkflowStatus.CLIENT_NEGOTIATION,
         WorkflowStatus.CANCELLED,
-        ["sales", "admin"],
+        ["sales", "head_of_sales", "admin"],
         requires_comment=True
     ),
     # Partial recalc transitions from CLIENT_NEGOTIATION
     StatusTransition(
         WorkflowStatus.CLIENT_NEGOTIATION,
         WorkflowStatus.PENDING_LOGISTICS,  # Client requests logistics change
-        ["sales", "admin"],
+        ["sales", "head_of_sales", "admin"],
         requires_comment=False
     ),
     StatusTransition(
         WorkflowStatus.CLIENT_NEGOTIATION,
         WorkflowStatus.PENDING_PROCUREMENT,  # Client requests add item or full recalc
-        ["sales", "admin"],
+        ["sales", "head_of_sales", "admin"],
         requires_comment=False
     ),
     StatusTransition(
         WorkflowStatus.CLIENT_NEGOTIATION,
         WorkflowStatus.PENDING_SALES_REVIEW,  # Client requests price change
-        ["sales", "admin"],
+        ["sales", "head_of_sales", "admin"],
         requires_comment=False
     ),
 
@@ -561,19 +561,19 @@ ALLOWED_TRANSITIONS: List[StatusTransition] = [
     StatusTransition(
         WorkflowStatus.PENDING_SIGNATURE,
         WorkflowStatus.DEAL,  # Signature confirmed
-        ["spec_controller", "sales", "admin"],
+        ["spec_controller", "sales", "head_of_sales", "admin"],
         requires_comment=False
     ),
     StatusTransition(
         WorkflowStatus.PENDING_SIGNATURE,
         WorkflowStatus.PENDING_SPEC_CONTROL,  # Changes needed
-        ["spec_controller", "sales", "admin"],
+        ["spec_controller", "sales", "head_of_sales", "admin"],
         requires_comment=True
     ),
     StatusTransition(
         WorkflowStatus.PENDING_SIGNATURE,
         WorkflowStatus.CANCELLED,
-        ["sales", "admin"],
+        ["sales", "head_of_sales", "admin"],
         requires_comment=True
     ),
 ]
