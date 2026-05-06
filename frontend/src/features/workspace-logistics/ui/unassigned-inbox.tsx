@@ -10,6 +10,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 // Direct imports (not barrel) — barrel exports server-only queries that break "use client" bundling.
 import { LocationChip, type LocationChipLocation } from "@/entities/location/ui/location-chip";
@@ -142,9 +143,16 @@ function UnassignedRow({
           >
             {invoice.idn}
           </Link>
-          <span className="text-sm text-text-muted truncate">
-            {invoice.customerName}
-          </span>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <span className="text-sm text-text-muted truncate block max-w-[200px] cursor-default" />
+              }
+            >
+              {invoice.customerName}
+            </TooltipTrigger>
+            <TooltipContent>{invoice.customerName}</TooltipContent>
+          </Tooltip>
           <SlaTimerBadge
             assignedAt={invoice.createdAt}
             deadlineAt={invoice.deadlineAt}
