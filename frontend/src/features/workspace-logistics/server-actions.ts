@@ -45,33 +45,42 @@ export async function reassignInvoice(
   const assignedAtCol =
     domain === "logistics" ? "logistics_assigned_at" : "customs_assigned_at";
 
+  // Org scoping: the legacy Python /workflow/reassign endpoint scoped writes
+  // by quote.organization_id (invoices has no `organization_id` column —
+  // only quote_id, FK to quotes which has the org). The strangler-fig
+  // migration to a Server Action dropped that filter, leaving cross-org
+  // reassignment possible by guessing an invoice UUID. Restore the filter
+  // by pre-checking via the quotes join, then updating by id.
+  const admin = createAdminClient();
+  const { data: ownership, error: ownershipError } = await admin
+    .from("invoices")
+    .select("id, quotes!inner(organization_id)")
+    .eq("id", invoiceId)
+    .eq("quotes.organization_id", user.orgId)
+    .maybeSingle();
+  if (ownershipError) {
+    console.error("[reassignInvoice] ownership check failed:", ownershipError);
+    throw new Error("Failed to reassign");
+  }
+  if (!ownership) {
+    // Wrong org or wrong id — don't differentiate (no UUID enumeration leak).
+    throw new Error("Forbidden");
+  }
+
   // Workspace stats and SLA averages count off the *_assigned_at timestamp,
   // not the *_user UUID. Stamp it on assign, clear it on unassign — same
   // contract the legacy Python workflow honoured.
-  //
-  // Org scoping: the legacy Python /workflow/reassign endpoint scoped writes
-  // by organization_id. The strangler-fig migration to a Server Action
-  // dropped that filter, leaving cross-org reassignment possible by guessing
-  // an invoice UUID. Restore the filter here. `.select()` after `.update()`
-  // returns the affected rows; an empty array means the invoice was not in
-  // this user's org (or the id is wrong) — surface as Forbidden either way.
-  const admin = createAdminClient();
   const updates: Record<string, string | null> = {
     [userCol]: newUserId,
     [assignedAtCol]: newUserId ? new Date().toISOString() : null,
   };
-  const { data, error } = await admin
+  const { error } = await admin
     .from("invoices")
     .update(updates)
-    .eq("id", invoiceId)
-    .eq("organization_id", user.orgId)
-    .select("id");
+    .eq("id", invoiceId);
   if (error) {
     console.error("[reassignInvoice] update failed:", error);
-    throw new Error(error.message ?? "Failed to reassign");
-  }
-  if (!data || data.length === 0) {
-    throw new Error("Forbidden");
+    throw new Error("Failed to reassign");
   }
 
   revalidatePath(`/workspace/${domain}`);
