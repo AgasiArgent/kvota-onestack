@@ -6,6 +6,7 @@ import {
   isCustomsOnly,
 } from "@/shared/lib/roles";
 import { getAssignedCustomerIds, getAssignedQuoteIds } from "@/shared/lib/access";
+import { getWorkflowStatusFilterOptions } from "@/shared/lib/workflow-statuses";
 import type { QuoteListItem, QuotesFilterParams, QuotesListResult } from "./types";
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -939,25 +940,10 @@ export async function fetchFilterOptions(
     }
   }
 
-  // Static list of workflow statuses with human-readable labels.
-  const statuses: { value: string; label: string }[] = [
-    { value: "draft", label: "Черновик" },
-    { value: "pending_procurement", label: "Закупки" },
-    { value: "pending_logistics", label: "Логистика" },
-    { value: "pending_customs", label: "Таможня" },
-    { value: "pending_logistics_and_customs", label: "Логистика и таможня" },
-    { value: "pending_quote_control", label: "Контроль КП" },
-    { value: "pending_spec_control", label: "Контроль спец." },
-    { value: "pending_sales_review", label: "Ревью продаж" },
-    { value: "pending_approval", label: "На утверждении" },
-    { value: "approved", label: "Одобрено" },
-    { value: "sent_to_client", label: "Отправлено клиенту" },
-    { value: "accepted", label: "Принято" },
-    { value: "spec_signed", label: "Спецификация" },
-    { value: "deal", label: "Сделка" },
-    { value: "rejected", label: "Отклонено" },
-    { value: "cancelled", label: "Отменено" },
-  ];
+  // Workflow status filter options come from a shared map so the table cell,
+  // the dropdown, and any other surface stay in lockstep — see
+  // `shared/lib/workflow-statuses.ts` for the single source of truth.
+  const statuses = getWorkflowStatusFilterOptions();
 
   // Fetch all organization users grouped by role for the Participants filter.
   // This is deliberately broad — show every eligible user, not just those
