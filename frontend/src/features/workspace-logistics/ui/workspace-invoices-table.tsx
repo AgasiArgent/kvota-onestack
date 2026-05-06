@@ -9,6 +9,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 // Direct imports (not barrel) — barrel exports server-only queries that break "use client" bundling.
 import { LocationChip, type LocationChipLocation } from "@/entities/location/ui/location-chip";
 import { UserAvatarChip, type UserAvatarChipUser } from "@/entities/user/ui/user-avatar-chip";
@@ -144,9 +145,16 @@ export function WorkspaceInvoicesTable({
                 </Link>
               </TableCell>
               <TableCell>
-                <span className="text-sm text-text truncate block max-w-[200px]">
-                  {inv.customerName}
-                </span>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <span className="text-sm text-text truncate block max-w-[200px] cursor-default" />
+                    }
+                  >
+                    {inv.customerName}
+                  </TooltipTrigger>
+                  <TooltipContent>{inv.customerName}</TooltipContent>
+                </Tooltip>
               </TableCell>
               <TableCell>
                 <div className="flex items-center gap-1.5 flex-wrap">
