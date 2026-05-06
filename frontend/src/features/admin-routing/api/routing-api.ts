@@ -151,28 +151,61 @@ export async function createTenderStep(
   if (error) throw error;
 }
 
-export async function deleteTenderStep(stepId: string): Promise<void> {
+export async function deleteTenderStep(
+  stepId: string,
+  orgId: string,
+): Promise<void> {
   const client = getUntypedClient();
 
+  // Defense in depth: tender_routing_chain has RLS policies that filter by
+  // organization_id (migration 225), but adding an explicit filter here
+  // means the delete cannot affect another org even if RLS is ever
+  // misconfigured. orgId is required from the caller.
   const { error } = await client
     .from("tender_routing_chain")
     .delete()
-    .eq("id", stepId);
+    .eq("id", stepId)
+    .eq("organization_id", orgId);
 
   if (error) throw error;
 }
 
 export async function reorderTenderSteps(
   stepA: { id: string; step_order: number },
-  stepB: { id: string; step_order: number }
+  stepB: { id: string; step_order: number },
+  orgId: string,
 ): Promise<void> {
   const supabase = getClient();
+
+  // CRITICAL: swap_tender_steps RPC (migration 226) is SECURITY DEFINER and
+  // GRANTed to `authenticated` — meaning it bypasses RLS and any logged-in
+  // user can call it with any UUIDs. The RPC's internal `v_org_a == v_org_b`
+  // check ensures both steps share an org, but does NOT verify the caller
+  // is in that org. Without this app-level pre-check, a user from org A
+  // could reorder org B's chain by guessing step UUIDs. Pre-check both
+  // steps belong to the caller's org before invoking the RPC.
+  const { data: owned, error: ownershipError } = await supabase
+    .from("tender_routing_chain")
+    .select("id")
+    .in("id", [stepA.id, stepB.id])
+    .eq("organization_id", orgId);
+  if (ownershipError) {
+    console.error("[reorderTenderSteps] ownership check failed:", ownershipError);
+    throw new Error("Failed to reorder steps");
+  }
+  if (!owned || owned.length !== 2) {
+    throw new Error("Forbidden");
+  }
+
   // swap_tender_steps RPC is not yet in generated types — cast to bypass
   const { error } = await (supabase.rpc as Function)("swap_tender_steps", {
     p_step_a: stepA.id,
     p_step_b: stepB.id,
   });
-  if (error) throw new Error(error.message);
+  if (error) {
+    console.error("[reorderTenderSteps] swap failed:", error);
+    throw new Error("Failed to reorder steps");
+  }
 }
 
 // ---------- Unassigned Item Mutations ----------
@@ -185,6 +218,24 @@ export async function assignUnassignedItem(
   brand: string | null
 ): Promise<void> {
   const supabase = getClient();
+
+  // Defense in depth: quote_items has RLS enabled (migration 042) but no
+  // direct organization_id column — org-scope is enforced via the
+  // quote_items → quotes FK join. Pre-check ownership through the join
+  // before mutating, mirroring PR #129's reassignInvoice pattern.
+  const { data: ownership, error: ownershipError } = await supabase
+    .from("quote_items")
+    .select("id, quotes!inner(organization_id)")
+    .eq("id", itemId)
+    .eq("quotes.organization_id", orgId)
+    .maybeSingle();
+  if (ownershipError) {
+    console.error("[assignUnassignedItem] ownership check failed:", ownershipError);
+    throw new Error("Failed to assign item");
+  }
+  if (!ownership) {
+    throw new Error("Forbidden");
+  }
 
   const { error } = await supabase
     .from("quote_items")
