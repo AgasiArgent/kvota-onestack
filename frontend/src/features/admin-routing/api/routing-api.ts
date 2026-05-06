@@ -172,15 +172,40 @@ export async function deleteTenderStep(
 
 export async function reorderTenderSteps(
   stepA: { id: string; step_order: number },
-  stepB: { id: string; step_order: number }
+  stepB: { id: string; step_order: number },
+  orgId: string,
 ): Promise<void> {
   const supabase = getClient();
+
+  // CRITICAL: swap_tender_steps RPC (migration 226) is SECURITY DEFINER and
+  // GRANTed to `authenticated` — meaning it bypasses RLS and any logged-in
+  // user can call it with any UUIDs. The RPC's internal `v_org_a == v_org_b`
+  // check ensures both steps share an org, but does NOT verify the caller
+  // is in that org. Without this app-level pre-check, a user from org A
+  // could reorder org B's chain by guessing step UUIDs. Pre-check both
+  // steps belong to the caller's org before invoking the RPC.
+  const { data: owned, error: ownershipError } = await supabase
+    .from("tender_routing_chain")
+    .select("id")
+    .in("id", [stepA.id, stepB.id])
+    .eq("organization_id", orgId);
+  if (ownershipError) {
+    console.error("[reorderTenderSteps] ownership check failed:", ownershipError);
+    throw new Error("Failed to reorder steps");
+  }
+  if (!owned || owned.length !== 2) {
+    throw new Error("Forbidden");
+  }
+
   // swap_tender_steps RPC is not yet in generated types — cast to bypass
   const { error } = await (supabase.rpc as Function)("swap_tender_steps", {
     p_step_a: stepA.id,
     p_step_b: stepB.id,
   });
-  if (error) throw new Error(error.message);
+  if (error) {
+    console.error("[reorderTenderSteps] swap failed:", error);
+    throw new Error("Failed to reorder steps");
+  }
 }
 
 // ---------- Unassigned Item Mutations ----------

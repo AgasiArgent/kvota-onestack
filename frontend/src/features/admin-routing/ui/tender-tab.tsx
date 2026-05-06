@@ -62,7 +62,7 @@ export function TenderTab({ steps, orgId }: Props) {
     if (index <= 0 || reordering) return;
     setReordering(true);
     try {
-      await reorderTenderSteps(steps[index], steps[index - 1]);
+      await reorderTenderSteps(steps[index], steps[index - 1], orgId);
       router.refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Ошибка перемещения");
@@ -75,7 +75,7 @@ export function TenderTab({ steps, orgId }: Props) {
     if (index >= steps.length - 1 || reordering) return;
     setReordering(true);
     try {
-      await reorderTenderSteps(steps[index], steps[index + 1]);
+      await reorderTenderSteps(steps[index], steps[index + 1], orgId);
       router.refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Ошибка перемещения");
