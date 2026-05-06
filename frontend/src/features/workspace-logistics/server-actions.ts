@@ -28,10 +28,11 @@ export async function reassignInvoice(
   const user = await getSessionUser();
   if (!user) throw new Error("Unauthorized");
 
-  const requiredRole =
-    domain === "logistics" ? "head_of_logistics" : "head_of_customs";
+  // head_of_logistics ↔ head_of_customs are dual-hat (PR #105): either head
+  // role can reassign in BOTH domains.
   if (
-    !user.roles.includes(requiredRole) &&
+    !user.roles.includes("head_of_logistics") &&
+    !user.roles.includes("head_of_customs") &&
     !user.roles.includes("admin") &&
     !user.roles.includes("top_manager")
   ) {

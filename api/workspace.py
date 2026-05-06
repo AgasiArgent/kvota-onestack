@@ -7,8 +7,9 @@ per-user completion counts + median time-to-complete + on-time %.
 
 Auth: dual — JWT (Next.js) via ApiAuthMiddleware (request.state.api_user),
 or legacy session (FastHTML) via Starlette's SessionMiddleware.
-Access: admin, top_manager, head_of_logistics (for domain=logistics),
-head_of_customs (for domain=customs). Other roles get 403.
+Access: admin, top_manager, or either head_of_logistics or head_of_customs
+(dual-hat per PR #105 — either head role grants access in BOTH domains).
+Other roles get 403.
 
 Aggregation is computed in Python over raw invoice rows instead of via a
 SQL RPC: org-scale data (< ~10k invoices) makes this trivial and keeps
@@ -33,12 +34,12 @@ logger = logging.getLogger(__name__)
 
 _ALLOWED_DOMAINS = ("logistics", "customs")
 
-# Role that grants access to analytics, per domain. admin + top_manager always
-# pass.
-_DOMAIN_HEAD_ROLE: dict[str, str] = {
-    "logistics": "head_of_logistics",
-    "customs": "head_of_customs",
-}
+# Roles that grant analytics + queue management access. head_of_logistics and
+# head_of_customs are dual-hat (PR #105) — either head role grants access in
+# BOTH domains. admin + top_manager always pass.
+_HEAD_ROLES: frozenset[str] = frozenset(
+    {"head_of_logistics", "head_of_customs", "admin", "top_manager"}
+)
 
 
 # ---------------------------------------------------------------------------
@@ -113,9 +114,14 @@ def _ok(data: dict | list | None = None, status: int = 200) -> JSONResponse:
 
 
 def _has_analytics_access(role_codes: list[str], domain: str) -> bool:
-    """Admin + top_manager always in; head_of_<domain> for their domain."""
-    allowed = {"admin", "top_manager", _DOMAIN_HEAD_ROLE[domain]}
-    return any(r in allowed for r in (role_codes or []))
+    """Dual-hat: admin, top_manager, head_of_logistics, head_of_customs all in.
+
+    `domain` is accepted (and validated upstream) for symmetry with other
+    workspace endpoints, but doesn't narrow the role gate — both head roles
+    have access to both domains per PR #105.
+    """
+    del domain  # accepted for endpoint symmetry, no longer narrows the gate
+    return any(r in _HEAD_ROLES for r in (role_codes or []))
 
 
 # ---------------------------------------------------------------------------
@@ -249,8 +255,8 @@ async def analytics(request: Request, domain: str) -> JSONResponse:
     Returns:
         data.rows: list[{user_id, user_name, completed_count, median_hours,
                          on_time_count, on_time_pct}]
-    Roles: admin, top_manager, head_of_logistics (logistics),
-           head_of_customs (customs)
+    Roles: admin, top_manager, or either head_of_logistics or head_of_customs
+           (dual-hat per PR #105 — both head roles access both domains).
     """
     if domain not in _ALLOWED_DOMAINS:
         return _err(
