@@ -1848,12 +1848,23 @@ def complete_logistics(
     """
     supabase = get_supabase()
 
-    # Validate role
-    if not any(role in ["logistics", "admin"] for role in actor_roles):
+    # Validate role. Mirrors _LOGISTICS_ROLES in api/logistics.py — both
+    # head roles count as dual-hat per PR #105 (one person typically holds
+    # head_of_logistics + head_of_customs in this org).
+    _ALLOWED_COMPLETION_ROLES = {
+        "logistics",
+        "head_of_logistics",
+        "head_of_customs",
+        "admin",
+    }
+    if not any(role in _ALLOWED_COMPLETION_ROLES for role in actor_roles):
         return TransitionResult(
             success=False,
-            error_message="Only logistics or admin can complete logistics",
-            quote_id=quote_id
+            error_message=(
+                "Only logistics, head_of_logistics, head_of_customs, or admin "
+                "can complete logistics"
+            ),
+            quote_id=quote_id,
         )
 
     # Get current quote status

@@ -27,6 +27,7 @@ from starlette.responses import JSONResponse
 
 from services.database import get_supabase
 from services.role_service import get_user_role_codes
+from services.workflow_service import complete_logistics
 
 logger = logging.getLogger(__name__)
 
@@ -906,14 +907,21 @@ async def complete(request: Request) -> JSONResponse:
     Returns:
         data: { invoice_id, logistics_completed_at, logistics_completed_by }
     Side Effects:
-        - Sets logistics_completed_at = NOW() on the invoice.
-        - Sets logistics_completed_by = user.id
+        - Sets invoices.logistics_completed_at = NOW() on the invoice.
+        - Sets invoices.logistics_completed_by = user.id
+        - When ALL invoices for the parent quote have logistics_completed_at,
+          delegates to services.workflow_service.complete_logistics which:
+          • sets quotes.logistics_completed_at,
+          • inserts an audit row in workflow_transitions,
+          • calls check_and_auto_transition_to_sales_review which advances
+            the quote out of pending_logistics_and_customs once customs is
+            also done (parallel branches merge → pending_sales_review).
     Roles: logistics, head_of_logistics, admin, head_of_customs.
     """
     auth = _authorize(request)
     if isinstance(auth, JSONResponse):
         return auth
-    user, _roles = auth
+    user, roles = auth
     org_id = user["org_id"]
 
     try:
@@ -954,12 +962,15 @@ async def complete(request: Request) -> JSONResponse:
         return _err("INTERNAL_ERROR", "Failed to complete logistics", 500)
     row = res.data[0]
 
-    # Roll up per-invoice completion to the quote level. The
-    # `quotes.logistics_completed_at` column is what
-    # ``services.workflow_service.check_and_auto_transition_to_sales_review``
-    # reads to decide whether to advance the quote out of the parallel
-    # ``pending_logistics_and_customs`` stage. Without this rollup, the
-    # quote would stay stuck even after every invoice is logistics-done.
+    # Roll up per-invoice completion to the quote level when ALL invoices
+    # for this quote are now logistics-done. We delegate to the
+    # ``services.workflow_service.complete_logistics`` helper rather than
+    # writing ``quotes.logistics_completed_at`` directly: the helper enforces
+    # the workflow_status guard, refuses to re-complete (idempotent), inserts
+    # the workflow_transitions audit row, and triggers the parallel-merge
+    # auto-advance to ``pending_sales_review`` when customs is also done.
+    # Failures here MUST NOT roll back the per-invoice write the user just
+    # confirmed — the rollup is best-effort.
     quote_id = invoice.get("quote_id")
     if quote_id:
         sibling_res = (
@@ -973,28 +984,18 @@ async def complete(request: Request) -> JSONResponse:
             inv.get("logistics_completed_at") for inv in siblings
         )
         if all_done:
-            sb.table("quotes").update(
-                {
-                    "logistics_completed_at": now_iso,
-                    "logistics_completed_by": user["id"],
-                }
-            ).eq("id", quote_id).execute()
-            # Try auto-advance to pending_sales_review when customs is also done.
-            # Lazy import to avoid the api → services → api cycle that the
-            # workflow module otherwise drags in.
             try:
-                from services.workflow_service import (
-                    check_and_auto_transition_to_sales_review,
-                )
-
-                check_and_auto_transition_to_sales_review(quote_id, user["id"])
-            except Exception as e:  # noqa: BLE001
-                # The invoice-level write succeeded; failing the auto-advance
-                # check should not roll back the user's primary action.
-                logger.warning(
-                    "logistics.complete: auto-transition check failed for quote %s: %s",
+                rollup = complete_logistics(quote_id, user["id"], roles)
+                if not rollup.success:
+                    logger.warning(
+                        "logistics.complete: quote-level rollup refused for %s: %s",
+                        quote_id,
+                        rollup.error_message,
+                    )
+            except Exception:
+                logger.exception(
+                    "logistics.complete: quote-level rollup raised for quote %s",
                     quote_id,
-                    e,
                 )
 
     return _ok(
