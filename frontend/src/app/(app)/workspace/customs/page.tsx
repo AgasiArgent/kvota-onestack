@@ -65,7 +65,6 @@ export default async function WorkspaceCustomsPage({ searchParams }: PageProps) 
       {isHead && stats && <WorkspaceStatsStrip domain="customs" stats={stats} />}
 
       <WorkspaceLogisticsClient
-        domain="customs"
         userRoles={user.roles}
         activeTab={activeTab}
         counts={{ my: my.length, completed: completed.length, unassigned: unassigned.length, all: all.length }}

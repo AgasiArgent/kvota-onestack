@@ -21,7 +21,6 @@ interface WorkspaceLogisticsClientProps {
     unassigned?: ReactNode;
     all?: ReactNode;
   };
-  domain?: "logistics" | "customs";
 }
 
 export function WorkspaceLogisticsClient({
@@ -29,7 +28,6 @@ export function WorkspaceLogisticsClient({
   activeTab,
   counts,
   children,
-  domain = "logistics",
 }: WorkspaceLogisticsClientProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -44,7 +42,6 @@ export function WorkspaceLogisticsClient({
 
   return (
     <WorkspaceTabBar
-      domain={domain}
       userRoles={userRoles}
       value={activeTab}
       onValueChange={setTab}
