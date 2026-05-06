@@ -9,13 +9,10 @@ import { RoleBasedTabs, type RoleBasedTab } from "@/shared/ui";
  *   - Все заявки        (head_of_logistics | head_of_customs | admin | top_manager)
  *
  * head_of_logistics ↔ head_of_customs are dual-hat (PR #105): either head
- * role grants full access in BOTH domains. `domain` is kept on the props for
- * future per-domain UI variations but no longer narrows the role gate.
+ * role grants full access in BOTH domains.
  */
 
 interface WorkspaceTabBarProps {
-  /** Kept for future per-domain UI variations; no longer narrows role gate. */
-  domain?: "logistics" | "customs";
   userRoles: string[];
   /** Current selected tab, controlled by the parent page from searchParams. */
   value: string;
