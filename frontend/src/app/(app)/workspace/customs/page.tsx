@@ -28,8 +28,11 @@ export default async function WorkspaceCustomsPage({ searchParams }: PageProps) 
   if (!user?.orgId) redirect("/login");
   const orgId = user.orgId;
 
+  // head_of_logistics ↔ head_of_customs are dual-hat (PR #105): either head
+  // role grants full access in BOTH /workspace/logistics and /workspace/customs.
   const isHead =
     user.roles.includes("head_of_customs") ||
+    user.roles.includes("head_of_logistics") ||
     user.roles.includes("admin") ||
     user.roles.includes("top_manager");
 

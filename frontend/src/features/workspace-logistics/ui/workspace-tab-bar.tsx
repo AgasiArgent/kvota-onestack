@@ -5,15 +5,17 @@ import { RoleBasedTabs, type RoleBasedTab } from "@/shared/ui";
  * WorkspaceTabBar — wraps RoleBasedTabs with the 4 workspace views:
  *   - Мои заявки        (all users)
  *   - Завершённые       (all users)
- *   - Неназначенные     (head_of_logistics | head_of_customs | admin)
- *   - Все заявки        (head_of_logistics | head_of_customs | admin)
+ *   - Неназначенные     (head_of_logistics | head_of_customs | admin | top_manager)
+ *   - Все заявки        (head_of_logistics | head_of_customs | admin | top_manager)
  *
- * Shared between /workspace/logistics and /workspace/customs — pass
- * `domain` to adjust RBAC for the "head" role slug.
+ * head_of_logistics ↔ head_of_customs are dual-hat (PR #105): either head
+ * role grants full access in BOTH domains. `domain` is kept on the props for
+ * future per-domain UI variations but no longer narrows the role gate.
  */
 
 interface WorkspaceTabBarProps {
-  domain: "logistics" | "customs";
+  /** Kept for future per-domain UI variations; no longer narrows role gate. */
+  domain?: "logistics" | "customs";
   userRoles: string[];
   /** Current selected tab, controlled by the parent page from searchParams. */
   value: string;
@@ -33,15 +35,18 @@ interface WorkspaceTabBarProps {
 }
 
 export function WorkspaceTabBar({
-  domain,
   userRoles,
   value,
   onValueChange,
   counts,
   children,
 }: WorkspaceTabBarProps) {
-  const headRole = domain === "logistics" ? "head_of_logistics" : "head_of_customs";
-  const headGuard = [headRole, "admin", "top_manager"];
+  const headGuard = [
+    "head_of_logistics",
+    "head_of_customs",
+    "admin",
+    "top_manager",
+  ];
 
   const tabs: RoleBasedTab[] = [
     {
