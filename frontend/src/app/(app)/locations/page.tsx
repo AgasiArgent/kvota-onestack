@@ -16,7 +16,20 @@ interface Props {
   }>;
 }
 
-const ALLOWED_ROLES = ["admin", "logistics", "customs", "procurement", "procurement_senior"];
+// Mirror sidebar-menu.ts — sidebar advertises this link to head_of_logistics
+// + head_of_customs (dual-hat per PR #105) and top_manager (head-tier
+// access per PR #126). Without these slugs the page silently redirects
+// to / for users the nav promised access to.
+const ALLOWED_ROLES = [
+  "admin",
+  "logistics",
+  "head_of_logistics",
+  "customs",
+  "head_of_customs",
+  "procurement",
+  "procurement_senior",
+  "top_manager",
+];
 
 export default async function LocationsRoute({ searchParams }: Props) {
   const user = await getSessionUser();
