@@ -26,20 +26,32 @@ interface SalesItemsHandsontableProps {
   currency: string;
 }
 
-/** Column field keys in display order */
-const COLUMN_KEYS = [
+/**
+ * Column field keys in display order.
+ *
+ * Exported so tests can assert the column contract without rendering the
+ * Handsontable runtime (mirrors PROCUREMENT_COLUMN_KEYS in
+ * procurement-handsontable.tsx). `name_en` was added 2026-05-06 as a
+ * follow-up to PR #116: МОЗ fills English item names here, the procurement
+ * КП export and letter composer then prefer name_en over product_name when
+ * the supplier requested EN-language docs.
+ */
+export const SALES_COLUMN_KEYS = [
   "brand",
   "product_code",
   "product_name",
+  "name_en",
   "quantity",
   "unit",
 ] as const;
+const COLUMN_KEYS = SALES_COLUMN_KEYS;
 
 interface RowData {
   id: string | null;
   brand: string;
   product_code: string;
   product_name: string;
+  name_en: string;
   quantity: number | null;
   unit: string;
 }
@@ -50,6 +62,7 @@ function itemToRow(item: QuoteItemRow): RowData {
     brand: item.brand ?? "",
     product_code: item.product_code ?? "",
     product_name: item.product_name ?? "",
+    name_en: item.name_en ?? "",
     quantity: item.quantity,
     unit: item.unit ?? "",
   };
@@ -61,6 +74,7 @@ function emptyRow(): RowData {
     brand: "",
     product_code: "",
     product_name: "",
+    name_en: "",
     quantity: null,
     unit: "",
   };
@@ -71,12 +85,17 @@ function hasContent(row: RowData): boolean {
     row.brand ||
     row.product_code ||
     row.product_name ||
+    row.name_en ||
     (row.quantity != null && row.quantity > 0) ||
     row.unit
   );
 }
 
 function rowToCreatePayload(row: RowData) {
+  // `name_en` is intentionally omitted: createQuoteItemsBatch only accepts
+  // the core sales fields (brand, product_code, product_name, quantity,
+  // unit). The user fills name_en after the row is persisted, which routes
+  // through updateQuoteItem in handleAfterChange below.
   return {
     product_name: row.product_name || "",
     brand: row.brand || undefined,
@@ -292,11 +311,19 @@ export function SalesItemsHandsontable({
           ref={hotRef}
           data={initialData}
           licenseKey="non-commercial-and-evaluation"
-          colHeaders={["Бренд *", "Артикул *", "Наименование", "Кол-во", "Ед."]}
+          colHeaders={[
+            "Бренд *",
+            "Артикул *",
+            "Наименование",
+            "Наименование (EN)",
+            "Кол-во",
+            "Ед.",
+          ]}
           columns={[
             { data: "brand", type: "text", width: 120 },
             { data: "product_code", type: "text", width: 150 },
             { data: "product_name", type: "text", width: 300 },
+            { data: "name_en", type: "text", width: 200 },
             { data: "quantity", type: "numeric", width: 80 },
             {
               data: "unit",
