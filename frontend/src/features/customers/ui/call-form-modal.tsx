@@ -93,7 +93,7 @@ export function CallFormModal({
       return {
         call_type: call.call_type,
         call_category: (call.call_category as CallCategory) ?? null,
-        contact_person_id: null, // contact_person_id not in CustomerCall type
+        contact_person_id: call.contact_person_id ?? null,
         assigned_to: call.assigned_to ?? null,
         scheduled_date: call.scheduled_date ?? null,
         comment: call.comment ?? "",

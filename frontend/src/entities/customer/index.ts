@@ -19,6 +19,7 @@ export {
   fetchCustomerContacts,
   fetchCustomerAddresses,
   fetchCustomerContracts,
+  fetchCustomerDocuments,
   fetchCustomerCalls,
   fetchCustomerQuotes,
   fetchCustomerSpecs,
@@ -45,6 +46,9 @@ export {
   createContract,
   updateContract,
   deleteContract,
+  uploadCustomerDocument,
+  deleteCustomerDocument,
   addCustomerAssignee,
   removeCustomerAssignee,
 } from "./mutations";
+export type { CustomerDocumentRow } from "./mutations";

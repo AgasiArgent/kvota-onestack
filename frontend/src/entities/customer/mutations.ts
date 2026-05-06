@@ -371,6 +371,120 @@ export async function deleteContract(contractId: string) {
   if (error) throw error;
 }
 
+// ---------- Customer document upload ----------
+
+export interface CustomerDocumentRow {
+  id: string;
+  storage_path: string;
+  original_filename: string;
+  file_size_bytes: number | null;
+  mime_type: string | null;
+  description: string | null;
+  created_at: string | null;
+}
+
+/**
+ * Upload a file to Supabase Storage and insert a kvota.documents row tied
+ * to a customer. Used by both the contract modal (МОП-7) and the
+ * Уставные документы section (МОП-8).
+ *
+ * `documentType` narrows the kind: 'contract' for contract scans,
+ * 'founding_docs' for charter / registration docs. `description` is
+ * displayed as a sub-label and is optional.
+ */
+export async function uploadCustomerDocument(
+  customerId: string,
+  file: File,
+  documentType: "contract" | "founding_docs",
+  description?: string
+): Promise<CustomerDocumentRow> {
+  const supabase = createClient();
+  const [organizationId, userId] = await Promise.all([
+    getCustomerOrgId(customerId),
+    getCurrentUserId(),
+  ]);
+
+  const ext = file.name.split(".").pop()?.toLowerCase() || "bin";
+  const storagePath = `customers/${customerId}/${documentType}/${crypto.randomUUID()}.${ext}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from("kvota-documents")
+    .upload(storagePath, file);
+  if (uploadError) {
+    if (
+      uploadError.message?.includes("mime") ||
+      uploadError.message?.includes("type")
+    ) {
+      throw new Error(
+        `Формат файла "${ext}" не поддерживается. Допустимые: PDF, Word, Excel, JPG, PNG, WebP, ZIP`
+      );
+    }
+    if (
+      uploadError.message?.includes("size") ||
+      uploadError.message?.includes("limit")
+    ) {
+      const sizeMb = Math.round(file.size / 1024 / 1024);
+      throw new Error(`Файл слишком большой (${sizeMb} МБ). Максимум: 50 МБ`);
+    }
+    throw new Error(`Ошибка загрузки: ${uploadError.message}`);
+  }
+
+  const { data, error } = await supabase
+    .from("documents")
+    .insert({
+      organization_id: organizationId,
+      entity_type: "customer",
+      entity_id: customerId,
+      storage_path: storagePath,
+      original_filename: file.name,
+      file_size_bytes: file.size,
+      mime_type: file.type || null,
+      document_type: documentType,
+      description: description?.trim() || null,
+      uploaded_by: userId,
+      status: "final",
+    })
+    .select(
+      "id, storage_path, original_filename, file_size_bytes, mime_type, description, created_at"
+    )
+    .single();
+
+  if (error) {
+    // Clean up the orphaned storage object so we don't leak files when the
+    // metadata insert fails (RLS, constraint, etc.).
+    await supabase.storage.from("kvota-documents").remove([storagePath]);
+    throw error;
+  }
+  return data as CustomerDocumentRow;
+}
+
+export async function deleteCustomerDocument(
+  documentId: string,
+  storagePath: string
+) {
+  const supabase = createClient();
+  // Storage object first; the DB row holds the path so it must persist
+  // until the file is gone, otherwise a re-render before delete completes
+  // would show a broken link.
+  const { error: storageError } = await supabase.storage
+    .from("kvota-documents")
+    .remove([storagePath]);
+  if (storageError) {
+    // Non-fatal: continue with metadata delete so the UI does not get stuck
+    // showing rows whose underlying file is already missing on retry.
+    console.warn(
+      "[deleteCustomerDocument] storage remove failed:",
+      storageError.message
+    );
+  }
+
+  const { error } = await supabase
+    .from("documents")
+    .delete()
+    .eq("id", documentId);
+  if (error) throw error;
+}
+
 // ---------- Assignee mutations ----------
 
 export async function addCustomerAssignee(

@@ -312,7 +312,7 @@ export async function fetchCustomerCalls(customerId: string) {
   const { data } = await supabase
     .from("calls")
     .select(
-      "id, call_type, call_category, scheduled_date, comment, customer_needs, meeting_notes, user_id, assigned_to, created_at, customer_contacts!calls_contact_person_id_fkey(name, phone, email)"
+      "id, call_type, call_category, scheduled_date, comment, customer_needs, meeting_notes, user_id, assigned_to, contact_person_id, created_at, customer_contacts!calls_contact_person_id_fkey(name, phone, email)"
     )
     .eq("customer_id", customerId)
     .order("created_at", { ascending: false })
@@ -355,6 +355,7 @@ export async function fetchCustomerCalls(customerId: string) {
       comment: row.comment,
       customer_needs: row.customer_needs,
       meeting_notes: row.meeting_notes,
+      contact_person_id: row.contact_person_id ?? null,
       contact_name: contact?.name ?? null,
       contact_phone: contact?.phone ?? null,
       contact_email: contact?.email ?? null,
@@ -379,6 +380,50 @@ export async function fetchCustomerContracts(
     .order("contract_date", { ascending: false });
   if (error) throw error;
   return (data ?? []) as CustomerContract[];
+}
+
+/**
+ * Fetch customer-level documents grouped by document_type. Used by the
+ * Documents tab to render Договоры (contract) attachments and the
+ * Уставные документы section (founding_docs).
+ *
+ * The schema uses entity_type='customer'; document_type narrows the kind
+ * (contract vs founding_docs). Migration 143 lists both as allowed.
+ */
+export async function fetchCustomerDocuments(
+  customerId: string,
+  documentType: "contract" | "founding_docs"
+): Promise<
+  Array<{
+    id: string;
+    storage_path: string;
+    original_filename: string;
+    file_size_bytes: number | null;
+    mime_type: string | null;
+    description: string | null;
+    created_at: string | null;
+  }>
+> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("documents")
+    .select(
+      "id, storage_path, original_filename, file_size_bytes, mime_type, description, created_at"
+    )
+    .eq("entity_type", "customer")
+    .eq("entity_id", customerId)
+    .eq("document_type", documentType)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    storage_path: row.storage_path,
+    original_filename: row.original_filename,
+    file_size_bytes: row.file_size_bytes,
+    mime_type: row.mime_type,
+    description: row.description,
+    created_at: row.created_at,
+  }));
 }
 
 export async function fetchOrgUsers(

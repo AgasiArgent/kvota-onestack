@@ -8,6 +8,7 @@ import {
   fetchCustomerQuotes,
   fetchCustomerSpecs,
   fetchCustomerContracts,
+  fetchCustomerDocuments,
   fetchCustomerPositions,
   fetchCustomerAssignees,
   fetchOrgUsers,
@@ -67,7 +68,7 @@ export default async function CustomerDetailPage({ params, searchParams }: Props
             userRoles={user.roles}
           />
         )}
-        {tab === "crm" && <CRMContent customerId={id} customer={customer} />}
+        {tab === "crm" && <CRMContent customerId={id} customer={customer} userId={user.id} />}
         {tab === "documents" && <DocumentsContent customerId={id} subtab={subtab} />}
         {tab === "positions" && <PositionsContent customerId={id} />}
         {tab === "assignees" && <AssigneesContent customerId={id} orgId={user.orgId} userRoles={user.roles} />}
@@ -108,16 +109,26 @@ async function OverviewContent({
 async function CRMContent({
   customerId,
   customer,
+  userId,
 }: {
   customerId: string;
   customer: Customer;
+  userId: string;
 }) {
   const [contacts, calls, orgUsers] = await Promise.all([
     fetchCustomerContacts(customerId),
     fetchCustomerCalls(customerId),
     fetchOrgUsers(customer.organization_id),
   ]);
-  return <TabCRM customer={customer} contacts={contacts} calls={calls} orgUsers={orgUsers} />;
+  return (
+    <TabCRM
+      customer={customer}
+      contacts={contacts}
+      calls={calls}
+      orgUsers={orgUsers}
+      currentUserId={userId}
+    />
+  );
 }
 
 async function DocumentsContent({
@@ -127,17 +138,22 @@ async function DocumentsContent({
   customerId: string;
   subtab?: string;
 }) {
-  const [quotes, specs, contracts] = await Promise.all([
-    fetchCustomerQuotes(customerId),
-    fetchCustomerSpecs(customerId),
-    fetchCustomerContracts(customerId),
-  ]);
+  const [quotes, specs, contracts, contractDocs, foundingDocs] =
+    await Promise.all([
+      fetchCustomerQuotes(customerId),
+      fetchCustomerSpecs(customerId),
+      fetchCustomerContracts(customerId),
+      fetchCustomerDocuments(customerId, "contract"),
+      fetchCustomerDocuments(customerId, "founding_docs"),
+    ]);
   return (
     <TabDocuments
       customerId={customerId}
       quotes={quotes}
       specs={specs}
       contracts={contracts}
+      contractDocs={contractDocs}
+      foundingDocs={foundingDocs}
       initialSubTab={subtab}
     />
   );
