@@ -39,15 +39,50 @@ def _resolve_author_profiles(
 ) -> dict[str, dict[str, str | None]]:
     """Resolve author display names + avatars for each user id.
 
-    Uses ``auth.admin.list_users()`` (one round-trip per request) and returns a
-    map ``user_id -> {"name": str, "email": str | None, "avatar_url": str | None}``.
-    Missing/deleted users get a short-id fallback name so the UI never breaks
-    on a stale ``author_id``.
+    Resolution order (per project convention — see services/call_service.py
+    and services/comment_service.py for the same pattern):
+      1. ``kvota.user_profiles.full_name`` — the canonical source of truth
+         for human-readable names. Mirrored on user creation in
+         api/admin_users.py and edited via the admin UI.
+      2. ``auth.users.user_metadata.full_name|name`` — only used by the
+         signup flow before the user_profiles row is materialised; usually
+         empty for project-managed users (probe finding #3, 2026-05-06).
+      3. ``auth.users.email`` — last human-readable fallback; the bare
+         email is at least intelligible.
+      4. Short UUID prefix — so the UI never breaks on a stale author_id,
+         even if the user has been deleted.
+
+    Avatars: ``user_profiles`` has no avatar column, so we still pull
+    ``user_metadata.avatar_url`` from auth (mostly null in practice).
+
+    Returns a map ``user_id -> {"name": str, "email": str | None,
+    "avatar_url": str | None}``.
     """
     profiles: dict[str, dict[str, str | None]] = {}
     if not user_ids:
         return profiles
 
+    # 1) Batch fetch canonical names from kvota.user_profiles.
+    profile_names: dict[str, str] = {}
+    try:
+        resp = (
+            sb.table("user_profiles")
+            .select("user_id, full_name")
+            .in_("user_id", user_ids)
+            .execute()
+        )
+        for p in (resp.data or []):
+            uid = p.get("user_id")
+            full_name = (p.get("full_name") or "").strip()
+            if uid and full_name:
+                profile_names[uid] = full_name
+    except Exception as exc:  # noqa: BLE001 — never 500 on profile lookup
+        logger.warning("notes: user_profiles lookup failed: %s", exc)
+
+    # 2) Pull email + avatar (and metadata-name fallback) from auth.users.
+    #    One auth.admin round-trip per request — kept to avoid widening
+    #    surface area while we have user_profiles as the primary source.
+    auth_meta: dict[str, dict[str, str | None]] = {}
     try:
         page = sb.auth.admin.list_users()
         users_iter = getattr(page, "users", None) or page or []
@@ -57,26 +92,29 @@ def _resolve_author_profiles(
             if uid is None or uid not in wanted:
                 continue
             meta = getattr(u, "user_metadata", {}) or {}
-            email = getattr(u, "email", None)
-            display = (
-                meta.get("full_name")
-                or meta.get("name")
-                or email
-                or str(uid)[:8]
-            )
-            profiles[uid] = {
-                "name": display,
-                "email": email,
+            auth_meta[uid] = {
+                "metadata_name": meta.get("full_name") or meta.get("name"),
+                "email": getattr(u, "email", None),
                 "avatar_url": meta.get("avatar_url"),
             }
     except Exception as exc:  # noqa: BLE001 — never 500 on auth lookup
-        logger.warning("notes: failed to resolve author profiles: %s", exc)
+        logger.warning("notes: auth.admin.list_users lookup failed: %s", exc)
 
+    # 3) Compose the final profile map: prefer profile name → auth metadata
+    #    name → email → short UUID prefix.
     for uid in user_ids:
-        profiles.setdefault(
-            uid,
-            {"name": str(uid)[:8], "email": None, "avatar_url": None},
+        meta = auth_meta.get(uid, {})
+        display = (
+            profile_names.get(uid)
+            or meta.get("metadata_name")
+            or meta.get("email")
+            or str(uid)[:8]
         )
+        profiles[uid] = {
+            "name": display,
+            "email": meta.get("email"),
+            "avatar_url": meta.get("avatar_url"),
+        }
     return profiles
 
 
