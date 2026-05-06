@@ -40,6 +40,7 @@ vi.mock("@/shared/lib/supabase/client", () => ({
       select: () => ({
         eq: () => ({
           order: () => ({ data: [], error: null }),
+          maybeSingle: () => Promise.resolve({ data: null, error: null }),
         }),
         in: () => ({ data: [], error: null }),
       }),

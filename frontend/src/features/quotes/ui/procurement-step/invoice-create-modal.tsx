@@ -75,20 +75,22 @@ export function InvoiceCreateModal({
   >([{ weight_kg: "", length_mm: "", width_mm: "", height_mm: "" }]);
   const [vatRate, setVatRate] = useState("");
   const [vatReason, setVatReason] = useState<VatResolverReason | null>(null);
-  // Strategy B (МОЗ Тест 2026-05-01 fail #82): every country/buyer change
-  // re-fetches and OVERWRITES the rate, even when the user previously typed
-  // a value. Country defines VAT — manual edits between country picks are
-  // treated as transient. The ``vatManuallyEdited`` flag is now used only
-  // to render an inline "вручную" badge until the next auto-fill arrives.
+  // РОЗ-95 / МОЗ-82 (2026-05-05): autofill is now empty-only — a manually
+  // typed (or previously autofilled, then edited) value is never overwritten
+  // when the user changes country/buyer afterwards. The ``vatManuallyEdited``
+  // flag still drives the inline "вручную" badge so the user can see why the
+  // auto-resolved reason badge disappeared.
   const [vatManuallyEdited, setVatManuallyEdited] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Auto-fill VAT rate + reason when both supplier country AND buyer company
-  // are selected. Re-fires on every country / buyer change and overwrites
-  // the field — see strategy B comment above.
+  // are selected. Empty-only: skips the network round-trip when the user has
+  // already entered a rate, so a country change after manual editing leaves
+  // the typed value intact.
   useEffect(() => {
     if (!countryCode || !buyerCompanyId) return;
+    if (vatRate.trim() !== "") return;
 
     let cancelled = false;
 
@@ -98,7 +100,9 @@ export function InvoiceCreateModal({
     }).then((result) => {
       if (cancelled) return;
       if (result) {
-        setVatRate(result.rate.toString());
+        // Re-check the empty guard at resolution time — the user may have
+        // started typing during the network round-trip.
+        setVatRate((prev) => (prev.trim() === "" ? result.rate.toString() : prev));
         setVatReason(result.reason);
         setVatManuallyEdited(false);
       } else {
@@ -111,6 +115,7 @@ export function InvoiceCreateModal({
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [countryCode, buyerCompanyId]);
 
   function handleClose() {
