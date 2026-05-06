@@ -2,6 +2,7 @@
 
 import { CheckCircle, Loader2, SkipForward } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { QuoteItemRow } from "@/entities/quote/queries";
 
 function ext<T>(row: unknown): T {
@@ -11,6 +12,8 @@ function ext<T>(row: unknown): T {
 type ItemExtras = {
   hs_code?: string | null;
   customs_duty?: number | null;
+  product_name?: string | null;
+  sku?: string | null;
 };
 
 interface CustomsActionBarProps {
@@ -20,6 +23,46 @@ interface CustomsActionBarProps {
   completing?: boolean;
   skipping?: boolean;
   canSkipCustoms?: boolean;
+}
+
+function itemDisplayName(extras: ItemExtras): string {
+  const name = (extras.product_name || "").trim();
+  const sku = (extras.sku || "").trim();
+  if (name && sku) return `${name} (${sku})`;
+  return name || sku || "позиция без названия";
+}
+
+function findMissingHsCode(items: QuoteItemRow[]): string[] {
+  const missing: string[] = [];
+  for (const item of items) {
+    const extras = ext<ItemExtras>(item);
+    const hs = (extras.hs_code || "").trim();
+    if (!hs) {
+      missing.push(itemDisplayName(extras));
+    }
+  }
+  return missing;
+}
+
+function formatDisabledReason(
+  totalItems: number,
+  missingNames: string[],
+  completing: boolean,
+  skipping: boolean,
+): string | null {
+  if (completing) return "Завершение в процессе…";
+  if (skipping) return "Пропуск в процессе…";
+  if (totalItems === 0) {
+    return "Нет позиций для расчёта таможни.";
+  }
+  if (missingNames.length === 0) return null;
+  const lines = missingNames
+    .slice(0, 5)
+    .map((name) => `• ${name}: укажите ТН ВЭД`);
+  if (missingNames.length > 5) {
+    lines.push(`• …и ещё ${missingNames.length - 5}`);
+  }
+  return "Заполните перед завершением:\n" + lines.join("\n");
 }
 
 export function CustomsActionBar({
@@ -41,22 +84,51 @@ export function CustomsActionBar({
   }).length;
 
   const allHaveHsCode = totalItems > 0 && itemsWithHsCode === totalItems;
+  const completeDisabled = !allHaveHsCode || completing || skipping;
+
+  // Mirrors the LogisticsActionBar tooltip pattern (PR #120) — closes
+  // probe finding #4 from the logistics-tab UX session: previously the
+  // disabled "Таможня завершена" button gave no explanation of which
+  // items were missing ТН ВЭД codes. Now the tooltip lists the first 5.
+  const missingNames = findMissingHsCode(items);
+  const disabledReason = completeDisabled
+    ? formatDisabledReason(totalItems, missingNames, completing, skipping)
+    : null;
+
+  const completeButton = (
+    <Button
+      size="sm"
+      className="bg-success text-white hover:bg-success/90"
+      disabled={completeDisabled}
+      onClick={onCompleteCustoms}
+      aria-label="Таможня завершена"
+    >
+      {completing ? (
+        <Loader2 size={14} className="animate-spin" aria-hidden />
+      ) : (
+        <CheckCircle size={14} aria-hidden />
+      )}
+      Таможня завершена
+    </Button>
+  );
 
   return (
     <div className="sticky top-[52px] z-[5] bg-card border-b border-border px-6 py-2 flex items-center gap-3">
-      <Button
-        size="sm"
-        className="bg-success text-white hover:bg-success/90"
-        disabled={!allHaveHsCode || completing || skipping}
-        onClick={onCompleteCustoms}
-      >
-        {completing ? (
-          <Loader2 size={14} className="animate-spin" />
-        ) : (
-          <CheckCircle size={14} />
-        )}
-        Таможня завершена
-      </Button>
+      {disabledReason ? (
+        <Tooltip>
+          <TooltipTrigger render={<span className="inline-block" />}>
+            {completeButton}
+          </TooltipTrigger>
+          <TooltipContent
+            side="bottom"
+            className="max-w-xs whitespace-pre-line text-xs"
+          >
+            {disabledReason}
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        completeButton
+      )}
 
       {canSkipCustoms && (
         <Button
@@ -66,9 +138,9 @@ export function CustomsActionBar({
           onClick={onSkipCustoms}
         >
           {skipping ? (
-            <Loader2 size={14} className="animate-spin" />
+            <Loader2 size={14} className="animate-spin" aria-hidden />
           ) : (
-            <SkipForward size={14} />
+            <SkipForward size={14} aria-hidden />
           )}
           Пропустить таможню
         </Button>
