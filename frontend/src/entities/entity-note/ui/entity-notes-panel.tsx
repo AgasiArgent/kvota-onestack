@@ -42,6 +42,11 @@ interface EntityNotesPanelProps {
   title?: string;
   subtitle?: string;
   visibilityOptions?: Array<{ value: string; label: string }>;
+  /**
+   * Explicit override for the composer's initial visibility preset.
+   * When provided, takes precedence over role-derived defaults.
+   * Pass `["*"]` to force "Видно всем" regardless of user role.
+   */
   defaultVisibleTo?: string[];
   /**
    * Path to revalidate after mutations. REQUIRED when entityType="invoice".
@@ -52,6 +57,33 @@ interface EntityNotesPanelProps {
   /** Extra paths to revalidate beyond the primary one. */
   revalidateExtra?: string[];
   className?: string;
+}
+
+/**
+ * Departmental role slugs the composer can default to. Order matters —
+ * the first matching role in `currentUser.roles` wins. We prefer non-admin
+ * working roles so a user who is BOTH admin and procurement defaults to
+ * the procurement preset (their actual day-to-day work). admin-only users
+ * fall through to ["*"] (visible to all).
+ */
+const DEPARTMENT_ROLE_PRIORITY = [
+  "sales",
+  "procurement",
+  "logistics",
+  "customs",
+  "head_of_sales",
+  "head_of_procurement",
+  "head_of_logistics",
+  "head_of_customs",
+  "finance",
+] as const;
+
+export function deriveDefaultVisibleTo(roles: string[]): string[] {
+  const roleSet = new Set(roles);
+  for (const role of DEPARTMENT_ROLE_PRIORITY) {
+    if (roleSet.has(role)) return [role];
+  }
+  return ["*"];
 }
 
 const DEFAULT_VISIBILITY: Array<{ value: string; label: string }> = [
@@ -85,11 +117,17 @@ export function EntityNotesPanel({
   title,
   subtitle,
   visibilityOptions = DEFAULT_VISIBILITY,
-  defaultVisibleTo = ["*"],
+  defaultVisibleTo,
   revalidatePath,
   revalidateExtra,
   className,
 }: EntityNotesPanelProps) {
+  // МОП-1: default visibility derives from the current user's department role
+  // when the caller does not pass an explicit override. Without this, every
+  // note posted from the panel went out as «Видно всем», which leaks МОП
+  // department-internal notes to logistics/customs/etc.
+  const resolvedDefaultVisibleTo =
+    defaultVisibleTo ?? deriveDefaultVisibleTo(currentUser.roles);
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -202,7 +240,7 @@ export function EntityNotesPanel({
       <div className="p-3 pt-0">
         <EntityNoteComposer
           visibilityOptions={visibilityOptions}
-          defaultVisibleTo={defaultVisibleTo}
+          defaultVisibleTo={resolvedDefaultVisibleTo}
           onSubmit={handleCreate}
           busy={isPending}
         />

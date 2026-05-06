@@ -75,6 +75,7 @@ export interface CustomerCall {
   comment: string | null;
   customer_needs: string | null;
   meeting_notes: string | null;
+  contact_person_id: string | null;
   contact_name: string | null;
   contact_phone: string | null;
   contact_email: string | null;

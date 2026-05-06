@@ -104,7 +104,7 @@ export function EntityNoteComposer({
             {allowedPresets.map((preset) => (
               <DropdownMenuItem
                 key={preset.key}
-                onSelect={() => setVisibleTo(preset.value)}
+                onClick={() => setVisibleTo(preset.value)}
                 className="gap-2"
               >
                 <Check

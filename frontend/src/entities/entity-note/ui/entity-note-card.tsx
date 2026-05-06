@@ -173,13 +173,17 @@ function NoteActions({
             Using onSelect here was a silent dead handler — kebab Удалить /
             Закрепить did nothing in production. Match the rest of the
             codebase's DropdownMenuItem usage (onClick). */}
-        <DropdownMenuItem onClick={onTogglePin}>
+        <DropdownMenuItem
+          onClick={onTogglePin}
+          data-testid="entity-note-toggle-pin"
+        >
           <Pin size={14} strokeWidth={2} className="mr-2" aria-hidden />
           {pinned ? "Открепить" : "Закрепить"}
         </DropdownMenuItem>
         <DropdownMenuItem
           onClick={onDelete}
           className="text-error focus:text-error focus:bg-error-bg"
+          data-testid="entity-note-delete"
         >
           Удалить
         </DropdownMenuItem>
