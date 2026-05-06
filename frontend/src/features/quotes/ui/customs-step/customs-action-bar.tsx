@@ -13,7 +13,7 @@ type ItemExtras = {
   hs_code?: string | null;
   customs_duty?: number | null;
   product_name?: string | null;
-  sku?: string | null;
+  product_code?: string | null;
 };
 
 interface CustomsActionBarProps {
@@ -27,9 +27,9 @@ interface CustomsActionBarProps {
 
 function itemDisplayName(extras: ItemExtras): string {
   const name = (extras.product_name || "").trim();
-  const sku = (extras.sku || "").trim();
-  if (name && sku) return `${name} (${sku})`;
-  return name || sku || "позиция без названия";
+  const code = (extras.product_code || "").trim();
+  if (name && code) return `${name} (${code})`;
+  return name || code || "позиция без названия";
 }
 
 function findMissingHsCode(items: QuoteItemRow[]): string[] {
