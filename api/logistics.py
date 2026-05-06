@@ -27,6 +27,7 @@ from starlette.responses import JSONResponse
 
 from services.database import get_supabase
 from services.role_service import get_user_role_codes
+from services.workflow_service import complete_logistics
 
 logger = logging.getLogger(__name__)
 
@@ -906,14 +907,21 @@ async def complete(request: Request) -> JSONResponse:
     Returns:
         data: { invoice_id, logistics_completed_at, logistics_completed_by }
     Side Effects:
-        - Sets logistics_completed_at = NOW() on the invoice.
-        - Sets logistics_completed_by = user.id
+        - Sets invoices.logistics_completed_at = NOW() on the invoice.
+        - Sets invoices.logistics_completed_by = user.id
+        - When ALL invoices for the parent quote have logistics_completed_at,
+          delegates to services.workflow_service.complete_logistics which:
+          • sets quotes.logistics_completed_at,
+          • inserts an audit row in workflow_transitions,
+          • calls check_and_auto_transition_to_sales_review which advances
+            the quote out of pending_logistics_and_customs once customs is
+            also done (parallel branches merge → pending_sales_review).
     Roles: logistics, head_of_logistics, admin, head_of_customs.
     """
     auth = _authorize(request)
     if isinstance(auth, JSONResponse):
         return auth
-    user, _roles = auth
+    user, roles = auth
     org_id = user["org_id"]
 
     try:
@@ -953,6 +961,43 @@ async def complete(request: Request) -> JSONResponse:
     if not res.data:
         return _err("INTERNAL_ERROR", "Failed to complete logistics", 500)
     row = res.data[0]
+
+    # Roll up per-invoice completion to the quote level when ALL invoices
+    # for this quote are now logistics-done. We delegate to the
+    # ``services.workflow_service.complete_logistics`` helper rather than
+    # writing ``quotes.logistics_completed_at`` directly: the helper enforces
+    # the workflow_status guard, refuses to re-complete (idempotent), inserts
+    # the workflow_transitions audit row, and triggers the parallel-merge
+    # auto-advance to ``pending_sales_review`` when customs is also done.
+    # Failures here MUST NOT roll back the per-invoice write the user just
+    # confirmed — the rollup is best-effort.
+    quote_id = invoice.get("quote_id")
+    if quote_id:
+        sibling_res = (
+            sb.table("invoices")
+            .select("id, logistics_completed_at")
+            .eq("quote_id", quote_id)
+            .execute()
+        )
+        siblings = sibling_res.data or []
+        all_done = bool(siblings) and all(
+            inv.get("logistics_completed_at") for inv in siblings
+        )
+        if all_done:
+            try:
+                rollup = complete_logistics(quote_id, user["id"], roles)
+                if not rollup.success:
+                    logger.warning(
+                        "logistics.complete: quote-level rollup refused for %s: %s",
+                        quote_id,
+                        rollup.error_message,
+                    )
+            except Exception:
+                logger.exception(
+                    "logistics.complete: quote-level rollup raised for quote %s",
+                    quote_id,
+                )
+
     return _ok(
         {
             "invoice_id": row["id"],

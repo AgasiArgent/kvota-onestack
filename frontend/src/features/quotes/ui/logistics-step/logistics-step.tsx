@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import type {
   QuoteDetailRow,
   QuoteInvoiceRow,
@@ -9,6 +11,7 @@ import type {
 import { createClient } from "@/shared/lib/supabase/client";
 import type { LocationOption, LocationType } from "@/entities/location";
 import type { LogisticsSegment } from "@/entities/logistics-segment";
+import { completeLogistics } from "@/entities/logistics-segment";
 import type { LogisticsTemplate } from "@/entities/logistics-template";
 import { RouteConstructor } from "@/features/route-constructor";
 import {
@@ -18,6 +21,14 @@ import {
 } from "@/features/quotes/ui/invoice-tabs";
 import { EntityNotesPanel } from "@/entities/entity-note";
 import type { EntityNoteCardData } from "@/entities/entity-note/ui/entity-note-card";
+import { LogisticsActionBar } from "./logistics-action-bar";
+
+const COMPLETE_LOGISTICS_ROLES = new Set([
+  "logistics",
+  "head_of_logistics",
+  "head_of_customs",
+  "admin",
+]);
 
 /**
  * LogisticsStep — thin wrapper around the RouteConstructor per invoice.
@@ -129,6 +140,36 @@ export function LogisticsStep({
   const [locations, setLocations] = useState<LocationOption[]>([]);
   const [templates, setTemplates] = useState<LogisticsTemplate[]>([]);
   const [loading, setLoading] = useState(true);
+  const [completing, startCompleting] = useTransition();
+  const router = useRouter();
+
+  const canCompleteLogistics =
+    userRoles?.some((r) => COMPLETE_LOGISTICS_ROLES.has(r)) ?? false;
+
+  const activeInvoice = useMemo(
+    () => invoices.find((i) => i.id === activeInvoiceId) ?? null,
+    [invoices, activeInvoiceId],
+  );
+
+  function handleCompleteLogistics() {
+    if (!activeInvoiceId) return;
+    startCompleting(async () => {
+      try {
+        await completeLogistics({
+          invoice_id: activeInvoiceId,
+          revalidate_path: `/quotes/${quote.id}`,
+        });
+        toast.success("Логистика по инвойсу завершена");
+        router.refresh();
+      } catch (err) {
+        toast.error(
+          err instanceof Error
+            ? err.message
+            : "Не удалось завершить логистику",
+        );
+      }
+    });
+  }
 
   // Re-pick active invoice if the list changed
   useEffect(() => {
@@ -397,16 +438,26 @@ export function LogisticsStep({
           />
           <span className="ml-2 text-sm text-text-muted">Загрузка…</span>
         </div>
-      ) : activeInvoiceId ? (
-        <RouteConstructor
-          key={activeInvoiceId}
-          invoiceId={activeInvoiceId}
-          orgId={quote.organization_id}
-          initialSegments={activeSegments}
-          locations={locations}
-          templates={templates}
-          revalidatePath={`/quotes/${quote.id}`}
-        />
+      ) : activeInvoiceId && activeInvoice ? (
+        <>
+          <LogisticsActionBar
+            segments={activeSegments}
+            alreadyCompleted={!!activeInvoice.logistics_completed_at}
+            needsReview={!!activeInvoice.logistics_needs_review_since}
+            canEdit={canCompleteLogistics}
+            completing={completing}
+            onComplete={handleCompleteLogistics}
+          />
+          <RouteConstructor
+            key={activeInvoiceId}
+            invoiceId={activeInvoiceId}
+            orgId={quote.organization_id}
+            initialSegments={activeSegments}
+            locations={locations}
+            templates={templates}
+            revalidatePath={`/quotes/${quote.id}`}
+          />
+        </>
       ) : null}
 
       {userId && (
