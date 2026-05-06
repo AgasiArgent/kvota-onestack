@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SearchableCombobox } from "@/shared/ui/searchable-combobox";
 import type { CustomerContact } from "@/entities/customer";
 import {
   createCall,
@@ -174,9 +175,15 @@ export function CallFormModal({
   }
 
   function getContactLabel(contact: CustomerContact): string {
-    const parts = [contact.name, contact.last_name].filter(Boolean);
-    if (contact.position) parts.push(`(${contact.position})`);
-    return parts.join(" ");
+    // Primary line: full name + position. Phone is rendered as the
+    // secondary muted segment via SearchableCombobox's `getSecondary`.
+    const nameParts = [contact.name, contact.last_name].filter(Boolean);
+    const fullName = nameParts.join(" ").trim() || "Контакт";
+    return contact.position ? `${fullName} · ${contact.position}` : fullName;
+  }
+
+  function getContactSecondary(contact: CustomerContact): string | null {
+    return contact.phones?.[0]?.number ?? contact.phone ?? null;
   }
 
   return (
@@ -232,55 +239,53 @@ export function CallFormModal({
             </Select>
           </div>
 
-          {/* Contact person */}
-          {contacts.length > 0 && (
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-                Контактное лицо
-              </label>
-              <Select
-                value={form.contact_person_id ?? undefined}
-                onValueChange={(val) =>
-                  updateField("contact_person_id", val || null)
-                }
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Не выбрано" />
-                </SelectTrigger>
-                <SelectContent>
-                  {contacts.map((contact) => (
-                    <SelectItem key={contact.id} value={contact.id}>
-                      {getContactLabel(contact)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+          {/* Contact person — always rendered. Base UI Select shows raw
+              UUIDs in the trigger until the popup is opened, which surfaced
+              in prod (МОП-4 follow-up: tester saw a UUID hash for
+              «ОТВЕТСТВЕННЫЙ» and no contact picker). SearchableCombobox
+              resolves the label up-front via `getLabel(items.find(...))`. */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+              Контактное лицо
+            </label>
+            <SearchableCombobox<CustomerContact>
+              value={form.contact_person_id}
+              onChange={(id) => updateField("contact_person_id", id)}
+              items={contacts}
+              getLabel={getContactLabel}
+              getSecondary={getContactSecondary}
+              getSearchableExtras={(c) => [
+                c.last_name ?? "",
+                c.position ?? "",
+                c.phone ?? "",
+                ...(c.phones?.map((p) => p.number) ?? []),
+              ]}
+              placeholder="Не выбран"
+              searchPlaceholder="Поиск контакта..."
+              emptyMessage="У клиента нет контактов"
+              ariaLabel="Контактное лицо"
+            />
+          </div>
 
-          {/* Assigned to */}
+          {/* Assigned to — searchable combobox so the trigger always
+              shows the resolved user full name (Base UI Select would show
+              the raw UUID until the popup was opened, which prod testers
+              hit when the form pre-filled `assigned_to=currentUserId`). */}
           {orgUsers.length > 0 && (
             <div className="space-y-1.5">
               <label className="text-xs font-semibold uppercase tracking-wide text-text-muted">
                 Ответственный
               </label>
-              <Select
-                value={form.assigned_to ?? undefined}
-                onValueChange={(val) =>
-                  updateField("assigned_to", val || null)
-                }
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Не выбран" />
-                </SelectTrigger>
-                <SelectContent>
-                  {orgUsers.map((user) => (
-                    <SelectItem key={user.id} value={user.id}>
-                      {user.full_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableCombobox<{ id: string; full_name: string }>
+                value={form.assigned_to}
+                onChange={(id) => updateField("assigned_to", id)}
+                items={orgUsers}
+                getLabel={(u) => u.full_name || "Без имени"}
+                placeholder="Не выбран"
+                searchPlaceholder="Поиск сотрудника..."
+                emptyMessage="Список пуст"
+                ariaLabel="Ответственный"
+              />
             </div>
           )}
 
