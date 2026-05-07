@@ -906,6 +906,31 @@ async def apply_template(request: Request, template_id: str) -> JSONResponse:
 
     sb = get_supabase()
 
+    # Defence-in-depth (РОЛ Тест 07 #5c W2 — Phase 5a security review):
+    # `location_map` overrides are caller-supplied UUIDs. Mirror the
+    # template-creation check (_validate_template_location_ids) and verify
+    # every override belongs to the caller's organisation before we resolve
+    # any segment from it. Without this, a logistics user could pass another
+    # org's location id and silently materialise segments pointing at
+    # foreign locations.
+    override_ids = {v for v in location_map.values() if v}
+    if override_ids:
+        check = (
+            sb.table("locations")
+            .select("id")
+            .eq("organization_id", org_id)
+            .in_("id", list(override_ids))
+            .execute()
+        )
+        found = {row["id"] for row in (check.data or [])}
+        bad = override_ids - found
+        if bad:
+            return _err(
+                "VALIDATION_ERROR",
+                f"Location IDs not in org: {sorted(bad)}",
+                403,
+            )
+
     tpl = (
         sb.table("logistics_route_templates")
         .select(
