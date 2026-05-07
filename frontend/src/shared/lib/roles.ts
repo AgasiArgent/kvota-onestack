@@ -220,3 +220,40 @@ const QUOTE_FINANCIALS_ROLES = [
 export function canViewQuoteFinancials(roles: string[]): boolean {
   return roles.some((r) => QUOTE_FINANCIALS_ROLES.includes(r));
 }
+
+/** Roles allowed to mutate sales-side customer-facing fields on a quote
+ * (contact person, delivery address). Procurement / logistics / customs /
+ * finance / controllers must not change which contact or address is on a
+ * quote — that's a sales decision.
+ */
+const QUOTE_CUSTOMER_FIELDS_EDIT_ROLES = ["admin", "sales", "head_of_sales"];
+
+/**
+ * Returns true if the user may edit customer-facing fields (contact, address)
+ * on a quote. Restricted to admin and the sales tier.
+ */
+export function canEditQuoteCustomerFields(roles: string[]): boolean {
+  return roles.some((r) => QUOTE_CUSTOMER_FIELDS_EDIT_ROLES.includes(r));
+}
+
+/** Roles that should see financial aggregate columns (Сумма / Прибыль /
+ * Выручка / Спец) in list views. Procurement / logistics / customs roles
+ * execute later pipeline stages — financial summary noise just confuses them.
+ */
+const FINANCIALS_VISIBLE_ROLES = [
+  "admin",
+  "sales",
+  "head_of_sales",
+  "quote_controller",
+  "spec_controller",
+  "finance",
+  "top_manager",
+];
+
+/**
+ * Returns true if the user should see financial aggregate columns in list
+ * views. Excludes procurement, logistics, customs and their leads.
+ */
+export function shouldShowFinancials(roles: string[]): boolean {
+  return roles.some((r) => FINANCIALS_VISIBLE_ROLES.includes(r));
+}

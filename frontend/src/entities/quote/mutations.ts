@@ -1,7 +1,7 @@
 import { createClient } from "@/shared/lib/supabase/client";
 import { escapePostgrestFilter } from "@/shared/lib/supabase/escape-filter";
 import { findCountryByName } from "@/shared/ui/geo";
-import { isSalesOnly } from "@/shared/lib/roles";
+import { canEditQuoteCustomerFields, isSalesOnly } from "@/shared/lib/roles";
 import { getAssignedCustomerIds } from "@/shared/lib/access";
 
 // Sentinel UUID used to force a query to return zero rows when a sales-only
@@ -1882,6 +1882,21 @@ export async function escalateQuote(
   if (commentError) throw commentError;
 }
 
+/**
+ * Roles that the auth.users JWT carries permitting customer-field edits on a
+ * quote (Контакт, Адрес доставки). Mirrors the UI gate in
+ * `canEditQuoteCustomerFields` and the RLS UPDATE policy on `kvota.quotes`
+ * (migration 308). Defense-in-depth: even if the parent component forgets
+ * to gate the dropdown, this function refuses to issue the update when the
+ * caller's roles don't allow it.
+ *
+ * МОЗ-58 / Track A 2026-05-07.
+ */
+const QUOTE_CUSTOMER_FIELD_KEYS = new Set([
+  "contact_person_id",
+  "delivery_address",
+]);
+
 export async function patchQuote(
   quoteId: string,
   updates: Partial<{
@@ -1891,6 +1906,35 @@ export async function patchQuote(
   }>
 ): Promise<void> {
   const supabase = createClient();
+
+  // Defensive role gate — only enforced when the patch touches customer-facing
+  // fields (Контакт / Адрес доставки). delivery_priority and other future
+  // additions remain unrestricted at this layer.
+  const touchesCustomerFields = Object.keys(updates).some((k) =>
+    QUOTE_CUSTOMER_FIELD_KEYS.has(k)
+  );
+
+  if (touchesCustomerFields) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error("Не авторизованы");
+    }
+    const { data: roleRows, error: rolesError } = await supabase
+      .from("user_roles")
+      .select("roles!inner(slug)")
+      .eq("user_id", user.id);
+    if (rolesError) throw rolesError;
+    const slugs = (roleRows ?? [])
+      .map((row) => (row.roles as unknown as { slug: string } | null)?.slug)
+      .filter((s): s is string => typeof s === "string");
+    if (!canEditQuoteCustomerFields(slugs)) {
+      throw new Error(
+        "Только роли «продажи» могут менять контакт и адрес доставки"
+      );
+    }
+  }
 
   const { error } = await supabase
     .from("quotes")

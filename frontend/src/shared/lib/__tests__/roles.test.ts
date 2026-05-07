@@ -6,6 +6,8 @@ import {
   isProcurementSeniorOnly,
   isCustomsOnly,
   canEditComposition,
+  canEditQuoteCustomerFields,
+  shouldShowFinancials,
 } from "../roles";
 
 describe("isSalesOnly", () => {
@@ -426,5 +428,74 @@ describe("canEditComposition", () => {
 
   it("returns true when sales + logistics combo (one matching role is enough)", () => {
     expect(canEditComposition(["sales", "logistics"])).toBe(true);
+  });
+});
+
+describe("canEditQuoteCustomerFields", () => {
+  // --- Roles that CAN edit customer fields (sales tier + admin) ---
+
+  it.each([["sales"], ["head_of_sales"], ["admin"]])(
+    "returns true for %s",
+    (role) => {
+      expect(canEditQuoteCustomerFields([role])).toBe(true);
+    }
+  );
+
+  it("returns true for admin + procurement combo (admin trumps)", () => {
+    expect(canEditQuoteCustomerFields(["admin", "procurement"])).toBe(true);
+  });
+
+  // --- Roles that CANNOT edit customer fields ---
+
+  it.each([
+    ["procurement"],
+    ["procurement_senior"],
+    ["head_of_procurement"],
+    ["logistics"],
+    ["customs"],
+    ["finance"],
+  ])("returns false for %s", (role) => {
+    expect(canEditQuoteCustomerFields([role])).toBe(false);
+  });
+
+  it("returns false for empty roles", () => {
+    expect(canEditQuoteCustomerFields([])).toBe(false);
+  });
+});
+
+describe("shouldShowFinancials", () => {
+  // --- Roles that SHOULD see financial columns ---
+
+  it.each([
+    ["admin"],
+    ["sales"],
+    ["head_of_sales"],
+    ["quote_controller"],
+    ["spec_controller"],
+    ["finance"],
+    ["top_manager"],
+  ])("returns true for %s", (role) => {
+    expect(shouldShowFinancials([role])).toBe(true);
+  });
+
+  it("returns true for sales + procurement combo (sales role wins)", () => {
+    expect(shouldShowFinancials(["sales", "procurement"])).toBe(true);
+  });
+
+  // --- Roles that should NOT see financial columns ---
+
+  it.each([
+    ["procurement"],
+    ["procurement_senior"],
+    ["head_of_procurement"],
+    ["logistics"],
+    ["head_of_logistics"],
+    ["customs"],
+  ])("returns false for %s", (role) => {
+    expect(shouldShowFinancials([role])).toBe(false);
+  });
+
+  it("returns false for empty roles", () => {
+    expect(shouldShowFinancials([])).toBe(false);
   });
 });

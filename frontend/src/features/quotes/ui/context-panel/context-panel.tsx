@@ -8,7 +8,7 @@ import { ContactDropdownSelect } from "./contact-dropdown-select";
 import { AddressDropdownSelect } from "./address-dropdown-select";
 import type { ParticipantRow } from "./participants-block";
 import { ROLE_LABELS_RU } from "@/entities/user/types";
-import { canViewQuoteFinancials } from "@/shared/lib/roles";
+import { canEditQuoteCustomerFields, canViewQuoteFinancials } from "@/shared/lib/roles";
 import type { QuoteContextData } from "./queries";
 
 const DELIVERY_METHOD_LABELS: Record<string, string> = {
@@ -54,6 +54,7 @@ interface ContextPanelProps {
 
 export function ContextPanel({ quote, data, userRoles }: ContextPanelProps) {
   const showFinancials = canViewQuoteFinancials(userRoles);
+  const canEditCustomerFields = canEditQuoteCustomerFields(userRoles);
   return (
     <div className="mx-6 mt-3 mb-1 rounded-lg border border-border bg-muted/30 p-4">
       <QuoteInfoBlock
@@ -61,6 +62,7 @@ export function ContextPanel({ quote, data, userRoles }: ContextPanelProps) {
         salesManager={data.salesManager}
         participants={data.participants}
         showFinancials={showFinancials}
+        canEditCustomerFields={canEditCustomerFields}
       />
     </div>
   );
@@ -75,11 +77,13 @@ function QuoteInfoBlock({
   salesManager,
   participants,
   showFinancials,
+  canEditCustomerFields,
 }: {
   quote: QuoteDetailRow;
   salesManager: QuoteContextData["salesManager"];
   participants: ParticipantRow[];
   showFinancials: boolean;
+  canEditCustomerFields: boolean;
 }) {
   const currency = quote.currency ?? "USD";
   const profit = quote.profit_quote_currency ?? null;
@@ -126,15 +130,24 @@ function QuoteInfoBlock({
         </InfoRow>
         <InfoRow label="Контакт">
           {quote.customer ? (
-            <ContactDropdownSelect
-              quoteId={quote.id}
-              customerId={quote.customer.id}
-              initialContact={
-                quote.contact_person
-                  ? { id: quote.contact_person.id, name: quote.contact_person.name }
-                  : null
-              }
-            />
+            canEditCustomerFields ? (
+              <ContactDropdownSelect
+                quoteId={quote.id}
+                customerId={quote.customer.id}
+                initialContact={
+                  quote.contact_person
+                    ? { id: quote.contact_person.id, name: quote.contact_person.name }
+                    : null
+                }
+              />
+            ) : (
+              <span
+                className="block truncate text-sm font-medium"
+                data-testid="context-panel-contact-readonly"
+              >
+                {quote.contact_person?.name ?? "—"}
+              </span>
+            )
           ) : (
             <span className="text-sm text-muted-foreground">{"\u2014"}</span>
           )}
@@ -146,11 +159,20 @@ function QuoteInfoBlock({
         </InfoRow>
         <InfoRow label="Адрес доставки">
           {quote.customer ? (
-            <AddressDropdownSelect
-              quoteId={quote.id}
-              customerId={quote.customer.id}
-              initialAddress={quote.delivery_address ?? null}
-            />
+            canEditCustomerFields ? (
+              <AddressDropdownSelect
+                quoteId={quote.id}
+                customerId={quote.customer.id}
+                initialAddress={quote.delivery_address ?? null}
+              />
+            ) : (
+              <span
+                className="block truncate text-sm font-medium"
+                data-testid="context-panel-address-readonly"
+              >
+                {quote.delivery_address ?? "—"}
+              </span>
+            )
           ) : (
             <span className="text-sm text-muted-foreground">{"\u2014"}</span>
           )}
