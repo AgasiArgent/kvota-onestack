@@ -37,8 +37,13 @@ export default async function WorkspaceLogisticsPage({ searchParams }: PageProps
     user.roles.includes("top_manager");
 
   const { tab } = await searchParams;
+  // Heads (head_of_logistics / head_of_customs / admin / top_manager) manage
+  // the team queue, so their landing tab is «Все заявки» — mirrors the
+  // sales-style scope where head_of_sales lands on the org-wide list, not
+  // their personal one (L-D 1.1).
+  const defaultTab: Tab = isHead ? "all" : "my";
   const activeTab: Tab =
-    (["my", "completed", "unassigned", "all"] as const).find((t) => t === tab) ?? "my";
+    (["my", "completed", "unassigned", "all"] as const).find((t) => t === tab) ?? defaultTab;
 
   if (!isHead && (activeTab === "unassigned" || activeTab === "all")) notFound();
 
@@ -54,7 +59,7 @@ export default async function WorkspaceLogisticsPage({ searchParams }: PageProps
     ]);
 
   return (
-    <div className="p-6 space-y-6 max-w-[1400px] mx-auto">
+    <div className="p-6 space-y-6">
       <header>
         <h1 className="text-2xl font-semibold text-text tracking-tight">Логистика</h1>
         <p className="text-sm text-text-muted mt-1">
@@ -67,6 +72,7 @@ export default async function WorkspaceLogisticsPage({ searchParams }: PageProps
       <WorkspaceLogisticsClient
         userRoles={user.roles}
         activeTab={activeTab}
+        defaultTab={defaultTab}
         counts={{ my: my.length, completed: completed.length, unassigned: unassigned.length, all: all.length }}
       >
         {{
