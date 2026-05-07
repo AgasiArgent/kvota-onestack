@@ -517,6 +517,8 @@ export function LogisticsStep({
             canEdit={canCompleteLogistics}
             completing={completing}
             onComplete={handleCompleteLogistics}
+            displayCurrency={quote.currency ?? "RUB"}
+            fxRates={ratesToRub}
           />
           {/* Cargo digest from procurement — RОЛ Тест 07 #3.3. */}
           <InvoiceCargoSummary invoice={activeInvoice} />
