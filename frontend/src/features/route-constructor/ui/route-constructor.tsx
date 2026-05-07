@@ -14,6 +14,7 @@ import {
 } from "@/entities/logistics-segment";
 import type { LogisticsTemplate } from "@/entities/logistics-template";
 import { applyLogisticsTemplate } from "@/entities/logistics-template";
+import type { FxRateMap } from "@/shared/lib/fx-convert";
 import { AddSegmentDialog } from "./add-segment-dialog";
 import { NewSegmentButton } from "./new-segment-button";
 import { RouteTotalsCard } from "./route-totals-card";
@@ -47,6 +48,14 @@ interface RouteConstructorProps {
   disabled?: boolean;
   /** Pickup hint forwarded from the parent invoice (РОЛ Тест 07 #3.4). */
   pickupHint?: { country: string | null; city: string | null } | null;
+  /**
+   * Quote currency for the route totals row (РОЛ Тест 07 #3.7). Defaults
+   * to RUB if not supplied so the constructor remains usable in admin
+   * previews where there is no quote context.
+   */
+  displayCurrency?: string;
+  /** Foreign-currency → RUB rate map for FX conversion. */
+  ratesToRub?: FxRateMap;
 }
 
 export function RouteConstructor({
@@ -57,6 +66,8 @@ export function RouteConstructor({
   revalidatePath,
   disabled,
   pickupHint,
+  displayCurrency,
+  ratesToRub,
 }: RouteConstructorProps) {
   const router = useRouter();
   const [segments, setSegments] = useState<LogisticsSegment[]>(initialSegments);
@@ -214,7 +225,11 @@ export function RouteConstructor({
             onDelete={handleDelete}
             disabled={disabled || isPending}
           />
-          <RouteTotalsCard segments={segments} />
+          <RouteTotalsCard
+            segments={segments}
+            displayCurrency={displayCurrency}
+            ratesToRub={ratesToRub}
+          />
         </div>
         <SegmentDetailsPanel
           segment={selected}

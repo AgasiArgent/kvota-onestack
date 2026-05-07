@@ -10,9 +10,16 @@ import type {
 } from "@/entities/quote/queries";
 import { createClient } from "@/shared/lib/supabase/client";
 import type { LocationOption, LocationType } from "@/entities/location";
-import type { LogisticsSegment } from "@/entities/logistics-segment";
-import { completeLogistics } from "@/entities/logistics-segment";
+import type {
+  LogisticsSegment,
+  SegmentCurrency,
+} from "@/entities/logistics-segment";
+import {
+  SEGMENT_CURRENCIES,
+  completeLogistics,
+} from "@/entities/logistics-segment";
 import type { LogisticsTemplate } from "@/entities/logistics-template";
+import type { FxRateMap } from "@/shared/lib/fx-convert";
 import { RouteConstructor } from "@/features/route-constructor";
 import {
   InvoiceTabs,
@@ -68,6 +75,8 @@ interface SegmentRowShape {
   label: string | null;
   transit_days: number | null;
   main_cost_rub: number | string | null;
+  /** Added by m309. Falls back to 'RUB' for legacy rows. */
+  currency_code: string | null;
   carrier: string | null;
   notes: string | null;
 }
@@ -84,6 +93,8 @@ interface ExpenseRowShape {
   segment_id: string;
   label: string;
   cost_rub: number | string | null;
+  /** Added by m309. Falls back to 'RUB' for legacy rows. */
+  currency_code: string | null;
   days: number | null;
   notes: string | null;
 }
@@ -104,6 +115,9 @@ interface TemplateSegmentRowShape {
   to_location_type: string;
   default_label: string | null;
   default_days: number | null;
+  /** Optional concrete location FKs (РОЛ Тест 07 #3.5, m309). */
+  from_location_id: string | null;
+  to_location_id: string | null;
 }
 
 const ALLOWED_TYPES: readonly LocationType[] = [
@@ -125,6 +139,14 @@ function toNumber(v: number | string | null | undefined): number {
   return typeof v === "number" ? v : Number(v) || 0;
 }
 
+function coerceCurrency(raw: string | null | undefined): SegmentCurrency {
+  if (!raw) return "RUB";
+  const upper = raw.toUpperCase();
+  return (SEGMENT_CURRENCIES as readonly string[]).includes(upper)
+    ? (upper as SegmentCurrency)
+    : "RUB";
+}
+
 export function LogisticsStep({
   quote,
   invoices,
@@ -140,6 +162,8 @@ export function LogisticsStep({
   >(new Map());
   const [locations, setLocations] = useState<LocationOption[]>([]);
   const [templates, setTemplates] = useState<LogisticsTemplate[]>([]);
+  // FX rates: foreign-currency → RUB, used by RouteTotalsCard (3.7).
+  const [ratesToRub, setRatesToRub] = useState<FxRateMap>({});
   const [loading, setLoading] = useState(true);
   const [completing, startCompleting] = useTransition();
   const router = useRouter();
@@ -221,6 +245,7 @@ export function LogisticsStep({
         templateSegmentsRes,
         segmentsRes,
         expensesRes,
+        ratesRes,
       ] = await Promise.all([
         // Locations — all types, org-scoped
         supabase
@@ -239,14 +264,14 @@ export function LogisticsStep({
         supabase
           .from("logistics_route_template_segments")
           .select(
-            "id, template_id, sequence_order, from_location_type, to_location_type, default_label, default_days",
+            "id, template_id, sequence_order, from_location_type, to_location_type, default_label, default_days, from_location_id, to_location_id",
           ),
         // Segments — only for the loaded quote's invoices
         invoiceIds.length > 0
           ? supabase
               .from("logistics_route_segments")
               .select(
-                "id, invoice_id, sequence_order, from_location_id, to_location_id, label, transit_days, main_cost_rub, carrier, notes",
+                "id, invoice_id, sequence_order, from_location_id, to_location_id, label, transit_days, main_cost_rub, currency_code, carrier, notes",
               )
               .in("invoice_id", invoiceIds)
               .order("sequence_order", { ascending: true })
@@ -256,9 +281,19 @@ export function LogisticsStep({
           ? supabase
               .from("logistics_segment_expenses")
               .select(
-                "id, segment_id, label, cost_rub, days, notes",
+                "id, segment_id, label, cost_rub, currency_code, days, notes",
               )
           : { data: [], error: null },
+        // FX rates: most-recent foreign→RUB rates for currencies the
+        // segment editor allows. Pulled from kvota.exchange_rates which
+        // is an org-agnostic CBR cache (services/currency_service.py).
+        supabase
+          .from("exchange_rates")
+          .select("from_currency, rate, fetched_at")
+          .eq("to_currency", "RUB")
+          .in("from_currency", ["USD", "EUR", "CNY"])
+          .order("fetched_at", { ascending: false })
+          .limit(20),
       ]);
 
       if (cancelled) return;
@@ -281,6 +316,7 @@ export function LogisticsStep({
           id: string;
           label: string;
           costRub: number;
+          currencyCode: SegmentCurrency;
           days?: number;
           notes?: string;
         }>
@@ -291,6 +327,7 @@ export function LogisticsStep({
           id: e.id,
           label: e.label,
           costRub: toNumber(e.cost_rub),
+          currencyCode: coerceCurrency(e.currency_code),
           days: e.days ?? undefined,
           notes: e.notes ?? undefined,
         });
@@ -332,6 +369,7 @@ export function LogisticsStep({
           label: row.label ?? undefined,
           transitDays: row.transit_days ?? undefined,
           mainCostRub: toNumber(row.main_cost_rub),
+          currencyCode: coerceCurrency(row.currency_code),
           carrier: row.carrier ?? undefined,
           notes: row.notes ?? undefined,
           expenses: expensesBySegment.get(row.id) ?? [],
@@ -367,12 +405,27 @@ export function LogisticsStep({
             toLocationType: coerceType(s.to_location_type),
             defaultLabel: s.default_label ?? undefined,
             defaultDays: s.default_days ?? undefined,
+            fromLocationId: s.from_location_id ?? undefined,
+            toLocationId: s.to_location_id ?? undefined,
           })),
       }));
+
+      // Build foreign-currency → RUB rate map (latest per currency).
+      const rates: Record<string, number> = {};
+      for (const r of (ratesRes.data ?? []) as Array<{
+        from_currency: string;
+        rate: number | string | null;
+      }>) {
+        const code = r.from_currency?.toUpperCase();
+        if (!code || code in rates) continue; // first row is most recent
+        const numeric = toNumber(r.rate);
+        if (numeric > 0) rates[code] = numeric;
+      }
 
       setLocations(locs);
       setTemplates(tmpls);
       setSegmentsByInvoice(byInvoice);
+      setRatesToRub(rates);
       setLoading(false);
     }
 
@@ -475,6 +528,8 @@ export function LogisticsStep({
               country: activeInvoice.pickup_country ?? null,
               city: activeInvoice.pickup_city ?? null,
             }}
+            displayCurrency={quote.currency ?? "RUB"}
+            ratesToRub={ratesToRub}
           />
         </>
       ) : null}

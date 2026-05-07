@@ -67,6 +67,7 @@ function makeSegment(overrides: Partial<LogisticsSegment> = {}): LogisticsSegmen
     label: undefined,
     transitDays: undefined,
     mainCostRub: 0,
+    currencyCode: "RUB",
     carrier: undefined,
     notes: undefined,
     expenses: [],
