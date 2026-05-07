@@ -45,6 +45,8 @@ interface RouteConstructorProps {
   templates: LogisticsTemplate[];
   revalidatePath: string;
   disabled?: boolean;
+  /** Pickup hint forwarded from the parent invoice (РОЛ Тест 07 #3.4). */
+  pickupHint?: { country: string | null; city: string | null } | null;
 }
 
 export function RouteConstructor({
@@ -54,6 +56,7 @@ export function RouteConstructor({
   templates,
   revalidatePath,
   disabled,
+  pickupHint,
 }: RouteConstructorProps) {
   const router = useRouter();
   const [segments, setSegments] = useState<LogisticsSegment[]>(initialSegments);
@@ -227,6 +230,7 @@ export function RouteConstructor({
         onOpenChange={setAddOpen}
         locations={locations}
         onSubmit={handleCreateSegment}
+        pickupHint={pickupHint}
       />
     </div>
   );

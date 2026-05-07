@@ -78,7 +78,7 @@ export function RoleBasedTabs({
             <span>{tab.label}</span>
             {tab.count !== undefined && tab.count !== null && (
               <span
-                className="tabular-nums text-xs text-text-muted data-[state=active]:text-accent"
+                className="tabular-nums text-xs text-text-muted data-[active]:text-accent"
                 aria-hidden
               >
                 · {tab.count}

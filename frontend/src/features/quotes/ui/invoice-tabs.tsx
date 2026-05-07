@@ -67,7 +67,9 @@ export function InvoiceTabs({
               className={cn(
                 "h-auto flex-col items-start gap-1 px-3 py-2",
                 "text-left whitespace-nowrap",
-                "data-[state=active]:bg-card data-[state=active]:shadow-sm",
+                // Base UI uses data-active (not data-state="active") on the
+                // selected trigger — see components/ui/tabs.tsx for context.
+                "data-[active]:bg-card data-[active]:shadow-sm",
               )}
             >
               <div className="flex items-center gap-2 text-sm font-medium">

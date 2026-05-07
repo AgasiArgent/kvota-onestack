@@ -97,7 +97,12 @@ export function EntityNoteCard({
       )}
     >
       <header className="flex items-start gap-2 mb-2">
-        <UserAvatarChip user={note.author} size="sm" />
+        {/* `initialsOnly` so the avatar does NOT render the author's name —
+            the header span below is the single source of truth. Earlier
+            code passed neither prop, which made UserAvatarChip render
+            `user.name` next to the avatar AND the header span repeat it,
+            so every note card showed «ФИО ФИО» (РОЛ Тест 07 #3.8). */}
+        <UserAvatarChip user={note.author} size="sm" initialsOnly />
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline gap-2 flex-wrap">
             <span className="text-sm font-medium text-text truncate">

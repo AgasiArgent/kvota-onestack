@@ -22,6 +22,7 @@ import {
 import { EntityNotesPanel } from "@/entities/entity-note";
 import type { EntityNoteCardData } from "@/entities/entity-note/ui/entity-note-card";
 import { LogisticsActionBar } from "./logistics-action-bar";
+import { InvoiceCargoSummary } from "./invoice-cargo-summary";
 
 const COMPLETE_LOGISTICS_ROLES = new Set([
   "logistics",
@@ -171,13 +172,24 @@ export function LogisticsStep({
     });
   }
 
-  // Re-pick active invoice if the list changed
+  // Stable key derived from invoice ids. The `invoices` prop is a fresh
+  // array reference on every parent render (server data, polling timers,
+  // unrelated state updates), so we cannot use it directly as an effect
+  // dep without re-running the network load on every render — which
+  // produces a "remount" feel mid-typing (РОЛ Тест 07 #3.6, cluster L-A).
+  const invoiceIdsKey = useMemo(
+    () => invoices.map((i) => i.id).join(","),
+    [invoices],
+  );
+
+  // Re-pick active invoice if the list changed (id-based, not ref-based)
   useEffect(() => {
     setActiveInvoiceId((prev) => {
       if (prev && invoices.some((i) => i.id === prev)) return prev;
       return invoices[0]?.id ?? null;
     });
-  }, [invoices]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- invoiceIdsKey is the canonical dep; `invoices` itself is unstable
+  }, [invoiceIdsKey]);
 
   // Load data — locations, templates (once), segments (per active invoice)
   useEffect(() => {
@@ -373,7 +385,8 @@ export function LogisticsStep({
     return () => {
       cancelled = true;
     };
-  }, [invoices, quote.organization_id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- invoiceIdsKey is stable when invoice IDs unchanged; `invoices` ref changes every parent render
+  }, [invoiceIdsKey, quote.organization_id]);
 
   const tabItems: InvoiceTabItem[] = useMemo(
     () =>
@@ -448,6 +461,8 @@ export function LogisticsStep({
             completing={completing}
             onComplete={handleCompleteLogistics}
           />
+          {/* Cargo digest from procurement — RОЛ Тест 07 #3.3. */}
+          <InvoiceCargoSummary invoice={activeInvoice} />
           <RouteConstructor
             key={activeInvoiceId}
             invoiceId={activeInvoiceId}
@@ -456,6 +471,10 @@ export function LogisticsStep({
             locations={locations}
             templates={templates}
             revalidatePath={`/quotes/${quote.id}`}
+            pickupHint={{
+              country: activeInvoice.pickup_country ?? null,
+              city: activeInvoice.pickup_city ?? null,
+            }}
           />
         </>
       ) : null}

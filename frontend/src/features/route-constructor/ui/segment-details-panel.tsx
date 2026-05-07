@@ -142,14 +142,24 @@ function SegmentFields({
   const [mainCost, setMainCost] = useState(String(segment.mainCostRub ?? 0));
   const [, startTransition] = useTransition();
 
-  // Re-sync when switching selected segment
+  // Re-sync local input state ONLY when the user switches to a different
+  // segment. Earlier code listed every individual field in the deps array,
+  // which caused the effect to re-run mid-edit on any unrelated server
+  // update (e.g. revalidatePath cascading down a new `segment` object with
+  // the same id). The effect would then call setLabel("") / setCarrier("")
+  // while the user was still typing, wiping their input — РОЛ Тест 07 #3.6
+  // ("страница remount при наборе 1 символа"). The parent already mounts
+  // SegmentFields with `key={segment.id}`, so this hook is a defensive
+  // re-init for the rare case of an in-place segment swap; it must never
+  // overwrite user input on field-level updates.
   useEffect(() => {
     setLabel(segment.label ?? "");
     setCarrier(segment.carrier ?? "");
     setNotes(segment.notes ?? "");
     setTransitDays(segment.transitDays != null ? String(segment.transitDays) : "");
     setMainCost(String(segment.mainCostRub ?? 0));
-  }, [segment.id, segment.label, segment.carrier, segment.notes, segment.transitDays, segment.mainCostRub]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: see comment above
+  }, [segment.id]);
 
   function patch(patch: SegmentPatch, local?: Partial<LogisticsSegment>) {
     if (local && onLocalUpdate) onLocalUpdate(segment.id, local);
