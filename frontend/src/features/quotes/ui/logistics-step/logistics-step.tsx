@@ -287,11 +287,15 @@ export function LogisticsStep({
         // FX rates: most-recent foreign→RUB rates for currencies the
         // segment editor allows. Pulled from kvota.exchange_rates which
         // is an org-agnostic CBR cache (services/currency_service.py).
+        // RUB is excluded — it's the base currency (implicit 1.0 in fx-convert).
         supabase
           .from("exchange_rates")
           .select("from_currency, rate, fetched_at")
           .eq("to_currency", "RUB")
-          .in("from_currency", ["USD", "EUR", "CNY"])
+          .in(
+            "from_currency",
+            SEGMENT_CURRENCIES.filter((c) => c !== "RUB"),
+          )
           .order("fetched_at", { ascending: false })
           .limit(20),
       ]);
