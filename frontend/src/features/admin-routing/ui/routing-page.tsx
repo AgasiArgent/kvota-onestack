@@ -7,6 +7,7 @@ import { GroupsTab } from "./groups-tab";
 import { TenderTab } from "./tender-tab";
 import { UnassignedTab } from "./unassigned-tab";
 import { LogisticsTemplatesTab } from "./logistics-templates-tab";
+import type { LocationOption } from "@/entities/location";
 import type {
   RoutingTab,
   BrandAssignment,
@@ -23,7 +24,10 @@ interface Props {
   groupsData?: { assignments: GroupAssignment[] };
   tenderData?: { steps: TenderChainStep[] };
   unassignedData?: { items: UnassignedItem[] };
-  logisticsData?: { templates: LogisticsTemplateAdmin[] };
+  logisticsData?: {
+    templates: LogisticsTemplateAdmin[];
+    locations?: LocationOption[];
+  };
 }
 
 export function RoutingPage({
@@ -58,6 +62,7 @@ export function RoutingPage({
           <LogisticsTemplatesTab
             templates={logisticsData.templates}
             orgId={orgId}
+            locations={logisticsData.locations}
           />
         )}
       </RoutingTabs>

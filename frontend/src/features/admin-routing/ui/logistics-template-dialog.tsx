@@ -14,14 +14,23 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { SearchableCombobox } from "@/shared/ui/searchable-combobox";
+import {
+  LOCATION_TYPE_LABEL,
+  formatLocationLabel,
+  type LocationOption,
+} from "@/entities/location";
 import type { LocationType } from "@/entities/location/ui/location-chip";
 
 /**
  * LogisticsTemplateDialog — creation form for a new logistics route template.
  *
- * The template is a typed scaffold: each segment is a (from_location_type,
- * to_location_type) pair with optional default label/days. Logisticians
- * instantiate it by picking concrete locations in the Route Constructor.
+ * Hybrid scaffold (РОЛ Тест 07 #3.5): each segment side carries a
+ * (location_type) pair, plus an OPTIONAL concrete location id. When the
+ * concrete id is set, apply_template uses it directly; otherwise it falls
+ * back to type-based selection at apply time. Lets admins build a
+ * "skeleton + pinned waypoint" template without forcing every leg to be
+ * type-only.
  */
 
 interface TemplateSegmentForm {
@@ -30,6 +39,10 @@ interface TemplateSegmentForm {
   to_location_type: LocationType;
   default_label: string;
   default_days: number | null;
+  /** Optional concrete from-location id (3.5). Null = type-only. */
+  from_location_id: string | null;
+  /** Optional concrete to-location id (3.5). Null = type-only. */
+  to_location_id: string | null;
 }
 
 interface Props {
@@ -47,6 +60,11 @@ interface Props {
     description: string;
     segments: TemplateSegmentForm[];
   };
+  /**
+   * All org-scoped locations for the optional concrete location pickers.
+   * Empty array is acceptable — falls back to type-only templates.
+   */
+  locations?: LocationOption[];
 }
 
 const LOCATION_TYPES: Array<{ value: LocationType; label: string }> = [
@@ -57,6 +75,49 @@ const LOCATION_TYPES: Array<{ value: LocationType; label: string }> = [
   { value: "client", label: "Клиент" },
 ];
 
+interface ConcreteLocationFieldProps {
+  label: string;
+  locations: LocationOption[];
+  value: string | null;
+  onChange: (next: string | null) => void;
+  disabled?: boolean;
+}
+
+/**
+ * ConcreteLocationField — searchable picker that defaults to "Любая
+ * локация типа выше" (i.e. type-only, value=null) and lets the admin pin
+ * a specific location when needed (3.5 hybrid templates).
+ */
+function ConcreteLocationField({
+  label,
+  locations,
+  value,
+  onChange,
+  disabled,
+}: ConcreteLocationFieldProps) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-xs font-medium text-text-muted">{label}</span>
+      <SearchableCombobox
+        ariaLabel={label}
+        value={value}
+        onChange={(v) => onChange(v ?? null)}
+        items={locations}
+        getLabel={formatLocationLabel}
+        getSecondary={(loc) => LOCATION_TYPE_LABEL[loc.type]}
+        getSearchableExtras={(loc) => [
+          LOCATION_TYPE_LABEL[loc.type],
+          loc.city ?? "",
+        ]}
+        placeholder="Авто (по типу)"
+        emptyMessage="Нет локаций — создайте их в «Справочниках»."
+        clearable
+        disabled={disabled}
+      />
+    </label>
+  );
+}
+
 function emptySegment(sequence_order: number): TemplateSegmentForm {
   return {
     sequence_order,
@@ -64,6 +125,8 @@ function emptySegment(sequence_order: number): TemplateSegmentForm {
     to_location_type: "hub",
     default_label: "",
     default_days: null,
+    from_location_id: null,
+    to_location_id: null,
   };
 }
 
@@ -73,6 +136,7 @@ export function LogisticsTemplateDialog({
   onSubmit,
   busy,
   initial,
+  locations = [],
 }: Props) {
   const isEdit = Boolean(initial);
   const [name, setName] = useState(initial?.name ?? "");
@@ -199,87 +263,119 @@ export function LogisticsTemplateDialog({
                 {segments.map((seg, i) => (
                   <div
                     key={i}
-                    className="flex items-center gap-2 rounded-md border border-border-light bg-card px-3 py-2"
+                    className="rounded-md border border-border-light bg-card px-3 py-2"
                   >
-                    <span className="shrink-0 text-xs text-text-subtle tabular-nums">
-                      {seg.sequence_order}
-                    </span>
-                    <select
-                      className="rounded border border-border-light bg-background px-2 py-1 text-sm"
-                      value={seg.from_location_type}
-                      onChange={(e) =>
-                        updateSegment(i, {
-                          from_location_type: e.target.value as LocationType,
-                        })
-                      }
-                      disabled={busy}
-                      aria-label="Тип начальной локации"
-                    >
-                      {LOCATION_TYPES.map((t) => (
-                        <option key={t.value} value={t.value}>
-                          {t.label}
-                        </option>
-                      ))}
-                    </select>
-                    <ArrowRight
-                      size={14}
-                      className="text-text-subtle"
-                      aria-hidden
-                    />
-                    <select
-                      className="rounded border border-border-light bg-background px-2 py-1 text-sm"
-                      value={seg.to_location_type}
-                      onChange={(e) =>
-                        updateSegment(i, {
-                          to_location_type: e.target.value as LocationType,
-                        })
-                      }
-                      disabled={busy}
-                      aria-label="Тип конечной локации"
-                    >
-                      {LOCATION_TYPES.map((t) => (
-                        <option key={t.value} value={t.value}>
-                          {t.label}
-                        </option>
-                      ))}
-                    </select>
-                    <Input
-                      className="flex-1"
-                      placeholder="Подпись сегмента (опц.)"
-                      value={seg.default_label}
-                      onChange={(e) =>
-                        updateSegment(i, { default_label: e.target.value })
-                      }
-                      disabled={busy}
-                    />
-                    <Input
-                      type="number"
-                      min={0}
-                      step={1}
-                      className="w-20"
-                      placeholder="Дни"
-                      value={seg.default_days ?? ""}
-                      onChange={(e) =>
-                        updateSegment(i, {
-                          default_days: e.target.value
-                            ? Number(e.target.value)
-                            : null,
-                        })
-                      }
-                      disabled={busy}
-                      aria-label="Дней по умолчанию"
-                    />
-                    {segments.length > 1 && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeSegment(i)}
+                    <div className="flex items-center gap-2">
+                      <span className="shrink-0 text-xs text-text-subtle tabular-nums">
+                        {seg.sequence_order}
+                      </span>
+                      <select
+                        className="rounded border border-border-light bg-background px-2 py-1 text-sm"
+                        value={seg.from_location_type}
+                        onChange={(e) =>
+                          updateSegment(i, {
+                            from_location_type: e.target.value as LocationType,
+                          })
+                        }
                         disabled={busy}
-                        aria-label={`Удалить сегмент ${seg.sequence_order}`}
+                        aria-label="Тип начальной локации"
                       >
-                        <Trash2 size={14} aria-hidden />
-                      </Button>
+                        {LOCATION_TYPES.map((t) => (
+                          <option key={t.value} value={t.value}>
+                            {t.label}
+                          </option>
+                        ))}
+                      </select>
+                      <ArrowRight
+                        size={14}
+                        className="text-text-subtle"
+                        aria-hidden
+                      />
+                      <select
+                        className="rounded border border-border-light bg-background px-2 py-1 text-sm"
+                        value={seg.to_location_type}
+                        onChange={(e) =>
+                          updateSegment(i, {
+                            to_location_type: e.target.value as LocationType,
+                          })
+                        }
+                        disabled={busy}
+                        aria-label="Тип конечной локации"
+                      >
+                        {LOCATION_TYPES.map((t) => (
+                          <option key={t.value} value={t.value}>
+                            {t.label}
+                          </option>
+                        ))}
+                      </select>
+                      <Input
+                        className="flex-1"
+                        placeholder="Подпись сегмента (опц.)"
+                        value={seg.default_label}
+                        onChange={(e) =>
+                          updateSegment(i, { default_label: e.target.value })
+                        }
+                        disabled={busy}
+                      />
+                      <Input
+                        type="number"
+                        min={0}
+                        step={1}
+                        className="w-20"
+                        placeholder="Дни"
+                        value={seg.default_days ?? ""}
+                        onChange={(e) =>
+                          updateSegment(i, {
+                            default_days: e.target.value
+                              ? Number(e.target.value)
+                              : null,
+                          })
+                        }
+                        disabled={busy}
+                        aria-label="Дней по умолчанию"
+                      />
+                      {segments.length > 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeSegment(i)}
+                          disabled={busy}
+                          aria-label={`Удалить сегмент ${seg.sequence_order}`}
+                        >
+                          <Trash2 size={14} aria-hidden />
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* Optional concrete-location pickers (3.5).
+                        Hidden when the org has no locations yet — keeps
+                        the dialog usable while the locations directory
+                        is empty. */}
+                    {locations.length > 0 && (
+                      <div
+                        className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2"
+                        data-testid={`template-segment-${i}-concrete`}
+                      >
+                        <ConcreteLocationField
+                          label="Конкретная локация (откуда)"
+                          locations={locations}
+                          value={seg.from_location_id}
+                          onChange={(v) =>
+                            updateSegment(i, { from_location_id: v })
+                          }
+                          disabled={busy}
+                        />
+                        <ConcreteLocationField
+                          label="Конкретная локация (куда)"
+                          locations={locations}
+                          value={seg.to_location_id}
+                          onChange={(v) =>
+                            updateSegment(i, { to_location_id: v })
+                          }
+                          disabled={busy}
+                        />
+                      </div>
                     )}
                   </div>
                 ))}

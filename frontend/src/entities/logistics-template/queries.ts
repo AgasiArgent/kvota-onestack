@@ -41,6 +41,8 @@ interface TemplateRow {
         to_location_type: string;
         default_label: string | null;
         default_days: number | null;
+        from_location_id: string | null;
+        to_location_id: string | null;
       }[]
     | null;
 }
@@ -56,6 +58,8 @@ function mapRow(r: TemplateRow): LogisticsTemplate {
       toLocationType: coerceType(s.to_location_type),
       defaultLabel: s.default_label ?? undefined,
       defaultDays: s.default_days ?? undefined,
+      fromLocationId: s.from_location_id ?? undefined,
+      toLocationId: s.to_location_id ?? undefined,
     }));
   return {
     id: r.id,
@@ -79,7 +83,8 @@ export async function fetchLogisticsTemplates(
       segments:logistics_route_template_segments (
         id, sequence_order,
         from_location_type, to_location_type,
-        default_label, default_days
+        default_label, default_days,
+        from_location_id, to_location_id
       )
     `,
     )

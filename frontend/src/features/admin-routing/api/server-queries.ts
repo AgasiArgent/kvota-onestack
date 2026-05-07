@@ -243,6 +243,8 @@ interface TemplateRowShape {
     to_location_type: string;
     default_label: string | null;
     default_days: number | null;
+    from_location_id: string | null;
+    to_location_id: string | null;
   }> | null;
 }
 
@@ -259,7 +261,8 @@ export async function fetchLogisticsTemplatesForAdmin(
       segments:logistics_route_template_segments (
         id, sequence_order,
         from_location_type, to_location_type,
-        default_label, default_days
+        default_label, default_days,
+        from_location_id, to_location_id
       )
     `,
     )

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/entities/user";
+import { fetchLocations } from "@/entities/location/queries";
 import { RoutingPage } from "@/features/admin-routing";
 import {
   fetchBrandsData,
@@ -71,7 +72,14 @@ export default async function AdminRoutingPage({ searchParams }: Props) {
       : undefined;
   const logisticsData =
     activeTab === "logistics"
-      ? { templates: await fetchLogisticsTemplatesForAdmin(orgId) }
+      ? await (async () => {
+          // Parallelise — independent reads, no waterfall.
+          const [templates, locations] = await Promise.all([
+            fetchLogisticsTemplatesForAdmin(orgId),
+            fetchLocations(orgId),
+          ]);
+          return { templates, locations };
+        })()
       : undefined;
 
   return (
