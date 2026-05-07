@@ -83,22 +83,20 @@ BEGIN
      LIMIT 1;
 
     -- Not found? Create one. Defaults: type='supplier' (МОЗ pickup is the
-    -- supplier side of the journey), is_active=true, code/address NULL.
+    -- supplier side of the journey), is_active=true, code NULL.
     IF v_loc_id IS NULL THEN
         INSERT INTO kvota.locations (
             organization_id,
             country,
             city,
             location_type,
-            is_active,
-            notes
+            is_active
         ) VALUES (
             v_org_id,
             v_country,
             v_city,
             'supplier',
-            TRUE,
-            'Auto-created from invoice pickup address'
+            TRUE
         )
         RETURNING id INTO v_loc_id;
     END IF;
@@ -167,11 +165,10 @@ BEGIN
         IF v_loc_id IS NULL THEN
             INSERT INTO kvota.locations (
                 organization_id, country, city,
-                location_type, is_active, notes
+                location_type, is_active
             ) VALUES (
                 v_org_id, v_country, v_city,
-                'supplier', TRUE,
-                'Auto-created from invoice pickup address (backfill m309)'
+                'supplier', TRUE
             )
             RETURNING id INTO v_loc_id;
             v_created := v_created + 1;
