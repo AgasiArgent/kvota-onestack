@@ -41,6 +41,7 @@ export default async function CustomersPage({ searchParams }: Props) {
         initialPage={page}
         orgId={user.orgId}
         financials={financials}
+        userRoles={user.roles}
       />
     </div>
   );

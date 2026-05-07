@@ -16,6 +16,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { ProcurementItemsEditor } from "./procurement-items-editor";
 import type { ProcurementEditorItem } from "./procurement-handsontable";
 import { SendHistoryPanel } from "./send-history-panel";
@@ -833,14 +839,43 @@ export function InvoiceCard({
             {invoice.invoice_number}
           </span>
 
-          <span className="text-sm text-muted-foreground truncate">
-            {supplierName}
-          </span>
+          {/* МОЗ-94: supplier + customer chip names truncate on narrow widths
+              (e.g., «ADLER S…»). Wrap in always-on Tooltip showing the full
+              name on hover. Option 1 (always-on) over scrollWidth detection
+              for simplicity — base-ui Tooltip's default delay keeps it
+              unobtrusive for already-short names. */}
+          <TooltipProvider delay={150}>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <span
+                    data-testid="invoice-card-header-supplier-name"
+                    className="text-sm text-muted-foreground truncate"
+                  />
+                }
+              >
+                {supplierName}
+              </TooltipTrigger>
+              <TooltipContent>{supplierName}</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
 
           {buyerName && (
-            <span className="text-xs text-muted-foreground truncate hidden sm:inline">
-              → {buyerName}
-            </span>
+            <TooltipProvider delay={150}>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <span
+                      data-testid="invoice-card-header-buyer-name"
+                      className="text-xs text-muted-foreground truncate hidden sm:inline"
+                    />
+                  }
+                >
+                  → {buyerName}
+                </TooltipTrigger>
+                <TooltipContent>{buyerName}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
 
           {/* Header chips below duplicate the editable form fields rendered in

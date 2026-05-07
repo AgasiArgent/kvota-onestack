@@ -129,23 +129,52 @@ def _has_analytics_access(role_codes: list[str], domain: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
+_UNKNOWN_USER_LABEL = "— Неизвестный логист"
+
+
 def _resolve_user_names(sb: Any, user_ids: list[str]) -> dict[str, str]:
     """Resolve a display name for each user id.
 
-    Uses auth.admin.list_users() via supabase-py admin client. Unknown ids are
-    returned with their short id as display fallback (never crashes on
-    deleted users). Called once per request with all distinct ids.
+    Resolution order (mirrors api/notes.py `_resolve_author_profiles` — the
+    project-wide canonical pattern):
+      1. ``kvota.user_profiles.full_name`` — canonical display name, mirrored
+         on user creation in api/admin_users.py.
+      2. ``auth.users.user_metadata.full_name|name`` — only present for users
+         created via the signup flow before user_profiles materialises.
+      3. ``auth.users.email`` — last human-readable fallback.
+      4. Localized "unknown logist" placeholder — so the UI never surfaces a
+         truncated UUID like ``96d797ee`` to a head_of_*.
+
+    Called once per request with all distinct ids.
     """
     names: dict[str, str] = {}
     if not user_ids:
         return names
 
+    # 1) Canonical names from kvota.user_profiles. This is the table the
+    #    admin UI writes to (api/admin_users.py:238) and is the source of
+    #    truth for human-readable names everywhere else in the codebase.
+    profile_names: dict[str, str] = {}
     try:
-        # supabase-py v2: sb.auth.admin.list_users() returns a list of User
-        # objects. For small orgs listing all is cheaper than N per-id lookups;
-        # for large orgs it's still one network call.
+        resp = (
+            sb.table("user_profiles")
+            .select("user_id, full_name")
+            .in_("user_id", user_ids)
+            .execute()
+        )
+        for p in (resp.data or []):
+            uid = p.get("user_id")
+            full_name = (p.get("full_name") or "").strip()
+            if uid and full_name:
+                profile_names[uid] = full_name
+    except Exception as exc:  # noqa: BLE001 — never 500 on profile lookup
+        logger.warning("analytics: user_profiles lookup failed: %s", exc)
+
+    # 2) auth.users metadata + email as secondary source for users without a
+    #    materialised profile row.
+    auth_meta: dict[str, dict[str, str | None]] = {}
+    try:
         page = sb.auth.admin.list_users()
-        # Normalize shape — can be list[User] or .users depending on version.
         users_iter = getattr(page, "users", None) or page or []
         wanted = set(user_ids)
         for u in users_iter:
@@ -153,14 +182,22 @@ def _resolve_user_names(sb: Any, user_ids: list[str]) -> dict[str, str]:
             if uid is None or uid not in wanted:
                 continue
             meta = getattr(u, "user_metadata", {}) or {}
-            email = getattr(u, "email", None) or ""
-            display = meta.get("full_name") or meta.get("name") or email or str(uid)[:8]
-            names[uid] = display
+            auth_meta[uid] = {
+                "metadata_name": meta.get("full_name") or meta.get("name"),
+                "email": getattr(u, "email", None),
+            }
     except Exception as exc:  # noqa: BLE001 — degrade gracefully, never 500
         logger.warning("analytics: failed to resolve user names: %s", exc)
 
+    # 3) Compose: profile name → metadata name → email → localized fallback.
     for uid in user_ids:
-        names.setdefault(uid, str(uid)[:8])
+        meta = auth_meta.get(uid, {})
+        names[uid] = (
+            profile_names.get(uid)
+            or meta.get("metadata_name")
+            or meta.get("email")
+            or _UNKNOWN_USER_LABEL
+        )
     return names
 
 
@@ -308,6 +345,6 @@ async def analytics(request: Request, domain: str) -> JSONResponse:
     user_ids = [r["user_id"] for r in aggregated]
     name_map = _resolve_user_names(sb, user_ids)
     for r in aggregated:
-        r["user_name"] = name_map.get(r["user_id"], str(r["user_id"])[:8])
+        r["user_name"] = name_map.get(r["user_id"], _UNKNOWN_USER_LABEL)
 
     return _ok({"rows": aggregated})

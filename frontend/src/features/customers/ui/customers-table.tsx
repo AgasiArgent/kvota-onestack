@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/table";
 import { Pagination } from "@/shared/ui/pagination";
 import type { CustomerListItem, CustomerFinancials } from "@/entities/customer";
+import { shouldShowFinancials } from "@/shared/lib/roles";
 
 type ViewMode = "compact" | "expanded";
 
@@ -56,6 +57,12 @@ interface Props {
   initialPage?: number;
   orgId: string;
   financials?: Map<string, CustomerFinancials>;
+  /**
+   * Roles of the current user. Used to gate financial aggregate columns
+   * (Кол-во КП / Выручка / Спец / Прибыль) — procurement / logistics /
+   * customs roles do not see them. See `shouldShowFinancials`.
+   */
+  userRoles: string[];
 }
 
 const PAGE_SIZE = 50;
@@ -79,7 +86,9 @@ export function CustomersTable({
   initialPage = 1,
   orgId,
   financials,
+  userRoles,
 }: Props) {
+  const showFinancials = shouldShowFinancials(userRoles);
   const router = useRouter();
   const searchParams = useSearchParams();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -130,7 +139,10 @@ export function CustomersTable({
     return str.length > max ? str.slice(0, max) + "..." : str;
   }
 
-  const colSpan = isExpanded ? 10 : 3;
+  // Base cols (compact): Наименование, ИНН, Дата = 3.
+  // Expanded adds Менеджер, Посл. КП, Статус (3 always); plus
+  // КП / Выручка / Спец / Прибыль (4 financial — gated by `showFinancials`).
+  const colSpan = isExpanded ? (showFinancials ? 10 : 6) : 3;
 
   return (
     <div className="space-y-4">
@@ -209,12 +221,18 @@ export function CustomersTable({
             {isExpanded && (
               <>
                 <TableHead>Менеджер</TableHead>
-                <TableHead className="text-center">КП</TableHead>
+                {showFinancials && (
+                  <TableHead className="text-center">КП</TableHead>
+                )}
                 <TableHead>Посл. КП</TableHead>
                 <TableHead>Статус</TableHead>
-                <TableHead className="text-right">Выручка</TableHead>
-                <TableHead className="text-center">Спец.</TableHead>
-                <TableHead className="text-right">Прибыль</TableHead>
+                {showFinancials && (
+                  <>
+                    <TableHead className="text-right">Выручка</TableHead>
+                    <TableHead className="text-center">Спец.</TableHead>
+                    <TableHead className="text-right">Прибыль</TableHead>
+                  </>
+                )}
               </>
             )}
           </TableRow>
@@ -243,9 +261,11 @@ export function CustomersTable({
                     <TableCell className="text-text-muted">
                       {customer.manager?.full_name ?? "—"}
                     </TableCell>
-                    <TableCell className="text-center tabular-nums">
-                      {fin?.quotes_count ?? customer.quotes_count ?? "—"}
-                    </TableCell>
+                    {showFinancials && (
+                      <TableCell className="text-center tabular-nums">
+                        {fin?.quotes_count ?? customer.quotes_count ?? "—"}
+                      </TableCell>
+                    )}
                     <TableCell className="text-text-muted">
                       {formatDate(fin?.last_quote_date ?? customer.last_quote_date)}
                     </TableCell>
@@ -254,15 +274,19 @@ export function CustomersTable({
                         {customer.status === "active" ? "Активен" : "Неактивен"}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatUsd(fin?.revenue_usd ?? 0)}
-                    </TableCell>
-                    <TableCell className="text-center tabular-nums">
-                      {fin?.specs_count ?? 0}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatUsd(fin?.profit_usd ?? 0)}
-                    </TableCell>
+                    {showFinancials && (
+                      <>
+                        <TableCell className="text-right tabular-nums">
+                          {formatUsd(fin?.revenue_usd ?? 0)}
+                        </TableCell>
+                        <TableCell className="text-center tabular-nums">
+                          {fin?.specs_count ?? 0}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {formatUsd(fin?.profit_usd ?? 0)}
+                        </TableCell>
+                      </>
+                    )}
                   </>
                 )}
               </TableRow>

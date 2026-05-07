@@ -12,6 +12,7 @@ import {
 } from "@/shared/ui/data-table";
 import type { QuoteListItem } from "@/entities/quote";
 import { workflowStatusLabel } from "@/shared/lib/workflow-statuses";
+import { shouldShowFinancials } from "@/shared/lib/roles";
 
 import { CreateQuoteDialog } from "./create-quote-dialog";
 import { useState, useEffect } from "react";
@@ -111,6 +112,7 @@ export function QuotesTableClient({
   const router = useRouter();
 
   const canCreate = hasAnyRole(userRoles, CREATE_ROLES);
+  const showFinancials = shouldShowFinancials(userRoles);
 
   // Auto-open create dialog when ?create=true
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -121,8 +123,8 @@ export function QuotesTableClient({
     }
   }, []);
 
-  const columns = useMemo<readonly DataTableColumn<QuoteListItem>[]>(
-    () => [
+  const columns = useMemo<readonly DataTableColumn<QuoteListItem>[]>(() => {
+    const allColumns: DataTableColumn<QuoteListItem>[] = [
       {
         key: "created_at",
         label: "Дата",
@@ -281,9 +283,18 @@ export function QuotesTableClient({
         align: "right",
         width: "120px",
       },
-    ],
-    [router]
-  );
+    ];
+
+    // Procurement / logistics / customs roles don't see financial aggregate
+    // columns (СУММА, ПРИБЫЛЬ) — they execute later pipeline stages where
+    // these aren't in scope. See `shouldShowFinancials`.
+    if (!showFinancials) {
+      return allColumns.filter(
+        (col) => col.key !== "amount" && col.key !== "profit"
+      );
+    }
+    return allColumns;
+  }, [router, showFinancials]);
 
   // Build filter options keyed by column key for the DataTable
   const filterOptionsMap: FilterOptions = useMemo(() => {

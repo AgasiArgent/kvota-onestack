@@ -36,12 +36,17 @@ function formatRub2(v: number | null): string {
   return ruFmt2.format(v);
 }
 
+// Pin formatting to Europe/Moscow so server (UTC) and client (any TZ)
+// produce identical output — fixes React hydration mismatch #418.
+// Without an explicit timeZone, `new Date("2026-04-15").toLocaleDateString`
+// renders 14.04.2026 on a UTC server but 15.04.2026 in MSK browsers.
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return "—";
   return new Date(dateStr).toLocaleDateString("ru-RU", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
+    timeZone: "Europe/Moscow",
   });
 }
 
