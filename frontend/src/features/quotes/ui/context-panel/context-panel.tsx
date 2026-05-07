@@ -61,6 +61,8 @@ export function ContextPanel({ quote, data, userRoles }: ContextPanelProps) {
         quote={quote}
         salesManager={data.salesManager}
         participants={data.participants}
+        logisticsAssignees={data.logisticsAssignees}
+        customsAssignees={data.customsAssignees}
         showFinancials={showFinancials}
         canEditCustomerFields={canEditCustomerFields}
       />
@@ -76,12 +78,16 @@ function QuoteInfoBlock({
   quote,
   salesManager,
   participants,
+  logisticsAssignees,
+  customsAssignees,
   showFinancials,
   canEditCustomerFields,
 }: {
   quote: QuoteDetailRow;
   salesManager: QuoteContextData["salesManager"];
   participants: ParticipantRow[];
+  logisticsAssignees: QuoteContextData["logisticsAssignees"];
+  customsAssignees: QuoteContextData["customsAssignees"];
   showFinancials: boolean;
   canEditCustomerFields: boolean;
 }) {
@@ -256,6 +262,26 @@ function QuoteInfoBlock({
             <span className="font-medium truncate">{salesManager.full_name}</span>
           </div>
         )}
+        {/* МОЛ / МОТ — sourced from invoices.assigned_logistics_user /
+            assigned_customs_user. РОЛ Тест 07 → 3.1 + 4.1: tester wants ФИО +
+            момент прикрепления (logistics_assigned_at / customs_assigned_at)
+            visible from any pipeline step, not buried in workspace tables. */}
+        {logisticsAssignees.map((a) => (
+          <DomainAssigneeRow
+            key={`mol-${a.user_id}`}
+            label="МОЛ"
+            data-testid="context-panel-logistics-assignee"
+            assignee={a}
+          />
+        ))}
+        {customsAssignees.map((a) => (
+          <DomainAssigneeRow
+            key={`mot-${a.user_id}`}
+            label="МОТ"
+            data-testid="context-panel-customs-assignee"
+            assignee={a}
+          />
+        ))}
         {participants.length > 0 ? (
           <ul className="space-y-1.5 max-h-32 overflow-y-auto">
             {participants.map((p) => (
@@ -273,11 +299,41 @@ function QuoteInfoBlock({
             ))}
           </ul>
         ) : (
-          !salesManager && (
+          !salesManager &&
+          logisticsAssignees.length === 0 &&
+          customsAssignees.length === 0 && (
             <p className="text-sm text-muted-foreground">Нет участников</p>
           )
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Single МОЛ / МОТ row. Mirrors the МОП row format (label · ФИО) and adds the
+ * attach timestamp underneath in muted small text — keeps the panel compact
+ * but answers «когда привязали» without expanding history.
+ */
+function DomainAssigneeRow({
+  label,
+  assignee,
+  ...rest
+}: {
+  label: string;
+  assignee: { full_name: string; assigned_at: string | null };
+} & React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div className="text-sm min-w-0" {...rest}>
+      <div className="flex items-baseline gap-1.5">
+        <span className="text-xs text-muted-foreground shrink-0">{label}</span>
+        <span className="font-medium truncate">{assignee.full_name}</span>
+      </div>
+      {assignee.assigned_at && (
+        <div className="text-[11px] text-muted-foreground tabular-nums pl-[2.25rem]">
+          {formatParticipantDate(assignee.assigned_at)}
+        </div>
+      )}
     </div>
   );
 }
