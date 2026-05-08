@@ -74,11 +74,11 @@ export function RoleBasedTabs({
     >
       <TabsList className={cn("h-auto", listClassName)}>
         {visibleTabs.map((tab) => (
-          <TabsTrigger key={tab.value} value={tab.value} className="gap-2">
+          <TabsTrigger key={tab.value} value={tab.value} className="group gap-2">
             <span>{tab.label}</span>
             {tab.count !== undefined && tab.count !== null && (
               <span
-                className="tabular-nums text-xs text-text-muted data-[state=active]:text-accent"
+                className="tabular-nums text-xs text-text-muted group-data-[active]:text-accent"
                 aria-hidden
               >
                 · {tab.count}

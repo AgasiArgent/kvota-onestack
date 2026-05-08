@@ -63,5 +63,9 @@ export interface LogisticsTemplateAdmin {
     to_location_type: string;
     default_label: string | null;
     default_days: number | null;
+    /** Optional concrete from-location id (РОЛ Тест 07 #3.5, m309). */
+    from_location_id: string | null;
+    /** Optional concrete to-location id (РОЛ Тест 07 #3.5, m309). */
+    to_location_id: string | null;
   }>;
 }

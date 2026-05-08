@@ -2097,6 +2097,7 @@ export type Database = {
           created_at: string | null
           updated_at: string | null
           created_by: string | null
+          currency_code: string
         }
         Insert: {
           id?: string
@@ -2112,6 +2113,7 @@ export type Database = {
           created_at?: string | null
           updated_at?: string | null
           created_by?: string | null
+          currency_code?: string
         }
         Update: {
           id?: string
@@ -2127,6 +2129,7 @@ export type Database = {
           created_at?: string | null
           updated_at?: string | null
           created_by?: string | null
+          currency_code?: string
         }
         Relationships: []
       }
@@ -2139,6 +2142,8 @@ export type Database = {
           to_location_type: string
           default_label: string | null
           default_days: number | null
+          from_location_id: string | null
+          to_location_id: string | null
         }
         Insert: {
           id?: string
@@ -2148,6 +2153,8 @@ export type Database = {
           to_location_type: string
           default_label?: string | null
           default_days?: number | null
+          from_location_id?: string | null
+          to_location_id?: string | null
         }
         Update: {
           id?: string
@@ -2157,6 +2164,8 @@ export type Database = {
           to_location_type?: string
           default_label?: string | null
           default_days?: number | null
+          from_location_id?: string | null
+          to_location_id?: string | null
         }
         Relationships: []
       }
@@ -2199,6 +2208,7 @@ export type Database = {
           days: number | null
           notes: string | null
           created_at: string | null
+          currency_code: string
         }
         Insert: {
           id?: string
@@ -2208,6 +2218,7 @@ export type Database = {
           days?: number | null
           notes?: string | null
           created_at?: string | null
+          currency_code?: string
         }
         Update: {
           id?: string
@@ -2217,6 +2228,7 @@ export type Database = {
           days?: number | null
           notes?: string | null
           created_at?: string | null
+          currency_code?: string
         }
         Relationships: []
       }

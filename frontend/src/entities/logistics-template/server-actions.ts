@@ -18,6 +18,10 @@ interface TemplateSegmentDraft {
   to_location_type: LocationType;
   default_label?: string;
   default_days?: number;
+  /** Optional concrete from-location id (РОЛ Тест 07 #3.5, m309). */
+  from_location_id?: string | null;
+  /** Optional concrete to-location id — see from_location_id. */
+  to_location_id?: string | null;
 }
 
 export async function createLogisticsTemplate(input: {

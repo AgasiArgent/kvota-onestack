@@ -4,6 +4,7 @@ import { CheckCircle, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { LogisticsSegment } from "@/entities/logistics-segment";
+import { sumInCurrency, type FxRateMap } from "@/shared/lib/fx-convert";
 
 /**
  * LogisticsActionBar — sticky header with the per-invoice
@@ -22,13 +23,15 @@ import type { LogisticsSegment } from "@/entities/logistics-segment";
  *     (matches CustomsActionBar's pattern of always rendering the bar).
  *   - default: enabled when the strict gate passes; clicking fires
  *     onComplete which the parent handles (server action + toast).
+ *
+ * Currency-aware totals (РОЛ Тест 07 #5c review, W1): segments now carry
+ * their own `currencyCode` (Combo-3). The summary at the right summed
+ * `mainCostRub` blindly across mixed-currency segments and labelled it
+ * RUB — wrong. Now we convert each segment's amount into the parent
+ * quote's `displayCurrency` via {@link sumInCurrency}; codes without an
+ * FX rate are surfaced via a quiet AlertCircle so the figure is never
+ * silently misleading.
  */
-
-const RUB_FMT = new Intl.NumberFormat("ru-RU", {
-  style: "currency",
-  currency: "RUB",
-  maximumFractionDigits: 0,
-});
 
 interface MissingItem {
   segmentNumber: number;
@@ -42,6 +45,10 @@ interface LogisticsActionBarProps {
   canEdit: boolean;
   completing?: boolean;
   onComplete: () => void;
+  /** Display currency for the totals strip — typically the parent quote's currency. */
+  displayCurrency: string;
+  /** foreign-currency → RUB rate map. RUB is implicit (1.0). */
+  fxRates: FxRateMap;
 }
 
 function findMissing(segments: LogisticsSegment[]): MissingItem[] {
@@ -57,6 +64,7 @@ function findMissing(segments: LogisticsSegment[]): MissingItem[] {
     if (!seg.toLocation) {
       missing.push({ segmentNumber: seg.sequenceOrder, field: "to" });
     }
+    // Currency-agnostic: > 0 holds for any currency, just not yet filled in.
     if (!(seg.mainCostRub > 0)) {
       missing.push({ segmentNumber: seg.sequenceOrder, field: "cost" });
     }
@@ -89,10 +97,28 @@ export function LogisticsActionBar({
   canEdit,
   completing = false,
   onComplete,
+  displayCurrency,
+  fxRates,
 }: LogisticsActionBarProps) {
   const missing = findMissing(segments);
-  const totalCost = segments.reduce((sum, s) => sum + (s.mainCostRub ?? 0), 0);
+  const { total: totalCost, missing: missingRates } = sumInCurrency(
+    segments.map((s) => ({
+      amount: s.mainCostRub ?? 0,
+      currency: s.currencyCode,
+    })),
+    displayCurrency,
+    fxRates,
+  );
   const totalDays = segments.reduce((sum, s) => sum + (s.transitDays ?? 0), 0);
+
+  const totalFmt = new Intl.NumberFormat("ru-RU", {
+    style: "currency",
+    currency: displayCurrency,
+    maximumFractionDigits: 0,
+  });
+  const totalLabel = missingRates.length > 0
+    ? `≈ ${totalFmt.format(totalCost)}`
+    : totalFmt.format(totalCost);
 
   // Why the button is disabled (in priority order)
   const disabledReason: string | null = !canEdit
@@ -153,12 +179,31 @@ export function LogisticsActionBar({
         button
       )}
 
-      <span className="ml-auto text-sm text-muted-foreground tabular-nums">
+      <span
+        className="ml-auto text-sm text-muted-foreground tabular-nums flex items-center gap-1.5"
+        data-testid="logistics-action-bar-totals"
+      >
         {segments.length}{" "}
         {segments.length === 1 ? "сегмент" : "сегментов"}
         {" · "}
-        {RUB_FMT.format(totalCost)}
+        {totalLabel}
         {totalDays > 0 ? ` · ${totalDays} дн` : ""}
+        {missingRates.length > 0 && (
+          <Tooltip>
+            <TooltipTrigger render={<span className="inline-flex" />}>
+              <AlertCircle
+                size={12}
+                strokeWidth={2}
+                aria-hidden
+                className="text-warning"
+                data-testid="logistics-action-bar-missing-rates"
+              />
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-xs text-xs">
+              {`Курс не найден для: ${missingRates.join(", ")}. Эти суммы исключены из итога.`}
+            </TooltipContent>
+          </Tooltip>
+        )}
       </span>
     </div>
   );

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { ArrowDown } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ArrowDown, Lightbulb } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -30,6 +30,13 @@ interface AddSegmentDialogProps {
     to_location_id: string;
     label: string | null;
   }) => Promise<void>;
+  /**
+   * Procurement-supplied pickup country / city for the active invoice.
+   * Surfaced as a hint so the logistician can see where МОЗ said the
+   * cargo originates (РОЛ Тест 07 #3.4, partial — full МОЗ-address
+   * sourcing requires a DB-backed address book; tracked as follow-up).
+   */
+  pickupHint?: { country: string | null; city: string | null } | null;
 }
 
 /**
@@ -46,11 +53,39 @@ export function AddSegmentDialog({
   onOpenChange,
   locations,
   onSubmit,
+  pickupHint,
 }: AddSegmentDialogProps) {
   const [fromId, setFromId] = useState<string | null>(null);
   const [toId, setToId] = useState<string | null>(null);
   const [label, setLabel] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // Try to auto-suggest a pickup-matching location for the From combobox
+  // when the invoice has a pickup address. Looks for a Location whose
+  // country (and city, when available) match the procurement-entered
+  // pickup data — case-insensitive.
+  const pickupMatch = useMemo<LocationOption | null>(() => {
+    if (!pickupHint?.country) return null;
+    const country = pickupHint.country.trim().toLowerCase();
+    const city = pickupHint.city?.trim().toLowerCase() ?? null;
+    const candidates = locations.filter(
+      (l) => l.country.trim().toLowerCase() === country,
+    );
+    if (city) {
+      const exact = candidates.find(
+        (l) => l.city?.trim().toLowerCase() === city,
+      );
+      if (exact) return exact;
+    }
+    return candidates[0] ?? null;
+  }, [locations, pickupHint?.country, pickupHint?.city]);
+
+  const pickupHintLabel = useMemo(() => {
+    if (!pickupHint?.country && !pickupHint?.city) return null;
+    return [pickupHint.country, pickupHint.city]
+      .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
+      .join(", ");
+  }, [pickupHint?.country, pickupHint?.city]);
 
   function handleOpenChange(next: boolean) {
     // Block close while a submit is in flight — otherwise Esc/backdrop close
@@ -109,6 +144,34 @@ export function AddSegmentDialog({
               placeholder="Выберите локацию…"
               emptyMessage="Нет локаций — создайте их в «Справочниках»."
             />
+            {pickupHintLabel && (
+              <div
+                className="flex items-start gap-1.5 rounded-md border border-info/30 bg-info-bg/40 px-2 py-1.5 text-xs text-text-muted"
+                data-testid="add-segment-pickup-hint"
+              >
+                <Lightbulb size={12} strokeWidth={2} aria-hidden className="mt-0.5 text-info" />
+                <span className="flex-1">
+                  Закупка указала отправление: <span className="font-medium text-text">{pickupHintLabel}</span>.
+                  {pickupMatch ? (
+                    <>
+                      {" "}
+                      <button
+                        type="button"
+                        onClick={() => setFromId(pickupMatch.id)}
+                        className="underline hover:text-info"
+                        data-testid="add-segment-pickup-hint-apply"
+                      >
+                        Подставить совпадающую локацию
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {" "}Создайте подходящую локацию в Справочники → Локации.
+                    </>
+                  )}
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="flex justify-center text-text-subtle">

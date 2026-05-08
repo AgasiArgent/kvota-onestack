@@ -18,6 +18,8 @@ export interface SegmentPatch {
   label?: string | null;
   transit_days?: number | null;
   main_cost_rub?: number;
+  /** RUB | USD | EUR | CNY — added in m309 (РОЛ Тест 07 #3.7). */
+  currency_code?: string;
   carrier?: string | null;
   notes?: string | null;
 }
@@ -28,6 +30,7 @@ export async function createSegment(input: {
   from_location_id?: string | null;
   to_location_id?: string | null;
   label?: string;
+  currency_code?: string;
   revalidate_path: string;
 }): Promise<{ segment_id: string }> {
   const user = await getSessionUser();
@@ -43,6 +46,7 @@ export async function createSegment(input: {
         from_location_id: input.from_location_id ?? null,
         to_location_id: input.to_location_id ?? null,
         label: input.label ?? null,
+        currency_code: input.currency_code,
       }),
     },
   );
@@ -118,6 +122,8 @@ export async function createSegmentExpense(input: {
   segment_id: string;
   label: string;
   cost_rub: number;
+  /** RUB | USD | EUR | CNY — added in m309 (РОЛ Тест 07 #3.7). */
+  currency_code?: string;
   days?: number;
   notes?: string;
   revalidate_path: string;
@@ -133,6 +139,7 @@ export async function createSegmentExpense(input: {
         segment_id: input.segment_id,
         label: input.label,
         cost_rub: input.cost_rub,
+        currency_code: input.currency_code,
         days: input.days ?? null,
         notes: input.notes ?? null,
       }),

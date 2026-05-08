@@ -16,9 +16,11 @@ import { LocationChip } from "@/entities/location/ui/location-chip";
 import type {
   LogisticsSegment,
   LogisticsSegmentExpense,
+  SegmentCurrency,
   SegmentPatch,
 } from "@/entities/logistics-segment";
 import {
+  SEGMENT_CURRENCIES,
   createSegmentExpense,
   deleteSegmentExpense,
   updateSegment,
@@ -38,11 +40,20 @@ import { cn } from "@/lib/utils";
  * if that shows up in usage we'll add PATCH later.
  */
 
-const rubFmt = new Intl.NumberFormat("ru-RU", {
-  style: "currency",
-  currency: "RUB",
-  maximumFractionDigits: 0,
-});
+const CURRENCY_FMT_CACHE = new Map<string, Intl.NumberFormat>();
+
+function formatCurrency(amount: number, code: SegmentCurrency): string {
+  let fmt = CURRENCY_FMT_CACHE.get(code);
+  if (!fmt) {
+    fmt = new Intl.NumberFormat("ru-RU", {
+      style: "currency",
+      currency: code,
+      maximumFractionDigits: 0,
+    });
+    CURRENCY_FMT_CACHE.set(code, fmt);
+  }
+  return fmt.format(amount);
+}
 
 interface SegmentDetailsPanelProps {
   segment: LogisticsSegment | null;
@@ -140,16 +151,30 @@ function SegmentFields({
     segment.transitDays != null ? String(segment.transitDays) : "",
   );
   const [mainCost, setMainCost] = useState(String(segment.mainCostRub ?? 0));
+  const [currencyCode, setCurrencyCode] = useState<SegmentCurrency>(
+    segment.currencyCode,
+  );
   const [, startTransition] = useTransition();
 
-  // Re-sync when switching selected segment
+  // Re-sync local input state ONLY when the user switches to a different
+  // segment. Earlier code listed every individual field in the deps array,
+  // which caused the effect to re-run mid-edit on any unrelated server
+  // update (e.g. revalidatePath cascading down a new `segment` object with
+  // the same id). The effect would then call setLabel("") / setCarrier("")
+  // while the user was still typing, wiping their input — РОЛ Тест 07 #3.6
+  // ("страница remount при наборе 1 символа"). The parent already mounts
+  // SegmentFields with `key={segment.id}`, so this hook is a defensive
+  // re-init for the rare case of an in-place segment swap; it must never
+  // overwrite user input on field-level updates.
   useEffect(() => {
     setLabel(segment.label ?? "");
     setCarrier(segment.carrier ?? "");
     setNotes(segment.notes ?? "");
     setTransitDays(segment.transitDays != null ? String(segment.transitDays) : "");
     setMainCost(String(segment.mainCostRub ?? 0));
-  }, [segment.id, segment.label, segment.carrier, segment.notes, segment.transitDays, segment.mainCostRub]);
+    setCurrencyCode(segment.currencyCode);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: see comment above
+  }, [segment.id]);
 
   function patch(patch: SegmentPatch, local?: Partial<LogisticsSegment>) {
     if (local && onLocalUpdate) onLocalUpdate(segment.id, local);
@@ -217,6 +242,12 @@ function SegmentFields({
     setMainCost(String(parsed));
   }
 
+  function handleCurrencyChange(next: SegmentCurrency) {
+    if (next === currencyCode) return;
+    setCurrencyCode(next);
+    patch({ currency_code: next }, { currencyCode: next });
+  }
+
   function handleTextBlur(
     value: string,
     key: "label" | "carrier" | "notes",
@@ -278,18 +309,27 @@ function SegmentFields({
           className="tabular-nums"
         />
       </Field>
-      <Field label="Стоимость, ₽">
-        <Input
-          type="number"
-          min={0}
-          step={1}
-          value={mainCost}
-          onChange={(e) => setMainCost(e.target.value)}
-          onBlur={(e) => handleCostBlur(e.target.value)}
-          placeholder="0"
-          disabled={disabled}
-          className="tabular-nums"
-        />
+      <Field label="Стоимость">
+        <div className="flex gap-1.5">
+          <Input
+            type="number"
+            min={0}
+            step={1}
+            value={mainCost}
+            onChange={(e) => setMainCost(e.target.value)}
+            onBlur={(e) => handleCostBlur(e.target.value)}
+            placeholder="0"
+            disabled={disabled}
+            className="tabular-nums"
+            aria-label="Сумма"
+          />
+          <CurrencyPicker
+            value={currencyCode}
+            onChange={handleCurrencyChange}
+            disabled={disabled}
+            ariaLabel="Валюта стоимости"
+          />
+        </div>
       </Field>
 
       <Field label="Перевозчик">
@@ -342,6 +382,47 @@ function Field({
   );
 }
 
+interface CurrencyPickerProps {
+  value: SegmentCurrency;
+  onChange: (next: SegmentCurrency) => void;
+  disabled?: boolean;
+  ariaLabel: string;
+}
+
+/**
+ * CurrencyPicker — compact native <select> for the four supported segment
+ * currencies. Native select keeps the keyboard / a11y story simple and
+ * matches the design system's restraint (no animations, no bespoke
+ * dropdowns for fixed 4-item lists).
+ */
+function CurrencyPicker({
+  value,
+  onChange,
+  disabled,
+  ariaLabel,
+}: CurrencyPickerProps) {
+  return (
+    <select
+      aria-label={ariaLabel}
+      value={value}
+      onChange={(e) => onChange(e.target.value as SegmentCurrency)}
+      disabled={disabled}
+      className={cn(
+        "h-9 rounded-md border border-border-light bg-background px-2 text-sm text-text",
+        "focus:outline-none focus:ring-2 focus:ring-accent",
+        "disabled:cursor-not-allowed disabled:opacity-50",
+      )}
+      data-testid="segment-currency-picker"
+    >
+      {SEGMENT_CURRENCIES.map((c) => (
+        <option key={c} value={c}>
+          {c}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Expenses
 // ---------------------------------------------------------------------------
@@ -361,9 +442,8 @@ function SegmentExpensesList({
 }: SegmentExpensesListProps) {
   const [label, setLabel] = useState("");
   const [cost, setCost] = useState("");
+  const [currencyCode, setCurrencyCode] = useState<SegmentCurrency>("RUB");
   const [isPending, startTransition] = useTransition();
-
-  const total = expenses.reduce((a, e) => a + (e.costRub ?? 0), 0);
 
   function handleAdd() {
     const trimmed = label.trim();
@@ -382,10 +462,13 @@ function SegmentExpensesList({
           segment_id: segmentId,
           label: trimmed,
           cost_rub: parsed,
+          currency_code: currencyCode,
           revalidate_path: revalidatePath,
         });
         setLabel("");
         setCost("");
+        // Keep currency selection between adds — common case is several
+        // expenses in the same currency for one segment.
       } catch (err) {
         toast.error(
           err instanceof Error ? err.message : "Не удалось добавить расход",
@@ -413,9 +496,6 @@ function SegmentExpensesList({
     <div className="flex flex-col gap-2 border-t border-border-light pt-4">
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-semibold text-text">Дополнительные расходы</h4>
-        <span className="text-xs text-text-muted tabular-nums">
-          Σ {rubFmt.format(total)}
-        </span>
       </div>
 
       {expenses.length === 0 ? (
@@ -431,7 +511,7 @@ function SegmentExpensesList({
                 {expense.label}
               </span>
               <span className="tabular-nums text-sm font-medium text-text">
-                {rubFmt.format(expense.costRub)}
+                {formatCurrency(expense.costRub, expense.currencyCode)}
               </span>
               <Button
                 type="button"
@@ -449,7 +529,7 @@ function SegmentExpensesList({
         </ul>
       )}
 
-      <div className="grid grid-cols-[1fr_110px_auto] items-end gap-2 pt-1">
+      <div className="grid grid-cols-[1fr_110px_auto_auto] items-end gap-2 pt-1">
         <Input
           value={label}
           onChange={(e) => setLabel(e.target.value)}
@@ -465,6 +545,13 @@ function SegmentExpensesList({
           placeholder="0"
           disabled={disabled || isPending}
           className="tabular-nums"
+          aria-label="Сумма расхода"
+        />
+        <CurrencyPicker
+          value={currencyCode}
+          onChange={setCurrencyCode}
+          disabled={disabled || isPending}
+          ariaLabel="Валюта расхода"
         />
         <Button
           type="button"

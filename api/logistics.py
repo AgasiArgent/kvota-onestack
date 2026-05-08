@@ -33,6 +33,75 @@ logger = logging.getLogger(__name__)
 
 _LOGISTICS_ROLES = {"logistics", "head_of_logistics", "admin", "head_of_customs"}
 _LOCATION_TYPES = {"supplier", "hub", "customs", "own_warehouse", "client"}
+_SEGMENT_CURRENCIES = {"RUB", "USD", "EUR", "CNY"}
+
+
+def _validate_currency(value: object) -> str | None:
+    """Return value if it's an allowed currency code, else None.
+
+    None means "not provided" — caller decides whether to default or reject.
+    """
+    if not isinstance(value, str):
+        return None
+    code = value.strip().upper()
+    return code if code in _SEGMENT_CURRENCIES else None
+
+
+def _validate_template_location_ids(
+    segments: list[dict], org_id: str
+) -> tuple[set[str], JSONResponse | None]:
+    """Verify every concrete location id referenced by template segments
+    belongs to the caller's organisation. Returns the set of resolved ids
+    on success, or a JSONResponse error to surface to the caller.
+
+    Optional fields — segments without `from_location_id`/`to_location_id`
+    pass through as type-only entries (existing behaviour).
+    """
+    ids: set[str] = set()
+    for seg in segments:
+        for key in ("from_location_id", "to_location_id"):
+            v = seg.get(key)
+            if v:
+                ids.add(v)
+    if not ids:
+        return ids, None
+
+    sb = get_supabase()
+    res = (
+        sb.table("locations")
+        .select("id")
+        .eq("organization_id", org_id)
+        .in_("id", list(ids))
+        .execute()
+    )
+    found = {row["id"] for row in (res.data or [])}
+    missing = ids - found
+    if missing:
+        return ids, _err(
+            "VALIDATION_ERROR",
+            f"Locations not found in organisation: {sorted(missing)}",
+            400,
+        )
+    return ids, None
+
+
+def _build_template_segment_row(
+    template_id: str, idx: int, seg: dict
+) -> dict:
+    """Construct a kvota.logistics_route_template_segments row from caller
+    payload. Optional concrete FKs default to NULL — apply_template falls
+    back to type-based selection when they are absent.
+    """
+    return {
+        "template_id": template_id,
+        "sequence_order": idx,
+        "from_location_type": seg["from_location_type"],
+        "to_location_type": seg["to_location_type"],
+        "default_label": seg.get("default_label"),
+        "default_days": seg.get("default_days"),
+        "from_location_id": seg.get("from_location_id"),
+        "to_location_id": seg.get("to_location_id"),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -173,7 +242,8 @@ async def create_segment(request: Request) -> JSONResponse:
         sequence_order: int (optional — defaults to MAX+1)
         label: str (optional)
         transit_days: int (optional)
-        main_cost_rub: number (optional, default 0)
+        main_cost_rub: number (optional, default 0) — value in `currency_code`
+        currency_code: str (optional, default 'RUB') — RUB | USD | EUR | CNY
         carrier: str (optional)
         notes: str (optional)
     Returns:
@@ -234,6 +304,18 @@ async def create_segment(request: Request) -> JSONResponse:
         "created_by": user["id"],
     }
 
+    # Per-segment currency (3.7). When provided it must be in the allowed
+    # set; when omitted, DB default 'RUB' applies.
+    if "currency_code" in body and body["currency_code"] is not None:
+        currency = _validate_currency(body["currency_code"])
+        if currency is None:
+            return _err(
+                "VALIDATION_ERROR",
+                f"Invalid currency_code. Allowed: {sorted(_SEGMENT_CURRENCIES)}",
+                400,
+            )
+        payload["currency_code"] = currency
+
     res = sb.table("logistics_route_segments").insert(payload).execute()
     if not res.data:
         return _err("INTERNAL_ERROR", "Failed to create segment", 500)
@@ -281,7 +363,7 @@ async def update_segment(request: Request, segment_id: str) -> JSONResponse:
     Path: PATCH /api/logistics/segments/{id}
     Body (JSON, all optional):
         from_location_id, to_location_id, label, transit_days, main_cost_rub,
-        carrier, notes
+        carrier, notes, currency_code (RUB | USD | EUR | CNY)
     Returns:
         data: updated segment row
     Roles: logistics, head_of_logistics, admin, head_of_customs.
@@ -308,10 +390,22 @@ async def update_segment(request: Request, segment_id: str) -> JSONResponse:
         "main_cost_rub",
         "carrier",
         "notes",
+        "currency_code",
     }
     updates = {k: v for k, v in body.items() if k in allowed}
     if not updates:
         return _err("VALIDATION_ERROR", "No updatable fields provided", 400)
+
+    # Validate currency_code when present (3.7).
+    if "currency_code" in updates and updates["currency_code"] is not None:
+        currency = _validate_currency(updates["currency_code"])
+        if currency is None:
+            return _err(
+                "VALIDATION_ERROR",
+                f"Invalid currency_code. Allowed: {sorted(_SEGMENT_CURRENCIES)}",
+                400,
+            )
+        updates["currency_code"] = currency
 
     sb = get_supabase()
     res = (
@@ -440,7 +534,8 @@ async def create_expense(request: Request) -> JSONResponse:
     Body (JSON):
         segment_id: str (required)
         label: str (required)
-        cost_rub: number (required, >= 0)
+        cost_rub: number (required, >= 0) — value in `currency_code`
+        currency_code: str (optional, default 'RUB') — RUB | USD | EUR | CNY
         days: int (optional)
         notes: str (optional)
     Returns:
@@ -479,6 +574,19 @@ async def create_expense(request: Request) -> JSONResponse:
         "days": body.get("days"),
         "notes": body.get("notes"),
     }
+
+    # Per-expense currency (3.7). When provided it must be in the allowed
+    # set; when omitted, DB default 'RUB' applies.
+    if "currency_code" in body and body["currency_code"] is not None:
+        currency = _validate_currency(body["currency_code"])
+        if currency is None:
+            return _err(
+                "VALIDATION_ERROR",
+                f"Invalid currency_code. Allowed: {sorted(_SEGMENT_CURRENCIES)}",
+                400,
+            )
+        payload["currency_code"] = currency
+
     res = sb.table("logistics_segment_expenses").insert(payload).execute()
     if not res.data:
         return _err("INTERNAL_ERROR", "Failed to create expense", 500)
@@ -548,7 +656,8 @@ async def list_templates(request: Request) -> JSONResponse:
         .select(
             "id, organization_id, name, description, created_by, created_at, updated_at, "
             "logistics_route_template_segments(id, sequence_order, from_location_type, "
-            "to_location_type, default_label, default_days)"
+            "to_location_type, default_label, default_days, "
+            "from_location_id, to_location_id)"
         )
         .eq("organization_id", org_id)
         .order("name")
@@ -607,6 +716,11 @@ async def create_template(request: Request) -> JSONResponse:
                 400,
             )
 
+    # Verify any optional concrete location FKs belong to this org (3.5).
+    _, fk_err = _validate_template_location_ids(segments, org_id)
+    if fk_err is not None:
+        return fk_err
+
     sb = get_supabase()
     tpl_res = (
         sb.table("logistics_route_templates")
@@ -626,14 +740,7 @@ async def create_template(request: Request) -> JSONResponse:
     template_id = template["id"]
 
     seg_rows = [
-        {
-            "template_id": template_id,
-            "sequence_order": idx,
-            "from_location_type": seg["from_location_type"],
-            "to_location_type": seg["to_location_type"],
-            "default_label": seg.get("default_label"),
-            "default_days": seg.get("default_days"),
-        }
+        _build_template_segment_row(template_id, idx, seg)
         for idx, seg in enumerate(segments, start=1)
     ]
     seg_res = (
@@ -686,6 +793,11 @@ async def update_template(request: Request, template_id: str) -> JSONResponse:
                 400,
             )
 
+    # Verify any optional concrete location FKs belong to this org (3.5).
+    _, fk_err = _validate_template_location_ids(segments, org_id)
+    if fk_err is not None:
+        return fk_err
+
     sb = get_supabase()
     existing = (
         sb.table("logistics_route_templates")
@@ -707,14 +819,7 @@ async def update_template(request: Request, template_id: str) -> JSONResponse:
     ).execute()
 
     seg_rows = [
-        {
-            "template_id": template_id,
-            "sequence_order": idx,
-            "from_location_type": seg["from_location_type"],
-            "to_location_type": seg["to_location_type"],
-            "default_label": seg.get("default_label"),
-            "default_days": seg.get("default_days"),
-        }
+        _build_template_segment_row(template_id, idx, seg)
         for idx, seg in enumerate(segments, start=1)
     ]
     sb.table("logistics_route_template_segments").insert(seg_rows).execute()
@@ -801,12 +906,38 @@ async def apply_template(request: Request, template_id: str) -> JSONResponse:
 
     sb = get_supabase()
 
+    # Defence-in-depth (РОЛ Тест 07 #5c W2 — Phase 5a security review):
+    # `location_map` overrides are caller-supplied UUIDs. Mirror the
+    # template-creation check (_validate_template_location_ids) and verify
+    # every override belongs to the caller's organisation before we resolve
+    # any segment from it. Without this, a logistics user could pass another
+    # org's location id and silently materialise segments pointing at
+    # foreign locations.
+    override_ids = {v for v in location_map.values() if v}
+    if override_ids:
+        check = (
+            sb.table("locations")
+            .select("id")
+            .eq("organization_id", org_id)
+            .in_("id", list(override_ids))
+            .execute()
+        )
+        found = {row["id"] for row in (check.data or [])}
+        bad = override_ids - found
+        if bad:
+            return _err(
+                "VALIDATION_ERROR",
+                f"Location IDs not in org: {sorted(bad)}",
+                403,
+            )
+
     tpl = (
         sb.table("logistics_route_templates")
         .select(
             "id, organization_id, "
             "logistics_route_template_segments(sequence_order, from_location_type, "
-            "to_location_type, default_label, default_days)"
+            "to_location_type, default_label, default_days, "
+            "from_location_id, to_location_id)"
         )
         .eq("id", template_id)
         .eq("organization_id", org_id)
@@ -820,13 +951,19 @@ async def apply_template(request: Request, template_id: str) -> JSONResponse:
         return _err("VALIDATION_ERROR", "Template has no segments", 400)
     template_segments.sort(key=lambda s: s.get("sequence_order") or 0)
 
-    # Resolve a placeholder location id for each type referenced by the template.
-    # Precedence: caller override → org-scoped location with matching type →
-    # fall back to any org-scoped location (last resort, so apply never fails
-    # silently and logistician can edit afterwards).
-    needed_types = {s["from_location_type"] for s in template_segments} | {
-        s["to_location_type"] for s in template_segments
-    }
+    # Hybrid resolution (3.5): when a template segment carries a concrete
+    # from_location_id / to_location_id, use it directly. Only fall back to
+    # type-based selection for sides without a concrete FK. This keeps
+    # behaviour for legacy type-only templates identical while letting
+    # admins pin specific locations on the template ("Хоргос таможня" vs
+    # any 'customs' row).
+    needed_types: set[str] = set()
+    for s in template_segments:
+        if not s.get("from_location_id"):
+            needed_types.add(s["from_location_type"])
+        if not s.get("to_location_id"):
+            needed_types.add(s["to_location_type"])
+
     resolved: dict[str, str] = {}
     for loc_type in needed_types:
         override = location_map.get(loc_type)
@@ -876,8 +1013,14 @@ async def apply_template(request: Request, template_id: str) -> JSONResponse:
         {
             "invoice_id": invoice_id,
             "sequence_order": starting_order + idx,
-            "from_location_id": resolved[ts["from_location_type"]],
-            "to_location_id": resolved[ts["to_location_type"]],
+            "from_location_id": (
+                ts.get("from_location_id")
+                or resolved[ts["from_location_type"]]
+            ),
+            "to_location_id": (
+                ts.get("to_location_id")
+                or resolved[ts["to_location_type"]]
+            ),
             "label": ts.get("default_label"),
             "transit_days": ts.get("default_days"),
             "main_cost_rub": 0,

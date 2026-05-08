@@ -10,6 +10,7 @@ import {
   updateLogisticsTemplate,
   deleteLogisticsTemplate,
 } from "@/entities/logistics-template";
+import type { LocationOption } from "@/entities/location";
 import type { LocationType } from "@/entities/location/ui/location-chip";
 import type { LogisticsTemplateAdmin } from "../model/types";
 import { LogisticsTemplateDialog } from "./logistics-template-dialog";
@@ -28,6 +29,12 @@ import { LogisticsTemplateDialog } from "./logistics-template-dialog";
 interface Props {
   templates: LogisticsTemplateAdmin[];
   orgId: string;
+  /**
+   * Org-scoped locations for the optional concrete-location picker on each
+   * template segment side (РОЛ Тест 07 #3.5, m309). Empty array → dialog
+   * shows type-only segments, same as before.
+   */
+  locations?: LocationOption[];
 }
 
 const TYPE_LABELS: Record<LocationType, string> = {
@@ -60,6 +67,8 @@ type TemplateSegmentForm = {
   to_location_type: LocationType;
   default_label: string;
   default_days: number | null;
+  from_location_id: string | null;
+  to_location_id: string | null;
 };
 
 function toDialogInitial(t: LogisticsTemplateAdmin): {
@@ -76,11 +85,13 @@ function toDialogInitial(t: LogisticsTemplateAdmin): {
       to_location_type: s.to_location_type as LocationType,
       default_label: s.default_label ?? "",
       default_days: s.default_days,
+      from_location_id: s.from_location_id ?? null,
+      to_location_id: s.to_location_id ?? null,
     })),
   };
 }
 
-export function LogisticsTemplatesTab({ templates }: Props) {
+export function LogisticsTemplatesTab({ templates, locations = [] }: Props) {
   const router = useRouter();
   const [dialogMode, setDialogMode] = useState<
     | { kind: "closed" }
@@ -106,6 +117,8 @@ export function LogisticsTemplatesTab({ templates }: Props) {
             to_location_type: s.to_location_type,
             default_label: s.default_label || undefined,
             default_days: s.default_days ?? undefined,
+            from_location_id: s.from_location_id,
+            to_location_id: s.to_location_id,
           })),
           revalidate_path: "/admin/routing?tab=logistics",
         };
@@ -270,6 +283,7 @@ export function LogisticsTemplatesTab({ templates }: Props) {
         }}
         onSubmit={handleSubmit}
         busy={isPending}
+        locations={locations}
         initial={
           dialogMode.kind === "edit"
             ? toDialogInitial(dialogMode.template)

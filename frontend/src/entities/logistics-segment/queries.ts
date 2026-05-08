@@ -1,8 +1,10 @@
 import "server-only";
 import { createAdminClient } from "@/shared/lib/supabase/server";
-import type {
-  LogisticsSegment,
-  LogisticsSegmentLocationRef,
+import {
+  SEGMENT_CURRENCIES,
+  type LogisticsSegment,
+  type LogisticsSegmentLocationRef,
+  type SegmentCurrency,
 } from "./types";
 
 /**
@@ -19,7 +21,9 @@ export type {
   LogisticsSegment,
   LogisticsSegmentExpense,
   LogisticsSegmentLocationRef,
+  SegmentCurrency,
 } from "./types";
+export { SEGMENT_CURRENCIES } from "./types";
 
 interface SegmentRow {
   id: string;
@@ -30,6 +34,7 @@ interface SegmentRow {
   label: string | null;
   transit_days: number | null;
   main_cost_rub: number | string | null;
+  currency_code: string | null;
   carrier: string | null;
   notes: string | null;
   from_location:
@@ -53,10 +58,19 @@ interface SegmentRow {
         id: string;
         label: string;
         cost_rub: number | string | null;
+        currency_code: string | null;
         days: number | null;
         notes: string | null;
       }[]
     | null;
+}
+
+function coerceCurrency(raw: string | null): SegmentCurrency {
+  if (!raw) return "RUB";
+  const upper = raw.toUpperCase();
+  return (SEGMENT_CURRENCIES as readonly string[]).includes(upper)
+    ? (upper as SegmentCurrency)
+    : "RUB";
 }
 
 function coerceType(raw: unknown): LogisticsSegmentLocationRef["type"] {
@@ -93,12 +107,14 @@ function mapRow(r: SegmentRow): LogisticsSegment {
     label: r.label ?? undefined,
     transitDays: r.transit_days ?? undefined,
     mainCostRub: toNumber(r.main_cost_rub),
+    currencyCode: coerceCurrency(r.currency_code),
     carrier: r.carrier ?? undefined,
     notes: r.notes ?? undefined,
     expenses: (r.expenses ?? []).map((e) => ({
       id: e.id,
       label: e.label,
       costRub: toNumber(e.cost_rub),
+      currencyCode: coerceCurrency(e.currency_code),
       days: e.days ?? undefined,
       notes: e.notes ?? undefined,
     })),
@@ -115,7 +131,7 @@ export async function fetchSegmentsForInvoice(
       `
       id, invoice_id, sequence_order,
       from_location_id, to_location_id,
-      label, transit_days, main_cost_rub, carrier, notes,
+      label, transit_days, main_cost_rub, currency_code, carrier, notes,
       from_location:locations!logistics_route_segments_from_location_id_fkey (
         id, country, city, location_type
       ),
@@ -123,7 +139,7 @@ export async function fetchSegmentsForInvoice(
         id, country, city, location_type
       ),
       expenses:logistics_segment_expenses (
-        id, label, cost_rub, days, notes
+        id, label, cost_rub, currency_code, days, notes
       )
     `,
     )

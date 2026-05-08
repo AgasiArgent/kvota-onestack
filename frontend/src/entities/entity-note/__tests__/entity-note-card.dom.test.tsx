@@ -136,4 +136,35 @@ describe("EntityNoteCard dropdown actions (МОП-2 / МОП-3)", () => {
       screen.queryByRole("button", { name: "Действия с заметкой" }),
     ).not.toBeInTheDocument();
   });
+
+  /**
+   * РОЛ Тест 07 #3.8 (cluster L-E): the author's full name was rendered
+   * twice in each note card — once by the card's own header span and once
+   * inside the `UserAvatarChip` which defaults to showing both the
+   * avatar AND the user's name. The fix is to render the avatar in
+   * `initialsOnly` mode so the card itself stays the single source of
+   * truth for the name string.
+   */
+  it("renders the author's full name exactly once (not duplicated by the avatar chip)", () => {
+    const note = makeNote({
+      author: {
+        id: "u-9",
+        name: "Сидоров Алексей Викторович",
+        email: "sidorov.a@example.com",
+        avatarUrl: null,
+      },
+    });
+
+    render(
+      <EntityNoteCard
+        note={note}
+        canModify={false}
+        onTogglePin={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+
+    const matches = screen.getAllByText("Сидоров Алексей Викторович");
+    expect(matches).toHaveLength(1);
+  });
 });

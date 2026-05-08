@@ -14,6 +14,14 @@ export interface LogisticsTemplateSegment {
   toLocationType: LocationType;
   defaultLabel?: string;
   defaultDays?: number;
+  /**
+   * Optional concrete from-location id (m309 hybrid templates,
+   * РОЛ Тест 07 #3.5). When set, apply_template uses this id directly;
+   * otherwise it falls back to fromLocationType-based selection.
+   */
+  fromLocationId?: string;
+  /** Optional concrete to-location id — see fromLocationId. */
+  toLocationId?: string;
 }
 
 export interface LogisticsTemplate {
