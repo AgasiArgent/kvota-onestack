@@ -32,6 +32,9 @@ import { MergeInlineDialog } from "./merge-inline-dialog";
 import { AddCargoPlaceDialog } from "./add-cargo-place-dialog";
 import { AddPositionsModal } from "./add-positions-modal";
 import type { QuoteItemRow, QuoteInvoiceRow } from "@/entities/quote/queries";
+import type { Database } from "@/shared/types/database.types";
+
+type InvoicesUpdate = Database["kvota"]["Tables"]["invoices"]["Update"];
 import {
   completeInvoiceProcurement,
   deleteCargoPlace,
@@ -180,9 +183,7 @@ export function InvoiceCard({
   const [incotermsLocal, setIncotermsLocal] = useState(invoice.supplier_incoterms ?? "");
   const [currencyLocal, setCurrencyLocal] = useState(invoice.currency ?? "USD");
   const [vatRateLocal, setVatRateLocal] = useState(
-    (invoice as { vat_rate?: number | null }).vat_rate != null
-      ? String((invoice as { vat_rate?: number | null }).vat_rate)
-      : ""
+    invoice.vat_rate != null ? String(invoice.vat_rate) : ""
   );
   // VAT autofill from kvota.vat_rates_by_country (РОЗ-95, МОЗ-82). Fires on
   // pickup-country change. Conservative: never overwrites a manually-entered
@@ -212,8 +213,7 @@ export function InvoiceCard({
         setVatRateLocal((prev) => (prev.trim() === "" ? String(rateNum) : prev));
         // Persist only if the saved invoice value is also unset; otherwise the
         // local state diverged from the DB intentionally.
-        const saved =
-          (invoice as { vat_rate?: number | null }).vat_rate ?? null;
+        const saved = invoice.vat_rate ?? null;
         if (saved === null) {
           void handleSaveInvoiceField({ vat_rate: rateNum });
         }
@@ -683,9 +683,7 @@ export function InvoiceCard({
   // Generic save for the deferred-fill invoice-level fields. No-op when the
   // new value is identical to the current invoice prop (avoids spurious
   // PostgREST round-trips on blur of unchanged inputs).
-  async function handleSaveInvoiceField(
-    updates: Record<string, string | number | null>
-  ) {
+  async function handleSaveInvoiceField(updates: InvoicesUpdate) {
     try {
       const supabase = (await import("@/shared/lib/supabase/client")).createClient();
       const { error } = await supabase
@@ -1163,8 +1161,7 @@ export function InvoiceCard({
                       const trimmed = vatRateLocal.trim();
                       const parsed = trimmed === "" ? null : parseFloat(trimmed);
                       if (parsed !== null && Number.isNaN(parsed)) return;
-                      const current =
-                        (invoice as { vat_rate?: number | null }).vat_rate ?? null;
+                      const current = invoice.vat_rate ?? null;
                       if (parsed === current) return;
                       void handleSaveInvoiceField({ vat_rate: parsed });
                     }}

@@ -34,11 +34,9 @@ export function DeadlineOverride({
         return;
       }
 
-      // stage_deadline_override_hours is from migration 238, not yet in generated types.
-      // Use type assertion to pass the update through PostgREST.
       await supabase
         .from("quotes")
-        .update({ stage_deadline_override_hours: parsed } as Record<string, unknown>)
+        .update({ stage_deadline_override_hours: parsed })
         .eq("id", quoteId);
 
       setEditing(false);

@@ -1590,6 +1590,7 @@ export type Database = {
           customs_sla_hours: number | null
           logistics_needs_review_since: string | null
           customs_needs_review_since: string | null
+          vat_rate: number | null
         }
         Insert: {
           id?: string
@@ -1641,6 +1642,7 @@ export type Database = {
           customs_sla_hours?: number | null
           logistics_needs_review_since?: string | null
           customs_needs_review_since?: string | null
+          vat_rate?: number | null
         }
         Update: {
           id?: string
@@ -1692,6 +1694,7 @@ export type Database = {
           customs_sla_hours?: number | null
           logistics_needs_review_since?: string | null
           customs_needs_review_since?: string | null
+          vat_rate?: number | null
         }
         Relationships: []
       }
@@ -4571,6 +4574,7 @@ export type Database = {
           cancelled_by: string | null
           incoterms: string | null
           deleted_by: string | null
+          customs_notes: string | null
         }
         Insert: {
           id?: string
@@ -4693,6 +4697,7 @@ export type Database = {
           cancelled_by?: string | null
           incoterms?: string | null
           deleted_by?: string | null
+          customs_notes?: string | null
         }
         Update: {
           id?: string
@@ -4815,6 +4820,7 @@ export type Database = {
           cancelled_by?: string | null
           incoterms?: string | null
           deleted_by?: string | null
+          customs_notes?: string | null
         }
         Relationships: []
       }
