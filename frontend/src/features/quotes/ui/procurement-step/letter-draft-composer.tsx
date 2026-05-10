@@ -135,15 +135,26 @@ export function LetterDraftComposer({
         lang === "en" ? "(no items listed)" : "(позиции не указаны)";
       const qtyUnit = lang === "en" ? "pcs" : "шт.";
 
-      // For EN, prefer name_en when available for each item
+      // EN mode: prefer name_en, fall back to RU name with an explicit
+      // «(перевод отсутствует)» / «(no translation)» marker so the recipient
+      // knows the line is intentionally bilingual rather than a typo. Plain
+      // silent fallback (МОЗ-104) confused suppliers and the supplier-side
+      // sender — they assumed the system had translated when it had not.
+      const missingTranslationMarker =
+        lang === "en" ? " (no translation)" : " (перевод отсутствует)";
       const itemsList =
         items.length > 0
           ? items
               .map((i, idx) => {
-                const displayName =
-                  lang === "en"
-                    ? ((i as { name_en?: string | null }).name_en ?? i.product_name)
-                    : i.product_name;
+                let displayName: string;
+                if (lang === "en") {
+                  const trimmedEn = i.name_en?.trim();
+                  displayName = trimmedEn
+                    ? trimmedEn
+                    : `${i.product_name}${missingTranslationMarker}`;
+                } else {
+                  displayName = i.product_name;
+                }
                 return `${idx + 1}. ${i.brand ?? ""} ${i.product_code ?? ""} — ${displayName} (${i.quantity} ${qtyUnit})`;
               })
               .join("\n")
