@@ -32,13 +32,24 @@ export interface KanbanPageProps {
   data: KanbanResponse;
   workload: ProcurementUserWorkload[];
   orgId: string;
+  /**
+   * When false, the «Распределение» column is hidden (МОЗ-45). Only roles
+   * with actual distribution authority — admin, head_of_procurement,
+   * procurement_senior — should see that column.
+   */
+  canDistribute: boolean;
 }
 
 /**
  * Top-level kanban screen. Server component fetches state once; subsequent
  * board mutations happen client-side with optimistic updates.
  */
-export function KanbanPage({ data, workload, orgId }: KanbanPageProps) {
+export function KanbanPage({
+  data,
+  workload,
+  orgId,
+  canDistribute,
+}: KanbanPageProps) {
   const totalCards = Object.values(data.columns).reduce(
     (sum, col) => sum + col.length,
     0
@@ -62,6 +73,7 @@ export function KanbanPage({ data, workload, orgId }: KanbanPageProps) {
           initialColumns={data.columns}
           workload={workload}
           orgId={orgId}
+          canDistribute={canDistribute}
         />
       </div>
       <AppToaster />
