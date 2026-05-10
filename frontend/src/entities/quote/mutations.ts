@@ -908,11 +908,21 @@ export async function unassignInvoiceItem(invoiceItemId: string) {
   const invoiceId = coveredRows[0]?.invoice_items?.invoice_id ?? null;
 
   // 2. DELETE invoice_item — cascades to coverage rows via ON DELETE CASCADE.
-  const { error: delErr } = await supabase
+  //    Chain .select() so PostgREST returns the deleted rows: an RLS-blocked
+  //    delete is a 200 OK with [] (no error), so we must inspect the result
+  //    and throw explicitly. Without this check, callers see a success toast
+  //    while the DB row remains (the original МОЗ-108 silent failure).
+  const { data: deletedRows, error: delErr } = await supabase
     .from("invoice_items")
     .delete()
-    .eq("id", invoiceItemId);
+    .eq("id", invoiceItemId)
+    .select("id");
   if (delErr) throw delErr;
+  if (!deletedRows || deletedRows.length === 0) {
+    throw new Error(
+      "Не удалось удалить позицию (нет прав или строка уже отсутствует)"
+    );
+  }
 
   if (coveredQiIds.length === 0 || !invoiceId) {
     // Orphan invoice_item with no coverage (e.g. manual addition) or we
