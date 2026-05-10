@@ -71,16 +71,19 @@ function makeFakeSupabase(): FakeSupabase {
             }),
           }),
           delete: () => ({
-            eq: async (_col: string, id: string) => {
-              state.invoiceItemsDeletedIds.push(id);
-              // Simulate ON DELETE CASCADE: drop coverage rows for this
-              // invoice_item so the follow-up "remaining coverage" check
-              // sees the real post-delete state.
-              state.invoiceItemCoverage = state.invoiceItemCoverage.filter(
-                (r) => r.invoice_item_id !== id
-              );
-              return { error: null };
-            },
+            eq: (_col: string, id: string) => ({
+              // Mirrors the real Supabase chain: .delete().eq(...).select("id")
+              // returns { data: deletedRows[], error }. The production code
+              // relies on `data.length === 0` to detect RLS-blocked deletes
+              // (МОЗ-108 root cause).
+              select: async (_cols: string) => {
+                state.invoiceItemsDeletedIds.push(id);
+                state.invoiceItemCoverage = state.invoiceItemCoverage.filter(
+                  (r) => r.invoice_item_id !== id
+                );
+                return { data: [{ id }], error: null };
+              },
+            }),
           }),
         };
       }
