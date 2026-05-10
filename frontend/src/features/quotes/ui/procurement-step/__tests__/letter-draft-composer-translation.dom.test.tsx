@@ -248,9 +248,11 @@ describe("LetterDraftComposer — translation wiring (РОЗ-117 / МОЗ-104)",
 
     await waitFor(async () => {
       const body = await getBodyText();
-      // Without a translation we render the Russian name verbatim — better
-      // than a blank line or a crash. Matches the XLS export's fallback.
-      expect(body).toContain("Шуруп оцинкованный 4×30");
+      // Without a translation we render the Russian name verbatim plus an
+      // explicit marker so the supplier (and the МОЗ sender) can see at a
+      // glance that the line is intentionally bilingual rather than a typo.
+      // Silent fallback is what testers reported as МОЗ-104.
+      expect(body).toContain("Шуруп оцинкованный 4×30 (no translation)");
       // Sanity: the (quantity pcs) suffix tells us the row was rendered,
       // not silently dropped.
       expect(body).toContain("(100 pcs)");
