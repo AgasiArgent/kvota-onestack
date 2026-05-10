@@ -19,7 +19,7 @@ export function CustomsNotes({ quoteId, initialNotes }: CustomsNotesProps) {
     try {
       await supabase
         .from("quotes")
-        .update({ customs_notes: notes } as Record<string, unknown>)
+        .update({ customs_notes: notes })
         .eq("id", quoteId);
       router.refresh();
     } catch {

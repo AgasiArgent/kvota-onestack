@@ -38,6 +38,15 @@ jobs:
         # validates the committed schema snapshot against current queries.
         run: python3 tools/check_select_columns.py
 
+      - name: Supabase write-type bypass lint
+        # Bans `as Record<string, ...>` casts on .update/.insert/.upsert args in
+        # frontend/src/. Background: this antipattern shipped МОЗ-82 plus two
+        # other silent-failure bugs (vat_rate, customs_notes, …) by disabling
+        # the typed Update<T> contract — frontend wrote to columns that did not
+        # exist in the schema, PostgREST returned 42703 silently while the UI
+        # showed success toasts. See migrations 310/311 + tool header for context.
+        run: python3 tools/check_supabase_write_types.py
+
       - name: Run tests
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
