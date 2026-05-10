@@ -37,6 +37,12 @@ export interface KanbanBoardProps {
   initialColumns: KanbanColumns;
   workload: ProcurementUserWorkload[];
   orgId: string;
+  /**
+   * When false the «Распределение» column is hidden — regular `procurement`
+   * users (МОЗ) only see cards already assigned to them, so the distribute
+   * column is irrelevant noise (МОЗ-45).
+   */
+  canDistribute: boolean;
 }
 
 const FORCED_ASSIGN_NOTICE =
@@ -67,7 +73,11 @@ export function KanbanBoard({
   initialColumns,
   workload,
   orgId,
+  canDistribute,
 }: KanbanBoardProps) {
+  const visibleSubstatuses = canDistribute
+    ? PROCUREMENT_SUBSTATUSES
+    : PROCUREMENT_SUBSTATUSES.filter((s) => s !== "distributing");
   const router = useRouter();
 
   // Sort each column so the most recently updated card appears at the top.
@@ -271,8 +281,14 @@ export function KanbanBoard({
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       >
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {PROCUREMENT_SUBSTATUSES.map((sub) => (
+        <div
+          className={
+            canDistribute
+              ? "grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4"
+              : "grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-3"
+          }
+        >
+          {visibleSubstatuses.map((sub) => (
             <KanbanColumn
               key={sub}
               substatus={sub}
