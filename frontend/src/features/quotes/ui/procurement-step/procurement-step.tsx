@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { createClient } from "@/shared/lib/supabase/client";
+import { isProcurementOnly } from "@/shared/lib/roles";
 import type {
   QuoteDetailRow,
   QuoteItemRow,
@@ -12,6 +13,10 @@ import { QuotePositionsList } from "./quote-positions-list";
 import { InvoiceCard } from "./invoice-card";
 import { InvoiceCreateModal } from "./invoice-create-modal";
 import { AppToaster } from "@/shared/ui/app-toaster";
+
+// Sentinel UUID forces a query to return zero rows when a procurement-only
+// user has no supplier assignments yet. Mirrors entities/supplier/queries.ts.
+const EMPTY_RESULT_UUID = "00000000-0000-0000-0000-000000000000";
 
 /**
  * Phase 5d Task 14 — "can complete procurement" guard.
@@ -111,24 +116,60 @@ export function ProcurementStep({
   const [minOrderQuantityByQuoteItemId, setMinOrderQuantityByQuoteItemId] =
     useState<Record<string, number | null>>({});
 
-  // Load suppliers and buyer companies for the invoice creation modal
+  // Load suppliers and buyer companies for the invoice creation modal.
+  // Suppliers are role-scoped: procurement-only users (МОЗ + procurement_senior)
+  // see only suppliers assigned to them via supplier_assignees; head_of_procurement,
+  // admin, sales, etc. see all org suppliers. Mirrors the /suppliers page
+  // behavior (entities/supplier/queries.ts) so МОЗ doesn't get a leaky
+  // "Поставщик" dropdown in the КПП create modal (МОЗ-75).
   useEffect(() => {
     const supabase = createClient();
+    let cancelled = false;
 
-    supabase
-      .from("suppliers")
-      .select("id, name, country")
-      .eq("organization_id", quote.organization_id)
-      .order("name")
-      .then(({ data }) => setSuppliers(data ?? []));
+    void (async () => {
+      let assignedIds: string[] | null = null;
+      if (isProcurementOnly(userRoles)) {
+        const { data: authData } = await supabase.auth.getUser();
+        if (authData.user) {
+          const { data: assignees } = await supabase
+            .from("supplier_assignees")
+            .select("supplier_id")
+            .eq("user_id", authData.user.id);
+          assignedIds = (assignees ?? []).map((r) => r.supplier_id);
+        } else {
+          // No auth context — fail closed.
+          assignedIds = [];
+        }
+      }
+      if (cancelled) return;
+
+      let suppliersQuery = supabase
+        .from("suppliers")
+        .select("id, name, country")
+        .eq("organization_id", quote.organization_id);
+      if (assignedIds !== null) {
+        suppliersQuery = suppliersQuery.in(
+          "id",
+          assignedIds.length > 0 ? assignedIds : [EMPTY_RESULT_UUID]
+        );
+      }
+      const { data } = await suppliersQuery.order("name");
+      if (!cancelled) setSuppliers(data ?? []);
+    })();
 
     supabase
       .from("buyer_companies")
       .select("id, name, company_code")
       .eq("organization_id", quote.organization_id)
       .order("name")
-      .then(({ data }) => setBuyerCompanies(data ?? []));
-  }, [quote.organization_id]);
+      .then(({ data }) => {
+        if (!cancelled) setBuyerCompanies(data ?? []);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [quote.organization_id, userRoles]);
 
   // Phase 5d: derive priceReady from invoice_item_coverage → invoice_items.
   useEffect(() => {
