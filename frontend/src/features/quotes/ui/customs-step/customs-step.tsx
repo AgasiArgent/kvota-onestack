@@ -10,6 +10,7 @@ import type {
   QuoteInvoiceRow,
 } from "@/entities/quote/queries";
 import { createClient } from "@/shared/lib/supabase/client";
+import { ALTA_FEATURES_ENABLED } from "@/shared/lib/feature-flags";
 import {
   AutofillBanner,
   type CustomsAutofillSuggestion,
@@ -274,7 +275,14 @@ export function CustomsStep({
 
   // Load autofill suggestions once per quote change. Fires-and-forget; silent
   // on error so customs workflow is never blocked by the suggestion endpoint.
+  // Gated by ALTA_FEATURES_ENABLED — when off, no fetch fires and suggestions
+  // stay empty (which also clears the customs-autofill-row highlight via the
+  // empty array propagating into <CustomsHandsontable>).
   useEffect(() => {
+    if (!ALTA_FEATURES_ENABLED) {
+      setAutofillSuggestions([]);
+      return;
+    }
     let cancelled = false;
     if (!isPendingCustoms || items.length === 0) {
       setAutofillSuggestions([]);
@@ -446,15 +454,17 @@ export function CustomsStep({
       />
 
       <div className="p-6 space-y-4">
-        {autofillSuggestions.length > 0 && !autofillDismissed && (
-          <AutofillBanner
-            totalItems={items.length}
-            suggestions={autofillSuggestions}
-            onAcceptAll={handleBulkAccept}
-            onDismiss={() => setAutofillDismissed(true)}
-            pending={bulkAcceptPending}
-          />
-        )}
+        {ALTA_FEATURES_ENABLED &&
+          autofillSuggestions.length > 0 &&
+          !autofillDismissed && (
+            <AutofillBanner
+              totalItems={items.length}
+              suggestions={autofillSuggestions}
+              onAcceptAll={handleBulkAccept}
+              onDismiss={() => setAutofillDismissed(true)}
+              pending={bulkAcceptPending}
+            />
+          )}
 
         {userId && quote.organization_id && (
           <div className="flex items-center justify-end">

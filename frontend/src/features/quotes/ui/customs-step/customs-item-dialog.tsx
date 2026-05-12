@@ -494,10 +494,12 @@ export function CustomsItemDialog({
 
   // Fetch history when dialog opens for an item with hs_code + country set.
   // Skipped when an Auto resolver result is already on screen (the user is
-  // mid-flow and a banner would only add noise).
+  // mid-flow and a banner would only add noise) OR when ALTA_FEATURES_ENABLED
+  // is off — no automation surfaces render (see `feature-flags.ts` for scope).
   const formHsCode = form?.hs_code;
   const formCountryOksm = form?.country_of_origin_oksm ?? null;
   useEffect(() => {
+    if (!ALTA_FEATURES_ENABLED) return;
     if (!open) return;
     if (!formHsCode || !formCountryOksm) return;
     if (resolveResult) return;
@@ -821,16 +823,19 @@ export function CustomsItemDialog({
           {/* REQ-10 Phase A — history suggestion banner. Surfaces the most
               recent (org, tnved_code, country) choice so the customs
               specialist can re-apply previous selections in one click. */}
-          {historySuggestion && !historyApplied && !historyDismissed && (
-            <HistoryBanner
-              suggestion={historySuggestion}
-              onApply={() => {
-                applyHistory(historySuggestion);
-                setHistoryApplied(true);
-              }}
-              onDismiss={() => setHistoryDismissed(true)}
-            />
-          )}
+          {ALTA_FEATURES_ENABLED &&
+            historySuggestion &&
+            !historyApplied &&
+            !historyDismissed && (
+              <HistoryBanner
+                suggestion={historySuggestion}
+                onApply={() => {
+                  applyHistory(historySuggestion);
+                  setHistoryApplied(true);
+                }}
+                onDismiss={() => setHistoryDismissed(true)}
+              />
+            )}
 
           {/* Core customs classification */}
           <section className="grid grid-cols-1 sm:grid-cols-2 gap-3">
