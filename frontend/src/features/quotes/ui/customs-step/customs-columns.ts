@@ -39,11 +39,8 @@ export const CUSTOMS_AVAILABLE_COLUMNS: readonly CustomsColumnSpec[] = [
   { key: "import_banned", label: "Запрет ввоза" },
   { key: "import_ban_reason", label: "Причина запрета" },
   { key: "license_ds_required", label: "ДС" },
-  { key: "license_ds_cost", label: "Ст-ть ДС" },
   { key: "license_ss_required", label: "СС" },
-  { key: "license_ss_cost", label: "Ст-ть СС" },
   { key: "license_sgr_required", label: "СГР" },
-  { key: "license_sgr_cost", label: "Ст-ть СГР" },
 ];
 
 /** Stable registry key for the customs items table — matches `user_table_views.table_key`. */

@@ -32,7 +32,6 @@ import {
   CUSTOMS_TABLE_KEY,
 } from "./customs-columns";
 import { CUSTOMS_SYSTEM_VIEWS } from "./customs-views";
-import { CustomsExpenses } from "./customs-expenses";
 import { CustomsNotes } from "./customs-notes";
 import { EntityNotesPanel } from "@/entities/entity-note";
 import type { EntityNoteCardData } from "@/entities/entity-note/ui/entity-note-card";
@@ -367,9 +366,6 @@ export function CustomsStep({
               license_ds_required: Boolean(s.license_ds_required),
               license_ss_required: Boolean(s.license_ss_required),
               license_sgr_required: Boolean(s.license_sgr_required),
-              license_ds_cost: s.license_ds_cost ?? 0,
-              license_ss_cost: s.license_ss_cost ?? 0,
-              license_sgr_cost: s.license_sgr_cost ?? 0,
             })),
           };
           const res = await fetch(
@@ -390,6 +386,11 @@ export function CustomsStep({
           setAutofillSuggestions([]);
           router.refresh();
         } catch (err) {
+          console.error("customs bulk autofill apply failed", {
+            quoteId: quote.id,
+            count: suggestions.length,
+            err,
+          });
           toast.error(
             err instanceof Error ? err.message : "Не удалось применить",
           );
@@ -497,15 +498,15 @@ export function CustomsStep({
           replaces the Phase A `<QuoteCustomsExpenses />` (per-quote) +
           `<ItemCustomsExpenses />` (per-item) split. Both data layers are
           now stored in `kvota.quote_certificates` with `is_custom_expense`
-          discriminating between certificates and ad-hoc fees.
+          discriminating between certificates and ad-hoc fees. The two
+          Phase A components were deleted in 2026-05 (FB-260511-212235-0384
+          cleanup) alongside the `license_*_cost` ghost-column removal.
         */}
         <CertificatesSection
           quoteId={quote.id}
           items={quoteItemsForCerts}
           canEdit={canEditCustoms}
         />
-
-        <CustomsExpenses quoteId={quote.id} />
 
         <CustomsNotes quoteId={quote.id} initialNotes={customsNotes} />
 

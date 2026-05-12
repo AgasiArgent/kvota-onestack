@@ -218,7 +218,14 @@ class TestBulkUpdateItems:
     @patch("api.customs.get_supabase")
     @patch("api.customs.get_user_role_codes")
     def test_happy_path_updates_items(self, mock_roles, mock_get_sb):
-        """Valid body + customs role → updates quote_items + returns success."""
+        """Valid body + customs role → updates quote_items + returns success.
+
+        Legacy clients may still send ``license_*_cost`` in their payload —
+        those columns were dropped from ``kvota.quote_items`` in migration
+        284 (Phase 5d, 2026-04-18) and now live on ``invoice_items`` only.
+        The handler must silently strip them before the ``.update()`` call
+        so a stale FE build can't crash the BE with PGRST204.
+        """
         mock_roles.return_value = ["customs"]
         mock_sb, item_chain = _patch_supabase_quote_ok()
         mock_get_sb.return_value = mock_sb
@@ -233,6 +240,7 @@ class TestBulkUpdateItems:
                         "hs_code": "1234.56",
                         "customs_duty": "5.5",
                         "license_ds_required": True,
+                        # Legacy cost fields — must be stripped before write.
                         "license_ds_cost": "5000",
                         "license_ss_required": False,
                         "license_ss_cost": 0,
@@ -246,15 +254,24 @@ class TestBulkUpdateItems:
         assert resp.status_code == 200
         assert _body(resp) == {"success": True}
 
-        # Verify update called with expected payload
+        # Verify update called with expected payload.
         update_call = item_chain.update.call_args
         assert update_call is not None
         payload = update_call[0][0]
+
+        # Required keys ARE present.
         assert payload["hs_code"] == "1234.56"
         assert payload["customs_duty"] == 5.5
         assert payload["license_ds_required"] is True
-        assert payload["license_ds_cost"] == 5000.0
-        assert payload["license_sgr_cost"] == 0.0  # empty string → 0
+        assert payload["license_ss_required"] is False
+        assert payload["license_sgr_required"] is False
+
+        # Ghost keys MUST NOT be in the write payload — the columns were
+        # dropped from kvota.quote_items in m284. Including them would 400
+        # PGRST204 against PostgREST.
+        assert "license_ds_cost" not in payload
+        assert "license_ss_cost" not in payload
+        assert "license_sgr_cost" not in payload
 
     @patch("api.customs.get_supabase")
     @patch("api.customs.get_user_role_codes")

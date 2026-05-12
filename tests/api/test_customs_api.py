@@ -852,11 +852,18 @@ class TestAutofillBackwardsCompat:
     def test_existing_fields_unchanged_without_force_live(
         self, mock_roles, mock_get_sb
     ):
-        """Without force_live=True, response shape matches existing contract."""
+        """REQ-5 AC#3 originally said 'STRICTLY ADDITIVE'. After migration 284
+        (Phase 5d, 2026-04-18) the 3 ``license_*_cost`` columns were dropped
+        from ``kvota.quote_items`` — the additive contract was *shrunk*, not
+        extended. Lock that shrink so we don't accidentally re-add them and
+        crash the autofill SELECT with PostgREST 42703.
+        """
         from api.customs import _AUTOFILL_FIELDS, autofill_handler
 
-        # Verify _AUTOFILL_FIELDS still contains all original keys (additive only)
-        legacy_required = {
+        # Required fields that MUST stay in _AUTOFILL_FIELDS (phase 6B-9
+        # baseline minus the 3 ghost columns dropped in m284, plus the
+        # REQ-5 customs-phase-1 additions).
+        REQUIRED_FIELDS = {
             "hs_code",
             "customs_duty",
             "customs_duty_per_kg",
@@ -867,14 +874,29 @@ class TestAutofillBackwardsCompat:
             "license_ds_required",
             "license_ss_required",
             "license_sgr_required",
+            "country_of_origin_oksm",
+            "has_origin_certificate",
+            "has_fta_certificate",
+        }
+        for f in REQUIRED_FIELDS:
+            assert f in _AUTOFILL_FIELDS, (
+                f"required field '{f}' missing from _AUTOFILL_FIELDS"
+            )
+
+        # Forbidden fields — dropped from kvota.quote_items in m284.
+        # Re-adding any of these will crash the autofill SELECT with
+        # PostgREST 42703 (column does not exist).
+        FORBIDDEN_GHOST_COLUMNS = {
             "license_ds_cost",
             "license_ss_cost",
             "license_sgr_cost",
         }
-        assert legacy_required.issubset(set(_AUTOFILL_FIELDS)), (
-            f"_AUTOFILL_FIELDS must remain strictly additive — "
-            f"missing legacy keys: {legacy_required - set(_AUTOFILL_FIELDS)}"
-        )
+        for f in FORBIDDEN_GHOST_COLUMNS:
+            assert f not in _AUTOFILL_FIELDS, (
+                f"ghost column '{f}' was dropped from kvota.quote_items in "
+                "migration 284 — re-adding it will crash autofill with "
+                "PGRST 42703"
+            )
 
         # Run handler with no historical match — should still return success+empty
         mock_roles.return_value = ["customs"]

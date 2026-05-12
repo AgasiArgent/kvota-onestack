@@ -82,6 +82,10 @@ _TNVED_RE = re.compile(r"^\d{10}$")
 # tuple and only marks new entries as optional.
 _AUTOFILL_FIELDS = (
     # --- Original fields (Phase 6B-9 logistics-customs-redesign) ---
+    # license_*_cost columns were dropped from kvota.quote_items in
+    # migration 284 (Phase 5d, 2026-04-18) — they live on invoice_items
+    # only. Removed from the autofill contract on 2026-05-12 alongside
+    # the FE ghost-key cleanup (FB-260511-212235-0384).
     "hs_code",
     "customs_duty",
     "customs_duty_per_kg",
@@ -92,9 +96,6 @@ _AUTOFILL_FIELDS = (
     "license_ds_required",
     "license_ss_required",
     "license_sgr_required",
-    "license_ds_cost",
-    "license_ss_cost",
-    "license_sgr_cost",
     # --- REQ-5 additions (customs-phase-1) — appended only ---
     "country_of_origin_oksm",
     "has_origin_certificate",
@@ -102,13 +103,8 @@ _AUTOFILL_FIELDS = (
 )
 
 # Subset of _AUTOFILL_FIELDS that actually maps to columns on
-# ``kvota.quote_items``. The license_*_cost columns moved off quote_items in
-# Phase 5d (they live on invoice_items only) — selecting them via PostgREST
-# raises 42703. The frontend contract still requires the keys to appear in
-# the response (per ``CustomsAutofillSuggestion`` mirror + REQ-5 AC#3
-# "STRICTLY ADDITIVE"); the population loop below uses ``row.get(field)``
-# which silently yields ``None`` for the dropped columns — preserving the
-# additive-only contract while keeping the SELECT schema-clean.
+# ``kvota.quote_items``. Currently identical to _AUTOFILL_FIELDS since the
+# ghost license_*_cost columns were removed (see comment above).
 #
 # Defined as a literal tuple (not a generator filter) so the static
 # schema-drift lint at ``tools/check_select_columns.py`` can resolve it.
@@ -200,13 +196,12 @@ async def bulk_update_items(request: Request, quote_id: str) -> JSONResponse:
             hs_code (optional str)
             customs_duty (optional number)
             license_ds_required / license_ss_required / license_sgr_required (bool)
-            license_ds_cost / license_ss_cost / license_sgr_cost (number)
     Returns:
         success: bool
         error: str — on failure
     Side Effects:
-        - Updates hs_code, customs_duty, license_* fields on quote_items rows
-          scoped to the given quote_id.
+        - Updates hs_code, customs_duty, license_*_required fields on
+          quote_items rows scoped to the given quote_id.
     Roles: customs, admin, head_of_customs, head_of_logistics.
 
     Response envelope mirrors the legacy FastHTML dict return (no ``data``
@@ -283,20 +278,17 @@ async def bulk_update_items(request: Request, quote_id: str) -> JSONResponse:
         license_ss_required = bool(item.get("license_ss_required", False))
         license_sgr_required = bool(item.get("license_sgr_required", False))
 
-        license_ds_cost = _safe_float(item.get("license_ds_cost"))
-        license_ss_cost = _safe_float(item.get("license_ss_cost"))
-        license_sgr_cost = _safe_float(item.get("license_sgr_cost"))
-
+        # license_*_cost columns were dropped from kvota.quote_items in
+        # migration 284 (Phase 5d) — they live on invoice_items only. Any
+        # cost payload from legacy clients is silently ignored here so a
+        # stale FE build can't crash with PGRST204.
         supabase.table("quote_items").update(
             {
                 "hs_code": hs_code if hs_code else None,
                 "customs_duty": customs_duty,
                 "license_ds_required": license_ds_required,
-                "license_ds_cost": license_ds_cost,
                 "license_ss_required": license_ss_required,
-                "license_ss_cost": license_ss_cost,
                 "license_sgr_required": license_sgr_required,
-                "license_sgr_cost": license_sgr_cost,
             }
         ).eq("id", item_id).eq("quote_id", quote_id).execute()
 
@@ -363,7 +355,6 @@ async def autofill_handler(
             customs_util_fee, customs_excise, customs_eco_fee,
             customs_honest_mark,
             license_ds_required, license_ss_required, license_sgr_required,
-            license_ds_cost, license_ss_cost, license_sgr_cost,
             country_of_origin_oksm,    — REQ-5 (additive)
             has_origin_certificate,    — REQ-5 (additive)
             has_fta_certificate,       — REQ-5 (additive)

@@ -113,11 +113,8 @@ type ItemExtras = {
   import_banned?: boolean | null;
   import_ban_reason?: string | null;
   license_ds_required?: boolean | null;
-  license_ds_cost?: number | null;
   license_ss_required?: boolean | null;
-  license_ss_cost?: number | null;
   license_sgr_required?: boolean | null;
-  license_sgr_cost?: number | null;
   // REQ-7 customs-phase-1 — country of origin (read-only column).
   // Edits happen through customs-item-dialog (CustomsCountryDropdown).
   country_of_origin_oksm?: number | null;
@@ -321,11 +318,8 @@ const COLUMN_KEYS = [
   "import_banned",
   "import_ban_reason",
   "license_ds_required",
-  "license_ds_cost",
   "license_ss_required",
-  "license_ss_cost",
   "license_sgr_required",
-  "license_sgr_cost",
 ] as const;
 
 type DutyMode = "pct" | "perKg";
@@ -370,11 +364,8 @@ interface RowData {
   import_banned: boolean;
   import_ban_reason: string;
   license_ds_required: boolean;
-  license_ds_cost: number | null;
   license_ss_required: boolean;
-  license_ss_cost: number | null;
   license_sgr_required: boolean;
-  license_sgr_cost: number | null;
 }
 
 function resolveDutyMode(
@@ -430,11 +421,8 @@ function itemToRow(
     import_banned: extras.import_banned ?? false,
     import_ban_reason: extras.import_ban_reason ?? "",
     license_ds_required: extras.license_ds_required ?? false,
-    license_ds_cost: extras.license_ds_cost ?? null,
     license_ss_required: extras.license_ss_required ?? false,
-    license_ss_cost: extras.license_ss_cost ?? null,
     license_sgr_required: extras.license_sgr_required ?? false,
-    license_sgr_cost: extras.license_sgr_cost ?? null,
   };
 }
 
@@ -442,9 +430,6 @@ const NUMERIC_FIELDS = new Set([
   "customs_util_fee",
   "customs_excise",
   "customs_eco_fee",
-  "license_ds_cost",
-  "license_ss_cost",
-  "license_sgr_cost",
 ]);
 
 const BOOLEAN_FIELDS = new Set([
@@ -501,11 +486,8 @@ const COL_HEADERS: string[] = [
   "Запрет ввоза",
   "Причина запрета",
   "ДС",
-  headerWithTooltip("Ст-ть ДС", numericTooltip),
   "СС",
-  headerWithTooltip("Ст-ть СС", numericTooltip),
   "СГР",
-  headerWithTooltip("Ст-ть СГР", numericTooltip),
 ];
 
 
@@ -759,11 +741,8 @@ const COLUMNS: Handsontable.ColumnSettings[] = [
   { data: "import_banned", type: "checkbox", width: 50 },
   { data: "import_ban_reason", type: "text", width: 120 },
   { data: "license_ds_required", type: "checkbox", width: 30 },
-  { data: "license_ds_cost", type: "numeric", width: 55, allowEmpty: true },
   { data: "license_ss_required", type: "checkbox", width: 30 },
-  { data: "license_ss_cost", type: "numeric", width: 55, allowEmpty: true },
   { data: "license_sgr_required", type: "checkbox", width: 30 },
-  { data: "license_sgr_cost", type: "numeric", width: 55, allowEmpty: true },
 ];
 
 interface CustomsHandsontableProps {
@@ -965,7 +944,18 @@ export function CustomsHandsontable({
 
         updateQuoteItem(rowId, updates)
           .then(() => router.refresh())
-          .catch(() => toast.error("Не удалось сохранить"))
+          .catch((err) => {
+            console.error("customs handsontable row save failed", {
+              rowId,
+              updates,
+              err,
+            });
+            toast.error(
+              err instanceof Error
+                ? err.message
+                : "Не удалось сохранить позицию таможни",
+            );
+          })
           .finally(() => pendingOps.current.delete(lockKey));
       }
     },
@@ -1015,7 +1005,18 @@ export function CustomsHandsontable({
       pendingOps.current.add(lockKey);
       updateQuoteItem(rowId, updates)
         .then(() => router.refresh())
-        .catch(() => toast.error("Не удалось сохранить"))
+        .catch((err) => {
+          console.error("customs handsontable duty-mode save failed", {
+            rowId,
+            updates,
+            err,
+          });
+          toast.error(
+            err instanceof Error
+              ? err.message
+              : "Не удалось сохранить тип пошлины",
+          );
+        })
         .finally(() => pendingOps.current.delete(lockKey));
     },
     [router],

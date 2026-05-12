@@ -98,11 +98,8 @@ interface CustomsExtras {
   import_banned?: boolean | null;
   import_ban_reason?: string | null;
   license_ds_required?: boolean | null;
-  license_ds_cost?: number | null;
   license_ss_required?: boolean | null;
-  license_ss_cost?: number | null;
   license_sgr_required?: boolean | null;
-  license_sgr_cost?: number | null;
   // REQ-7 customs-phase-1 — country of origin + certificates
   country_of_origin_oksm?: number | null;
   has_origin_certificate?: boolean | null;
@@ -147,11 +144,8 @@ export interface FormState {
   import_banned: boolean;
   import_ban_reason: string;
   license_ds_required: boolean;
-  license_ds_cost: string;
   license_ss_required: boolean;
-  license_ss_cost: string;
   license_sgr_required: boolean;
-  license_sgr_cost: string;
   // REQ-7 customs-phase-1 — country of origin + certificates
   country_of_origin_oksm: number | null;
   has_origin_certificate: boolean;
@@ -200,11 +194,8 @@ function stateFromItem(item: QuoteItemRow): FormState {
     import_banned: Boolean(extras.import_banned),
     import_ban_reason: extras.import_ban_reason ?? "",
     license_ds_required: Boolean(extras.license_ds_required),
-    license_ds_cost: numToStr(extras.license_ds_cost),
     license_ss_required: Boolean(extras.license_ss_required),
-    license_ss_cost: numToStr(extras.license_ss_cost),
     license_sgr_required: Boolean(extras.license_sgr_required),
-    license_sgr_cost: numToStr(extras.license_sgr_cost),
     country_of_origin_oksm: extras.country_of_origin_oksm ?? null,
     has_origin_certificate: Boolean(extras.has_origin_certificate),
     has_fta_certificate: Boolean(extras.has_fta_certificate),
@@ -299,17 +290,8 @@ export function buildUpdates(form: FormState): Record<string, unknown> {
         ? form.import_ban_reason.trim() || null
         : null,
       license_ds_required: form.license_ds_required,
-      license_ds_cost: form.license_ds_required
-        ? parseNumOrNull(form.license_ds_cost)
-        : null,
       license_ss_required: form.license_ss_required,
-      license_ss_cost: form.license_ss_required
-        ? parseNumOrNull(form.license_ss_cost)
-        : null,
       license_sgr_required: form.license_sgr_required,
-      license_sgr_cost: form.license_sgr_required
-        ? parseNumOrNull(form.license_sgr_cost)
-        : null,
       country_of_origin_oksm: form.country_of_origin_oksm,
       has_origin_certificate: form.has_origin_certificate,
       has_fta_certificate: form.has_fta_certificate,
@@ -343,17 +325,8 @@ export function buildUpdates(form: FormState): Record<string, unknown> {
       ? form.import_ban_reason.trim() || null
       : null,
     license_ds_required: form.license_ds_required,
-    license_ds_cost: form.license_ds_required
-      ? parseNumOrNull(form.license_ds_cost)
-      : null,
     license_ss_required: form.license_ss_required,
-    license_ss_cost: form.license_ss_required
-      ? parseNumOrNull(form.license_ss_cost)
-      : null,
     license_sgr_required: form.license_sgr_required,
-    license_sgr_cost: form.license_sgr_required
-      ? parseNumOrNull(form.license_sgr_cost)
-      : null,
     country_of_origin_oksm: form.country_of_origin_oksm,
     has_origin_certificate: form.has_origin_certificate,
     has_fta_certificate: form.has_fta_certificate,
@@ -660,6 +633,11 @@ export function CustomsItemDialog({
       onSaved?.();
       onOpenChange(false);
     } catch (err) {
+      console.error("customs dialog save failed", {
+        itemId: item.id,
+        fields: Object.keys(buildUpdates(form)),
+        err,
+      });
       toast.error(err instanceof Error ? err.message : "Не удалось сохранить");
     } finally {
       setSaving(false);
@@ -1168,24 +1146,18 @@ export function CustomsItemDialog({
               label="Декларация соответствия (ДС)"
               required={form.license_ds_required}
               onRequiredChange={(v) => update("license_ds_required", v)}
-              cost={form.license_ds_cost}
-              onCostChange={(v) => update("license_ds_cost", v)}
               disabled={readOnly || saving}
             />
             <LicenseRow
               label="Сертификат соответствия (СС)"
               required={form.license_ss_required}
               onRequiredChange={(v) => update("license_ss_required", v)}
-              cost={form.license_ss_cost}
-              onCostChange={(v) => update("license_ss_cost", v)}
               disabled={readOnly || saving}
             />
             <LicenseRow
               label="Свидетельство гос. регистрации (СГР)"
               required={form.license_sgr_required}
               onRequiredChange={(v) => update("license_sgr_required", v)}
-              cost={form.license_sgr_cost}
-              onCostChange={(v) => update("license_sgr_cost", v)}
               disabled={readOnly || saving}
             />
           </section>
@@ -1746,19 +1718,26 @@ function extractCustomsValue(item: QuoteItemRow): number | null {
   return null;
 }
 
+/**
+ * Per-item «требуется ли разрешительный документ» toggle.
+ *
+ * The `cost` field that used to live alongside this toggle was dropped from
+ * the component in 2026-05 when `license_{ds,ss,sgr}_cost` columns were
+ * removed from `kvota.quote_items` (migration 284, Phase 5d). Per-supplier
+ * costs now live on `kvota.invoice_items`, and the user-facing money-amount
+ * is entered as an ad-hoc «общий расход на КП» via the Phase B
+ * `<CertificatesSection>` (with `is_custom_expense=true` and M:N attachment
+ * to the relevant items).
+ */
 function LicenseRow({
   label,
   required,
   onRequiredChange,
-  cost,
-  onCostChange,
   disabled,
 }: {
   label: string;
   required: boolean;
   onRequiredChange: (v: boolean) => void;
-  cost: string;
-  onCostChange: (v: string) => void;
   disabled: boolean;
 }) {
   return (
@@ -1771,20 +1750,6 @@ function LicenseRow({
         />
         <span className="text-sm text-foreground">{label}</span>
       </label>
-      <div className="flex items-center gap-2">
-        <Input
-          type="number"
-          inputMode="decimal"
-          step="0.01"
-          min="0"
-          value={cost}
-          onChange={(e) => onCostChange(e.target.value)}
-          disabled={disabled || !required}
-          className="w-32 text-right tabular-nums"
-          placeholder="0"
-        />
-        <span className="text-xs text-muted-foreground">₽</span>
-      </div>
     </div>
   );
 }

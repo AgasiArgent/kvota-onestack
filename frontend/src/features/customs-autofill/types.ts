@@ -26,9 +26,10 @@ export interface CustomsAutofillSuggestion {
   license_ss_required: boolean | null;
   license_sgr_required: boolean | null;
 
-  license_ds_cost: number | null;
-  license_ss_cost: number | null;
-  license_sgr_cost: number | null;
+  // license_*_cost fields were removed when kvota.quote_items dropped
+  // those columns in migration 284 (Phase 5d). Costs now live on
+  // invoice_items only; the autofill endpoint no longer returns them.
+  // See FB-260511-212235-0384 cleanup (2026-05-12).
 
   // ---- REQ-5 additive (customs-phase-1) ----------------------------------
   // Populated for both historical and force_live suggestions.
