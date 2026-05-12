@@ -71,11 +71,8 @@ export const CUSTOMS_SYSTEM_VIEWS: readonly SystemView[] = [
       "import_banned",
       "import_ban_reason",
       "license_ds_required",
-      "license_ds_cost",
       "license_ss_required",
-      "license_ss_cost",
       "license_sgr_required",
-      "license_sgr_cost",
     ],
   },
   {

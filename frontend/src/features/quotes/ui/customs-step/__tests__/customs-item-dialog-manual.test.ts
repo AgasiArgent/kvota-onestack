@@ -34,11 +34,8 @@ const BASE_FORM: FormState = {
   import_banned: false,
   import_ban_reason: "",
   license_ds_required: false,
-  license_ds_cost: "",
   license_ss_required: false,
-  license_ss_cost: "",
   license_sgr_required: false,
-  license_sgr_cost: "",
   country_of_origin_oksm: 156,
   has_origin_certificate: false,
   has_fta_certificate: false,
@@ -206,3 +203,121 @@ describe("buildUpdates — Manual mode persists payload", () => {
     expect(updates.customs_duty_per_kg).toBe(0.04);
   });
 });
+
+/**
+ * Regression test for FB-260511-212235-0384.
+ *
+ * Migration 284 (Phase 5d) dropped `license_ds_cost`, `license_ss_cost`,
+ * and `license_sgr_cost` from `kvota.quote_items` — per-supplier costs
+ * now live on `kvota.invoice_items`, and ad-hoc «общий расход на КП» lives
+ * on `kvota.quote_certificates` with `is_custom_expense=true`.
+ *
+ * If anyone re-introduces those keys into `buildUpdates()` output, every
+ * customs-item save will fail with PostgREST 400 PGRST204 (ghost column).
+ */
+describe("buildUpdates — no license_*_cost ghost columns (FB-260511-212235-0384)", () => {
+  const GHOST_KEYS = [
+    "license_ds_cost",
+    "license_ss_cost",
+    "license_sgr_cost",
+  ] as const;
+
+  it("does not emit ghost license_*_cost keys in Auto mode", () => {
+    const updates = buildUpdates({ ...BASE_FORM, duty_manual_mode: false });
+    for (const key of GHOST_KEYS) {
+      expect(updates).not.toHaveProperty(key);
+    }
+  });
+
+  it("does not emit ghost license_*_cost keys in Manual mode", () => {
+    const updates = buildUpdates({
+      ...BASE_FORM,
+      duty_manual_mode: true,
+      duty_rate_type: "simple",
+      duty_value_1: "10",
+      duty_unit_1: "percent",
+    });
+    for (const key of GHOST_KEYS) {
+      expect(updates).not.toHaveProperty(key);
+    }
+  });
+});
+
+/**
+ * Source-sanity regression for FB-260511-212235-0384 — guards the wider
+ * write-paths flagged in Phase 5a review.
+ *
+ * Phase 5a review identified 4 more files that referenced
+ * `license_(ds|ss|sgr)_cost` after migration 284 dropped the columns from
+ * `kvota.quote_items`:
+ *
+ *   - `customs-handsontable.tsx` — inline edit path (CRITICAL: live broken).
+ *   - `customs-step.tsx#handleBulkAccept` — `/api/customs/{id}/items/bulk`
+ *     payload (CRITICAL: dormant only because ALTA_FEATURES_ENABLED=false).
+ *   - `customs-columns.ts` / `customs-views.ts` — column registry leakage
+ *     (HIGH: cosmetic empty columns if user toggles visibility).
+ *   - `features/customs-autofill/types.ts` — `CustomsAutofillSuggestion`
+ *     contract (HIGH: shape drift, FE expected fields that backend no
+ *     longer returns).
+ *
+ * The asserts below use the same readFileSync source-scan pattern as
+ * `customs-item-dialog-certification.test.tsx` (orphan removal block) so
+ * the regression catches re-introductions without needing to render the
+ * Handsontable in jsdom.
+ */
+describe(
+  "customs-step source sanity — no license_*_cost ghosts (FB-260511-212235-0384)",
+  () => {
+    const GHOST_RE = /license_(ds|ss|sgr)_cost/;
+
+    async function readSiblingSource(filename: string): Promise<string> {
+      const fs = await import("node:fs/promises");
+      const path = await import("node:path");
+      const filePath = path.resolve(__dirname, "..", filename);
+      return fs.readFile(filePath, "utf-8");
+    }
+
+    it("customs-handsontable.tsx no longer references license_*_cost", async () => {
+      const src = await readSiblingSource("customs-handsontable.tsx");
+      expect(src).not.toMatch(GHOST_RE);
+    });
+
+    it("customs-step.tsx handleBulkAccept payload omits license_*_cost", async () => {
+      const src = await readSiblingSource("customs-step.tsx");
+      expect(src).not.toMatch(GHOST_RE);
+    });
+
+    it("customs-columns.ts registry omits license_*_cost", async () => {
+      const src = await readSiblingSource("customs-columns.ts");
+      expect(src).not.toMatch(GHOST_RE);
+    });
+
+    it("customs-views.ts presets omit license_*_cost", async () => {
+      const src = await readSiblingSource("customs-views.ts");
+      expect(src).not.toMatch(GHOST_RE);
+    });
+
+    it(
+      "customs-autofill types omit license_*_cost (contract removed)",
+      async () => {
+        const fs = await import("node:fs/promises");
+        const path = await import("node:path");
+        // __tests__ → customs-step → ui → quotes → features → customs-autofill/types.ts
+        const typesPath = path.resolve(
+          __dirname,
+          "..",
+          "..",
+          "..",
+          "..",
+          "customs-autofill",
+          "types.ts",
+        );
+        const src = await fs.readFile(typesPath, "utf-8");
+        // Match only TypeScript field declarations like `license_ds_cost:`.
+        // Comments mentioning the removal are explicitly allowed.
+        const FIELD_RE = /^\s*license_(ds|ss|sgr)_cost\s*[?:]/m;
+        expect(src).not.toMatch(FIELD_RE);
+      },
+    );
+  },
+);
