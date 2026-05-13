@@ -33,7 +33,12 @@ function DropdownMenuContent({
   return (
     <MenuPrimitive.Portal>
       <MenuPrimitive.Positioner
-        className="isolate z-50 outline-none"
+        // Positioner is the position:absolute element, so z-index must live
+        // here (not on Popup which is position:static — z-index is a no-op
+        // on static elements per CSS spec). z-[300] sits above Handsontable
+        // headers/cells and the Dialog overlay (z-[200]), matching the
+        // Popover/Select primitives.
+        className="isolate z-[300] outline-none"
         align={align}
         alignOffset={alignOffset}
         side={side}
