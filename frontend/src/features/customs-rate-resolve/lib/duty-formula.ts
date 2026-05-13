@@ -162,3 +162,42 @@ export function formatDutyFormula(args: DutyFormulaArgs): string {
 
   return `duty = ${op}(${fmt(part1)}, ${fmt(part2)}) = ${fmt(result)} ₽`;
 }
+
+/**
+ * Short single-line chip representation for the Handsontable «Пошлина»
+ * column when Manual mode is active.
+ *
+ * Examples:
+ *   simple percent       → "10%"
+ *   specific perKg       → "0.5 EUR/kg"
+ *   combined "но не менее"→ "10% > 0.5 EUR/kg"
+ *   combined "плюс"      → "10% + 0.5 EUR/kg"
+ *
+ * Returns "—" when value_1 is missing. Unlike formatDutyFormula this
+ * helper does NOT require customs_value / weight_kg — it just echoes
+ * the raw user input, suitable for a narrow cell that confirms
+ * "value was saved" without doing the RUB math.
+ */
+export function formatDutyChip(args: {
+  rate_type: DutyRateType;
+  value_1: number | null;
+  unit_1: DutyUnit | string;
+  value_2?: number | null;
+  unit_2?: DutyUnit | string | null;
+  sign?: DutySign;
+}): string {
+  const { rate_type, value_1, unit_1, value_2, unit_2, sign } = args;
+  if (value_1 == null) return "—";
+
+  const slot1 =
+    unit_1 === "percent" ? `${value_1}%` : `${value_1} ${unit_1}`;
+
+  if (rate_type !== "combined" || value_2 == null || unit_2 == null) {
+    return slot1;
+  }
+
+  const slot2 =
+    unit_2 === "percent" ? `${value_2}%` : `${value_2} ${unit_2}`;
+  const op = sign === "+" ? "+" : ">";
+  return `${slot1} ${op} ${slot2}`;
+}

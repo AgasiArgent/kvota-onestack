@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 
-import { formatDutyFormula, formatRub } from "../lib/duty-formula";
+import {
+  formatDutyChip,
+  formatDutyFormula,
+  formatRub,
+} from "../lib/duty-formula";
 
 /**
  * Pure-function tests for the Manual duty-rate live preview helper
@@ -216,5 +220,81 @@ describe("formatDutyFormula — Russian thousand separators", () => {
     });
     expect(out).toContain(`1${NBSP}500${NBSP}000`);
     expect(out).toContain(`150${NBSP}000`);
+  });
+});
+
+/**
+ * Row 9 (Testing 2 2026-05-13) — chip helper for the Handsontable
+ * «Пошлина» column when the row is in Manual override. Compact echo
+ * of user input, no RUB math.
+ */
+describe("formatDutyChip", () => {
+  it("renders simple percent as `10%`", () => {
+    expect(
+      formatDutyChip({
+        rate_type: "simple",
+        value_1: 10,
+        unit_1: "percent",
+      }),
+    ).toBe("10%");
+  });
+
+  it("renders specific per-kg as `0.5 EUR/kg`", () => {
+    expect(
+      formatDutyChip({
+        rate_type: "specific",
+        value_1: 0.5,
+        unit_1: "EUR/kg",
+      }),
+    ).toBe("0.5 EUR/kg");
+  });
+
+  it("renders combined «но не менее» as `10% > 0.5 EUR/kg`", () => {
+    expect(
+      formatDutyChip({
+        rate_type: "combined",
+        value_1: 10,
+        unit_1: "percent",
+        value_2: 0.5,
+        unit_2: "EUR/kg",
+        sign: ">",
+      }),
+    ).toBe("10% > 0.5 EUR/kg");
+  });
+
+  it("renders combined «плюс» as `10% + 0.5 EUR/kg`", () => {
+    expect(
+      formatDutyChip({
+        rate_type: "combined",
+        value_1: 10,
+        unit_1: "percent",
+        value_2: 0.5,
+        unit_2: "EUR/kg",
+        sign: "+",
+      }),
+    ).toBe("10% + 0.5 EUR/kg");
+  });
+
+  it("falls back to slot 1 when combined is incomplete", () => {
+    expect(
+      formatDutyChip({
+        rate_type: "combined",
+        value_1: 10,
+        unit_1: "percent",
+        value_2: null,
+        unit_2: null,
+        sign: ">",
+      }),
+    ).toBe("10%");
+  });
+
+  it("returns «—» for missing value_1", () => {
+    expect(
+      formatDutyChip({
+        rate_type: "simple",
+        value_1: null,
+        unit_1: "percent",
+      }),
+    ).toBe("—");
   });
 });

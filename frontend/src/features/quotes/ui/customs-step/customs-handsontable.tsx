@@ -12,6 +12,12 @@ import type { QuoteItemRow } from "@/entities/quote/queries";
 import type { CustomsAutofillSuggestion } from "@/features/customs-autofill";
 import type { SystemView } from "@/features/customs-certificates";
 import { CustomsViewHintBanner } from "@/features/customs-certificates";
+import {
+  formatDutyChip,
+  type DutyRateType,
+  type DutySign,
+  type DutyUnit,
+} from "@/features/customs-rate-resolve";
 
 import { CUSTOMS_AVAILABLE_COLUMNS } from "./customs-columns";
 import { isSystemViewId, resolveSystemView } from "./customs-views";
@@ -99,6 +105,22 @@ function ext<T>(row: unknown): T {
 //   renamed: customs_psn_pts → customs_psm_pts
 // ---------------------------------------------------------------------------
 
+/**
+ * Row 9 — JSONB payload mirror of `services.alta_client.Rate`. Stored on
+ * `kvota.quote_items.customs_manual_rate_payload` when the user enters a
+ * Manual duty rate via the per-item dialog. The Handsontable «Пошлина»
+ * renderer reads this so the chip can display the combined-rate formula
+ * (`10% > 0.5 EUR/kg`) instead of just the percent slot value.
+ */
+interface ManualRatePayload {
+  duty_rate_type?: DutyRateType | null;
+  value_1_number?: number | null;
+  value_1_unit?: string | null;
+  value_2_number?: number | null;
+  value_2_unit?: string | null;
+  sign_1?: DutySign | null;
+}
+
 type ItemExtras = {
   hs_code?: string | null;
   customs_duty?: number | null;
@@ -118,6 +140,10 @@ type ItemExtras = {
   // REQ-7 customs-phase-1 — country of origin (read-only column).
   // Edits happen through customs-item-dialog (CustomsCountryDropdown).
   country_of_origin_oksm?: number | null;
+  // Row 9 (Testing 2) — Manual-mode round-trip data so the table can
+  // render a formula chip when the user picked combined/specific rate.
+  customs_manual_override?: boolean | null;
+  customs_manual_rate_payload?: ManualRatePayload | null;
   // REQ-6 customs-phase-A — special-duty variants from snapshot.
   // Multiple shapes supported (defensive read-side):
   //   - Phase 1 snapshot: `customs_rates_snapshot.rates: SpecialDutyVariant[]`
@@ -346,6 +372,12 @@ interface RowData {
   /** Actual storage — only one of these is non-null per row. */
   customs_duty: number | null;
   customs_duty_per_kg: number | null;
+  /**
+   * Row 9 — when true the renderer formats the manual rate chip
+   * (`10% > 0.5 EUR/kg`) using the JSONB payload below.
+   */
+  customs_manual_override: boolean;
+  customs_manual_rate_payload: ManualRatePayload | null;
 
   customs_util_fee: number | null;
   customs_excise: number | null;
@@ -409,6 +441,8 @@ function itemToRow(
     customs_duty_composite: composite,
     customs_duty: duty,
     customs_duty_per_kg: dutyPerKg,
+    customs_manual_override: Boolean(extras.customs_manual_override),
+    customs_manual_rate_payload: extras.customs_manual_rate_payload ?? null,
 
     customs_util_fee: extras.customs_util_fee ?? null,
     customs_excise: extras.customs_excise ?? null,
@@ -494,12 +528,20 @@ const COL_HEADERS: string[] = [
 /**
  * Composite "Пошлина" cell renderer.
  *
- * Draws the value + an inline chip selector (%, ₽/кг). The chip toggles
- * mode — writing to customs_duty (%) or customs_duty_per_kg (₽/кг) —
- * via an afterChange-compatible event dispatch.
+ * Two branches:
+ *   1. Auto / legacy: draws the value + an inline chip selector
+ *      (%, ₽/кг). The chip toggles mode — writing to customs_duty (%)
+ *      or customs_duty_per_kg (₽/кг) — via a synthetic CustomEvent.
+ *      ₽/шт variant is shown disabled with a tooltip since the
+ *      customs_duty_per_pc column does not yet exist in the DB.
  *
- * ₽/шт variant is shown disabled with a tooltip since the
- * customs_duty_per_pc column does not yet exist in the DB.
+ *   2. Manual override (Row 9 fix, Testing 2): when the per-item
+ *      dialog flipped the row into Manual mode (combined/specific or
+ *      simple with custom units), we render a compact formula chip
+ *      (`10% > 0.5 EUR/kg`) sourced from `customs_manual_rate_payload`.
+ *      Without this branch the cell would show only the slot-1 value
+ *      (e.g. `10`) and the tester would read it as "не сохранилось".
+ *      See SB-E row 9 in docs/plans/2026-05-13-customs-batch-plan.md.
  */
 function dutyCompositeRenderer(
   instance: Handsontable,
@@ -510,7 +552,48 @@ function dutyCompositeRenderer(
   value: unknown,
   cellProperties: Handsontable.CellProperties,
 ) {
-  // Let the default numeric renderer format the numeric value first.
+  const manualOverride = Boolean(
+    instance.getDataAtRowProp(row, "customs_manual_override"),
+  );
+  const manualPayload = instance.getDataAtRowProp(
+    row,
+    "customs_manual_rate_payload",
+  ) as ManualRatePayload | null | undefined;
+
+  // Manual branch — read-only formula chip. The user edits via the
+  // dialog (combined-rate inputs); the table just confirms the saved
+  // state so they don't perceive «не сохранилось».
+  if (manualOverride && manualPayload) {
+    td.innerHTML = "";
+    td.classList.add("customs-duty-cell", "customs-duty-cell--manual");
+
+    const chipText = formatDutyChip({
+      rate_type: (manualPayload.duty_rate_type ?? "simple") as DutyRateType,
+      value_1: manualPayload.value_1_number ?? null,
+      unit_1: (manualPayload.value_1_unit ?? "percent") as DutyUnit,
+      value_2: manualPayload.value_2_number ?? null,
+      unit_2: (manualPayload.value_2_unit ?? null) as DutyUnit | null,
+      sign: manualPayload.sign_1 ?? null,
+    });
+
+    const formula = document.createElement("span");
+    formula.className = "customs-duty-formula";
+    formula.title =
+      "Manual-режим: ставка задаётся в карточке позиции. Тип: " +
+      (manualPayload.duty_rate_type ?? "simple");
+    formula.textContent = chipText;
+    td.appendChild(formula);
+
+    const badge = document.createElement("span");
+    badge.className = "customs-duty-mode-badge";
+    badge.textContent = "M";
+    badge.title =
+      "Manual override — редактирование в карточке позиции";
+    td.appendChild(badge);
+    return;
+  }
+
+  // Auto branch — original chip selector + numeric value.
   Handsontable.renderers.NumericRenderer(
     instance,
     td,
@@ -522,10 +605,15 @@ function dutyCompositeRenderer(
   );
 
   td.classList.add("customs-duty-cell");
+  td.classList.remove("customs-duty-cell--manual");
 
-  // Strip any previously appended chip UI to avoid duplicates on re-render.
-  const existing = td.querySelector(".customs-duty-chip");
-  if (existing) existing.remove();
+  // Strip any previously appended UI to avoid duplicates on re-render.
+  const existingChip = td.querySelector(".customs-duty-chip");
+  if (existingChip) existingChip.remove();
+  const existingFormula = td.querySelector(".customs-duty-formula");
+  if (existingFormula) existingFormula.remove();
+  const existingBadge = td.querySelector(".customs-duty-mode-badge");
+  if (existingBadge) existingBadge.remove();
 
   const duty = instance.getDataAtRowProp(row, "customs_duty") as
     | number
@@ -581,6 +669,43 @@ function dutyCompositeRenderer(
   chip.appendChild(mkBtn("₽/кг", "perKg"));
   chip.appendChild(mkBtn("₽/шт", "perPc", /* disabled */ true));
   td.appendChild(chip);
+}
+
+/**
+ * Row 10 — OKSM country renderer factory. Maps the read-only numeric
+ * column `country_of_origin_oksm` to its Russian name (e.g. `156` →
+ * «Китай»). Falls back to the raw digit when the lookup misses or the
+ * map isn't loaded yet.
+ *
+ * Returns a renderer function bound to the supplied map; the outer
+ * factory pattern matches `makePositionRenderer` below.
+ */
+function makeCountryOksmRenderer(
+  oksmNameMap: Map<number, string>,
+) {
+  return function countryOksmRenderer(
+    instance: Handsontable,
+    td: HTMLTableCellElement,
+    row: number,
+  ): HTMLTableCellElement {
+    td.innerHTML = "";
+    td.classList.add("customs-country-cell");
+    const value = instance.getDataAtRowProp(
+      row,
+      "country_of_origin_oksm",
+    ) as number | null | undefined;
+    if (value == null) {
+      td.textContent = "—";
+      td.classList.add("customs-country-cell--empty");
+      return td;
+    }
+    const name = oksmNameMap.get(value);
+    td.textContent = name ?? String(value);
+    if (name) {
+      td.title = `ОКСМ ${value}`;
+    }
+    return td;
+  };
 }
 
 /**
@@ -768,6 +893,19 @@ interface CustomsHandsontableProps {
    *   filter, because the row-expand affordance is essential UX.
    */
   visibleColumns?: readonly string[];
+  /**
+   * Row 10 — OKSM digital code → Russian name lookup. Read-only column
+   * `country_of_origin_oksm` renders the name (Китай) instead of the
+   * raw digit (156). Empty map = fall back to digit.
+   */
+  oksmNameMap?: Map<number, string>;
+  /**
+   * Row 8 — synchronous optimistic patch callback. Invoked by HoT
+   * inline edits (e.g. duty-mode chip) before the async server save
+   * completes, so the dialog reseed sees the fresh value when the user
+   * opens the row card right after the chip click.
+   */
+  onItemPatched?: (rowId: string, patch: Partial<QuoteItemRow>) => void;
 }
 
 /**
@@ -806,6 +944,8 @@ export function CustomsHandsontable({
   onSelectRow,
   onExpandRow,
   visibleColumns,
+  oksmNameMap,
+  onItemPatched,
 }: CustomsHandsontableProps) {
   // REQ-11 — read the `?customs_view=` URL param directly so the table
   // reacts to synthetic `system:*` IDs without depending on the parent
@@ -866,6 +1006,13 @@ export function CustomsHandsontable({
   const positionRenderer = useMemo(
     () => makePositionRenderer(autofillByRowId),
     [autofillByRowId],
+  );
+
+  // Row 10 — bind the OKSM map into a renderer closure. Map identity drives
+  // the memo so the renderer doesn't churn on unrelated re-renders.
+  const countryOksmRenderer = useMemo(
+    () => makeCountryOksmRenderer(oksmNameMap ?? new Map<number, string>()),
+    [oksmNameMap],
   );
 
   const handleAfterChange = useCallback(
@@ -938,6 +1085,11 @@ export function CustomsHandsontable({
 
         if (Object.keys(updates).length === 0) continue;
 
+        // Row 8 fix — push the patch into the parent's override map
+        // synchronously so a dialog opened right after an inline edit
+        // reseeds from the fresh value, not the stale items prop.
+        onItemPatched?.(rowId, updates as Partial<QuoteItemRow>);
+
         const lockKey = `update-${rowId}`;
         if (pendingOps.current.has(lockKey)) continue;
         pendingOps.current.add(lockKey);
@@ -959,7 +1111,7 @@ export function CustomsHandsontable({
           .finally(() => pendingOps.current.delete(lockKey));
       }
     },
-    [router, visibleKeys],
+    [router, visibleKeys, onItemPatched],
   );
 
   /**
@@ -1000,6 +1152,11 @@ export function CustomsHandsontable({
         "internal-mirror",
       );
 
+      // Row 8 fix — push the same patch into the parent's optimistic-
+      // override map so the dialog reseed sees the fresh value if the
+      // user opens the row card before the async save completes.
+      onItemPatched?.(rowId, updates as Partial<QuoteItemRow>);
+
       const lockKey = `update-${rowId}`;
       if (pendingOps.current.has(lockKey)) return;
       pendingOps.current.add(lockKey);
@@ -1019,7 +1176,7 @@ export function CustomsHandsontable({
         })
         .finally(() => pendingOps.current.delete(lockKey));
     },
-    [router],
+    [router, onItemPatched],
   );
 
   const canToggleBan = useMemo(
@@ -1055,6 +1212,9 @@ export function CustomsHandsontable({
         meta.renderer = expandRenderer;
       } else if (prop === "customs_antidumping") {
         meta.renderer = antidumpingRenderer;
+      } else if (prop === "country_of_origin_oksm") {
+        // Row 10 — render OKSM digit as Russian country name.
+        meta.renderer = countryOksmRenderer;
       }
 
       if (prop === "import_banned" && !canToggleBan) {
@@ -1066,7 +1226,7 @@ export function CustomsHandsontable({
 
       return meta;
     },
-    [initialData, canToggleBan, positionRenderer, visibleKeys],
+    [initialData, canToggleBan, positionRenderer, countryOksmRenderer, visibleKeys],
   );
 
   const handleAfterSelectionEnd = useCallback(
@@ -1238,6 +1398,46 @@ export function CustomsHandsontable({
           .customs-antidumping-badge.bg-slate-700\\/30 {
             background-color: rgb(51 65 85 / 0.30);
             color: rgb(203 213 225);
+          }
+          /* Row 9 (Testing 2) — Manual-mode chip in «Пошлина» column. */
+          .customs-duty-cell--manual {
+            padding-right: 32px !important;
+          }
+          .customs-duty-formula {
+            display: inline-block;
+            font-family: var(--font-mono, ui-monospace, monospace);
+            font-size: 11px;
+            line-height: 1.2;
+            color: var(--foreground);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: calc(100% - 24px);
+            vertical-align: middle;
+          }
+          .customs-duty-mode-badge {
+            position: absolute;
+            right: 4px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            border-radius: var(--radius-sm);
+            background: color-mix(in oklch, var(--accent) 20%, transparent);
+            color: var(--accent);
+            font-size: 10px;
+            font-weight: 700;
+            border: 1px solid color-mix(in oklch, var(--accent) 30%, transparent);
+          }
+          /* Row 10 — OKSM country name cell. */
+          .customs-country-cell {
+            text-align: left;
+          }
+          .customs-country-cell--empty {
+            color: var(--muted-foreground);
           }
         `}</style>
         <div

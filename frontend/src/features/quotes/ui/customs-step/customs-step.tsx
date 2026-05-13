@@ -19,6 +19,7 @@ import {
   CertificatesSection,
   type QuoteItemForSelect,
 } from "@/features/customs-certificates";
+import { fetchOksmCountries } from "@/features/customs-country-dropdown";
 import type { TableView } from "@/entities/table-view";
 import { fetchAllAvailable } from "@/entities/table-view";
 import {
@@ -189,6 +190,67 @@ export function CustomsStep({
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
   const [bulkAcceptPending, startBulkAccept] = useTransition();
 
+  // Row 10 — OKSM country reference for the «Страна происх.» column.
+  // Fetched once on mount; `kvota.countries` is small (~250 rows) and
+  // stable. The resulting `Map<oksm_digital, name_ru>` is passed to the
+  // Handsontable so the read-only column renders `Китай` instead of
+  // the raw OKSM digit `156`. Edits still flow through the dialog's
+  // `<CustomsCountryDropdown>` (separate fetch, small duplication OK).
+  const [oksmNameMap, setOksmNameMap] = useState<Map<number, string>>(
+    new Map()
+  );
+  useEffect(() => {
+    let cancelled = false;
+    fetchOksmCountries()
+      .then((countries) => {
+        if (cancelled) return;
+        const map = new Map<number, string>();
+        for (const c of countries) {
+          map.set(c.oksm_digital, c.name_ru);
+        }
+        setOksmNameMap(map);
+      })
+      .catch((err) => {
+        // Silent — the column falls back to the raw OKSM digit on miss,
+        // which is the pre-fix behavior. Better than blocking the panel.
+        console.error("Failed to load OKSM countries reference:", err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Row 8 — optimistic patch map for the dialog↔table sync. When the
+  // HoT inline duty-mode chip fires `handleDutyModeChange`, the actual
+  // server round-trip is async; opening the dialog before
+  // `router.refresh()` completes would reseed the form from stale
+  // `items`. We keep a synchronous local patch keyed by row id; merge
+  // into the dialog's item; clear when fresh server data arrives.
+  const [itemsOverride, setItemsOverride] = useState<
+    Map<string, Partial<QuoteItemRow>>
+  >(new Map());
+
+  const patchItem = useCallback(
+    (rowId: string, patch: Partial<QuoteItemRow>) => {
+      setItemsOverride((prev) => {
+        const next = new Map(prev);
+        const existing = next.get(rowId) ?? {};
+        next.set(rowId, { ...existing, ...patch });
+        return next;
+      });
+    },
+    []
+  );
+
+  // When the server returns fresh items (after router.refresh propagates
+  // through the parent server component), clear any overrides whose data
+  // is now reflected in the canonical row. We use a coarse "items prop
+  // changed" signal — any new items array means refresh happened, so
+  // drop the override map entirely.
+  useEffect(() => {
+    setItemsOverride((prev) => (prev.size === 0 ? prev : new Map()));
+  }, [items]);
+
   // Views are seeded from server props and refreshed client-side after the
   // settings dialog mutates them. Keep them in state so a refresh after
   // save reflects immediately without a full router.refresh() round-trip.
@@ -268,6 +330,19 @@ export function CustomsStep({
   }, [invoices]);
 
   const supplierByQuoteItemId = useSupplierByQuoteItemId(items);
+
+  // Items merged with any pending optimistic patches (Row 8). The dialog
+  // reads from this so a chip-mode flip in HoT is reflected immediately
+  // when the user opens the row card. HoT itself reads from `items`
+  // (its internal HoT state already has the mirrored value via
+  // setDataAtRowProp in handleDutyModeChange).
+  const mergedItems = useMemo<QuoteItemRow[]>(() => {
+    if (itemsOverride.size === 0) return items;
+    return items.map((it) => {
+      const patch = itemsOverride.get(it.id);
+      return patch ? ({ ...it, ...patch } as QuoteItemRow) : it;
+    });
+  }, [items, itemsOverride]);
 
   // Load autofill suggestions once per quote change. Fires-and-forget; silent
   // on error so customs workflow is never blocked by the suggestion endpoint.
@@ -488,6 +563,8 @@ export function CustomsStep({
           autofillSuggestions={autofillSuggestions}
           onExpandRow={setExpandedRowId}
           visibleColumns={visibleColumns}
+          oksmNameMap={oksmNameMap}
+          onItemPatched={patchItem}
         />
 
         {/*
@@ -525,14 +602,17 @@ export function CustomsStep({
           if (!next) setExpandedRowId(null);
         }}
         quoteId={quote.id}
-        item={items.find((it) => it.id === expandedRowId) ?? null}
+        // Row 8 fix — use `mergedItems` so in-flight optimistic patches
+        // from HoT inline edits (e.g. duty-mode chip) are visible to the
+        // dialog before `router.refresh()` round-trips.
+        item={mergedItems.find((it) => it.id === expandedRowId) ?? null}
         // Phase B Wave 5 cleanup — pass the full quote-items array so the
         // dialog's BindPopover after-attach preview / Сертификация section
         // can resolve sibling positions (REQ-8 AC#7 «derived RUB-суммы» across
         // all attachments). Internally the dialog adapts QuoteItemRow →
         // QuoteItemForSelect; if omitted, the popover falls back to a
         // singleton list of just the current item.
-        allItems={items}
+        allItems={mergedItems}
         userRoles={userRoles}
         onSaved={() => router.refresh()}
       />

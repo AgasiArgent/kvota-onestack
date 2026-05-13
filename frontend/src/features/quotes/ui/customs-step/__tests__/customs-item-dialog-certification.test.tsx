@@ -445,6 +445,9 @@ describe("CustomsItemDialog — orphan removal (Phase A → Phase B migration)",
   it("customs-step.tsx passes allItems through to the dialog", async () => {
     // Phase B Wave 5 — the dialog mount in customs-step.tsx must forward
     // the full QuoteItemRow[] so the Сертификация section sees siblings.
+    // Testing 2 Row 8 (2026-05-13) — value is now `mergedItems` (an
+    // optimistic-override-merged copy of `items`) but the contract is
+    // the same: the dialog receives every quote item, not a singleton.
     const fs = await import("node:fs/promises");
     const path = await import("node:path");
     const stepPath = path.resolve(
@@ -453,7 +456,8 @@ describe("CustomsItemDialog — orphan removal (Phase A → Phase B migration)",
       "customs-step.tsx",
     );
     const src = await fs.readFile(stepPath, "utf-8");
-    expect(src).toContain("allItems={items}");
+    // Accept either the legacy `items` reference or the new merged copy.
+    expect(/allItems=\{(items|mergedItems)\}/.test(src)).toBe(true);
   });
 
   it("renders the «Сертификация» section guard when hs_code is set", async () => {
