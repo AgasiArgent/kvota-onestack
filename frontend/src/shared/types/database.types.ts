@@ -1591,6 +1591,8 @@ export type Database = {
           logistics_needs_review_since: string | null
           customs_needs_review_since: string | null
           vat_rate: number | null
+          pickup_address: string | null
+          supplier_contact_id: string | null
         }
         Insert: {
           id?: string
@@ -1643,6 +1645,8 @@ export type Database = {
           logistics_needs_review_since?: string | null
           customs_needs_review_since?: string | null
           vat_rate?: number | null
+          pickup_address?: string | null
+          supplier_contact_id?: string | null
         }
         Update: {
           id?: string
@@ -1695,6 +1699,8 @@ export type Database = {
           logistics_needs_review_since?: string | null
           customs_needs_review_since?: string | null
           vat_rate?: number | null
+          pickup_address?: string | null
+          supplier_contact_id?: string | null
         }
         Relationships: []
       }

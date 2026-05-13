@@ -46,6 +46,13 @@ vi.mock("@/entities/quote/mutations", () => ({
   assignItemsToInvoice: vi.fn(async () => undefined),
 }));
 
+// Testing 2 row 21: stub fetchSupplierContacts so the modal can mount without
+// touching a real Supabase client. The default returns an empty array — tests
+// that need contacts override this via `vi.mocked(...).mockResolvedValueOnce`.
+vi.mock("@/entities/supplier", () => ({
+  fetchSupplierContacts: vi.fn(async () => []),
+}));
+
 import { InvoiceCreateModal } from "../invoice-create-modal";
 
 describe("InvoiceCreateModal — module + closed-state (SSR sanity)", () => {
