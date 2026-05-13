@@ -11,6 +11,8 @@ import { AddContactForm } from "./add-contact-form";
 interface ContactOption {
   id: string;
   name: string;
+  last_name: string | null;
+  patronymic: string | null;
   phone: string | null;
   email: string | null;
 }
@@ -18,7 +20,28 @@ interface ContactOption {
 interface ContactDropdownSelectProps {
   quoteId: string;
   customerId: string;
-  initialContact: { id: string; name: string } | null;
+  initialContact: {
+    id: string;
+    name: string;
+    last_name: string | null;
+    patronymic: string | null;
+  } | null;
+}
+
+/**
+ * Build full ФИО from a contact's name parts.
+ *
+ * Testing 2 row 1 (FB-260513-100622-47b6): tester reported only the first name
+ * was rendered — mirror the convention from `customers/ui/call-form-modal.tsx`
+ * so контакт displays as «Имя Фамилия Отчество» (joining with single spaces,
+ * filtering out null/empty pieces).
+ */
+function formatContactName(c: {
+  name: string;
+  last_name?: string | null;
+  patronymic?: string | null;
+}): string {
+  return [c.name, c.last_name, c.patronymic].filter(Boolean).join(" ").trim();
 }
 
 export function ContactDropdownSelect({
@@ -30,9 +53,12 @@ export function ContactDropdownSelect({
   const [search, setSearch] = useState("");
   const [contacts, setContacts] = useState<ContactOption[] | null>(null);
   const [loading, setLoading] = useState(false);
-  const [selected, setSelected] = useState<{ id: string; name: string } | null>(
-    initialContact
-  );
+  const [selected, setSelected] = useState<{
+    id: string;
+    name: string;
+    last_name: string | null;
+    patronymic: string | null;
+  } | null>(initialContact);
   const [addFormOpen, setAddFormOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -59,7 +85,7 @@ export function ContactDropdownSelect({
       const supabase = createClient();
       const { data, error } = await supabase
         .from("customer_contacts")
-        .select("id, name, phone, email")
+        .select("id, name, last_name, patronymic, phone, email")
         .eq("customer_id", customerId)
         .order("is_primary", { ascending: false })
         .order("name");
@@ -70,6 +96,8 @@ export function ContactDropdownSelect({
         (data ?? []).map((c) => ({
           id: c.id,
           name: c.name,
+          last_name: c.last_name ?? null,
+          patronymic: c.patronymic ?? null,
           phone: c.phone ?? null,
           email: c.email ?? null,
         }))
@@ -95,7 +123,12 @@ export function ContactDropdownSelect({
 
   async function handleSelect(contact: ContactOption) {
     const prev = selected;
-    setSelected({ id: contact.id, name: contact.name });
+    setSelected({
+      id: contact.id,
+      name: contact.name,
+      last_name: contact.last_name,
+      patronymic: contact.patronymic,
+    });
     setOpen(false);
     setSearch("");
     setAddFormOpen(false);
@@ -122,7 +155,14 @@ export function ContactDropdownSelect({
   }
 
   async function handleContactCreated(contact: { id: string; name: string }) {
-    const newContact: ContactOption = { id: contact.id, name: contact.name, phone: null, email: null };
+    const newContact: ContactOption = {
+      id: contact.id,
+      name: contact.name,
+      last_name: null,
+      patronymic: null,
+      phone: null,
+      email: null,
+    };
     setAddFormOpen(false);
     setContacts((prev) => (prev ? [...prev, newContact] : [newContact]));
     await handleSelect(newContact);
@@ -130,7 +170,7 @@ export function ContactDropdownSelect({
 
   const filtered =
     contacts?.filter((c) =>
-      c.name.toLowerCase().includes(search.toLowerCase())
+      formatContactName(c).toLowerCase().includes(search.toLowerCase())
     ) ?? [];
 
   return (
@@ -142,7 +182,7 @@ export function ContactDropdownSelect({
         className="group flex items-center gap-1 text-sm font-medium hover:text-accent transition-colors"
       >
         <span className="truncate">
-          {selected ? selected.name : "\u2014"}
+          {selected ? formatContactName(selected) || "\u2014" : "\u2014"}
         </span>
         {selected ? (
           <X
@@ -201,7 +241,9 @@ export function ContactDropdownSelect({
                         c.id === selected?.id && "bg-accent/10 font-medium"
                       )}
                     >
-                      <span className="truncate">{c.name}</span>
+                      <span className="truncate">
+                        {formatContactName(c) || c.name}
+                      </span>
                       {(c.phone || c.email) && (
                         <span className="text-xs text-muted-foreground truncate">
                           {[c.phone, c.email].filter(Boolean).join(" \u00B7 ")}
