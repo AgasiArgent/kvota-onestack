@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import type {
   QuoteDetailRow,
   QuoteInvoiceRow,
+  QuoteItemRow,
 } from "@/entities/quote/queries";
 import { createClient } from "@/shared/lib/supabase/client";
 import type { LocationOption, LocationType } from "@/entities/location";
@@ -56,6 +57,11 @@ const COMPLETE_LOGISTICS_ROLES = new Set([
 interface LogisticsStepProps {
   quote: QuoteDetailRow;
   invoices: QuoteInvoiceRow[];
+  /**
+   * All quote items. Forwarded to InvoiceCargoSummary so the cargo
+   * digest can show item count + names per КПП (МОЛ Тест row 14).
+   */
+  items?: readonly QuoteItemRow[];
   userId?: string;
   userRoles?: string[];
   quoteNotes?: EntityNoteCardData[];
@@ -150,6 +156,7 @@ function coerceCurrency(raw: string | null | undefined): SegmentCurrency {
 export function LogisticsStep({
   quote,
   invoices,
+  items,
   userId,
   userRoles,
   quoteNotes = [],
@@ -520,8 +527,16 @@ export function LogisticsStep({
             displayCurrency={quote.currency ?? "RUB"}
             fxRates={ratesToRub}
           />
-          {/* Cargo digest from procurement — RОЛ Тест 07 #3.3. */}
-          <InvoiceCargoSummary invoice={activeInvoice} />
+          {/* Cargo digest from procurement — РОЛ Тест 07 #3.3 + МОЛ Тест row 14. */}
+          <InvoiceCargoSummary
+            invoice={activeInvoice}
+            destination={{
+              country: quote.delivery_country ?? null,
+              city: quote.delivery_city ?? null,
+              address: quote.delivery_address ?? null,
+            }}
+            items={items}
+          />
           <RouteConstructor
             key={activeInvoiceId}
             invoiceId={activeInvoiceId}

@@ -5,13 +5,22 @@
  * country / city, total weight, total volume, package count and packed
  * dimensions — so the logistician can pick a route without bouncing
  * to the procurement tab.
+ *
+ * МОЛ Тест row 14 (extends #3.3): the panel must additionally show the
+ * destination (Куда) read from the parent quote and a digest of which
+ * items ride in this КПП. Tester also asked for «Транзит через Турцию»
+ * but the underlying column does not exist in kvota.invoices — that
+ * flag is deferred until a schema migration adds it.
  */
 import React from "react";
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 
 import { InvoiceCargoSummary } from "../logistics-step/invoice-cargo-summary";
-import type { QuoteInvoiceRow } from "@/entities/quote/queries";
+import type {
+  QuoteInvoiceRow,
+  QuoteItemRow,
+} from "@/entities/quote/queries";
 
 function makeInvoice(
   overrides: Partial<QuoteInvoiceRow> = {},
@@ -72,6 +81,87 @@ function makeInvoice(
   } as QuoteInvoiceRow;
 }
 
+function makeItem(overrides: Partial<QuoteItemRow> = {}): QuoteItemRow {
+  return {
+    id: overrides.id ?? "item-1",
+    quote_id: "q-1",
+    position: 0,
+    product_name: "Item",
+    product_code: null,
+    quantity: 1,
+    description: null,
+    unit: null,
+    created_at: null,
+    updated_at: null,
+    brand: null,
+    custom_fields: null,
+    idn_sku: null,
+    product_category: null,
+    proforma_number: null,
+    proforma_date: null,
+    proforma_currency: null,
+    proforma_amount_excl_vat: null,
+    proforma_amount_incl_vat: null,
+    proforma_amount_excl_vat_usd: null,
+    proforma_amount_incl_vat_usd: null,
+    purchasing_company_id: null,
+    supplier_id: null,
+    purchasing_manager_id: null,
+    pickup_country: null,
+    supplier_payment_country: null,
+    procurement_status: null,
+    procurement_completed_at: null,
+    procurement_completed_by: null,
+    hs_code: null,
+    customs_duty: null,
+    customs_extra: null,
+    supplier_payment_terms: null,
+    payer_company: null,
+    advance_to_supplier_percent: null,
+    procurement_notes: null,
+    assigned_procurement_user: null,
+    supplier_city: null,
+    logistics_supplier_to_hub: null,
+    logistics_hub_to_customs: null,
+    logistics_customs_to_customer: null,
+    logistics_total_days: null,
+    buyer_company_id: null,
+    pickup_location_id: null,
+    volume_m3: null,
+    is_unavailable: null,
+    license_ds_required: null,
+    license_ss_required: null,
+    license_sgr_required: null,
+    supplier_sku: null,
+    item_idn: null,
+    supplier_advance_percent: null,
+    weight_kg: null,
+    customs_duty_percent: null,
+    customs_extra_cost: null,
+    supplier_sku_note: null,
+    manufacturer_product_name: null,
+    vat_rate: null,
+    customs_util_fee: null,
+    customs_excise: null,
+    customs_psm_pts: null,
+    customs_notification: null,
+    customs_licenses: null,
+    customs_eco_fee: null,
+    customs_honest_mark: null,
+    customs_duty_per_kg: null,
+    import_banned: null,
+    import_ban_reason: null,
+    composition_selected_invoice_id: null,
+    name_en: null,
+    country_of_origin_oksm: null,
+    has_origin_certificate: false,
+    has_fta_certificate: false,
+    customs_manual_override: false,
+    customs_manual_rate_payload: null,
+    ...overrides,
+  } as QuoteItemRow;
+}
+
 afterEach(cleanup);
 
 describe("InvoiceCargoSummary (РОЛ Тест 07 #3.3)", () => {
@@ -128,5 +218,90 @@ describe("InvoiceCargoSummary (РОЛ Тест 07 #3.3)", () => {
     expect(screen.queryByText("Мест:")).toBeNull();
     expect(screen.queryByText("Габариты:")).toBeNull();
     expect(screen.queryByText("Incoterms:")).toBeNull();
+  });
+
+  it("renders destination (Куда) when delivery_* fields are passed", () => {
+    render(
+      <InvoiceCargoSummary
+        invoice={makeInvoice({
+          pickup_country: "Испания",
+          pickup_city: "Lleida",
+        })}
+        destination={{
+          country: "Россия",
+          city: "Москва",
+          address:
+            "141701, Московская область, г. Долгопрудный, Лихачевский проезд, д. 5 Б",
+        }}
+      />,
+    );
+    expect(screen.getByText("Куда:")).toBeTruthy();
+    expect(
+      screen.getByText(/Россия, Москва, 141701, Московская область/),
+    ).toBeTruthy();
+  });
+
+  it("omits destination when all delivery fields are empty", () => {
+    render(
+      <InvoiceCargoSummary
+        invoice={makeInvoice({ pickup_country: "Испания" })}
+        destination={{ country: null, city: null, address: null }}
+      />,
+    );
+    expect(screen.queryByText("Куда:")).toBeNull();
+  });
+
+  it("renders cargo item count and the first two product names", () => {
+    const items: QuoteItemRow[] = [
+      makeItem({
+        id: "i1",
+        composition_selected_invoice_id: "inv-1",
+        product_name: "Шайбы 100шт",
+      }),
+      makeItem({
+        id: "i2",
+        composition_selected_invoice_id: "inv-1",
+        product_name: "Трубка для масла, 2 метра",
+      }),
+      makeItem({
+        id: "i3",
+        composition_selected_invoice_id: "inv-1",
+        product_name: "ЗИП Комплект",
+      }),
+      // Item belonging to a different invoice — must not contribute.
+      makeItem({
+        id: "i4",
+        composition_selected_invoice_id: "inv-other",
+        product_name: "Other invoice item",
+      }),
+    ];
+    render(
+      <InvoiceCargoSummary
+        invoice={makeInvoice({ pickup_country: "Испания" })}
+        items={items}
+      />,
+    );
+    expect(screen.getByText("Груз:")).toBeTruthy();
+    // Count is 3 (one item is on a different invoice and is excluded).
+    expect(screen.getByText(/3 позиции/i)).toBeTruthy();
+    expect(screen.getByText(/Шайбы 100шт/)).toBeTruthy();
+    expect(screen.getByText(/Трубка для масла, 2 метра/)).toBeTruthy();
+    // The third item is hidden behind a "+1" overflow hint.
+    expect(screen.queryByText(/ЗИП Комплект/)).toBeNull();
+  });
+
+  it("does not render cargo digest when no items belong to this invoice", () => {
+    render(
+      <InvoiceCargoSummary
+        invoice={makeInvoice({ pickup_country: "Испания" })}
+        items={[
+          makeItem({
+            composition_selected_invoice_id: "inv-other",
+            product_name: "Other invoice item",
+          }),
+        ]}
+      />,
+    );
+    expect(screen.queryByText("Груз:")).toBeNull();
   });
 });

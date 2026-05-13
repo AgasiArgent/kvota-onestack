@@ -94,6 +94,7 @@ export function QuoteStepContent({
         <LogisticsStep
           quote={quote}
           invoices={invoices}
+          items={items}
           userId={userId}
           userRoles={userRoles}
           quoteNotes={quoteNotes}
