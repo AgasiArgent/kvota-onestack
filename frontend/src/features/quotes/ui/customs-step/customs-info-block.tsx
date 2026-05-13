@@ -44,6 +44,8 @@ const ROLE_LABELS_RU: Record<string, string> = {
 interface PersonInfo {
   fullName: string;
   phone: string;
+  /** Origin of the data, surfaced as a tooltip when the primary source was empty. */
+  sourceNote?: string;
 }
 
 interface TransitionRow {
@@ -51,6 +53,7 @@ interface TransitionRow {
   from_status: string;
   to_status: string;
   actor_role: string;
+  actor_id: string;
   created_at: string | null;
 }
 
@@ -59,10 +62,21 @@ interface CustomsInfoBlockProps {
   orgId: string;
 }
 
+function formatTransitionDate(dateStr: string | null): string {
+  if (!dateStr) return "—";
+  const d = new Date(dateStr);
+  return d.toLocaleDateString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "Europe/Moscow",
+  });
+}
+
 export function CustomsInfoBlock({ quoteId, orgId }: CustomsInfoBlockProps) {
   const [loading, setLoading] = useState(true);
   const [sales, setSales] = useState<PersonInfo | null>(null);
-  const [procurement, setProcurement] = useState<PersonInfo | null>(null);
+  const [procurementList, setProcurementList] = useState<PersonInfo[]>([]);
   const [customs, setCustoms] = useState<PersonInfo | null>(null);
   const [transitions, setTransitions] = useState<TransitionRow[]>([]);
 
@@ -92,38 +106,59 @@ export function CustomsInfoBlock({ quoteId, orgId }: CustomsInfoBlockProps) {
       const quoteItems = (quote.quote_items ?? []) as unknown as Array<{
         assigned_procurement_user: string | null;
       }>;
-      const procurementUsers: string[] = Array.from(
+      // Primary procurement source: distinct quote_items.assigned_procurement_user.
+      // Preserve insertion order so the first item's МОЗ shows first.
+      const procurementUserIdsPrimary: string[] = Array.from(
         new Set(
           quoteItems
             .map((i) => i.assigned_procurement_user)
             .filter((id): id is string => !!id)
         )
       );
-      const procurementUserId =
-        procurementUsers.length > 0 ? procurementUsers[0] : null;
       const customsUserId = (quote.assigned_customs_user as string) ?? null;
 
+      // Always load workflow_transitions; we need them for the history card AND
+      // for the procurement fallback below.
+      const transitionsResult = await supabase
+        .from("workflow_transitions")
+        .select("id, from_status, to_status, actor_role, actor_id, created_at")
+        .eq("quote_id", quoteId)
+        .order("created_at", { ascending: false });
+
+      const transitionRows = (transitionsResult.data ?? []) as TransitionRow[];
+
+      // Fallback: when no per-item МОЗ is recorded, derive it from the most
+      // recent workflow_transitions row that left `pending_procurement`. The
+      // actor on that transition is the user who marked procurement as done.
+      let procurementFallbackTransition: TransitionRow | null = null;
+      let procurementUserIds: string[] = procurementUserIdsPrimary;
+      if (procurementUserIds.length === 0) {
+        procurementFallbackTransition =
+          transitionRows.find(
+            (t) => t.from_status === "pending_procurement" && !!t.actor_id
+          ) ?? null;
+        if (procurementFallbackTransition) {
+          procurementUserIds = [procurementFallbackTransition.actor_id];
+        }
+      }
+
       // Collect unique user IDs to batch-fetch profiles
-      const userIds = [salesUserId, procurementUserId, customsUserId].filter(
-        (id): id is string => id !== null
+      const userIds = Array.from(
+        new Set(
+          [salesUserId, ...procurementUserIds, customsUserId].filter(
+            (id): id is string => id !== null
+          )
+        )
       );
 
-      const [profilesResult, transitionsResult] = await Promise.all([
+      const profilesResult =
         userIds.length > 0
-          ? supabase
+          ? await supabase
               .from("user_profiles")
               .select("user_id, full_name, phone")
               .eq("organization_id", orgId)
               .in("user_id", userIds)
-          : Promise.resolve({
-              data: [] as { user_id: string; full_name: string | null; phone: string | null }[],
-            }),
-        supabase
-          .from("workflow_transitions")
-          .select("id, from_status, to_status, actor_role, created_at")
-          .eq("quote_id", quoteId)
-          .order("created_at", { ascending: false }),
-      ]);
+          : { data: [] as { user_id: string; full_name: string | null; phone: string | null }[] };
 
       const profiles = profilesResult.data ?? [];
       const profileMap = new Map(
@@ -139,15 +174,25 @@ export function CustomsInfoBlock({ quoteId, orgId }: CustomsInfoBlockProps) {
       setSales(
         salesUserId ? profileMap.get(salesUserId) ?? null : null
       );
-      setProcurement(
-        procurementUserId ? profileMap.get(procurementUserId) ?? null : null
-      );
+
+      const fallbackNote = procurementFallbackTransition
+        ? `Назначен на этапе закупок · ${formatTransitionDate(
+            procurementFallbackTransition.created_at
+          )}`
+        : undefined;
+      const procurementResolved: PersonInfo[] = procurementUserIds
+        .map((id) => {
+          const profile = profileMap.get(id);
+          if (!profile) return null;
+          return fallbackNote ? { ...profile, sourceNote: fallbackNote } : profile;
+        })
+        .filter((p): p is PersonInfo => p !== null);
+      setProcurementList(procurementResolved);
+
       setCustoms(
         customsUserId ? profileMap.get(customsUserId) ?? null : null
       );
-      setTransitions(
-        (transitionsResult.data ?? []) as TransitionRow[]
-      );
+      setTransitions(transitionRows);
       setLoading(false);
     }
 
@@ -176,7 +221,7 @@ export function CustomsInfoBlock({ quoteId, orgId }: CustomsInfoBlockProps) {
 
         <div className="space-y-2">
           <PersonRow role="МОП" person={sales} />
-          <PersonRow role="МОЗ" person={procurement} />
+          <ProcurementRows people={procurementList} />
           <PersonRow role="Таможня" person={customs} />
         </div>
       </div>
@@ -226,13 +271,32 @@ function PersonRow({
   return (
     <div className="grid grid-cols-[80px_1fr_auto] items-center gap-2 text-sm">
       <span className="text-muted-foreground font-medium">{role}</span>
-      <span className="truncate">
+      <span className="truncate" title={person?.sourceNote}>
         {person ? person.fullName : "Не назначен"}
       </span>
       <span className="text-muted-foreground text-xs tabular-nums">
         {person?.phone && person.phone !== "—" ? person.phone : ""}
       </span>
     </div>
+  );
+}
+
+function ProcurementRows({ people }: { people: PersonInfo[] }) {
+  if (people.length === 0) {
+    return <PersonRow role="МОЗ" person={null} />;
+  }
+  return (
+    <>
+      {people.map((person, idx) => (
+        <PersonRow
+          // Index is safe — list is rebuilt as a whole on each load() and
+          // ordering is stable within a single render pass.
+          key={`${person.fullName}-${idx}`}
+          role={idx === 0 ? "МОЗ" : ""}
+          person={person}
+        />
+      ))}
+    </>
   );
 }
 
