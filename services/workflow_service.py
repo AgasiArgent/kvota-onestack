@@ -1977,7 +1977,10 @@ def complete_customs(
     Validates all quote_items have hs_code filled. Returns error if any hs_code is missing.
 
     This function:
-    1. Validates the user has customs or admin role
+    1. Validates the user has a customs-completion role (customs, head_of_customs,
+       head_of_logistics, or admin). head_of_logistics is dual-hat: one person
+       typically holds both head_of_logistics + head_of_customs in this org,
+       mirroring complete_logistics and api/customs.py `_CUSTOMS_ROLES`.
     2. Sets customs_completed_at timestamp
     3. Checks if logistics is also complete
     4. If both complete, auto-transitions to pending_sales_review
@@ -1997,12 +2000,23 @@ def complete_customs(
     """
     supabase = get_supabase()
 
-    # Validate role
-    if not any(role in ["customs", "admin"] for role in actor_roles):
+    # Validate role. Mirrors _CUSTOMS_ROLES in api/customs.py and the dual-hat
+    # pattern in complete_logistics — head_of_logistics counts because the
+    # logistics lead also handles customs in this org (see customs-step.tsx).
+    _ALLOWED_COMPLETION_ROLES = {
+        "customs",
+        "head_of_customs",
+        "head_of_logistics",
+        "admin",
+    }
+    if not any(role in _ALLOWED_COMPLETION_ROLES for role in actor_roles):
         return TransitionResult(
             success=False,
-            error_message="Only customs or admin can complete customs",
-            quote_id=quote_id
+            error_message=(
+                "Only customs, head_of_customs, head_of_logistics, or admin "
+                "can complete customs"
+            ),
+            quote_id=quote_id,
         )
 
     # Get current quote status

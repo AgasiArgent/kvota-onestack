@@ -1562,6 +1562,111 @@ class TestLogisticsCustomsAutoTransition:
         assert "customs" in result.error_message.lower()
 
     @patch('services.workflow_service.get_supabase')
+    def test_complete_customs_rejects_procurement(self, mock_supabase):
+        """complete_customs rejects procurement role (not in the dual-hat set)."""
+        from services.workflow_service import complete_customs
+
+        result = complete_customs(
+            quote_id="quote-uuid",
+            actor_id="user-uuid",
+            actor_roles=["procurement"]
+        )
+
+        assert result.success is False
+        assert "customs" in result.error_message.lower()
+
+    @patch('services.workflow_service.check_and_auto_transition_to_sales_review')
+    @patch('services.workflow_service.get_supabase')
+    def test_complete_customs_head_of_customs_allowed(
+        self, mock_supabase, mock_auto_transition
+    ):
+        """complete_customs accepts head_of_customs role (Testing 2 row 11 fix)."""
+        from services.workflow_service import complete_customs
+
+        mock_client = MagicMock()
+        mock_supabase.return_value = mock_client
+
+        # Quote select returns a quote in pending_customs status
+        quote_response = MagicMock()
+        quote_response.data = {
+            "id": "quote-uuid",
+            "workflow_status": "pending_customs",
+            "customs_completed_at": None,
+        }
+        # quote_items select returns items with hs_code filled
+        items_response = MagicMock()
+        items_response.data = [{"id": "item-1", "hs_code": "1234567890"}]
+
+        def table_router(table_name):
+            tbl = MagicMock()
+            if table_name == "quotes":
+                tbl.select.return_value.eq.return_value.single.return_value.execute.return_value = quote_response
+                tbl.update.return_value.eq.return_value.execute.return_value = MagicMock()
+            elif table_name == "quote_items":
+                tbl.select.return_value.eq.return_value.execute.return_value = items_response
+            elif table_name == "workflow_transitions":
+                tbl.insert.return_value.execute.return_value = MagicMock()
+            return tbl
+
+        mock_client.table.side_effect = table_router
+        mock_auto_transition.return_value = None  # logistics not complete yet
+
+        result = complete_customs(
+            quote_id="quote-uuid",
+            actor_id="user-uuid",
+            actor_roles=["head_of_customs"],
+        )
+
+        assert result.success is True, f"Expected success, got: {result.error_message}"
+
+    @patch('services.workflow_service.check_and_auto_transition_to_sales_review')
+    @patch('services.workflow_service.get_supabase')
+    def test_complete_customs_head_of_logistics_allowed(
+        self, mock_supabase, mock_auto_transition
+    ):
+        """complete_customs accepts head_of_logistics dual-hat (Testing 2 row 11 fix).
+
+        The logistics lead typically also handles customs in this org — mirrors
+        the dual-hat pattern in complete_logistics and api/customs.py
+        `_CUSTOMS_ROLES`.
+        """
+        from services.workflow_service import complete_customs
+
+        mock_client = MagicMock()
+        mock_supabase.return_value = mock_client
+
+        quote_response = MagicMock()
+        quote_response.data = {
+            "id": "quote-uuid",
+            "workflow_status": "pending_customs",
+            "customs_completed_at": None,
+        }
+        items_response = MagicMock()
+        items_response.data = [{"id": "item-1", "hs_code": "1234567890"}]
+
+        def table_router(table_name):
+            tbl = MagicMock()
+            if table_name == "quotes":
+                tbl.select.return_value.eq.return_value.single.return_value.execute.return_value = quote_response
+                tbl.update.return_value.eq.return_value.execute.return_value = MagicMock()
+            elif table_name == "quote_items":
+                tbl.select.return_value.eq.return_value.execute.return_value = items_response
+            elif table_name == "workflow_transitions":
+                tbl.insert.return_value.execute.return_value = MagicMock()
+            return tbl
+
+        mock_client.table.side_effect = table_router
+        mock_auto_transition.return_value = None
+
+        result = complete_customs(
+            quote_id="quote-uuid",
+            actor_id="user-uuid",
+            actor_roles=["head_of_logistics"],
+        )
+
+        assert result.success is True, f"Expected success, got: {result.error_message}"
+
+    @patch('services.workflow_service.get_supabase')
     def test_get_parallel_stages_status_both_incomplete(self, mock_supabase):
         """get_parallel_stages_status returns correct state when both incomplete."""
         from services.workflow_service import get_parallel_stages_status
