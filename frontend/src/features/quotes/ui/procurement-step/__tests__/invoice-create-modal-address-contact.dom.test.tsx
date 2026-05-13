@@ -22,26 +22,33 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 // hoisted mock setup, which breaks the factory.
 // ---------------------------------------------------------------------------
 
-const { createInvoiceMock, assignItemsToInvoiceMock, fetchSupplierContactsMock } =
-  vi.hoisted(() => {
-    return {
-      createInvoiceMock: vi.fn(async () => ({
-        id: "inv-1",
-        invoice_number: "INV-01-Q-202604-0001",
-        bypass_reason: null,
-      })),
-      assignItemsToInvoiceMock: vi.fn(async () => undefined),
-      fetchSupplierContactsMock: vi.fn(),
-    };
-  });
+// Supplier contacts are now read via an inline browser-Supabase SELECT inside
+// the modal (the server-side `fetchSupplierContacts` import was banned in
+// Client Components — Turbopack build error). Tests control the returned rows
+// via `supplierContactsState.rows` and inspect what supplier_id was queried
+// via `supplierContactsState.lastSupplierId`.
+const {
+  createInvoiceMock,
+  assignItemsToInvoiceMock,
+  supplierContactsState,
+} = vi.hoisted(() => {
+  return {
+    createInvoiceMock: vi.fn(async () => ({
+      id: "inv-1",
+      invoice_number: "INV-01-Q-202604-0001",
+      bypass_reason: null,
+    })),
+    assignItemsToInvoiceMock: vi.fn(async () => undefined),
+    supplierContactsState: {
+      rows: [] as Array<Record<string, unknown>>,
+      lastSupplierId: null as string | null,
+    },
+  };
+});
 
 vi.mock("@/entities/quote/mutations", () => ({
   createInvoice: createInvoiceMock,
   assignItemsToInvoice: assignItemsToInvoiceMock,
-}));
-
-vi.mock("@/entities/supplier", () => ({
-  fetchSupplierContacts: fetchSupplierContactsMock,
 }));
 
 vi.mock("@/entities/invoice/queries", () => ({
@@ -51,12 +58,29 @@ vi.mock("@/entities/invoice/queries", () => ({
 vi.mock("@/shared/lib/supabase/client", () => ({
   createClient: () => ({
     auth: { getSession: async () => ({ data: { session: null } }) },
-    from: () => ({
-      select: () => ({
-        eq: () => ({ in: async () => ({ data: [], error: null }) }),
-      }),
-      update: () => ({ in: async () => ({ data: [], error: null }) }),
-    }),
+    from: (table: string) => {
+      if (table === "supplier_contacts") {
+        // Chain: .select("*").eq("supplier_id", id).order("is_primary").order("name")
+        const settle = () =>
+          Promise.resolve({ data: supplierContactsState.rows, error: null });
+        return {
+          select: () => ({
+            eq: (_col: string, val: string) => {
+              supplierContactsState.lastSupplierId = val;
+              return {
+                order: () => ({ order: settle }),
+              };
+            },
+          }),
+        };
+      }
+      return {
+        select: () => ({
+          eq: () => ({ in: async () => ({ data: [], error: null }) }),
+        }),
+        update: () => ({ in: async () => ({ data: [], error: null }) }),
+      };
+    },
   }),
 }));
 
@@ -214,8 +238,11 @@ describe("InvoiceCreateModal — pickup address + supplier-contact picker (Testi
   beforeEach(() => {
     createInvoiceMock.mockClear();
     assignItemsToInvoiceMock.mockClear();
-    fetchSupplierContactsMock.mockReset();
-    fetchSupplierContactsMock.mockResolvedValue([CONTACT_A, CONTACT_B]);
+    supplierContactsState.lastSupplierId = null;
+    supplierContactsState.rows = [
+      CONTACT_A as unknown as Record<string, unknown>,
+      CONTACT_B as unknown as Record<string, unknown>,
+    ];
   });
 
   afterEach(() => {
@@ -237,13 +264,13 @@ describe("InvoiceCreateModal — pickup address + supplier-contact picker (Testi
     const supplierSelect = screen.getByLabelText("Поставщик") as HTMLSelectElement;
     fireEvent.change(supplierSelect, { target: { value: "sup-1" } });
     await waitFor(() => {
-      expect(fetchSupplierContactsMock).toHaveBeenCalledWith("sup-1");
+      expect(supplierContactsState.lastSupplierId).toBe("sup-1");
     });
   });
 
   it("blocks submit and surfaces field-level errors when pickup_address + contact are missing", async () => {
     // No contacts returned — submit must still fail on both new fields.
-    fetchSupplierContactsMock.mockResolvedValueOnce([]);
+    supplierContactsState.rows = [];
     renderModal();
     fireEvent.change(screen.getByLabelText("Поставщик"), {
       target: { value: "sup-1" },
@@ -252,7 +279,7 @@ describe("InvoiceCreateModal — pickup address + supplier-contact picker (Testi
       target: { value: "buy-1" },
     });
     await waitFor(() => {
-      expect(fetchSupplierContactsMock).toHaveBeenCalled();
+      expect(supplierContactsState.lastSupplierId).toBe("sup-1");
     });
 
     fireEvent.click(screen.getByRole("button", { name: /Создать/i }));
@@ -279,7 +306,7 @@ describe("InvoiceCreateModal — pickup address + supplier-contact picker (Testi
     // Wait for primary contact (CONTACT_A) to be auto-selected after the
     // contacts effect resolves.
     await waitFor(() => {
-      expect(fetchSupplierContactsMock).toHaveBeenCalled();
+      expect(supplierContactsState.lastSupplierId).toBe("sup-1");
     });
     await waitFor(() => {
       // After fetch resolves, the contact <select> should reflect the

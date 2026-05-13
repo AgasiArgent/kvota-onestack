@@ -30,8 +30,12 @@ import {
   fetchSupplierVatRate,
   type VatResolverReason,
 } from "@/entities/invoice/queries";
-import { fetchSupplierContacts } from "@/entities/supplier";
-import type { SupplierContact } from "@/entities/supplier";
+// NOTE: `fetchSupplierContacts` (in `@/entities/supplier/queries`) uses the
+// server-side Supabase admin client which transitively imports `next/headers`.
+// That's banned in Client Components — Turbopack fails the production build.
+// We inline the same SELECT against the browser-side client below.
+// Type-only import is safe: TypeScript types are erased at build time.
+import type { SupplierContact } from "@/entities/supplier/types";
 import { Badge } from "@/components/ui/badge";
 
 interface Supplier {
@@ -109,27 +113,39 @@ export function InvoiceCreateModal({
     }
     let cancelled = false;
     setSupplierContactsLoading(true);
-    fetchSupplierContacts(supplierId)
-      .then((contacts) => {
-        if (cancelled) return;
-        setSupplierContacts(contacts);
-        // Auto-pick the primary contact (is_primary=true → first in the
-        // ordered list) when nothing is selected yet. Don't clobber an
-        // explicit pick if the user already changed it.
-        setSupplierContactId((prev) => {
-          if (prev) return prev;
-          const primary = contacts.find((c) => c.is_primary) ?? contacts[0];
-          return primary?.id ?? "";
-        });
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        console.error("[invoice-create-modal] fetchSupplierContacts:", err);
+
+    // Inline browser-side query — the server-side `fetchSupplierContacts`
+    // pulls in `next/headers` via the admin client which is banned in
+    // Client Components. Same SQL: order by is_primary DESC, then name.
+    (async () => {
+      const { createClient } = await import("@/shared/lib/supabase/client");
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("supplier_contacts")
+        .select("*")
+        .eq("supplier_id", supplierId)
+        .order("is_primary", { ascending: false })
+        .order("name");
+      if (cancelled) return;
+      if (error) {
+        console.error("[invoice-create-modal] fetchSupplierContacts:", error);
         setSupplierContacts([]);
-      })
-      .finally(() => {
-        if (!cancelled) setSupplierContactsLoading(false);
+        setSupplierContactsLoading(false);
+        return;
+      }
+      const contacts = (data ?? []) as SupplierContact[];
+      setSupplierContacts(contacts);
+      // Auto-pick the primary contact (is_primary=true → first in the
+      // ordered list) when nothing is selected yet. Don't clobber an
+      // explicit pick if the user already changed it.
+      setSupplierContactId((prev) => {
+        if (prev) return prev;
+        const primary = contacts.find((c) => c.is_primary) ?? contacts[0];
+        return primary?.id ?? "";
       });
+      setSupplierContactsLoading(false);
+    })();
+
     return () => {
       cancelled = true;
     };
