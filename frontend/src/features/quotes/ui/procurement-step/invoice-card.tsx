@@ -180,6 +180,11 @@ export function InvoiceCard({
   const [pickupCountryCodeLocal, setPickupCountryCodeLocal] = useState<string | null>(
     invoice.pickup_country_code ?? null
   );
+  // Testing 2 row 21: free-text pickup address (street-level) editable on the
+  // КПП after creation. Distinct from pickupCity which feeds logistics routing.
+  const [pickupAddressLocal, setPickupAddressLocal] = useState(
+    invoice.pickup_address ?? ""
+  );
   const [incotermsLocal, setIncotermsLocal] = useState(invoice.supplier_incoterms ?? "");
   const [currencyLocal, setCurrencyLocal] = useState(invoice.currency ?? "USD");
   const [vatRateLocal, setVatRateLocal] = useState(
@@ -1125,6 +1130,62 @@ export function InvoiceCard({
                   </select>
                 </div>
               </div>
+
+              {/* Testing 2 row 21: Pickup address (free-text street level) +
+                  supplier contact display. Pickup address is editable inline
+                  here so the procurement user can correct what was entered at
+                  КПП creation. Supplier contact is read-only — to swap it the
+                  user opens the supplier contacts page; we keep this card
+                  focused on shipment parameters. */}
+              <div className="space-y-1">
+                <span className="text-xs text-muted-foreground">Адрес забора груза</span>
+                <Input
+                  type="text"
+                  placeholder="Адрес отгрузки (улица, дом, склад)"
+                  value={pickupAddressLocal}
+                  onChange={(e) => setPickupAddressLocal(e.target.value)}
+                  onBlur={() => {
+                    const next = pickupAddressLocal.trim();
+                    const value = next === "" ? null : next;
+                    if (value === (invoice.pickup_address ?? null)) return;
+                    void handleSaveInvoiceField({ pickup_address: value });
+                  }}
+                  className="h-7 text-xs"
+                  data-testid="invoice-card-pickup-address"
+                />
+              </div>
+
+              {invoice.supplier_contact && (
+                <div className="space-y-1">
+                  <span className="text-xs text-muted-foreground">Контакт поставщика</span>
+                  <div
+                    className="text-xs text-foreground"
+                    data-testid="invoice-card-supplier-contact"
+                  >
+                    <span className="font-medium">
+                      {invoice.supplier_contact.name}
+                    </span>
+                    {invoice.supplier_contact.position && (
+                      <span className="text-muted-foreground">
+                        {" · "}
+                        {invoice.supplier_contact.position}
+                      </span>
+                    )}
+                    {(invoice.supplier_contact.phone ||
+                      invoice.supplier_contact.email) && (
+                      <span className="text-muted-foreground">
+                        {" · "}
+                        {[
+                          invoice.supplier_contact.phone,
+                          invoice.supplier_contact.email,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Row: Currency + VAT */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">

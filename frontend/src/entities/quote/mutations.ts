@@ -1238,6 +1238,16 @@ export async function createInvoice(data: {
   pickup_country_code?: string | null;
   /** Incoterms 2020 code picked in the modal, e.g. "FOB", "CIF". */
   supplier_incoterms?: string | null;
+  /**
+   * Free-text pickup address (Testing 2 row 21). Distinct from pickup_city —
+   * this is the literal street address the driver will visit at the supplier.
+   */
+  pickup_address?: string | null;
+  /**
+   * Selected contact at the supplier (FK to kvota.supplier_contacts). Shown on
+   * the КПП together with the contact's phone/email (Testing 2 row 21).
+   */
+  supplier_contact_id?: string | null;
   currency?: string;
   boxes: CargoPlaceInput[];
 }): Promise<{
@@ -1339,6 +1349,8 @@ export async function createInvoice(data: {
       pickup_city: pickupCity,
       pickup_country: pickupCountry,
       pickup_country_code: pickupCountryCode,
+      pickup_address: data.pickup_address ?? null,
+      supplier_contact_id: data.supplier_contact_id ?? null,
       supplier_incoterms: data.supplier_incoterms ?? null,
       currency: data.currency || "USD",
       total_weight_kg: totalWeightKg,

@@ -30,6 +30,12 @@ import {
   fetchSupplierVatRate,
   type VatResolverReason,
 } from "@/entities/invoice/queries";
+// NOTE: `fetchSupplierContacts` (in `@/entities/supplier/queries`) uses the
+// server-side Supabase admin client which transitively imports `next/headers`.
+// That's banned in Client Components — Turbopack fails the production build.
+// We inline the same SELECT against the browser-side client below.
+// Type-only import is safe: TypeScript types are erased at build time.
+import type { SupplierContact } from "@/entities/supplier/types";
 import { Badge } from "@/components/ui/badge";
 
 interface Supplier {
@@ -68,6 +74,15 @@ export function InvoiceCreateModal({
   const [buyerCompanyId, setBuyerCompanyId] = useState("");
   const [countryCode, setCountryCode] = useState<string | null>(null);
   const [city, setCity] = useState("");
+  // Testing 2 row 21: free-text pickup address + supplier-contact picker.
+  // Both are mandatory before КПП creation — the supplier needs the literal
+  // pickup street address and a named contact responsible for the КПП on
+  // their side. The contact list is loaded reactively once a supplier is
+  // chosen (kvota.supplier_contacts is keyed on supplier_id).
+  const [pickupAddress, setPickupAddress] = useState("");
+  const [supplierContactId, setSupplierContactId] = useState("");
+  const [supplierContacts, setSupplierContacts] = useState<SupplierContact[]>([]);
+  const [supplierContactsLoading, setSupplierContactsLoading] = useState(false);
   const [incoterms, setIncoterms] = useState<string>("");
   const [currency, setCurrency] = useState<string>("USD");
   const [boxes, setBoxes] = useState<
@@ -83,6 +98,58 @@ export function InvoiceCreateModal({
   const [vatManuallyEdited, setVatManuallyEdited] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Load supplier contacts when supplier changes (Testing 2 row 21). Resets
+  // any previously picked contact so the user can't carry a stale selection
+  // from another supplier into the new КПП. Default-selects the primary
+  // contact (is_primary=true) when present — fetchSupplierContacts orders by
+  // is_primary DESC, so it's just `contacts[0]` when the supplier has any
+  // primary marked.
+  useEffect(() => {
+    if (!supplierId) {
+      setSupplierContacts([]);
+      setSupplierContactId("");
+      return;
+    }
+    let cancelled = false;
+    setSupplierContactsLoading(true);
+
+    // Inline browser-side query — the server-side `fetchSupplierContacts`
+    // pulls in `next/headers` via the admin client which is banned in
+    // Client Components. Same SQL: order by is_primary DESC, then name.
+    (async () => {
+      const { createClient } = await import("@/shared/lib/supabase/client");
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("supplier_contacts")
+        .select("*")
+        .eq("supplier_id", supplierId)
+        .order("is_primary", { ascending: false })
+        .order("name");
+      if (cancelled) return;
+      if (error) {
+        console.error("[invoice-create-modal] fetchSupplierContacts:", error);
+        setSupplierContacts([]);
+        setSupplierContactsLoading(false);
+        return;
+      }
+      const contacts = (data ?? []) as SupplierContact[];
+      setSupplierContacts(contacts);
+      // Auto-pick the primary contact (is_primary=true → first in the
+      // ordered list) when nothing is selected yet. Don't clobber an
+      // explicit pick if the user already changed it.
+      setSupplierContactId((prev) => {
+        if (prev) return prev;
+        const primary = contacts.find((c) => c.is_primary) ?? contacts[0];
+        return primary?.id ?? "";
+      });
+      setSupplierContactsLoading(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [supplierId]);
 
   // Auto-fill VAT rate + reason when both supplier country AND buyer company
   // are selected. Empty-only: skips the network round-trip when the user has
@@ -128,6 +195,9 @@ export function InvoiceCreateModal({
     setBuyerCompanyId("");
     setCountryCode(null);
     setCity("");
+    setPickupAddress("");
+    setSupplierContactId("");
+    setSupplierContacts([]);
     setIncoterms("");
     setCurrency("USD");
     setVatRate("");
@@ -174,6 +244,18 @@ export function InvoiceCreateModal({
     const e: Record<string, string> = {};
     if (!supplierId) e.supplier = "Выберите поставщика";
     if (!buyerCompanyId) e.buyer = "Выберите компанию-покупателя";
+    // Testing 2 row 21: both new fields are mandatory before КПП creation.
+    // pickup_address is free-text (street address driver visits), distinct
+    // from pickup_city. supplier_contact_id is the named person on the
+    // supplier side responsible for this КПП.
+    if (!pickupAddress.trim()) e.pickup_address = "Укажите адрес забора груза";
+    if (!supplierContactId) {
+      e.supplier_contact = supplierId
+        ? supplierContacts.length === 0
+          ? "У поставщика нет контактов — добавьте контакт в карточке поставщика"
+          : "Выберите контакт поставщика"
+        : "Сначала выберите поставщика";
+    }
 
     // Cargo places are optional. If a row is touched, require all four fields
     // > 0 so we never persist partial garbage (weight without dimensions etc.).
@@ -212,6 +294,8 @@ export function InvoiceCreateModal({
           : undefined,
         pickup_country_code: countryCode || undefined,
         pickup_city: city || undefined,
+        pickup_address: pickupAddress.trim() || undefined,
+        supplier_contact_id: supplierContactId || undefined,
         supplier_incoterms: incoterms || undefined,
         currency,
         boxes: parsedBoxes,
@@ -343,6 +427,81 @@ export function InvoiceCreateModal({
               placeholder="Начните вводить город…"
               ariaLabel="Город отгрузки"
             />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="invoice-pickup-address">
+              Адрес забора груза <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              id="invoice-pickup-address"
+              type="text"
+              value={pickupAddress}
+              onChange={(e) => {
+                setPickupAddress(e.target.value);
+                if (e.target.value.trim()) {
+                  setErrors((prev) => {
+                    const { pickup_address: _pa, ...rest } = prev;
+                    return rest;
+                  });
+                }
+              }}
+              placeholder="Например, ул. Промышленная, 12, склад 4"
+              aria-invalid={Boolean(errors.pickup_address)}
+              aria-describedby={
+                errors.pickup_address ? "invoice-pickup-address-error" : undefined
+              }
+              className={`h-8 text-sm ${errors.pickup_address ? "border-destructive" : ""}`}
+            />
+            {errors.pickup_address && (
+              <p id="invoice-pickup-address-error" className="text-xs text-destructive">
+                {errors.pickup_address}
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>
+              Контакт поставщика <span className="text-destructive">*</span>
+            </Label>
+            <SearchableCombobox<SupplierContact>
+              value={supplierContactId || null}
+              onChange={(newContactId) => {
+                setSupplierContactId(newContactId ?? "");
+                setErrors((prev) => {
+                  const { supplier_contact: _sc, ...rest } = prev;
+                  return rest;
+                });
+              }}
+              items={supplierContacts}
+              getLabel={(c) => c.name}
+              getSecondary={(c) => {
+                const parts = [c.position, c.phone, c.email].filter(Boolean);
+                return parts.length > 0 ? parts.join(" · ") : null;
+              }}
+              getSearchableExtras={(c) =>
+                [c.position, c.phone, c.email].filter(
+                  (v): v is string => Boolean(v)
+                )
+              }
+              placeholder={
+                !supplierId
+                  ? "Сначала выберите поставщика"
+                  : supplierContactsLoading
+                    ? "Загрузка контактов…"
+                    : supplierContacts.length === 0
+                      ? "У поставщика нет контактов"
+                      : "Выберите контакт"
+              }
+              searchPlaceholder="Поиск контакта…"
+              emptyMessage="Контакты не найдены"
+              ariaLabel="Контакт поставщика"
+              disabled={!supplierId || supplierContactsLoading}
+              invalid={Boolean(errors.supplier_contact)}
+            />
+            {errors.supplier_contact && (
+              <p className="text-xs text-destructive">{errors.supplier_contact}</p>
+            )}
           </div>
 
           <div className="space-y-1.5">

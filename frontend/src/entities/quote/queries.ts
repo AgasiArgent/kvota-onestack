@@ -494,15 +494,21 @@ export async function fetchQuoteInvoices(quoteId: string) {
 
   if (!invoices?.length) return [];
 
-  // Batch-resolve supplier + buyer FKs
+  // Batch-resolve supplier + buyer + supplier_contact FKs
   const supplierIds = [
     ...new Set(invoices.map((i) => i.supplier_id).filter(Boolean)),
   ] as string[];
   const buyerIds = [
     ...new Set(invoices.map((i) => i.buyer_company_id).filter(Boolean)),
   ] as string[];
+  // Testing 2 row 21: supplier_contact_id (migration 315) joined here so the
+  // КПП card and downstream consumers can show the named contact + реквизиты
+  // without an extra round-trip per invoice.
+  const supplierContactIds = [
+    ...new Set(invoices.map((i) => i.supplier_contact_id).filter(Boolean)),
+  ] as string[];
 
-  const [suppliersRes, buyersRes] = await Promise.all([
+  const [suppliersRes, buyersRes, supplierContactsRes] = await Promise.all([
     supplierIds.length
       ? supabase.from("suppliers").select("id, name").in("id", supplierIds)
       : null,
@@ -512,12 +518,21 @@ export async function fetchQuoteInvoices(quoteId: string) {
           .select("id, name, company_code")
           .in("id", buyerIds)
       : null,
+    supplierContactIds.length
+      ? supabase
+          .from("supplier_contacts")
+          .select("id, name, position, email, phone")
+          .in("id", supplierContactIds)
+      : null,
   ]);
 
   const supplierMap = new Map(
     (suppliersRes?.data ?? []).map((s) => [s.id, s])
   );
   const buyerMap = new Map((buyersRes?.data ?? []).map((b) => [b.id, b]));
+  const supplierContactMap = new Map(
+    (supplierContactsRes?.data ?? []).map((c) => [c.id, c])
+  );
 
   return invoices.map((inv) => ({
     ...inv,
@@ -525,6 +540,8 @@ export async function fetchQuoteInvoices(quoteId: string) {
       (inv.supplier_id && supplierMap.get(inv.supplier_id)) || null,
     buyer_company:
       (inv.buyer_company_id && buyerMap.get(inv.buyer_company_id)) || null,
+    supplier_contact:
+      (inv.supplier_contact_id && supplierContactMap.get(inv.supplier_contact_id)) || null,
   }));
 }
 
