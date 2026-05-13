@@ -61,6 +61,7 @@ export function ContextPanel({ quote, data, userRoles }: ContextPanelProps) {
         quote={quote}
         salesManager={data.salesManager}
         participants={data.participants}
+        procurementAssignees={data.procurementAssignees}
         logisticsAssignees={data.logisticsAssignees}
         customsAssignees={data.customsAssignees}
         showFinancials={showFinancials}
@@ -78,6 +79,7 @@ function QuoteInfoBlock({
   quote,
   salesManager,
   participants,
+  procurementAssignees,
   logisticsAssignees,
   customsAssignees,
   showFinancials,
@@ -86,6 +88,7 @@ function QuoteInfoBlock({
   quote: QuoteDetailRow;
   salesManager: QuoteContextData["salesManager"];
   participants: ParticipantRow[];
+  procurementAssignees: QuoteContextData["procurementAssignees"];
   logisticsAssignees: QuoteContextData["logisticsAssignees"];
   customsAssignees: QuoteContextData["customsAssignees"];
   showFinancials: boolean;
@@ -142,7 +145,12 @@ function QuoteInfoBlock({
                 customerId={quote.customer.id}
                 initialContact={
                   quote.contact_person
-                    ? { id: quote.contact_person.id, name: quote.contact_person.name }
+                    ? {
+                        id: quote.contact_person.id,
+                        name: quote.contact_person.name,
+                        last_name: quote.contact_person.last_name,
+                        patronymic: quote.contact_person.patronymic,
+                      }
                     : null
                 }
               />
@@ -151,7 +159,15 @@ function QuoteInfoBlock({
                 className="block truncate text-sm font-medium"
                 data-testid="context-panel-contact-readonly"
               >
-                {quote.contact_person?.name ?? "—"}
+                {quote.contact_person
+                  ? [
+                      quote.contact_person.name,
+                      quote.contact_person.last_name,
+                      quote.contact_person.patronymic,
+                    ]
+                      .filter(Boolean)
+                      .join(" ") || "—"
+                  : "—"}
               </span>
             )
           ) : (
@@ -173,7 +189,7 @@ function QuoteInfoBlock({
               />
             ) : (
               <span
-                className="block truncate text-sm font-medium"
+                className="block text-sm font-medium line-clamp-2 break-words"
                 data-testid="context-panel-address-readonly"
               >
                 {quote.delivery_address ?? "—"}
@@ -248,7 +264,10 @@ function QuoteInfoBlock({
         </div>
       )}
 
-      {/* Participants */}
+      {/* Participants — active responsibles (МОП / МОЗ / МОЛ / МОТ) up top
+          with attach dates, then a separated «История переходов» log so the
+          tester can tell them apart at a glance. Testing 2 row 2
+          (FB-260513-100338-a778). */}
       <div className="space-y-2 min-w-0">
         <div className="flex items-center gap-2 mb-2">
           <Users size={14} className="text-muted-foreground" />
@@ -256,12 +275,31 @@ function QuoteInfoBlock({
             Участники
           </h4>
         </div>
+        {/* МОП — assignment moment = quote creation. Mirrors МОЛ/МОТ shape so
+            the four responsibles render with a uniform «ФИО + дата» line.
+            Testing 2 row 2 — tester reported МОП had no date. */}
         {salesManager && (
-          <div className="flex items-baseline gap-1.5 text-sm">
-            <span className="text-xs text-muted-foreground shrink-0">МОП</span>
-            <span className="font-medium truncate">{salesManager.full_name}</span>
-          </div>
+          <DomainAssigneeRow
+            label="МОП"
+            data-testid="context-panel-sales-manager"
+            assignee={{
+              full_name: salesManager.full_name,
+              assigned_at: quote.created_at ?? null,
+            }}
+          />
         )}
+        {/* МОЗ — sourced from quote_items.assigned_procurement_user. Testing 2
+            row 2 — tester reported МОЗ missing from the active responsibles
+            block. `assigned_at` is best-effort (earliest workflow_transitions
+            row for that user — see fetchQuoteContextData step 4b). */}
+        {procurementAssignees.map((a) => (
+          <DomainAssigneeRow
+            key={`moz-${a.user_id}`}
+            label="МОЗ"
+            data-testid="context-panel-procurement-assignee"
+            assignee={a}
+          />
+        ))}
         {/* МОЛ / МОТ — sourced from invoices.assigned_logistics_user /
             assigned_customs_user. РОЛ Тест 07 → 3.1 + 4.1: tester wants ФИО +
             момент прикрепления (logistics_assigned_at / customs_assigned_at)
@@ -283,23 +321,32 @@ function QuoteInfoBlock({
           />
         ))}
         {participants.length > 0 ? (
-          <ul className="space-y-1.5 max-h-32 overflow-y-auto">
-            {participants.map((p) => (
-              <li key={p.id} className="text-sm text-muted-foreground truncate">
-                <span className="tabular-nums">
-                  {formatParticipantDate(p.created_at)}
-                </span>
-                {" "}
-                <span className="text-foreground">{p.actor_name}</span>
-                {" "}
-                <Badge variant="outline" className="text-[10px] h-4 px-1 align-middle">
-                  {ROLE_LABELS_RU[p.actor_role] ?? p.actor_role}
-                </Badge>
-              </li>
-            ))}
-          </ul>
+          <>
+            {/* Visual separator between the active-responsibles block above
+                and the workflow_transitions history below. Testing 2 row 2 —
+                tester read the two regions as one merged blob. */}
+            <h5 className="pt-2 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+              История переходов
+            </h5>
+            <ul className="space-y-1.5 max-h-32 overflow-y-auto">
+              {participants.map((p) => (
+                <li key={p.id} className="text-sm text-muted-foreground truncate">
+                  <span className="tabular-nums">
+                    {formatParticipantDate(p.created_at)}
+                  </span>
+                  {" "}
+                  <span className="text-foreground">{p.actor_name}</span>
+                  {" "}
+                  <Badge variant="outline" className="text-[10px] h-4 px-1 align-middle">
+                    {ROLE_LABELS_RU[p.actor_role] ?? p.actor_role}
+                  </Badge>
+                </li>
+              ))}
+            </ul>
+          </>
         ) : (
           !salesManager &&
+          procurementAssignees.length === 0 &&
           logisticsAssignees.length === 0 &&
           customsAssignees.length === 0 && (
             <p className="text-sm text-muted-foreground">Нет участников</p>

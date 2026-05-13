@@ -440,7 +440,7 @@ export async function fetchQuoteDetail(quoteId: string) {
     quote.contact_person_id
       ? supabase
           .from("customer_contacts")
-          .select("id, name, phone, email")
+          .select("id, name, last_name, patronymic, phone, email")
           .eq("id", quote.contact_person_id)
           .single()
       : null,

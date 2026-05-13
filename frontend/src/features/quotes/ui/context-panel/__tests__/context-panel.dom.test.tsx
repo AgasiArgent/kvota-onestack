@@ -76,6 +76,7 @@ const data: QuoteContextData = {
   contactPerson: null,
   salesManager: null,
   participants: [],
+  procurementAssignees: [],
   logisticsAssignees: [],
   customsAssignees: [],
 };
@@ -254,6 +255,7 @@ describe("ContextPanel — МОЛ / МОТ assignees in Участники", () 
     contactPerson: null,
     salesManager: { id: "u-mop", full_name: "Иван Продажин", phone: null, email: null },
     participants: [],
+    procurementAssignees: [],
     logisticsAssignees: [],
     customsAssignees: [],
   };
@@ -370,12 +372,13 @@ describe("ContextPanel — МОЛ / МОТ assignees in Участники", () 
     expect(row.textContent).not.toMatch(/\d{2}\.\d{2}/);
   });
 
-  it('falls back to "Нет участников" only when МОП, МОЛ, МОТ and transitions are all empty', () => {
+  it('falls back to "Нет участников" only when МОП, МОЗ, МОЛ, МОТ and transitions are all empty', () => {
     const empty: QuoteContextData = {
       salesChecklist: null,
       contactPerson: null,
       salesManager: null,
       participants: [],
+      procurementAssignees: [],
       logisticsAssignees: [],
       customsAssignees: [],
     };
@@ -393,6 +396,7 @@ describe("ContextPanel — МОЛ / МОТ assignees in Участники", () 
       contactPerson: null,
       salesManager: null,
       participants: [],
+      procurementAssignees: [],
       logisticsAssignees: [
         {
           user_id: "u-mol-1",
@@ -415,5 +419,168 @@ describe("ContextPanel — МОЛ / МОТ assignees in Участники", () 
     expect(
       screen.getByTestId("context-panel-logistics-assignee"),
     ).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Testing 2 row 1 (FB-260513-100622-47b6) — contact ФИО + address full text
+// ---------------------------------------------------------------------------
+
+describe("ContextPanel — contact full name in info panel (row 1)", () => {
+  it("renders Имя Фамилия Отчество in the readonly contact span", () => {
+    const quote = makeQuote({
+      contact_person: {
+        id: "ct-1",
+        name: "Азиз",
+        last_name: "Каримов",
+        patronymic: "Рустамович",
+        phone: "+7 999",
+        email: "a@a.ru",
+      },
+    });
+
+    render(
+      <ContextPanel quote={quote} data={data} userRoles={["customs"]} />,
+    );
+
+    const readonly = screen.getByTestId("context-panel-contact-readonly");
+    expect(readonly).toHaveTextContent("Азиз Каримов Рустамович");
+  });
+
+  it("falls back to just first name when last_name / patronymic are null", () => {
+    const quote = makeQuote({
+      contact_person: {
+        id: "ct-1",
+        name: "Азиз",
+        last_name: null,
+        patronymic: null,
+        phone: null,
+        email: null,
+      },
+    });
+
+    render(
+      <ContextPanel quote={quote} data={data} userRoles={["customs"]} />,
+    );
+
+    const readonly = screen.getByTestId("context-panel-contact-readonly");
+    expect(readonly).toHaveTextContent("Азиз");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Testing 2 row 2 (FB-260513-100338-a778) — МОЗ + МОП date + separator
+// ---------------------------------------------------------------------------
+
+describe("ContextPanel — МОЗ + МОП date + history separator (row 2)", () => {
+  it("renders МОП row with the quote.created_at attach timestamp", () => {
+    const dataWithSales: QuoteContextData = {
+      salesChecklist: null,
+      contactPerson: null,
+      salesManager: {
+        id: "u-mop",
+        full_name: "Денис Рогачёв",
+        phone: null,
+        email: null,
+      },
+      participants: [],
+      procurementAssignees: [],
+      logisticsAssignees: [],
+      customsAssignees: [],
+    };
+
+    const quote = makeQuote({
+      created_at: "2026-04-15T07:00:00Z",
+    });
+
+    render(
+      <ContextPanel quote={quote} data={dataWithSales} userRoles={["sales"]} />,
+    );
+
+    const row = screen.getByTestId("context-panel-sales-manager");
+    expect(row).toHaveTextContent("МОП");
+    expect(row).toHaveTextContent("Денис Рогачёв");
+    expect(row.textContent).toMatch(/15\.04/);
+    expect(row.textContent).toMatch(/10:00/); // UTC+3
+  });
+
+  it("renders МОЗ row sourced from procurementAssignees", () => {
+    const dataWithMoz: QuoteContextData = {
+      salesChecklist: null,
+      contactPerson: null,
+      salesManager: null,
+      participants: [],
+      procurementAssignees: [
+        {
+          user_id: "u-moz-1",
+          full_name: "Екатерина Хусндинова",
+          assigned_at: "2026-04-20T06:00:00Z",
+        },
+      ],
+      logisticsAssignees: [],
+      customsAssignees: [],
+    };
+
+    render(
+      <ContextPanel
+        quote={makeQuote()}
+        data={dataWithMoz}
+        userRoles={["head_of_procurement"]}
+      />,
+    );
+
+    const row = screen.getByTestId("context-panel-procurement-assignee");
+    expect(row).toHaveTextContent("МОЗ");
+    expect(row).toHaveTextContent("Екатерина Хусндинова");
+    expect(row.textContent).toMatch(/20\.04/);
+  });
+
+  it("renders «История переходов» heading separating active responsibles from log", () => {
+    const dataWithTransitions: QuoteContextData = {
+      salesChecklist: null,
+      contactPerson: null,
+      salesManager: {
+        id: "u-mop",
+        full_name: "Денис Рогачёв",
+        phone: null,
+        email: null,
+      },
+      participants: [
+        {
+          id: "wt-1",
+          actor_id: "u-mop",
+          actor_role: "sales",
+          actor_name: "Денис Рогачёв",
+          from_status: "draft",
+          to_status: "pending_procurement",
+          created_at: "2026-04-15T09:00:00Z",
+        },
+      ],
+      procurementAssignees: [],
+      logisticsAssignees: [],
+      customsAssignees: [],
+    };
+
+    render(
+      <ContextPanel
+        quote={makeQuote()}
+        data={dataWithTransitions}
+        userRoles={["sales"]}
+      />,
+    );
+
+    expect(screen.getByText("История переходов")).toBeInTheDocument();
+  });
+
+  it("hides the «История переходов» heading when there are no transitions", () => {
+    render(
+      <ContextPanel
+        quote={makeQuote()}
+        data={data}
+        userRoles={["sales"]}
+      />,
+    );
+
+    expect(screen.queryByText("История переходов")).not.toBeInTheDocument();
   });
 });

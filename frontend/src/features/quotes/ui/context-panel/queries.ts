@@ -20,6 +20,8 @@ export interface ContextPanelSalesManager {
 
 export interface ContextPanelContact {
   name: string;
+  last_name: string | null;
+  patronymic: string | null;
   phone: string | null;
   email: string | null;
 }
@@ -48,6 +50,19 @@ export interface QuoteContextData {
   contactPerson: ContextPanelContact | null;
   salesManager: ContextPanelSalesManager | null;
   participants: ContextPanelParticipant[];
+  /**
+   * Distinct МОЗ assignees on this quote's items
+   * (`quote_items.assigned_procurement_user`).
+   *
+   * Testing 2 row 2 (FB-260513-100338-a778): the «Участники» info panel was
+   * missing the procurement responsible — only МОЛ + МОТ surfaced. МОЗ is the
+   * single source of truth on `quote_items.assigned_procurement_user`
+   * (per `.kiro/specs/procurement-users-single-source/`); we deduplicate by
+   * user_id and approximate «когда привязали» via the earliest workflow
+   * transition that user is recorded on, since `quote_items` carries no
+   * dedicated assignment timestamp.
+   */
+  procurementAssignees: ContextPanelDomainAssignee[];
   /** Distinct МОЛ assignees on this quote's invoices (РОЛ Тест 07 / 3.1). */
   logisticsAssignees: ContextPanelDomainAssignee[];
   /** Distinct МОТ assignees on this quote's invoices (РОЛ Тест 07 / 4.1). */
@@ -79,6 +94,7 @@ export async function fetchQuoteContextData(
       contactPerson: null,
       salesManager: null,
       participants: [],
+      procurementAssignees: [],
       logisticsAssignees: [],
       customsAssignees: [],
     };
@@ -90,13 +106,13 @@ export async function fetchQuoteContextData(
   const createdBy = quoteRow.created_by ?? null;
 
   // 2. Parallel: contact person, sales manager profile, workflow transitions,
-  //    invoice-level МОЛ/МОТ assignments
-  const [contactRes, managerRes, transitionsRes, invoicesRes] =
+  //    invoice-level МОЛ/МОТ assignments, item-level МОЗ assignment
+  const [contactRes, managerRes, transitionsRes, invoicesRes, itemsRes] =
     await Promise.all([
       contactPersonId
         ? supabase
             .from("customer_contacts")
-            .select("name, phone, email")
+            .select("name, last_name, patronymic, phone, email")
             .eq("id", contactPersonId)
             .maybeSingle()
         : Promise.resolve({ data: null }),
@@ -118,11 +134,17 @@ export async function fetchQuoteContextData(
           "assigned_logistics_user, logistics_assigned_at, assigned_customs_user, customs_assigned_at"
         )
         .eq("quote_id", quoteId),
+      supabase
+        .from("quote_items")
+        .select("assigned_procurement_user")
+        .eq("quote_id", quoteId),
     ]);
 
   const contactPerson: ContextPanelContact | null = contactRes.data
     ? {
         name: contactRes.data.name,
+        last_name: contactRes.data.last_name ?? null,
+        patronymic: contactRes.data.patronymic ?? null,
         phone: contactRes.data.phone ?? null,
         email: contactRes.data.email ?? null,
       }
@@ -176,14 +198,44 @@ export async function fetchQuoteContextData(
     }
   }
 
+  // 4b. Aggregate distinct МОЗ assignees from per-item column. There is no
+  //     dedicated assignment timestamp on `quote_items`; we leave the entry
+  //     null here and back-fill the «когда привязали» moment from the user's
+  //     earliest workflow_transitions row below (step 5). Testing 2 row 2.
+  const items = itemsRes.data ?? [];
+  const procurementAt = new Map<string, string | null>();
+  for (const it of items) {
+    const pUser = it.assigned_procurement_user ?? null;
+    if (pUser && !procurementAt.has(pUser)) {
+      procurementAt.set(pUser, null);
+    }
+  }
+
   // 5. Batch-resolve all user names in one round-trip: transition actors +
-  //    МОЛ + МОТ.
+  //    МОП (already loaded above) + МОЗ + МОЛ + МОТ.
   const transitions = transitionsRes.data ?? [];
   const allUserIds = new Set<string>(
     transitions.map((t) => t.actor_id).filter(Boolean) as string[]
   );
+  for (const id of procurementAt.keys()) allUserIds.add(id);
   for (const id of logisticsAt.keys()) allUserIds.add(id);
   for (const id of customsAt.keys()) allUserIds.add(id);
+
+  // Backfill МОЗ `assigned_at` with the earliest workflow_transitions row
+  // recorded for that user on this quote, as a best-effort «когда привязали»
+  // approximation. If the user has no transition (e.g., they only set the
+  // per-item assignment without advancing the workflow), the timestamp stays
+  // null and the panel renders the ФИО without a date — same as МОЛ/МОТ when
+  // `*_assigned_at` is null.
+  for (const t of transitions) {
+    const uid = t.actor_id ?? null;
+    if (!uid || !t.created_at) continue;
+    if (!procurementAt.has(uid)) continue;
+    const prev = procurementAt.get(uid);
+    if (prev === null || (prev && t.created_at < prev)) {
+      procurementAt.set(uid, t.created_at);
+    }
+  }
 
   const profileMap = new Map<string, string>();
   if (allUserIds.size > 0) {
@@ -230,6 +282,7 @@ export async function fetchQuoteContextData(
     contactPerson,
     salesManager,
     participants,
+    procurementAssignees: buildAssignees(procurementAt),
     logisticsAssignees: buildAssignees(logisticsAt),
     customsAssignees: buildAssignees(customsAt),
   };

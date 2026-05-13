@@ -141,9 +141,15 @@ export function AddressDropdownSelect({
       <button
         type="button"
         onClick={handleTriggerClick}
-        className="flex items-center gap-1 text-sm font-medium hover:text-accent transition-colors max-w-full"
+        className="flex items-start gap-1 text-sm font-medium hover:text-accent transition-colors max-w-full text-left"
       >
-        <span className="truncate">
+        {/*
+          Testing 2 row 1 (FB-260513-100622-47b6): tester expects to see the
+          full delivery address \u2014 `truncate` clipped it to a single line on
+          the info panel grid. `line-clamp-2` lets long addresses wrap to a
+          second line while still preventing the panel from growing unbounded.
+        */}
+        <span className="line-clamp-2 break-words">
           {currentAddress ?? "\u2014"}
         </span>
         {currentAddress ? (

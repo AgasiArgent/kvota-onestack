@@ -189,6 +189,8 @@ export interface QuoteDetail {
   contact_person?: {
     id: string;
     name: string;
+    last_name: string | null;
+    patronymic: string | null;
     phone: string | null;
     email: string | null;
   } | null;
