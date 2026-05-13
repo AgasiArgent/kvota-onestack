@@ -1,5 +1,9 @@
 import { createClient } from "@/shared/lib/supabase/server";
-import { isSalesOnly, isAssignedItemsOnly } from "@/shared/lib/roles";
+import {
+  isSalesOnly,
+  isAssignedItemsOnly,
+  BROAD_QUOTE_ACCESS_ROLES,
+} from "@/shared/lib/roles";
 import { getAssignedCustomerIds } from "@/shared/lib/access";
 
 export interface ChatListItem {
@@ -113,6 +117,23 @@ export async function fetchAllChats(
     } else {
       quotesQuery = quotesQuery.eq("created_by", user.id);
     }
+  } else if (
+    (user.roles.includes("customs") ||
+      user.roles.includes("head_of_customs")) &&
+    !user.roles.some((r) => BROAD_QUOTE_ACCESS_ROLES.includes(r))
+  ) {
+    // Customs tier (Batch M row 12): there is no per-user customs assignment,
+    // so scope the chat list to all quotes currently in customs workflow
+    // stages for the org. Mirrors isCustomsOnly semantics from roles.ts and
+    // the customs branch in fetchQuotesList (entities/quote/queries.ts).
+    // head_of_customs is included alongside customs because the regression
+    // also hits the head when not dual-hatted with admin/top_manager
+    // (otherwise they'd fall through to "see all org" — broader than the
+    // stage-only tier the role expects).
+    quotesQuery = quotesQuery.in("workflow_status", [
+      "pending_customs",
+      "pending_logistics_and_customs",
+    ]);
   } else if (isAssignedItemsOnly(user.roles)) {
     // Operational roles (procurement, logistics, customs) see chats only on
     // quotes where they are personally assigned. Procurement assignment lives

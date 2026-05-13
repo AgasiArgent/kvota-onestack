@@ -102,7 +102,7 @@ const ROLES_BROADER_THAN_PROCUREMENT_SENIOR = [
 ];
 
 /** Roles that grant quote visibility beyond personal item assignment. */
-const BROAD_QUOTE_ACCESS_ROLES = [
+export const BROAD_QUOTE_ACCESS_ROLES = [
   "admin",
   "top_manager",
   "quote_controller",
