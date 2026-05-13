@@ -341,9 +341,58 @@ export function ProcurementHandsontable({
   const pendingOps = useRef(new Set<string>());
   const rowIdsRef = useRef<string[]>(items.map((i) => i.id));
 
+  /**
+   * Testing 2 row 20 — preserve scroll & selection across autosaves.
+   *
+   * The earlier `initialData = useMemo(..., [items, salesByItemId])` produced
+   * a new array reference on every parent re-render (which happens after every
+   * cell autosave: `handleAfterChange` → `updateInvoiceItem` → `onMutated` →
+   * parent bumps `refreshKey` → refetch invoice_items from Supabase → new
+   * `items` reference flows down). The new `data` prop fed back into
+   * `HotTable.componentDidUpdate` → `updateSettings({data})` → HoT's
+   * `updateData` → datamap rebuild + `selection.refresh()`. Visually: the
+   * table "прыгает" — scroll resets toward row 0 and the user's selection is
+   * lost mid-edit. РОЗ/СтМОЗ/МОЗ all reported this on the КПП card (one
+   * symptom across all three roles).
+   *
+   * Fix: memoize `initialData` on the **stable row-id signature** instead of
+   * the items reference. Same row IDs (in the same order) → same array
+   * reference → HotTable's `componentDidUpdate` doesn't see a `data` prop
+   * change. Cell-VALUE updates flow into HoT through the second effect
+   * below via `setDataAtRowProp`, which patches in place without touching
+   * scroll/selection.
+   *
+   * Structural changes (split/merge/unassign add or remove rows) DO change
+   * the row-id signature, so `initialData` becomes a new reference and HoT
+   * reloads — which is the correct behavior for those cases.
+   */
+  const rowIdSignature = useMemo(
+    () => items.map((i) => i.id).join("|"),
+    [items]
+  );
+
+  // Keep the latest items + sales map in refs so the structural memo below
+  // can recompute rows when the row-id signature changes — without making
+  // `initialData` depend on the items reference directly.
+  const itemsRef = useRef(items);
+  const salesByItemIdRef = useRef(salesByItemId);
+  itemsRef.current = items;
+  salesByItemIdRef.current = salesByItemId;
+
+  // Computed once per stable row-id signature. The array identity is stable
+  // across renders that don't add/remove/reorder rows, so HotTable's React
+  // wrapper sees `data === prevData` and skips the prop-driven reload path.
+  // `rowIdSignature` IS load-bearing here even though the closure body reads
+  // from refs (intentional — values are pushed in via the imperative effect
+  // below, not via the memo). The eslint-disable below silences the false
+  // "unnecessary dependency" warning that arises from that indirection.
   const initialData = useMemo(
-    () => items.map((it) => itemToRow(it, salesByItemId?.[it.id])),
-    [items, salesByItemId]
+    () =>
+      itemsRef.current.map((it) =>
+        itemToRow(it, salesByItemIdRef.current?.[it.id])
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rowIdSignature]
   );
 
   // Refs let the cell renderer read fresh prop values without us having to
@@ -386,6 +435,47 @@ export function ProcurementHandsontable({
   if (rowIdsRef.current.length !== initialData.length) {
     rowIdsRef.current = initialData.map((r) => r.id);
   }
+
+  /**
+   * Testing 2 row 20 (companion to the rowIdSignature memo above) — push
+   * per-cell value updates into Handsontable IMPERATIVELY when items change
+   * but row structure does not. Mirroring this through the `data` prop would
+   * trigger HoT's prop-driven reload (which resets scroll/selection); the
+   * `setDataAtRowProp("external")` calls below patch cells in place.
+   *
+   * The `"external"` source tag is filtered out by `handleAfterChange` so
+   * these synthetic patches don't bounce back into another save → refetch
+   * → patch loop.
+   */
+  useEffect(() => {
+    const hot = hotRef.current?.hotInstance;
+    if (!hot) return;
+    // Skip the very first run — `initialData` already seeded the table at
+    // mount time. Only later items-prop updates need the imperative sync.
+    if (hot.countRows() === 0) return;
+
+    const next = items.map((it) => itemToRow(it, salesByItemId?.[it.id]));
+    const rowIds = rowIdsRef.current;
+
+    // Defensive — if row structure changed, the rowIdSignature memo will
+    // already have rebuilt `initialData` and HoT will reload via the data
+    // prop; bail out here so we don't double-patch.
+    if (next.length !== rowIds.length) return;
+
+    for (let r = 0; r < next.length; r++) {
+      if (next[r].id !== rowIds[r]) return; // structural mismatch
+    }
+
+    for (let r = 0; r < next.length; r++) {
+      const row = next[r];
+      for (const key of Object.keys(row) as (keyof RowData)[]) {
+        const current = hot.getDataAtRowProp(r, key);
+        if (current !== row[key]) {
+          hot.setDataAtRowProp(r, key, row[key], "external");
+        }
+      }
+    }
+  }, [items, salesByItemId]);
 
   const rowActionsRenderer = useCallback(
     (
@@ -664,7 +754,11 @@ export function ProcurementHandsontable({
 
   const handleAfterChange = useCallback(
     (changes: Handsontable.CellChange[] | null, source: string) => {
-      if (!changes || source === "loadData") return;
+      // `external` is the source tag used by the imperative items→HoT sync
+      // effect above when it patches cell values after a parent re-fetch.
+      // Skipping it prevents a save → refetch → setDataAtRowProp → save
+      // infinite loop. (Testing 2 row 20 — preserve scroll on autosave.)
+      if (!changes || source === "loadData" || source === "external") return;
 
       const hot = hotRef.current?.hotInstance;
       if (!hot) return;

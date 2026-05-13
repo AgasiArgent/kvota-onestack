@@ -37,9 +37,10 @@
  * the props passed to `<HotTable />` and assert the config flag is set.
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { renderToString } from "react-dom/server";
 import { createElement } from "react";
+import { cleanup, render } from "@testing-library/react";
 
 // Capture every props bag passed to <HotTable />.
 const hotTableCalls: Array<Record<string, unknown>> = [];
@@ -142,5 +143,103 @@ describe("procurement-handsontable — cell-click coordinate offset (МОЗ-109.
     // overlay (column header), bypassing the auto-detection that picks
     // up the parent `overflow-x-auto` wrapper as the scroll context.
     expect(props.preventOverflow).toBe("horizontal");
+  });
+});
+
+/**
+ * Testing 2 row 20 — «Таблица прыгает при сохранении данных в каждой ячейке».
+ *
+ * Symptom: every cell autosave on the КПП Handsontable triggered the parent
+ * invoice-card to re-fetch invoice_items, which produced a new `items`
+ * reference. The old `useMemo(..., [items, salesByItemId])` recomputed
+ * `initialData` on each items change, handing a NEW array to `<HotTable />`.
+ * The React wrapper forwarded it via `updateSettings({ data })` → HoT
+ * internally calls `updateData` → datamap rebuild + `selection.refresh()`.
+ * The user saw the table "jump" — scroll resets and selection clears mid-edit.
+ *
+ * Contract: when the user edits a single cell and the parent re-renders with
+ * a fresh `items` reference of the SAME row IDs in the SAME order, the
+ * reference handed to `<HotTable data={…} />` MUST stay the same. Value
+ * updates flow into HoT through `setDataAtRowProp` instead (verified
+ * separately by the in-place imperative-sync effect — jsdom can't observe
+ * Handsontable internals here).
+ */
+describe("procurement-handsontable — autosave preserves scroll (Testing 2 row 20)", () => {
+  afterEach(() => {
+    cleanup();
+    hotTableCalls.length = 0;
+  });
+
+  it("keeps the same `data` reference across re-renders when row IDs don't change (cell value autosave path)", () => {
+    hotTableCalls.length = 0;
+
+    // First render — initial mount.
+    const { rerender } = render(
+      createElement(ProcurementHandsontable, {
+        items: [sampleItem],
+        invoiceId: "inv-1",
+        procurementCompleted: false,
+      })
+    );
+
+    expect(hotTableCalls.length).toBeGreaterThan(0);
+    const firstData = hotTableCalls[0].data;
+
+    // Simulate the parent re-fetch path: same row, freshly-fetched item
+    // object (different REFERENCE, but same `id` and a new value in one of
+    // the editable cells — like the user just saved a new purchase price).
+    const refreshedItem = { ...sampleItem, purchase_price_original: 123 };
+    rerender(
+      createElement(ProcurementHandsontable, {
+        items: [refreshedItem],
+        invoiceId: "inv-1",
+        procurementCompleted: false,
+      })
+    );
+
+    // Sanity — HotTable was re-rendered (componentDidUpdate ran).
+    expect(hotTableCalls.length).toBeGreaterThan(1);
+
+    // The fix: `data` MUST be the SAME array reference. If this fails,
+    // HotTable's componentDidUpdate will call updateSettings({data}) which
+    // triggers updateData → datamap rebuild → selection.refresh → scroll
+    // jumps. Reference-equality is the load-bearing contract.
+    const lastData = hotTableCalls[hotTableCalls.length - 1].data;
+    expect(lastData).toBe(firstData);
+  });
+
+  it("hands a NEW `data` reference when row structure changes (split/merge/unassign path)", () => {
+    hotTableCalls.length = 0;
+
+    const itemA = { ...sampleItem, id: "ii-1" };
+    const itemB = { ...sampleItem, id: "ii-2" };
+
+    const { rerender } = render(
+      createElement(ProcurementHandsontable, {
+        items: [itemA, itemB],
+        invoiceId: "inv-1",
+        procurementCompleted: false,
+      })
+    );
+
+    expect(hotTableCalls.length).toBeGreaterThan(0);
+    const firstData = hotTableCalls[0].data;
+
+    // Simulate a structural change — one row removed (unassign).
+    rerender(
+      createElement(ProcurementHandsontable, {
+        items: [itemA],
+        invoiceId: "inv-1",
+        procurementCompleted: false,
+      })
+    );
+
+    expect(hotTableCalls.length).toBeGreaterThan(1);
+    const lastData = hotTableCalls[hotTableCalls.length - 1].data;
+
+    // Reference MUST differ — HoT needs to reload its dataset. The visible
+    // scroll reset on structural changes is acceptable; structural ops are
+    // user-initiated (icon click) and rare compared to per-cell autosaves.
+    expect(lastData).not.toBe(firstData);
   });
 });
