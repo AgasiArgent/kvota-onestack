@@ -2723,6 +2723,59 @@ def assign_customs_to_invoices(quote_id: str) -> Dict:
         )
 
 
+def _ensure_quote_brand_substates(quote_id: str) -> List[str]:
+    """Insert a `quote_brand_substates` row per distinct brand on the quote.
+
+    The kanban (api/procurement.py::get_kanban) inner-joins
+    `quote_brand_substates` against `quotes` — a `pending_procurement` quote
+    with no qbs rows is invisible on the board. Migration 274 backfilled rows
+    for quotes that were already in pending_procurement at deploy time, but
+    nothing creates rows when a quote enters that status afterwards.
+
+    Idempotent: composite PK (quote_id, brand) + upsert ignore_duplicates
+    means re-transitions are no-ops. Brand normalization matches migration
+    274 — NULL brand becomes empty string so the PK is well-defined.
+
+    Returns the list of distinct brand strings inserted (empty list if the
+    quote has no items or the upsert failed).
+    """
+    sb = get_supabase()
+    try:
+        items_response = (
+            sb.table("quote_items")
+            .select("brand")
+            .eq("quote_id", quote_id)
+            .execute()
+        )
+    except Exception as e:
+        logger.warning("Failed to load items for qbs init (quote %s): %s", quote_id, e)
+        return []
+
+    distinct_brands = sorted({
+        (it.get("brand") or "")
+        for it in (items_response.data or [])
+    })
+    if not distinct_brands:
+        return []
+
+    payload = [
+        {"quote_id": quote_id, "brand": brand, "substatus": "distributing"}
+        for brand in distinct_brands
+    ]
+    try:
+        sb.table("quote_brand_substates").upsert(
+            payload, on_conflict="quote_id,brand", ignore_duplicates=True
+        ).execute()
+    except Exception as e:
+        logger.warning(
+            "Failed to upsert quote_brand_substates for quote %s: %s",
+            quote_id, e,
+        )
+        return []
+
+    return distinct_brands
+
+
 def transition_to_pending_procurement(
     quote_id: str,
     actor_id: str,
@@ -2852,6 +2905,23 @@ def transition_to_pending_procurement(
             quote_id=quote_id,
             from_status=current_status
         )
+
+    # Ensure quote_brand_substates rows exist for every distinct brand on the
+    # quote. Without this the kanban (inner-joined on qbs) silently filters out
+    # newly-transitioned quotes — migration 274 only backfilled rows that were
+    # already in pending_procurement at deploy time. Auto-advance is then run
+    # per brand so slices where every item was already routed by
+    # assign_procurement_users_to_quote skip the empty «Распределение» column
+    # and land directly in «Поиск поставщика».
+    initialized_brands = _ensure_quote_brand_substates(quote_id)
+    for brand in initialized_brands:
+        try:
+            maybe_advance_after_distribution(quote_id, brand, actor_id)
+        except Exception as e:
+            logger.warning(
+                "Post-transition auto-advance failed for quote %s brand %r: %s",
+                quote_id, brand, e,
+            )
 
     # Log the transition
     actor_role = "sales" if "sales" in actor_roles else "admin"
