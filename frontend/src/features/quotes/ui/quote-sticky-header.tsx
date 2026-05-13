@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Paperclip, Wallet, Ban, Loader2, Info } from "lucide-react";
@@ -67,7 +67,21 @@ export function QuoteStickyHeader({
   isContextOpen,
   onToggleContext,
 }: QuoteStickyHeaderProps) {
+  const router = useRouter();
   const [cancelOpen, setCancelOpen] = useState(false);
+
+  // Back arrow returns to the previous browser page when there is history
+  // (e.g. opened from /tasks or /workspace), and falls back to /quotes when
+  // the user landed here directly (e.g. via a bookmark or paste-in URL).
+  // FB-260513-155446-efa0: testers expected "Назад" to mean "previous page",
+  // not "always the КП list".
+  const handleBack = useCallback(() => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+    } else {
+      router.push("/quotes");
+    }
+  }, [router]);
   const isDocumentsActive = activeStep === "documents";
   const isPlanFactActive = activeStep === "plan-fact";
   // The step we should return to when the user closes documents/plan-fact.
@@ -130,13 +144,14 @@ export function QuoteStickyHeader({
         <div className="flex items-center justify-between gap-4">
           {/* Left: navigation + identification */}
           <div className="flex items-center gap-3 min-w-0">
-            <Link
-              href="/quotes"
+            <button
+              type="button"
+              onClick={handleBack}
               className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground shrink-0"
             >
               <ArrowLeft size={16} />
-              КП
-            </Link>
+              Назад
+            </button>
 
             <span className="font-mono text-sm font-medium shrink-0">
               {quote.idn_quote}
