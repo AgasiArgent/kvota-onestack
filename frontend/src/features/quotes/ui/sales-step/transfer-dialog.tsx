@@ -29,8 +29,15 @@ import type { QuoteDetailRow, QuoteItemRow } from "@/entities/quote/queries";
 // Pre-transfer validation
 // ---------------------------------------------------------------------------
 
+// Testing 2 row 23 (МОП/РОП): adding a customer contact must be mandatory for
+// МОП before the quote can leave the «Заявка» stage. Listed alongside the other
+// mandatory client/delivery fields so the same gate (button disable + tooltip
+// + field highlight) covers it. Keyed by the canonical column on
+// `kvota.quotes` (`contact_person_id` — `contact_id` is unused legacy, see
+// migration notes / MEMORY.md).
 const FIELD_LABELS: Record<string, string> = {
   customer_id: "Клиент",
+  contact_person_id: "Контакт клиента",
   seller_company_id: "Продавец",
   delivery_city: "Город доставки",
   delivery_country: "Страна",
