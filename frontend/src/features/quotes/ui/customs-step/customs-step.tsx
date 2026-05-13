@@ -32,7 +32,6 @@ import {
   CUSTOMS_TABLE_KEY,
 } from "./customs-columns";
 import { CUSTOMS_SYSTEM_VIEWS } from "./customs-views";
-import { CustomsNotes } from "./customs-notes";
 import { EntityNotesPanel } from "@/entities/entity-note";
 import type { EntityNoteCardData } from "@/entities/entity-note/ui/entity-note-card";
 import { CustomsInfoBlock } from "./customs-info-block";
@@ -270,8 +269,6 @@ export function CustomsStep({
 
   const supplierByQuoteItemId = useSupplierByQuoteItemId(items);
 
-  const customsNotes = ext<{ customs_notes?: string | null }>(quote).customs_notes ?? "";
-
   // Load autofill suggestions once per quote change. Fires-and-forget; silent
   // on error so customs workflow is never blocked by the suggestion endpoint.
   // Gated by ALTA_FEATURES_ENABLED — when off, no fetch fires and suggestions
@@ -507,8 +504,6 @@ export function CustomsStep({
           items={quoteItemsForCerts}
           canEdit={canEditCustoms}
         />
-
-        <CustomsNotes quoteId={quote.id} initialNotes={customsNotes} />
 
         {userId && (
           <EntityNotesPanel
