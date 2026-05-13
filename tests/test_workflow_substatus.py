@@ -34,6 +34,7 @@ from services.workflow_service import (
     can_transition_substatus,
     transition_substatus,
     maybe_advance_after_distribution,
+    _ensure_quote_brand_substates,
 )
 
 
@@ -554,3 +555,138 @@ class TestTransitionsCatalog:
             reverse = (t.to_substatus, t.from_substatus)
             if reverse in forward_pairs:
                 assert t.requires_reason is True
+
+
+class TestEnsureQuoteBrandSubstates:
+    """Regression coverage for the qbs init missed by `transition_to_pending_procurement`.
+
+    Without this helper, new quotes entering pending_procurement had no
+    quote_brand_substates rows and were silently filtered out of the kanban
+    inner-join (Testing 2 rows 15-18: «отражается только одно старое КП»).
+    """
+
+    @patch("services.workflow_service.get_supabase")
+    def test_upserts_one_row_per_distinct_brand(self, mock_get_sb):
+        sb = MagicMock()
+        upsert_payloads: list = []
+
+        def _table(name):
+            tbl = MagicMock()
+            if name == "quote_items":
+                tbl.select.return_value.eq.return_value.execute.return_value.data = [
+                    {"brand": "ABB"},
+                    {"brand": "Siemens"},
+                    {"brand": "ABB"},  # duplicate — same brand, second item
+                ]
+            elif name == "quote_brand_substates":
+                def _upsert(payload, **kwargs):
+                    upsert_payloads.append((payload, kwargs))
+                    mock = MagicMock()
+                    mock.execute.return_value = MagicMock(data=payload)
+                    return mock
+                tbl.upsert.side_effect = _upsert
+            return tbl
+
+        sb.table.side_effect = _table
+        mock_get_sb.return_value = sb
+
+        brands = _ensure_quote_brand_substates("q-1")
+
+        assert brands == ["ABB", "Siemens"]
+        assert len(upsert_payloads) == 1
+        payload, kwargs = upsert_payloads[0]
+        assert {row["brand"] for row in payload} == {"ABB", "Siemens"}
+        assert all(row["substatus"] == "distributing" for row in payload)
+        assert kwargs.get("on_conflict") == "quote_id,brand"
+        assert kwargs.get("ignore_duplicates") is True
+
+    @patch("services.workflow_service.get_supabase")
+    def test_null_brand_normalized_to_empty_string(self, mock_get_sb):
+        """Migration 274 convention: NULL brand becomes '' so the PK is well-defined."""
+        sb = MagicMock()
+        upsert_payloads: list = []
+
+        def _table(name):
+            tbl = MagicMock()
+            if name == "quote_items":
+                tbl.select.return_value.eq.return_value.execute.return_value.data = [
+                    {"brand": None},
+                    {"brand": "ABB"},
+                ]
+            elif name == "quote_brand_substates":
+                def _upsert(payload, **kwargs):
+                    upsert_payloads.append(payload)
+                    mock = MagicMock()
+                    mock.execute.return_value = MagicMock(data=payload)
+                    return mock
+                tbl.upsert.side_effect = _upsert
+            return tbl
+
+        sb.table.side_effect = _table
+        mock_get_sb.return_value = sb
+
+        brands = _ensure_quote_brand_substates("q-1")
+
+        assert "" in brands
+        assert "ABB" in brands
+        payload = upsert_payloads[0]
+        brands_in_payload = {row["brand"] for row in payload}
+        assert "" in brands_in_payload
+        assert None not in brands_in_payload
+
+    @patch("services.workflow_service.get_supabase")
+    def test_no_items_returns_empty_no_upsert(self, mock_get_sb):
+        sb = MagicMock()
+        upsert_called = []
+
+        def _table(name):
+            tbl = MagicMock()
+            if name == "quote_items":
+                tbl.select.return_value.eq.return_value.execute.return_value.data = []
+            elif name == "quote_brand_substates":
+                tbl.upsert.side_effect = lambda *a, **kw: upsert_called.append(True) or MagicMock()
+            return tbl
+
+        sb.table.side_effect = _table
+        mock_get_sb.return_value = sb
+
+        brands = _ensure_quote_brand_substates("q-empty")
+
+        assert brands == []
+        assert upsert_called == []  # never tried to upsert empty payload
+
+    @patch("services.workflow_service.get_supabase")
+    def test_items_fetch_failure_returns_empty(self, mock_get_sb):
+        sb = MagicMock()
+
+        def _table(name):
+            tbl = MagicMock()
+            if name == "quote_items":
+                tbl.select.return_value.eq.return_value.execute.side_effect = Exception("db down")
+            return tbl
+
+        sb.table.side_effect = _table
+        mock_get_sb.return_value = sb
+
+        # Must not raise — failures swallowed so the parent transition can
+        # still log workflow_transitions and return success.
+        assert _ensure_quote_brand_substates("q-1") == []
+
+    @patch("services.workflow_service.get_supabase")
+    def test_upsert_failure_returns_empty(self, mock_get_sb):
+        sb = MagicMock()
+
+        def _table(name):
+            tbl = MagicMock()
+            if name == "quote_items":
+                tbl.select.return_value.eq.return_value.execute.return_value.data = [
+                    {"brand": "ABB"},
+                ]
+            elif name == "quote_brand_substates":
+                tbl.upsert.return_value.execute.side_effect = Exception("constraint")
+            return tbl
+
+        sb.table.side_effect = _table
+        mock_get_sb.return_value = sb
+
+        assert _ensure_quote_brand_substates("q-1") == []
