@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -9,6 +10,7 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
+import { CreateLocationDialog } from "./create-location-dialog";
 import { LocationsTable } from "./locations-table";
 import { useFilterNavigation } from "@/shared/lib/use-filter-navigation";
 import type { LocationListItem, LocationStats } from "../model/types";
@@ -22,6 +24,7 @@ interface Props {
   initialStatus?: string;
   initialType?: string;
   canEditType?: boolean;
+  canCreate?: boolean;
 }
 
 const STATUS_OPTIONS = [
@@ -48,6 +51,7 @@ export function LocationsPage({
   initialStatus = "",
   initialType = "",
   canEditType = false,
+  canCreate = false,
 }: Props) {
   const getStatusLabel = (v: string) =>
     STATUS_OPTIONS.find((o) => o.value === v)?.label ?? "Все статусы";
@@ -57,6 +61,7 @@ export function LocationsPage({
   const [statusLabel, setStatusLabel] = useState(getStatusLabel(initialStatus || "all"));
   const [typeLabel, setTypeLabel] = useState(getTypeLabel(initialType || "all"));
   const [searchValue, setSearchValue] = useState(initialSearch);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const { navigate } = useFilterNavigation();
 
@@ -157,6 +162,18 @@ export function LocationsPage({
             ))}
           </SelectContent>
         </Select>
+
+        {canCreate && (
+          <Button
+            size="sm"
+            className="ml-auto bg-accent text-white hover:bg-accent-hover"
+            onClick={() => setCreateDialogOpen(true)}
+            type="button"
+          >
+            <Plus size={16} />
+            Создать локацию
+          </Button>
+        )}
       </div>
 
       {/* Stats row */}
@@ -166,6 +183,13 @@ export function LocationsPage({
       </div>
 
       <LocationsTable locations={locations} canEditType={canEditType} />
+
+      {canCreate && (
+        <CreateLocationDialog
+          open={createDialogOpen}
+          onOpenChange={setCreateDialogOpen}
+        />
+      )}
     </div>
   );
 }

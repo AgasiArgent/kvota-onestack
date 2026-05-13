@@ -6,6 +6,7 @@ import {
   fetchLocationStats,
   fetchLocationCountries,
 } from "@/features/locations/api/server-queries";
+import { canCreateLocation } from "@/shared/lib/roles";
 
 interface Props {
   searchParams: Promise<{
@@ -54,6 +55,7 @@ export default async function LocationsRoute({ searchParams }: Props) {
     (r) =>
       r === "admin" || r === "head_of_logistics" || r === "head_of_customs",
   );
+  const canCreate = canCreateLocation(user.roles);
 
   return (
     <div>
@@ -67,6 +69,7 @@ export default async function LocationsRoute({ searchParams }: Props) {
         initialStatus={status}
         initialType={type}
         canEditType={canEditType}
+        canCreate={canCreate}
       />
     </div>
   );

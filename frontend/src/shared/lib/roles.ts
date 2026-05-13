@@ -257,3 +257,32 @@ const FINANCIALS_VISIBLE_ROLES = [
 export function shouldShowFinancials(roles: string[]): boolean {
   return roles.some((r) => FINANCIALS_VISIBLE_ROLES.includes(r));
 }
+
+/**
+ * Roles allowed to create rows in kvota.locations from the /locations page
+ * (Testing 2 row 13). Mirrors the page-level access set — every role that
+ * sees the registry can extend it.
+ *
+ * Sales / head_of_sales are intentionally excluded: they don't see the
+ * /locations page (redirected away by ALLOWED_ROLES in route handler), so
+ * granting them write access here would be moot.
+ */
+const LOCATION_CREATE_ROLES = [
+  "admin",
+  "top_manager",
+  "logistics",
+  "head_of_logistics",
+  "customs",
+  "head_of_customs",
+  "procurement",
+  "procurement_senior",
+  "head_of_procurement",
+];
+
+/**
+ * Returns true if the user may create a new location via the /locations
+ * page «Создать локацию» dialog.
+ */
+export function canCreateLocation(roles: string[]): boolean {
+  return roles.some((r) => LOCATION_CREATE_ROLES.includes(r));
+}
