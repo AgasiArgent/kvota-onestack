@@ -137,7 +137,7 @@ function QuoteInfoBlock({
             <span className="text-sm text-muted-foreground">{"\u2014"}</span>
           )}
         </InfoRow>
-        <InfoRow label="Контакт">
+        <InfoRow label="Контакт" dataField="contact_person_id">
           {quote.customer ? (
             canEditCustomerFields ? (
               <ContactDropdownSelect
