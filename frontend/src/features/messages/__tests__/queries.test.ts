@@ -247,6 +247,33 @@ describe("fetchAllChats — customs tier (Batch M row 12)", () => {
     ).toBeUndefined();
   });
 
+  it("head_of_customs + head_of_logistics dual-hat lands in broad fallback (not customs-stage)", async () => {
+    // sidorov.a РОЛ pattern: head_of_logistics is in BROAD_QUOTE_ACCESS_ROLES,
+    // so the dual-hat user lands in broad fallback — NOT customs-stage-only.
+    // This is intentional: a manager overseeing both stages sees chats org-wide.
+    const { fetchAllChats } = await import("../queries");
+
+    await fetchAllChats(
+      makeUser(["head_of_customs", "head_of_logistics"]),
+      "all"
+    );
+
+    const inFilter = pickInFilter(
+      fakeSupabase.quotesFilters,
+      "workflow_status"
+    );
+    expect(
+      inFilter,
+      "customs-stage filter must be skipped when head_of_logistics broadens access"
+    ).toBeUndefined();
+
+    const orFilter = pickOrFilter(fakeSupabase.quotesFilters);
+    expect(
+      orFilter,
+      "assigned-items OR clause must be skipped — head_of_logistics is broad-access"
+    ).toBeUndefined();
+  });
+
   it("pure `customs` user with matching quotes: returns those chats", async () => {
     // Sanity check: with the workflow_status filter in place, the supabase
     // mock returns whatever quote rows we configure — the function must
