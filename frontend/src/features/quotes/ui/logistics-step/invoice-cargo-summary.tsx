@@ -24,11 +24,15 @@ import { cn } from "@/lib/utils";
  * Closes:
  *   - РОЛ Тест 07 #3.3 (origin + dimensions, original release).
  *   - МОЛ Тест row 14 (destination + cargo digest extension).
+ *   - Testing 2 row 14 v3 (cargo items as a vertical bullet list).
  *
  * Schema gap (deferred): kvota.invoices does NOT have a
  * `transit_via_turkey` flag or a `pickup_address` column. Those
  * tester-requested fields are tracked separately and require a
- * migration before they can be rendered.
+ * migration before they can be rendered. Per-position dimensions on
+ * `quote_items` do not exist either, so when invoice-level габариты
+ * are NULL there is no derived fallback to show — the «Габариты» row
+ * is simply omitted.
  */
 
 interface Destination {
@@ -81,28 +85,44 @@ function formatDimensions(invoice: QuoteInvoiceRow): string | null {
   return `${fmt(length_m)} × ${fmt(width_m)} × ${fmt(height_m)} м`;
 }
 
-function formatCargoDigest(items: readonly QuoteItemRow[]): string | null {
+function renderCargoDigest(items: readonly QuoteItemRow[]): React.ReactNode {
   if (items.length === 0) return null;
   const names = items
     .map((i) => i.product_name?.trim())
     .filter((s): s is string => !!s);
-  // Testing 2 row 14 v2: testers (РОЛ/МОЛ/МВЭД) explicitly asked to see
-  // ALL item names — the previous "+N" overflow hid most of the cargo.
-  // The panel uses `flex flex-wrap`, so a long comma-separated list
-  // wraps naturally instead of being truncated.
-  const joined = names.join(", ");
-  const count = `${items.length} ${pluralPositions(items.length)}`;
-  return joined ? `${count}: ${joined}` : count;
+  const countLabel = `${items.length} ${pluralPositions(items.length)}`;
+  // Testing 2 row 14 v3: testers (РОЛ/МОЛ/МВЭД) asked for items as a vertical
+  // bullet list — comma-separated wrapping was hard to read once the cargo
+  // grew past 3-4 items. Single-text count stays when product names are
+  // missing.
+  if (names.length === 0) return countLabel;
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span>{countLabel}:</span>
+      <ul className="list-disc pl-5 text-text">
+        {names.map((n, idx) => (
+          <li key={`${idx}-${n}`}>{n}</li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 interface Field {
   icon: React.ComponentType<{
     size?: number;
     strokeWidth?: number;
+    className?: string;
     "aria-hidden"?: boolean;
   }>;
   label: string;
-  value: string;
+  value: React.ReactNode;
+  /**
+   * When true, the field's value is a block-level element (e.g. cargo
+   * bullet list). The row uses `items-start` so the icon/label sit at
+   * the top instead of vertically centered against a tall block.
+   */
+  block?: boolean;
 }
 
 function buildFields(
@@ -156,8 +176,14 @@ function buildFields(
     });
   }
 
-  const digest = formatCargoDigest(invoiceItems);
-  if (digest) out.push({ icon: Package, label: "Груз", value: digest });
+  const digest = renderCargoDigest(invoiceItems);
+  if (digest)
+    out.push({
+      icon: Package,
+      label: "Груз",
+      value: digest,
+      block: invoiceItems.length > 0,
+    });
 
   return out;
 }
@@ -196,10 +222,25 @@ export function InvoiceCargoSummary({
         className,
       )}
     >
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
+      <div className="flex flex-wrap items-start gap-x-5 gap-y-2 text-xs">
         {fields.map((f) => (
-          <div key={f.label} className="inline-flex items-center gap-1.5">
-            <f.icon size={12} strokeWidth={2} aria-hidden />
+          <div
+            key={f.label}
+            className={cn(
+              "gap-1.5",
+              f.block
+                ? "flex items-start"
+                : "inline-flex items-center",
+            )}
+          >
+            <f.icon
+              size={12}
+              strokeWidth={2}
+              aria-hidden
+              // Nudge the icon down a hair when it sits beside a block
+              // value so it visually aligns with the count label.
+              className={f.block ? "mt-0.5 shrink-0" : undefined}
+            />
             <span className="text-text-muted">{f.label}:</span>
             <span className="font-medium text-text">{f.value}</span>
           </div>
