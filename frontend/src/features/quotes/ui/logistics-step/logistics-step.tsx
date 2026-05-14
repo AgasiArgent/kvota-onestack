@@ -174,6 +174,13 @@ export function LogisticsStep({
   const [loading, setLoading] = useState(true);
   const [completing, startCompleting] = useTransition();
   const router = useRouter();
+  // Refresh tick — incremented by RouteConstructor after each successful
+  // server mutation. Drives the Supabase data reload below; without it
+  // `router.refresh()` re-runs Server Components but never re-fires this
+  // client-side useEffect (its deps don't change), so newly created /
+  // updated / deleted segments only appeared after a hard reload
+  // (Testing 2 row 30 — "сегмент добавляется только после обновления").
+  const [refreshTick, setRefreshTick] = useState(0);
 
   const canCompleteLogistics =
     userRoles?.some((r) => COMPLETE_LOGISTICS_ROLES.has(r)) ?? false;
@@ -450,7 +457,7 @@ export function LogisticsStep({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- invoiceIdsKey is stable when invoice IDs unchanged; `invoices` ref changes every parent render
-  }, [invoiceIdsKey, quote.organization_id]);
+  }, [invoiceIdsKey, quote.organization_id, refreshTick]);
 
   const tabItems: InvoiceTabItem[] = useMemo(
     () =>
@@ -551,6 +558,7 @@ export function LogisticsStep({
             }}
             displayCurrency={quote.currency ?? "RUB"}
             ratesToRub={ratesToRub}
+            onMutation={() => setRefreshTick((t) => t + 1)}
           />
         </>
       ) : null}

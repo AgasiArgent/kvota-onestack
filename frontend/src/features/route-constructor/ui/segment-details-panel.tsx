@@ -60,6 +60,12 @@ interface SegmentDetailsPanelProps {
   locations: LocationOption[];
   revalidatePath: string;
   onLocalUpdate?: (id: string, patch: Partial<LogisticsSegment>) => void;
+  /**
+   * Bubbles up to the parent (LogisticsStep) so the client-side Supabase
+   * loader can re-fetch after server mutations. router.refresh() alone
+   * does not re-run useEffects whose deps haven't changed (Testing 2 row 30).
+   */
+  onMutation?: () => void;
   disabled?: boolean;
 }
 
@@ -68,6 +74,7 @@ export function SegmentDetailsPanel({
   locations,
   revalidatePath,
   onLocalUpdate,
+  onMutation,
   disabled,
 }: SegmentDetailsPanelProps) {
   if (!segment) {
@@ -111,6 +118,7 @@ export function SegmentDetailsPanel({
           locations={locations}
           revalidatePath={revalidatePath}
           onLocalUpdate={onLocalUpdate}
+          onMutation={onMutation}
           disabled={disabled}
         />
 
@@ -118,6 +126,7 @@ export function SegmentDetailsPanel({
           segmentId={segment.id}
           expenses={segment.expenses}
           revalidatePath={revalidatePath}
+          onMutation={onMutation}
           disabled={disabled}
         />
       </div>
@@ -134,6 +143,7 @@ interface SegmentFieldsProps {
   locations: LocationOption[];
   revalidatePath: string;
   onLocalUpdate?: (id: string, patch: Partial<LogisticsSegment>) => void;
+  onMutation?: () => void;
   disabled?: boolean;
 }
 
@@ -142,6 +152,7 @@ function SegmentFields({
   locations,
   revalidatePath,
   onLocalUpdate,
+  onMutation,
   disabled,
 }: SegmentFieldsProps) {
   const [label, setLabel] = useState(segment.label ?? "");
@@ -185,6 +196,7 @@ function SegmentFields({
           patch,
           revalidate_path: revalidatePath,
         });
+        onMutation?.();
       } catch (err) {
         toast.error(
           err instanceof Error ? err.message : "Не удалось сохранить",
@@ -431,6 +443,7 @@ interface SegmentExpensesListProps {
   segmentId: string;
   expenses: LogisticsSegmentExpense[];
   revalidatePath: string;
+  onMutation?: () => void;
   disabled?: boolean;
 }
 
@@ -438,6 +451,7 @@ function SegmentExpensesList({
   segmentId,
   expenses,
   revalidatePath,
+  onMutation,
   disabled,
 }: SegmentExpensesListProps) {
   const [label, setLabel] = useState("");
@@ -467,6 +481,7 @@ function SegmentExpensesList({
         });
         setLabel("");
         setCost("");
+        onMutation?.();
         // Keep currency selection between adds — common case is several
         // expenses in the same currency for one segment.
       } catch (err) {
@@ -484,6 +499,7 @@ function SegmentExpensesList({
           expense_id: expenseId,
           revalidate_path: revalidatePath,
         });
+        onMutation?.();
       } catch (err) {
         toast.error(
           err instanceof Error ? err.message : "Не удалось удалить расход",

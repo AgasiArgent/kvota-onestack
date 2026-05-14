@@ -1,22 +1,34 @@
 "use client";
 
 import { ChevronRight, Clock } from "lucide-react";
-import type { LogisticsSegment } from "@/entities/logistics-segment";
+import type { LogisticsSegment, SegmentCurrency } from "@/entities/logistics-segment";
 import { cn } from "@/lib/utils";
 
 /**
  * SegmentEdge — the visual connector between two SegmentNodes in the
- * timeline. Shows the segment's main cost (₽), transit days and a count
- * of extra expenses (pill).
+ * timeline. Shows the segment's main cost (in the segment's own currency,
+ * not always RUB — Testing 2 row 30), transit days and a count of extra
+ * expenses (pill).
  *
  * Read-only renderer; interaction lives on the parent timeline row.
  */
 
-const rubFmt = new Intl.NumberFormat("ru-RU", {
-  style: "currency",
-  currency: "RUB",
-  maximumFractionDigits: 0,
-});
+// Cache formatters per currency code — Intl.NumberFormat construction is
+// non-trivial and would otherwise run on every render.
+const CURRENCY_FMT_CACHE = new Map<string, Intl.NumberFormat>();
+
+function formatSegmentCost(amount: number, code: SegmentCurrency): string {
+  let fmt = CURRENCY_FMT_CACHE.get(code);
+  if (!fmt) {
+    fmt = new Intl.NumberFormat("ru-RU", {
+      style: "currency",
+      currency: code,
+      maximumFractionDigits: 0,
+    });
+    CURRENCY_FMT_CACHE.set(code, fmt);
+  }
+  return fmt.format(amount);
+}
 
 interface SegmentEdgeProps {
   segment: LogisticsSegment;
@@ -42,7 +54,9 @@ export function SegmentEdge({ segment, className }: SegmentEdgeProps) {
           hasCost ? "text-text" : "text-text-subtle",
         )}
       >
-        {hasCost ? rubFmt.format(segment.mainCostRub) : "—"}
+        {hasCost
+          ? formatSegmentCost(segment.mainCostRub, segment.currencyCode)
+          : "—"}
       </span>
       {days > 0 && (
         <span className="inline-flex items-center gap-1">

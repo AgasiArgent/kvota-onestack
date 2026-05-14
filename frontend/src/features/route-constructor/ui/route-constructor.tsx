@@ -56,6 +56,14 @@ interface RouteConstructorProps {
   displayCurrency?: string;
   /** Foreign-currency → RUB rate map for FX conversion. */
   ratesToRub?: FxRateMap;
+  /**
+   * Called after a successful server mutation (create/update/delete/
+   * reorder/apply-template). The parent typically increments a tick that
+   * drives the Supabase data reload, since `router.refresh()` alone does
+   * not re-run client-side useEffects whose deps haven't changed
+   * (Testing 2 row 30 — "сегмент добавляется только после обновления").
+   */
+  onMutation?: () => void;
 }
 
 export function RouteConstructor({
@@ -68,6 +76,7 @@ export function RouteConstructor({
   pickupHint,
   displayCurrency,
   ratesToRub,
+  onMutation,
 }: RouteConstructorProps) {
   const router = useRouter();
   const [segments, setSegments] = useState<LogisticsSegment[]>(initialSegments);
@@ -116,6 +125,7 @@ export function RouteConstructor({
         setSelectedId(res.segment_id);
       }
       router.refresh();
+      onMutation?.();
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Не удалось добавить сегмент",
@@ -138,6 +148,7 @@ export function RouteConstructor({
       try {
         await deleteSegment({ segment_id: id, revalidate_path: revalidatePath });
         router.refresh();
+        onMutation?.();
       } catch (err) {
         // Rollback
         setSegments(before);
@@ -164,6 +175,7 @@ export function RouteConstructor({
           });
         }
         router.refresh();
+        onMutation?.();
       } catch (err) {
         setSegments(before);
         toast.error(
@@ -183,6 +195,7 @@ export function RouteConstructor({
         });
         toast.success(`Шаблон «${template.name}» применён`);
         router.refresh();
+        onMutation?.();
       } catch (err) {
         toast.error(
           err instanceof Error ? err.message : "Не удалось применить шаблон",
@@ -236,6 +249,7 @@ export function RouteConstructor({
           locations={locations}
           revalidatePath={revalidatePath}
           onLocalUpdate={handleLocalUpdate}
+          onMutation={onMutation}
           disabled={disabled || isPending}
         />
       </div>
@@ -246,6 +260,7 @@ export function RouteConstructor({
         locations={locations}
         onSubmit={handleCreateSegment}
         pickupHint={pickupHint}
+        isFirstSegment={segments.length === 0}
       />
     </div>
   );
