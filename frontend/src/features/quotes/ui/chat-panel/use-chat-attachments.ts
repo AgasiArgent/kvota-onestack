@@ -29,12 +29,38 @@ const ALLOWED_MIME_PREFIXES = [
   "application/msword",
   "application/vnd.openxmlformats-officedocument",
   "application/vnd.ms-excel",
+  // Some browsers/OSes report .xls as application/excel or x-msexcel
+  "application/excel",
+  "application/x-excel",
+  "application/x-msexcel",
   "application/zip",
 ] as const;
 
-function isAllowedMime(mime: string): boolean {
-  if (!mime) return false;
-  return ALLOWED_MIME_PREFIXES.some((prefix) => mime.startsWith(prefix));
+// Extension allowlist — used when file.type is empty or non-standard
+// (common on Windows for older Office formats like .xls).
+const ALLOWED_EXTENSIONS = [
+  "pdf",
+  "jpg",
+  "jpeg",
+  "png",
+  "webp",
+  "gif",
+  "doc",
+  "docx",
+  "xls",
+  "xlsx",
+  "zip",
+] as const;
+
+function isAllowedFile(file: File): boolean {
+  const mime = (file.type || "").toLowerCase();
+  if (mime && ALLOWED_MIME_PREFIXES.some((prefix) => mime.startsWith(prefix))) {
+    return true;
+  }
+  // Fallback: check extension. Catches .xls files reported with empty or
+  // unusual MIME types by some browsers.
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+  return (ALLOWED_EXTENSIONS as readonly string[]).includes(ext);
 }
 
 function formatSizeMb(bytes: number): string {
@@ -85,7 +111,7 @@ export function useChatAttachments({
           );
           continue;
         }
-        if (!isAllowedMime(file.type)) {
+        if (!isAllowedFile(file)) {
           toast.error(`${file.name}: неподдерживаемый формат (${file.type || "unknown"})`);
           continue;
         }

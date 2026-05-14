@@ -334,7 +334,10 @@ export function InvoiceCreateModal({
 
   return (
     <Dialog open={open} onOpenChange={() => {}}>
-      <DialogContent className="sm:max-w-lg z-[200]" showCloseButton={false}>
+      <DialogContent
+        className="sm:max-w-lg z-[200] overflow-x-hidden"
+        showCloseButton={false}
+      >
         <DialogHeader>
           <DialogTitle>Создать КП поставщику</DialogTitle>
           <DialogDescription>
@@ -657,19 +660,19 @@ export function InvoiceCreateModal({
               <Label>
                 Назначаемые позиции ({selectedItems.length})
               </Label>
-              <div className="max-h-36 overflow-y-auto rounded-md border border-input bg-muted/30 p-2 space-y-1">
+              <div className="max-h-36 overflow-y-auto overflow-x-hidden rounded-md border border-input bg-muted/30 p-2 space-y-1">
                 {selectedItems.map((item) => (
                   <div
                     key={item.id}
-                    className="text-xs flex items-center gap-2"
+                    className="text-xs flex items-center gap-2 min-w-0"
                   >
-                    <span className="font-medium truncate max-w-20">
+                    <span className="font-medium truncate max-w-20 shrink-0">
                       {item.brand ?? "\u2014"}
                     </span>
-                    <span className="font-mono text-muted-foreground truncate max-w-24">
+                    <span className="font-mono text-muted-foreground truncate max-w-24 shrink-0">
                       {item.product_code ?? "\u2014"}
                     </span>
-                    <span className="truncate flex-1">
+                    <span className="truncate flex-1 min-w-0">
                       {item.product_name}
                     </span>
                     <span className="font-mono shrink-0">

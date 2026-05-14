@@ -74,3 +74,25 @@ export function extractErrorMessage(err: unknown): string | null {
 function normalizeWhitespace(s: string): string {
   return s.replace(/\s+/g, " ").trim();
 }
+
+/**
+ * Detect the Next.js "Server Action was not found on the server" error.
+ *
+ * This happens when a deploy invalidates the action IDs while the user
+ * still has an old page in memory — the browser POSTs to an action ID
+ * the new server doesn't know. Refreshing the page reloads the new IDs.
+ *
+ * Surface as a friendly "обновите страницу" toast instead of a raw error.
+ */
+export function isStaleServerActionError(err: unknown): boolean {
+  const msg = extractErrorMessage(err);
+  if (!msg) return false;
+  return (
+    msg.includes("was not found on the server") ||
+    /Server Action .* was not found/i.test(msg)
+  );
+}
+
+/** Standard Russian message for stale Server Action errors. */
+export const STALE_SERVER_ACTION_MESSAGE =
+  "Страница устарела — обновите её (Ctrl+Shift+R) и попробуйте снова.";
