@@ -38,19 +38,34 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/shared/lib/supabase/client", () => ({
-  createClient: () => ({
-    from: () => ({
-      select: () => ({
-        eq: () => ({
-          order: () => ({ data: [], error: null }),
-          maybeSingle: () => Promise.resolve({ data: null, error: null }),
+  createClient: () => {
+    // `.order()` may be called once or chained twice (e.g. supplier_contacts
+    // ordered by is_primary then name — Testing 2 row 25). The returned
+    // object is itself a thenable AND accepts another `.order()` — so both
+    // `await q.order(...)` and `await q.order(...).order(...)` resolve to
+    // `{data: [], error: null}`.
+    interface Orderable {
+      order: () => Orderable;
+      then: (resolve: (v: { data: unknown[]; error: null }) => unknown) => unknown;
+    }
+    const makeOrderable = (): Orderable => ({
+      order: () => makeOrderable(),
+      then: (resolve) => resolve({ data: [], error: null }),
+    });
+    return {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            order: () => makeOrderable(),
+            maybeSingle: () => Promise.resolve({ data: null, error: null }),
+          }),
+          in: () => ({ data: [], error: null }),
         }),
-        in: () => ({ data: [], error: null }),
+        update: () => ({ eq: async () => ({ error: null }) }),
+        delete: () => ({ in: async () => ({ error: null }) }),
       }),
-      update: () => ({ eq: async () => ({ error: null }) }),
-      delete: () => ({ in: async () => ({ error: null }) }),
-    }),
-  }),
+    };
+  },
 }));
 
 vi.mock("@/entities/quote/mutations", async () => {

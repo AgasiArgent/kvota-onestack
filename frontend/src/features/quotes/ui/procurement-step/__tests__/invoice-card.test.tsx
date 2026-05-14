@@ -28,18 +28,31 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/shared/lib/supabase/client", () => ({
-  createClient: () => ({
-    from: () => ({
-      select: () => ({
-        eq: () => ({
-          order: () => ({
-            select: async () => ({ data: [], error: null }),
+  createClient: () => {
+    // Testing 2 row 25 — supplier_contacts fetch uses `.order().order()`.
+    // The orderable must be both thenable and re-chainable so old call sites
+    // (single `.order()` awaited) keep working alongside the new one.
+    interface Orderable {
+      order: () => Orderable;
+      select: () => Promise<{ data: unknown[]; error: null }>;
+      then: (resolve: (v: { data: unknown[]; error: null }) => unknown) => unknown;
+    }
+    const makeOrderable = (): Orderable => ({
+      order: () => makeOrderable(),
+      select: async () => ({ data: [], error: null }),
+      then: (resolve) => resolve({ data: [], error: null }),
+    });
+    return {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            order: () => makeOrderable(),
           }),
+          in: async () => ({ data: [], error: null }),
         }),
-        in: async () => ({ data: [], error: null }),
       }),
-    }),
-  }),
+    };
+  },
 }));
 
 import { InvoiceCard } from "../invoice-card";
@@ -404,18 +417,31 @@ describe("InvoiceCard — passes invoice_items to ProcurementItemsEditor (caller
       }),
     }));
     vi.doMock("@/shared/lib/supabase/client", () => ({
-      createClient: () => ({
-        from: () => ({
-          select: () => ({
-            eq: () => ({
-              order: () => ({
-                select: async () => ({ data: [], error: null }),
+      createClient: () => {
+        // Same shape as the top-of-file mock — see comment there.
+        interface Orderable {
+          order: () => Orderable;
+          select: () => Promise<{ data: unknown[]; error: null }>;
+          then: (
+            resolve: (v: { data: unknown[]; error: null }) => unknown,
+          ) => unknown;
+        }
+        const makeOrderable = (): Orderable => ({
+          order: () => makeOrderable(),
+          select: async () => ({ data: [], error: null }),
+          then: (resolve) => resolve({ data: [], error: null }),
+        });
+        return {
+          from: () => ({
+            select: () => ({
+              eq: () => ({
+                order: () => makeOrderable(),
               }),
+              in: async () => ({ data: [], error: null }),
             }),
-            in: async () => ({ data: [], error: null }),
           }),
-        }),
-      }),
+        };
+      },
     }));
 
     const mod = await import("../invoice-card");
