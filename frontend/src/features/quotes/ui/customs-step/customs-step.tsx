@@ -11,6 +11,7 @@ import type {
 } from "@/entities/quote/queries";
 import { createClient } from "@/shared/lib/supabase/client";
 import { ALTA_FEATURES_ENABLED } from "@/shared/lib/feature-flags";
+import { extractErrorMessage } from "@/shared/lib/errors";
 import {
   AutofillBanner,
   type CustomsAutofillSuggestion,
@@ -404,8 +405,13 @@ export function CustomsStep({
       toast.success("Таможня завершена");
       router.refresh();
     } catch (err) {
+      // Testing 2 row 11 — surface the server-side 422 reason
+      // (e.g. «Customs already completed», «Cannot complete customs:
+      // N items missing HS code») via toast. The pre-fix path used a
+      // raw `err instanceof Error` check which silently masked
+      // Supabase / api-first envelope shapes, producing a no-op click.
       toast.error(
-        err instanceof Error ? err.message : "Не удалось завершить таможню"
+        extractErrorMessage(err) ?? "Не удалось завершить таможню",
       );
     } finally {
       setCompleting(false);
@@ -420,7 +426,7 @@ export function CustomsStep({
       router.refresh();
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Не удалось пропустить таможню"
+        extractErrorMessage(err) ?? "Не удалось пропустить таможню",
       );
     } finally {
       setSkipping(false);
@@ -525,6 +531,7 @@ export function CustomsStep({
         completing={completing}
         skipping={skipping}
         canSkipCustoms={canSkipCustoms}
+        customsCompletedAt={quote.customs_completed_at ?? null}
       />
 
       <div className="p-6 space-y-4">

@@ -23,6 +23,15 @@ interface CustomsActionBarProps {
   completing?: boolean;
   skipping?: boolean;
   canSkipCustoms?: boolean;
+  /**
+   * Timestamp when customs was already marked complete for this quote.
+   * Non-null means the server will reject another `complete_customs`
+   * action with HTTP 422 «Customs already completed». We disable the
+   * button up-front so the user never sees the silent-failure path
+   * (Testing 2 row 11). Mirrors the per-quote gate enforced by
+   * `services/workflow_service.complete_customs`.
+   */
+  customsCompletedAt?: string | null;
 }
 
 function itemDisplayName(extras: ItemExtras): string {
@@ -49,7 +58,12 @@ function formatDisabledReason(
   missingNames: string[],
   completing: boolean,
   skipping: boolean,
+  alreadyCompleted: boolean,
 ): string | null {
+  // Already-completed gate takes precedence — the server rejects any
+  // further `complete_customs` action with HTTP 422, and we want a
+  // self-explanatory tooltip instead of a silent click (Testing 2 row 11).
+  if (alreadyCompleted) return "Таможня по этому КП уже завершена.";
   if (completing) return "Завершение в процессе…";
   if (skipping) return "Пропуск в процессе…";
   if (totalItems === 0) {
@@ -72,6 +86,7 @@ export function CustomsActionBar({
   completing = false,
   skipping = false,
   canSkipCustoms = false,
+  customsCompletedAt = null,
 }: CustomsActionBarProps) {
   const totalItems = items.length;
   const itemsWithHsCode = items.filter((item) => {
@@ -83,16 +98,27 @@ export function CustomsActionBar({
     return extras.customs_duty != null;
   }).length;
 
+  const alreadyCompleted = Boolean(customsCompletedAt);
   const allHaveHsCode = totalItems > 0 && itemsWithHsCode === totalItems;
-  const completeDisabled = !allHaveHsCode || completing || skipping;
+  const completeDisabled =
+    alreadyCompleted || !allHaveHsCode || completing || skipping;
 
   // Mirrors the LogisticsActionBar tooltip pattern (PR #120) — closes
   // probe finding #4 from the logistics-tab UX session: previously the
   // disabled "Таможня завершена" button gave no explanation of which
   // items were missing ТН ВЭД codes. Now the tooltip lists the first 5.
+  // Testing 2 row 11 extends the same tooltip with the "already
+  // completed" branch so the silent 422 path is replaced by a visible
+  // disabled state.
   const missingNames = findMissingHsCode(items);
   const disabledReason = completeDisabled
-    ? formatDisabledReason(totalItems, missingNames, completing, skipping)
+    ? formatDisabledReason(
+        totalItems,
+        missingNames,
+        completing,
+        skipping,
+        alreadyCompleted,
+      )
     : null;
 
   const completeButton = (
