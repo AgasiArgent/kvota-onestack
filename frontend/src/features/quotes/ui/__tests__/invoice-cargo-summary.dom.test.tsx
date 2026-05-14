@@ -251,9 +251,10 @@ describe("InvoiceCargoSummary (РОЛ Тест 07 #3.3)", () => {
     expect(screen.queryByText("Куда:")).toBeNull();
   });
 
-  it("renders cargo item count and ALL product names (Testing 2 row 14 v2)", () => {
-    // Testers (РОЛ/МОЛ/МВЭД) require every item to be visible —
-    // no «+N» overflow hint. The flex-wrap container handles long lists.
+  it("renders cargo item count and ALL product names as a bullet list (Testing 2 row 14 v3)", () => {
+    // Testers (РОЛ/МОЛ/МВЭД) require every item to be visible AND laid
+    // out in столбик — comma-separated wrapping was hard to read once
+    // the cargo grew past 3-4 items.
     const items: QuoteItemRow[] = [
       makeItem({
         id: "i1",
@@ -277,7 +278,7 @@ describe("InvoiceCargoSummary (РОЛ Тест 07 #3.3)", () => {
         product_name: "Other invoice item",
       }),
     ];
-    render(
+    const { container } = render(
       <InvoiceCargoSummary
         invoice={makeInvoice({ pickup_country: "Испания" })}
         items={items}
@@ -285,15 +286,25 @@ describe("InvoiceCargoSummary (РОЛ Тест 07 #3.3)", () => {
     );
     expect(screen.getByText("Груз:")).toBeTruthy();
     // Count is 3 (one item is on a different invoice and is excluded).
-    const digest = screen.getByText(
-      /3 позиции: Шайбы 100шт, Трубка для масла, 2 метра, ЗИП Комплект/,
+    expect(screen.getByText("3 позиции:")).toBeTruthy();
+    // Items render as <li> elements inside a single <ul>.
+    const ul = container.querySelector("ul");
+    expect(ul).not.toBeNull();
+    const liTexts = Array.from(ul!.querySelectorAll("li")).map(
+      (li) => li.textContent ?? "",
     );
-    expect(digest).toBeTruthy();
+    expect(liTexts).toEqual([
+      "Шайбы 100шт",
+      "Трубка для масла, 2 метра",
+      "ЗИП Комплект",
+    ]);
+    // Item on the other invoice must NOT appear in the cargo list.
+    expect(liTexts).not.toContain("Other invoice item");
     // No "+N" overflow tail — every cargo item must be visible.
-    expect(digest.textContent ?? "").not.toMatch(/\+\d/);
+    expect(ul!.textContent ?? "").not.toMatch(/\+\d/);
   });
 
-  it("shows every product name when the invoice has 5+ items (no truncation)", () => {
+  it("shows every product name as <li> when the invoice has 5+ items", () => {
     const names = [
       "Кабель силовой 10м",
       "Разъём BNC",
@@ -308,23 +319,22 @@ describe("InvoiceCargoSummary (РОЛ Тест 07 #3.3)", () => {
         product_name: n,
       }),
     );
-    render(
+    const { container } = render(
       <InvoiceCargoSummary
         invoice={makeInvoice({ pickup_country: "Россия" })}
         items={items}
       />,
     );
     expect(screen.getByText("Груз:")).toBeTruthy();
-    const digest = screen.getByText(
-      (content) =>
-        content.startsWith("5 позиций:") &&
-        names.every((n) => content.includes(n)),
+    expect(screen.getByText("5 позиций:")).toBeTruthy();
+    // Every product name appears in document order, one per <li>.
+    const ul = container.querySelector("ul");
+    expect(ul).not.toBeNull();
+    const liTexts = Array.from(ul!.querySelectorAll("li")).map(
+      (li) => li.textContent ?? "",
     );
-    expect(digest).toBeTruthy();
-    // Every product name appears in document order, comma-separated.
-    const text = digest.textContent ?? "";
-    expect(text).toContain(`5 позиций: ${names.join(", ")}`);
-    expect(text).not.toMatch(/\+\d/);
+    expect(liTexts).toEqual(names);
+    expect(ul!.textContent ?? "").not.toMatch(/\+\d/);
   });
 
   it("does not render cargo digest when no items belong to this invoice", () => {
