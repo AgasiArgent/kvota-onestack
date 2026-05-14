@@ -244,11 +244,12 @@ export function InvoiceCreateModal({
     const e: Record<string, string> = {};
     if (!supplierId) e.supplier = "Выберите поставщика";
     if (!buyerCompanyId) e.buyer = "Выберите компанию-покупателя";
-    // Testing 2 row 21: both new fields are mandatory before КПП creation.
-    // pickup_address is free-text (street address driver visits), distinct
-    // from pickup_city. supplier_contact_id is the named person on the
-    // supplier side responsible for this КПП.
-    if (!pickupAddress.trim()) e.pickup_address = "Укажите адрес забора груза";
+    // Testing 2 row 21: supplier_contact_id is the named person on the
+    // supplier side responsible for this КПП — still mandatory.
+    // Testing 2 row 25 (FB 2026-05-14): pickup_address dropped to optional
+    // per tester request — the driver address is often filled later by
+    // procurement once the supplier confirms staging warehouse. The input
+    // stays in the modal but no longer blocks submit when empty.
     if (!supplierContactId) {
       e.supplier_contact = supplierId
         ? supplierContacts.length === 0
@@ -430,9 +431,7 @@ export function InvoiceCreateModal({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="invoice-pickup-address">
-              Адрес забора груза <span className="text-destructive">*</span>
-            </Label>
+            <Label htmlFor="invoice-pickup-address">Адрес забора груза</Label>
             <Input
               id="invoice-pickup-address"
               type="text"
