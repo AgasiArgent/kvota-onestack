@@ -160,7 +160,7 @@ export interface FormState {
   duty_sign: DutySign;
 }
 
-function stateFromItem(item: QuoteItemRow): FormState {
+export function stateFromItem(item: QuoteItemRow): FormState {
   const extras = ext<CustomsExtras>(item);
   const dutyPerKg = extras.customs_duty_per_kg ?? null;
   const duty = extras.customs_duty ?? null;
@@ -172,8 +172,17 @@ function stateFromItem(item: QuoteItemRow): FormState {
 
   // REQ-4: re-hydrate Manual mode from snapshot when present so the user
   // sees what they entered last time. Falls back to Auto / simple defaults.
+  //
+  // Bug fix (Testing 2 rows 8/9): when ALTA_FEATURES_ENABLED=false the
+  // Auto/Manual toggle is hidden and the Manual UI is always rendered
+  // (see DutyRateInput: `isManual = !showAutoToggle || form.duty_manual_mode`).
+  // The seed state must mirror that derivation so `buildUpdates` takes the
+  // Manual branch on save — otherwise the user interacts with the Manual
+  // slots but the save handler reads the empty Auto-mode `duty_value` and
+  // silently drops the entered mode/value/unit.
   const manualPayload = extras.customs_manual_rate_payload ?? null;
-  const manualOverride = Boolean(extras.customs_manual_override);
+  const manualOverride =
+    Boolean(extras.customs_manual_override) || !ALTA_FEATURES_ENABLED;
   const initialUnit1: DutyUnit =
     (manualPayload?.value_1_unit as DutyUnit | undefined) ??
     (mode === "perKg" ? "EUR/kg" : "percent");
