@@ -317,6 +317,54 @@ export function buildSpecialDutyTooltip(variant: SpecialDutyVariant): string {
 }
 
 /**
+ * Pure merge helper for the inline «Пошлина» (`customs_duty_composite`)
+ * edit path. Centralizes the rules:
+ *
+ *   1. Re-emit the value under `customs_duty` or `customs_duty_per_kg`
+ *      based on the row's current storage mode (which slot is non-null).
+ *   2. Always null the other slot so the row can only carry one duty
+ *      value at a time.
+ *   3. Testing 2 row 26 — if the row is currently in Manual override
+ *      mode (a previously-saved combined/specific rate), clear the
+ *      Manual snapshot so the renderer falls back to the Auto branch.
+ *      Without this, the formula chip + «M» badge keeps painting the
+ *      stale `customs_manual_rate_payload` and the user perceives
+ *      «ячейка не редактируется».
+ *
+ * Exported so the regression test covers the merge rules directly without
+ * having to mount Handsontable in jsdom.
+ */
+export interface DutyCompositeRowState {
+  customs_duty_per_kg: number | null;
+  customs_manual_override: boolean;
+}
+
+export interface DutyCompositeUpdates {
+  customs_duty: number | null;
+  customs_duty_per_kg: number | null;
+  customs_manual_override?: false;
+  customs_manual_rate_payload?: null;
+}
+
+export function buildDutyCompositeUpdates(
+  rawValue: unknown,
+  rowState: DutyCompositeRowState,
+): DutyCompositeUpdates {
+  const parsed = parseFloat(String(rawValue));
+  const num = Number.isNaN(parsed) ? null : parsed;
+  const mode: DutyMode = rowState.customs_duty_per_kg != null ? "perKg" : "pct";
+  const updates: DutyCompositeUpdates =
+    mode === "perKg"
+      ? { customs_duty: null, customs_duty_per_kg: num }
+      : { customs_duty: num, customs_duty_per_kg: null };
+  if (rowState.customs_manual_override) {
+    updates.customs_manual_override = false;
+    updates.customs_manual_rate_payload = null;
+  }
+  return updates;
+}
+
+/**
  * Logical column keys (order matches HoT column array below).
  *
  * Exported (via {@link CUSTOMS_AVAILABLE_COLUMNS}) so the table-views
@@ -1048,29 +1096,47 @@ export function CustomsHandsontable({
 
         for (const [field, val] of fieldChanges) {
           if (field === "customs_duty_composite") {
-            const parsed = parseFloat(String(val));
-            const num = Number.isNaN(parsed) ? null : parsed;
-            const curDutyPerKg = hot.getDataAtRowProp(
-              rowIndex,
-              "customs_duty_per_kg",
-            ) as number | null | undefined;
-            const mode: DutyMode = curDutyPerKg != null ? "perKg" : "pct";
-            if (mode === "perKg") {
-              updates.customs_duty_per_kg = num;
-              updates.customs_duty = null;
-            } else {
-              updates.customs_duty = num;
-              updates.customs_duty_per_kg = null;
-            }
+            const compositeUpdates = buildDutyCompositeUpdates(val, {
+              customs_duty_per_kg: hot.getDataAtRowProp(
+                rowIndex,
+                "customs_duty_per_kg",
+              ) as number | null,
+              customs_manual_override: Boolean(
+                hot.getDataAtRowProp(rowIndex, "customs_manual_override"),
+              ),
+            });
+            Object.assign(updates, compositeUpdates);
             // Sync the mirror fields into HoT state so the renderer
-            // sees the latest value immediately.
-            hot.setDataAtRowProp(rowIndex, "customs_duty", updates.customs_duty, "internal-mirror");
+            // sees the latest value immediately. When the row was in
+            // Manual override, also clear the manual mirror columns —
+            // otherwise the formula chip keeps painting the stale rate
+            // (Testing 2 row 26).
+            hot.setDataAtRowProp(
+              rowIndex,
+              "customs_duty",
+              compositeUpdates.customs_duty,
+              "internal-mirror",
+            );
             hot.setDataAtRowProp(
               rowIndex,
               "customs_duty_per_kg",
-              updates.customs_duty_per_kg,
+              compositeUpdates.customs_duty_per_kg,
               "internal-mirror",
             );
+            if (compositeUpdates.customs_manual_override === false) {
+              hot.setDataAtRowProp(
+                rowIndex,
+                "customs_manual_override",
+                false,
+                "internal-mirror",
+              );
+              hot.setDataAtRowProp(
+                rowIndex,
+                "customs_manual_rate_payload",
+                null,
+                "internal-mirror",
+              );
+            }
             continue;
           }
           if (NUMERIC_FIELDS.has(field)) {

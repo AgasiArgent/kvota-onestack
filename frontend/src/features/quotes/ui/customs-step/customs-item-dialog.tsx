@@ -1405,8 +1405,17 @@ function Field({
    */
   badge?: string | null;
 }) {
+  // Use a <div> wrapper instead of <label>. Several Field instances wrap
+  // composite controls (button chip groups + selects + inputs — notably the
+  // «Пошлина» field renders Простая / Комбинированная / Специфическая chips
+  // before the value/unit slots). A <label> forwards stray clicks on its
+  // whitespace to the FIRST focusable form control inside it, which in the
+  // composite case is the "Простая" chip → silently resetting the user's
+  // explicitly chosen rate type (Testing 2 row 27 / FB-260514-123129-2203).
+  // None of the existing Fields use `htmlFor`, so they never produced real
+  // a11y label associations — `<div>` is a faithful no-op replacement.
   return (
-    <label className={`flex flex-col gap-1 ${className ?? ""}`.trim()}>
+    <div className={`flex flex-col gap-1 ${className ?? ""}`.trim()}>
       <span className="text-xs font-medium text-muted-foreground inline-flex items-center gap-2">
         {label}
         {badge ? (
@@ -1419,7 +1428,7 @@ function Field({
         ) : null}
       </span>
       {children}
-    </label>
+    </div>
   );
 }
 
