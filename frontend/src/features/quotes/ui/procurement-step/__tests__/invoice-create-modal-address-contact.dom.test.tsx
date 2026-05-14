@@ -250,10 +250,10 @@ describe("InvoiceCreateModal — pickup address + supplier-contact picker (Testi
     vi.clearAllMocks();
   });
 
-  it("renders the new «Адрес забора груза» input as required", () => {
+  it("renders the «Адрес забора груза» input (Testing 2 row 25: optional)", () => {
     renderModal();
-    // The label is rendered with a required-asterisk; query by label-for and
-    // assert that the linked input is present + empty.
+    // Testing 2 row 25 (FB 2026-05-14): label no longer carries the required
+    // asterisk — the field is optional. Input must still be present + empty.
     const input = screen.getByLabelText(/Адрес забора груза/i);
     expect(input).toBeTruthy();
     expect((input as HTMLInputElement).value).toBe("");
@@ -268,8 +268,10 @@ describe("InvoiceCreateModal — pickup address + supplier-contact picker (Testi
     });
   });
 
-  it("blocks submit and surfaces field-level errors when pickup_address + contact are missing", async () => {
-    // No contacts returned — submit must still fail on both new fields.
+  it("blocks submit on missing contact but allows empty pickup_address (Testing 2 row 25)", async () => {
+    // Testing 2 row 25 (FB 2026-05-14): pickup_address is now optional, so a
+    // blank address alone must no longer block submit. The named contact is
+    // still mandatory — submit fails only on the contact field.
     supplierContactsState.rows = [];
     renderModal();
     fireEvent.change(screen.getByLabelText("Поставщик"), {
@@ -284,14 +286,48 @@ describe("InvoiceCreateModal — pickup address + supplier-contact picker (Testi
 
     fireEvent.click(screen.getByRole("button", { name: /Создать/i }));
 
-    // Both errors should appear and createInvoice must not have been called.
+    // Contact error must surface; pickup_address error must NOT appear.
     await waitFor(() => {
-      expect(screen.getByText(/Укажите адрес забора груза/i)).toBeTruthy();
+      expect(
+        screen.getByText(/У поставщика нет контактов/i)
+      ).toBeTruthy();
     });
     expect(
-      screen.getByText(/У поставщика нет контактов/i)
-    ).toBeTruthy();
+      screen.queryByText(/Укажите адрес забора груза/i)
+    ).toBeNull();
     expect(createInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("submits without pickup_address when only contact is provided (Testing 2 row 25)", async () => {
+    renderModal();
+    fireEvent.change(screen.getByLabelText("Поставщик"), {
+      target: { value: "sup-1" },
+    });
+    fireEvent.change(screen.getByLabelText("Компания-покупатель"), {
+      target: { value: "buy-1" },
+    });
+
+    await waitFor(() => {
+      expect(supplierContactsState.lastSupplierId).toBe("sup-1");
+    });
+    await waitFor(() => {
+      const contactSelect = screen.getByLabelText(
+        "Контакт поставщика"
+      ) as HTMLSelectElement;
+      expect(contactSelect.value).toBe("c-1");
+    });
+
+    // Submit WITHOUT touching the pickup_address input.
+    fireEvent.click(screen.getByRole("button", { name: /Создать/i }));
+
+    await waitFor(() => {
+      expect(createInvoiceMock).toHaveBeenCalledTimes(1);
+    });
+    const call = (createInvoiceMock.mock.calls[0] as unknown as [
+      Record<string, unknown>,
+    ])[0];
+    expect(call.pickup_address).toBeUndefined();
+    expect(call.supplier_contact_id).toBe("c-1");
   });
 
   it("submits pickup_address + supplier_contact_id to createInvoice when valid", async () => {

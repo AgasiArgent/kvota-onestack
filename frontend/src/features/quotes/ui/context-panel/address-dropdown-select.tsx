@@ -15,6 +15,11 @@ interface DeliveryAddress {
   is_default: boolean;
 }
 
+interface WarehouseAddressEntry {
+  address?: string | null;
+  label?: string | null;
+}
+
 interface AddressDropdownSelectProps {
   quoteId: string;
   customerId: string;
@@ -54,25 +59,97 @@ export function AddressDropdownSelect({
     if (addresses !== null) return;
     setLoading(true);
 
+    // Testing 2 row 24 (FB 2026-05-14): the dropdown previously only listed
+    // rows from `customer_delivery_addresses`, which left МОП users staring
+    // at «Нет адресов» whenever the customer's addresses lived on the
+    // `customers` row itself (legal/actual/postal text fields + a
+    // `warehouse_addresses` jsonb array). We now merge both sources and
+    // dedupe by trimmed/lowercased address string so a warehouse that also
+    // happens to be in `customer_delivery_addresses` shows up once.
     try {
       const supabase = createClient();
-      const { data, error } = await supabase
-        .from("customer_delivery_addresses")
-        .select("id, name, address, is_default")
-        .eq("customer_id", customerId)
-        .order("is_default", { ascending: false })
-        .order("name");
+      const [deliveryRes, customerRes] = await Promise.all([
+        supabase
+          .from("customer_delivery_addresses")
+          .select("id, name, address, is_default")
+          .eq("customer_id", customerId)
+          .order("is_default", { ascending: false })
+          .order("name"),
+        supabase
+          .from("customers")
+          .select(
+            "legal_address, actual_address, postal_address, warehouse_addresses"
+          )
+          .eq("id", customerId)
+          .maybeSingle(),
+      ]);
 
-      if (error) throw error;
+      if (deliveryRes.error) throw deliveryRes.error;
+      if (customerRes.error) throw customerRes.error;
 
-      setAddresses(
-        (data ?? []).map((row) => ({
+      const merged: DeliveryAddress[] = [];
+      const seen = new Set<string>();
+
+      function pushIfFresh(entry: DeliveryAddress) {
+        const key = entry.address.trim().toLowerCase();
+        if (!key || seen.has(key)) return;
+        seen.add(key);
+        merged.push(entry);
+      }
+
+      // 1. Rows from customer_delivery_addresses keep their original name.
+      for (const row of deliveryRes.data ?? []) {
+        if (!row.address) continue;
+        pushIfFresh({
           id: row.id,
           name: row.name ?? null,
           address: row.address,
           is_default: row.is_default ?? false,
-        }))
-      );
+        });
+      }
+
+      const customer = customerRes.data ?? null;
+      const customerRecord = customer as Record<string, unknown> | null;
+
+      // 2. warehouse_addresses jsonb array → "Склад: <label or address>".
+      const rawWarehouses = customerRecord?.warehouse_addresses;
+      const warehouses: WarehouseAddressEntry[] = Array.isArray(rawWarehouses)
+        ? (rawWarehouses as WarehouseAddressEntry[])
+        : [];
+      warehouses.forEach((wh, idx) => {
+        const address = (wh?.address ?? "").trim();
+        if (!address) return;
+        const label = (wh?.label ?? "").trim();
+        pushIfFresh({
+          id: `customer-warehouse-${idx}`,
+          name: `Склад: ${label || address}`,
+          address,
+          is_default: false,
+        });
+      });
+
+      // 3. Single-value address fields on customers.
+      const singles: Array<[
+        "legal_address" | "actual_address" | "postal_address",
+        string,
+      ]> = [
+        ["legal_address", "Юридический"],
+        ["actual_address", "Фактический"],
+        ["postal_address", "Почтовый"],
+      ];
+      for (const [field, label] of singles) {
+        const raw = customerRecord ? customerRecord[field] : null;
+        const value = typeof raw === "string" ? raw.trim() : "";
+        if (!value) continue;
+        pushIfFresh({
+          id: `customer-${field}`,
+          name: label,
+          address: value,
+          is_default: false,
+        });
+      }
+
+      setAddresses(merged);
     } catch {
       toast.error("Не удалось загрузить адреса");
     } finally {
