@@ -251,7 +251,9 @@ describe("InvoiceCargoSummary (РОЛ Тест 07 #3.3)", () => {
     expect(screen.queryByText("Куда:")).toBeNull();
   });
 
-  it("renders cargo item count and the first two product names", () => {
+  it("renders cargo item count and ALL product names (Testing 2 row 14 v2)", () => {
+    // Testers (РОЛ/МОЛ/МВЭД) require every item to be visible —
+    // no «+N» overflow hint. The flex-wrap container handles long lists.
     const items: QuoteItemRow[] = [
       makeItem({
         id: "i1",
@@ -283,11 +285,46 @@ describe("InvoiceCargoSummary (РОЛ Тест 07 #3.3)", () => {
     );
     expect(screen.getByText("Груз:")).toBeTruthy();
     // Count is 3 (one item is on a different invoice and is excluded).
-    expect(screen.getByText(/3 позиции/i)).toBeTruthy();
-    expect(screen.getByText(/Шайбы 100шт/)).toBeTruthy();
-    expect(screen.getByText(/Трубка для масла, 2 метра/)).toBeTruthy();
-    // The third item is hidden behind a "+1" overflow hint.
-    expect(screen.queryByText(/ЗИП Комплект/)).toBeNull();
+    const digest = screen.getByText(
+      /3 позиции: Шайбы 100шт, Трубка для масла, 2 метра, ЗИП Комплект/,
+    );
+    expect(digest).toBeTruthy();
+    // No "+N" overflow tail — every cargo item must be visible.
+    expect(digest.textContent ?? "").not.toMatch(/\+\d/);
+  });
+
+  it("shows every product name when the invoice has 5+ items (no truncation)", () => {
+    const names = [
+      "Кабель силовой 10м",
+      "Разъём BNC",
+      "Изолента ПВХ",
+      "Хомуты 100шт",
+      "Маркер промышленный",
+    ];
+    const items: QuoteItemRow[] = names.map((n, idx) =>
+      makeItem({
+        id: `i-${idx}`,
+        composition_selected_invoice_id: "inv-1",
+        product_name: n,
+      }),
+    );
+    render(
+      <InvoiceCargoSummary
+        invoice={makeInvoice({ pickup_country: "Россия" })}
+        items={items}
+      />,
+    );
+    expect(screen.getByText("Груз:")).toBeTruthy();
+    const digest = screen.getByText(
+      (content) =>
+        content.startsWith("5 позиций:") &&
+        names.every((n) => content.includes(n)),
+    );
+    expect(digest).toBeTruthy();
+    // Every product name appears in document order, comma-separated.
+    const text = digest.textContent ?? "";
+    expect(text).toContain(`5 позиций: ${names.join(", ")}`);
+    expect(text).not.toMatch(/\+\d/);
   });
 
   it("does not render cargo digest when no items belong to this invoice", () => {

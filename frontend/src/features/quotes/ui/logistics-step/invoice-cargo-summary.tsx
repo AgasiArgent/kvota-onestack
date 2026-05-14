@@ -86,11 +86,13 @@ function formatCargoDigest(items: readonly QuoteItemRow[]): string | null {
   const names = items
     .map((i) => i.product_name?.trim())
     .filter((s): s is string => !!s);
-  const head = names.slice(0, 2).join(", ");
-  const rest = names.length - 2;
-  const tail = rest > 0 ? ` +${rest}` : "";
+  // Testing 2 row 14 v2: testers (РОЛ/МОЛ/МВЭД) explicitly asked to see
+  // ALL item names — the previous "+N" overflow hid most of the cargo.
+  // The panel uses `flex flex-wrap`, so a long comma-separated list
+  // wraps naturally instead of being truncated.
+  const joined = names.join(", ");
   const count = `${items.length} ${pluralPositions(items.length)}`;
-  return head ? `${count}: ${head}${tail}` : count;
+  return joined ? `${count}: ${joined}` : count;
 }
 
 interface Field {
