@@ -36,7 +36,6 @@ import {
 import { CUSTOMS_SYSTEM_VIEWS } from "./customs-views";
 import { EntityNotesPanel } from "@/entities/entity-note";
 import type { EntityNoteCardData } from "@/entities/entity-note/ui/entity-note-card";
-import { CustomsInfoBlock } from "./customs-info-block";
 import { CustomsItemDialog } from "./customs-item-dialog";
 import { InvoiceCargoSummary } from "../logistics-step/invoice-cargo-summary";
 
@@ -621,8 +620,6 @@ export function CustomsStep({
             defaultVisibleTo={["customs", "head_of_customs", "head_of_logistics", "sales", "procurement"]}
           />
         )}
-
-        <CustomsInfoBlock quoteId={quote.id} orgId={quote.organization_id} />
       </div>
 
       <CustomsItemDialog

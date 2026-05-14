@@ -12,9 +12,11 @@
  *   - Body: vertical stack of cards — `CertificateCard` for cert rows
  *     (`is_custom_expense=false`) or `CustomExpenseCard` for expense rows
  *     (`is_custom_expense=true`). Sorted `created_at DESC`.
- *   - Empty state: «Расходов нет» + helper «Нажмите ➕ чтобы добавить
- *     сертификат или расход» + a centered duplicate of the two buttons
- *     when `canEdit=true` (REQ-6 AC#7).
+ *   - Empty state: «Расходов нет» + helper pointing users to the header
+ *     buttons. The header buttons remain visible above the empty state, so
+ *     no duplicate add buttons are rendered inside the empty card
+ *     (Testing 2 row 4 cleanup 2026-05-14 — was: centered duplicate of the
+ *     two buttons when `canEdit=true`, REQ-6 AC#7).
  *
  * Loads its own list via `listCertificates(quoteId)` on mount (REQ-2 AC#3),
  * exposes a re-fetch callback to children that mutate the list (REQ-6
@@ -290,28 +292,8 @@ export function CertificatesSection({
         >
           <p className="text-sm font-medium text-foreground/80">Расходов нет</p>
           <p className="text-xs text-foreground/60">
-            Нажмите ➕ чтобы добавить сертификат или расход
+            Используйте кнопки выше, чтобы добавить сертификат или расход
           </p>
-          {canEdit ? (
-            <div className="flex items-center gap-2 mt-1">
-              <Button
-                variant="default"
-                size="sm"
-                onClick={() => setCreateCertOpen(true)}
-                data-testid="customs-cert-add-button-empty"
-              >
-                + Добавить сертификат
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setCreateExpenseOpen(true)}
-                data-testid="customs-expense-add-button-empty"
-              >
-                + Добавить расход
-              </Button>
-            </div>
-          ) : null}
         </div>
       ) : null}
 
