@@ -140,10 +140,15 @@ describe("CertificatesSection — empty state", () => {
     );
     expect(html).toContain('data-testid="customs-cert-empty-state"');
     expect(html).toContain("Расходов нет");
-    expect(html).toContain("Нажмите ➕ чтобы добавить сертификат или расход");
+    expect(html).toContain(
+      "Используйте кнопки выше, чтобы добавить сертификат или расход",
+    );
   });
 
-  it("renders centered duplicate add buttons in empty state when canEdit=true", () => {
+  // Testing 2 row 4 cleanup (2026-05-14): the empty state no longer renders
+  // a duplicate pair of «+ Добавить сертификат» / «+ Добавить расход»
+  // buttons. Header buttons remain the single add affordance.
+  it("does not render duplicate add buttons inside the empty state", () => {
     const html = renderToString(
       <CertificatesSection
         quoteId="quote-1"
@@ -152,11 +157,16 @@ describe("CertificatesSection — empty state", () => {
         initialCertificates={[]}
       />,
     );
-    expect(html).toContain('data-testid="customs-cert-add-button-empty"');
-    expect(html).toContain('data-testid="customs-expense-add-button-empty"');
+    expect(html).not.toContain('data-testid="customs-cert-add-button-empty"');
+    expect(html).not.toContain(
+      'data-testid="customs-expense-add-button-empty"',
+    );
+    // Header buttons remain (single source of add actions).
+    expect(html).toContain('data-testid="customs-cert-add-button"');
+    expect(html).toContain('data-testid="customs-expense-add-button"');
   });
 
-  it("hides the centered duplicate buttons when canEdit=false", () => {
+  it("hides add buttons entirely when canEdit=false (empty list)", () => {
     const html = renderToString(
       <CertificatesSection
         quoteId="quote-1"
@@ -167,6 +177,8 @@ describe("CertificatesSection — empty state", () => {
     );
     expect(html).toContain('data-testid="customs-cert-empty-state"');
     expect(html).not.toContain('data-testid="customs-cert-add-button-empty"');
+    expect(html).not.toContain('data-testid="customs-cert-add-button"');
+    expect(html).not.toContain('data-testid="customs-expense-add-button"');
   });
 
   it("does not render the empty state when certificates exist", () => {
