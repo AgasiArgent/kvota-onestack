@@ -5,14 +5,20 @@
  * Pre-fix repro on prod: clicking the button after customs was already
  * marked complete produced an HTTP 422 with body
  *   {"success": false, "error": "Customs already completed"}
- * and no UI feedback. Two-part fix verified here:
+ * and no UI feedback. Three-part fix verified here:
  *
  *   Part 1 — `customsCompletedAt` prop disables the button up-front,
  *   so the silent-422 path is unreachable. Hovering surfaces a tooltip
  *   («Таможня по этому КП уже завершена.») via the existing
  *   formatDisabledReason / Tooltip wiring.
  *
- *   Part 2 — covered by `customs-step-error-toast.test.tsx`
+ *   Part 2 (this batch) — when `customsCompletedAt` is set we replace
+ *   the disabled-but-green Button with a static Badge. The disabled
+ *   filled-success Button still read as "clickable/active" to testers,
+ *   who clicked it and reported «горит, ничего не происходит». A Badge
+ *   has no button affordance so the done state is unambiguous.
+ *
+ *   Part 3 — covered by `customs-step-error-toast.test.tsx`
  *   (handler-level): when the server *does* return a 422 (e.g. when the
  *   action bar is mounted with stale data), the catch branch fires a
  *   `toast.error()` with the server-supplied message via
@@ -46,7 +52,7 @@ function makeItem(overrides: Partial<QuoteItemRow> = {}): QuoteItemRow {
 afterEach(cleanup);
 
 describe("CustomsActionBar — customs already completed gate (Testing 2 row 11)", () => {
-  it("disables «Таможня завершена» when customsCompletedAt is set, even with all HS codes filled", () => {
+  it("renders static «Таможня завершена» badge (no button) when customsCompletedAt is set", () => {
     const items = [
       makeItem({ id: "a", hs_code: "1234567890", customs_duty: 5 }),
       makeItem({ id: "b", hs_code: "9876543210", customs_duty: 7 }),
@@ -61,8 +67,17 @@ describe("CustomsActionBar — customs already completed gate (Testing 2 row 11)
       />,
     );
 
-    const button = screen.getByRole("button", { name: "Таможня завершена" });
-    expect((button as HTMLButtonElement).disabled).toBe(true);
+    // Button must NOT render — testers misread the disabled-but-green
+    // button as clickable.
+    expect(
+      screen.queryByRole("button", { name: "Таможня завершена" }),
+    ).toBeNull();
+
+    // Badge replaces the button.
+    const badge = screen.getByTestId("customs-completed-badge");
+    expect(badge.textContent).toMatch(/Таможня завершена/);
+    // Sanity: the Check icon is rendered inside the badge.
+    expect(badge.querySelector("svg")).not.toBeNull();
   });
 
   it("keeps the button enabled when customsCompletedAt is null and all items have HS code", () => {
@@ -83,9 +98,11 @@ describe("CustomsActionBar — customs already completed gate (Testing 2 row 11)
 
     const button = screen.getByRole("button", { name: "Таможня завершена" });
     expect((button as HTMLButtonElement).disabled).toBe(false);
+    // No badge when the bar is still in "to do" state.
+    expect(screen.queryByTestId("customs-completed-badge")).toBeNull();
   });
 
-  it("does NOT call onCompleteCustoms when the disabled button is clicked", async () => {
+  it("does NOT expose an onClick handler via the completion badge", () => {
     const items = [
       makeItem({ id: "a", hs_code: "1234567890", customs_duty: 5 }),
     ];
@@ -100,9 +117,10 @@ describe("CustomsActionBar — customs already completed gate (Testing 2 row 11)
       />,
     );
 
-    const button = screen.getByRole("button", { name: "Таможня завершена" });
-    button.click();
-    // `disabled` short-circuits onClick — handler must never fire.
+    // The badge is a plain <span>, not a button — clicking it must not
+    // invoke onCompleteCustoms.
+    const badge = screen.getByTestId("customs-completed-badge");
+    (badge as HTMLElement).click();
     expect(handleComplete).not.toHaveBeenCalled();
   });
 
@@ -120,7 +138,9 @@ describe("CustomsActionBar — customs already completed gate (Testing 2 row 11)
       />,
     );
 
-    const button = screen.getByRole("button", { name: "Таможня завершена" });
-    expect((button as HTMLButtonElement).disabled).toBe(true);
+    expect(
+      screen.queryByRole("button", { name: "Таможня завершена" }),
+    ).toBeNull();
+    expect(screen.getByTestId("customs-completed-badge")).toBeTruthy();
   });
 });

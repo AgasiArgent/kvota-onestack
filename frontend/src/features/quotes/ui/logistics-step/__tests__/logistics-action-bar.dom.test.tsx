@@ -94,6 +94,58 @@ describe("LogisticsActionBar — currency-aware totals (5c W1)", () => {
     ).toBeNull();
   });
 
+  it("renders static «Логистика завершена» badge (no button) when alreadyCompleted", () => {
+    // Testing 2 row 11 (part 3): the disabled-but-green «Логистика
+    // готова» Button was misread as clickable by testers. A Badge has
+    // no button affordance so the done state is unambiguous.
+    const segments = [
+      makeSegment({ id: "s1", sequenceOrder: 1, mainCostRub: 100, currencyCode: "RUB" }),
+    ];
+    render(
+      <LogisticsActionBar
+        segments={segments}
+        alreadyCompleted
+        needsReview={false}
+        canEdit
+        onComplete={vi.fn()}
+        displayCurrency="RUB"
+        fxRates={{}}
+      />,
+    );
+
+    // No completion button when logistics is already done.
+    expect(
+      screen.queryByRole("button", { name: /Логистика/ }),
+    ).toBeNull();
+
+    // Badge replaces the button.
+    const badge = screen.getByTestId("logistics-completed-badge");
+    expect(badge.textContent).toMatch(/Логистика завершена/);
+    expect(badge.querySelector("svg")).not.toBeNull();
+  });
+
+  it("does NOT call onComplete when the completion badge is clicked", () => {
+    const segments = [
+      makeSegment({ id: "s1", sequenceOrder: 1, mainCostRub: 100, currencyCode: "RUB" }),
+    ];
+    const handleComplete = vi.fn();
+    render(
+      <LogisticsActionBar
+        segments={segments}
+        alreadyCompleted
+        needsReview={false}
+        canEdit
+        onComplete={handleComplete}
+        displayCurrency="RUB"
+        fxRates={{}}
+      />,
+    );
+
+    const badge = screen.getByTestId("logistics-completed-badge");
+    (badge as HTMLElement).click();
+    expect(handleComplete).not.toHaveBeenCalled();
+  });
+
   it("shows AlertCircle and ≈ prefix when an FX rate is missing", () => {
     const segments = [
       makeSegment({ id: "s1", sequenceOrder: 1, mainCostRub: 100, currencyCode: "USD" }),

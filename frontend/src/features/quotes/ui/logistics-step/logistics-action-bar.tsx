@@ -1,6 +1,7 @@
 "use client";
 
-import { CheckCircle, Loader2, AlertCircle } from "lucide-react";
+import { AlertCircle, Check, CheckCircle, Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { LogisticsSegment } from "@/entities/logistics-segment";
@@ -161,9 +162,27 @@ export function LogisticsActionBar({
     </Button>
   );
 
+  // Testing 2 row 11 (part 3): once logistics is complete, render a static
+  // Badge instead of a disabled-but-green Button. The previous "Логистика
+  // готова" Button still looked clickable (filled bg-success/20 with
+  // CheckCircle) which testers misread as "active", clicked, and got no
+  // feedback. A Badge unambiguously signals "done, nothing to click".
+  const completedBadge = (
+    <Badge
+      variant="default"
+      className="bg-green-100 text-green-700 px-3 py-1.5 h-auto inline-flex items-center gap-1.5"
+      data-testid="logistics-completed-badge"
+    >
+      <Check size={14} aria-hidden />
+      <span>Логистика завершена</span>
+    </Badge>
+  );
+
   return (
     <div className="sticky top-[52px] z-[5] bg-card border-b border-border px-6 py-2 flex items-center gap-3">
-      {disabledReason ? (
+      {alreadyCompleted ? (
+        completedBadge
+      ) : disabledReason ? (
         <Tooltip>
           <TooltipTrigger render={<span className="inline-block" />}>
             {button}
