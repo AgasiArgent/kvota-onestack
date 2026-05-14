@@ -104,4 +104,39 @@ describe("AddSegmentDialog pickup hint (РОЛ Тест 07 #3.4)", () => {
 
     expect(screen.queryByTestId("add-segment-pickup-hint")).toBeNull();
   });
+
+  // Testing 2 row 30 — pickup hint only applies to the first mile.
+  // For 2nd / 3rd / … segment the route starts at the previous
+  // segment's destination, not at the procurement pickup, so showing
+  // the hint there confused the tester ("В модальном окне постоянно
+  // высвечивает подсказку на first mile").
+  it("hides the hint when isFirstSegment is false", () => {
+    render(
+      <AddSegmentDialog
+        open
+        onOpenChange={vi.fn()}
+        locations={[LOC_RU_MOSCOW, LOC_CN_SHANGHAI]}
+        onSubmit={vi.fn(async () => undefined)}
+        pickupHint={{ country: "Китай", city: "Шанхай" }}
+        isFirstSegment={false}
+      />,
+    );
+
+    expect(screen.queryByTestId("add-segment-pickup-hint")).toBeNull();
+  });
+
+  it("shows the hint when isFirstSegment is true (default)", () => {
+    render(
+      <AddSegmentDialog
+        open
+        onOpenChange={vi.fn()}
+        locations={[LOC_RU_MOSCOW, LOC_CN_SHANGHAI]}
+        onSubmit={vi.fn(async () => undefined)}
+        pickupHint={{ country: "Китай", city: "Шанхай" }}
+        isFirstSegment
+      />,
+    );
+
+    expect(screen.getByTestId("add-segment-pickup-hint")).toBeTruthy();
+  });
 });

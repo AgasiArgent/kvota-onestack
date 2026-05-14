@@ -37,6 +37,14 @@ interface AddSegmentDialogProps {
    * sourcing requires a DB-backed address book; tracked as follow-up).
    */
   pickupHint?: { country: string | null; city: string | null } | null;
+  /**
+   * True when there are no existing segments — i.e. this dialog is
+   * adding the FIRST mile. The pickup-hint card is only meaningful for
+   * the first mile (subsequent segments start where the previous one
+   * ended, not at the procurement-entered pickup), so we suppress the
+   * hint for non-first segments (Testing 2 row 30).
+   */
+  isFirstSegment?: boolean;
 }
 
 /**
@@ -54,6 +62,7 @@ export function AddSegmentDialog({
   locations,
   onSubmit,
   pickupHint,
+  isFirstSegment = true,
 }: AddSegmentDialogProps) {
   const [fromId, setFromId] = useState<string | null>(null);
   const [toId, setToId] = useState<string | null>(null);
@@ -144,7 +153,7 @@ export function AddSegmentDialog({
               placeholder="Выберите локацию…"
               emptyMessage="Нет локаций — создайте их в «Справочниках»."
             />
-            {pickupHintLabel && (
+            {pickupHintLabel && isFirstSegment && (
               <div
                 className="flex items-start gap-1.5 rounded-md border border-info/30 bg-info-bg/40 px-2 py-1.5 text-xs text-text-muted"
                 data-testid="add-segment-pickup-hint"
