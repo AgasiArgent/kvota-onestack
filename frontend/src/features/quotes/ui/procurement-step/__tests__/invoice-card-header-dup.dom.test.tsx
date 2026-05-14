@@ -35,19 +35,32 @@ vi.mock("next/navigation", () => ({
 // + coverage. Return empty so the load() effect resolves without surfacing
 // any rendering side-effects.
 vi.mock("@/shared/lib/supabase/client", () => ({
-  createClient: () => ({
-    from: () => ({
-      select: () => ({
-        eq: () => ({
-          order: () => ({ data: [], error: null }),
-          maybeSingle: () => Promise.resolve({ data: null, error: null }),
+  createClient: () => {
+    // Testing 2 row 25 added a `.order().order()` chain for supplier_contacts
+    // fetch. The orderable returned here is a thenable AND accepts another
+    // `.order()` so both single- and double-chained awaits resolve.
+    interface Orderable {
+      order: () => Orderable;
+      then: (resolve: (v: { data: unknown[]; error: null }) => unknown) => unknown;
+    }
+    const makeOrderable = (): Orderable => ({
+      order: () => makeOrderable(),
+      then: (resolve) => resolve({ data: [], error: null }),
+    });
+    return {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            order: () => makeOrderable(),
+            maybeSingle: () => Promise.resolve({ data: null, error: null }),
+          }),
+          in: () => ({ data: [], error: null }),
         }),
-        in: () => ({ data: [], error: null }),
+        update: () => ({ eq: async () => ({ error: null }) }),
+        delete: () => ({ in: async () => ({ error: null }) }),
       }),
-      update: () => ({ eq: async () => ({ error: null }) }),
-      delete: () => ({ in: async () => ({ error: null }) }),
-    }),
-  }),
+    };
+  },
 }));
 
 // Cargo-place fetch side-effect mock — the card calls fetchCargoPlaces on

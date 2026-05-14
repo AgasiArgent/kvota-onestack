@@ -55,6 +55,12 @@ import { downloadInvoiceXls, markInvoiceSent } from "@/entities/invoice/mutation
 import { createClient } from "@/shared/lib/supabase/client";
 import { extractErrorMessage } from "@/shared/lib/errors";
 import { CityAutocomplete, CountryCombobox, findCountryByCode } from "@/shared/ui/geo";
+import { SearchableCombobox } from "@/shared/ui/searchable-combobox";
+// Type-only import: kept off the runtime path so we don't transitively pull
+// `next/headers` into this Client Component (same constraint as
+// `invoice-create-modal.tsx`). The actual contact rows come from an inline
+// browser-side Supabase SELECT below.
+import type { SupplierContact } from "@/entities/supplier/types";
 
 type InvoiceExtras = {
   invoice_file_url?: string | null;
@@ -232,6 +238,46 @@ export function InvoiceCard({
     // cleared. handleSaveInvoiceField is a stable closure read at call-time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pickupCountryCodeLocal]);
+
+  // Testing 2 row 25: supplier-contact picker on the КПП card. The contact
+  // list is reactive to the invoice's supplier (kvota.supplier_contacts is
+  // keyed on supplier_id). Mirrors the inline browser-side SELECT used in
+  // `invoice-create-modal.tsx` — the server-side `fetchSupplierContacts`
+  // pulls in `next/headers` via the admin client which is banned in Client
+  // Components, so we re-issue the same SQL against the browser client.
+  const invoiceSupplierId =
+    (invoice as { supplier_id?: string | null }).supplier_id ?? null;
+  const [supplierContacts, setSupplierContacts] = useState<SupplierContact[]>([]);
+  const [supplierContactsLoading, setSupplierContactsLoading] = useState(false);
+  useEffect(() => {
+    if (!invoiceSupplierId) {
+      setSupplierContacts([]);
+      return;
+    }
+    let cancelled = false;
+    setSupplierContactsLoading(true);
+    (async () => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("supplier_contacts")
+        .select("*")
+        .eq("supplier_id", invoiceSupplierId)
+        .order("is_primary", { ascending: false })
+        .order("name");
+      if (cancelled) return;
+      if (error) {
+        console.error("[invoice-card] fetch supplier_contacts:", error);
+        setSupplierContacts([]);
+        setSupplierContactsLoading(false);
+        return;
+      }
+      setSupplierContacts((data ?? []) as SupplierContact[]);
+      setSupplierContactsLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [invoiceSupplierId]);
   const [fetchedInvoiceItems, setFetchedInvoiceItems] = useState<
     InvoiceItemRow[]
   >([]);
@@ -1155,37 +1201,63 @@ export function InvoiceCard({
                 />
               </div>
 
-              {invoice.supplier_contact && (
-                <div className="space-y-1">
-                  <span className="text-xs text-muted-foreground">Контакт поставщика</span>
-                  <div
-                    className="text-xs text-foreground"
-                    data-testid="invoice-card-supplier-contact"
-                  >
-                    <span className="font-medium">
-                      {invoice.supplier_contact.name}
-                    </span>
-                    {invoice.supplier_contact.position && (
-                      <span className="text-muted-foreground">
-                        {" · "}
-                        {invoice.supplier_contact.position}
-                      </span>
-                    )}
-                    {(invoice.supplier_contact.phone ||
-                      invoice.supplier_contact.email) && (
-                      <span className="text-muted-foreground">
-                        {" · "}
-                        {[
-                          invoice.supplier_contact.phone,
-                          invoice.supplier_contact.email,
-                        ]
-                          .filter(Boolean)
-                          .join(" · ")}
-                      </span>
-                    )}
+              {/* Testing 2 row 25: supplier-contact picker on the КПП card.
+                  Inline-editable: the procurement user can swap the named
+                  contact without leaving the card. Mirrors the picker in
+                  invoice-create-modal.tsx (same SearchableCombobox, same
+                  contact-row label shape). PATCH-on-change writes
+                  `supplier_contact_id` via the shared handleSaveInvoiceField
+                  helper used by every other deferred-fill field on this card. */}
+              <div className="space-y-1" data-testid="invoice-card-supplier-contact">
+                <span className="text-xs text-muted-foreground">Контакт поставщика</span>
+                <SearchableCombobox<SupplierContact>
+                  value={invoice.supplier_contact_id ?? null}
+                  onChange={(nextId) => {
+                    const value = nextId ?? null;
+                    if (value === (invoice.supplier_contact_id ?? null)) return;
+                    void handleSaveInvoiceField({ supplier_contact_id: value });
+                  }}
+                  items={supplierContacts}
+                  getLabel={(c) => c.name}
+                  getSecondary={(c) => {
+                    const parts = [c.position, c.phone, c.email].filter(Boolean);
+                    return parts.length > 0 ? parts.join(" · ") : null;
+                  }}
+                  getSearchableExtras={(c) =>
+                    [c.position, c.phone, c.email].filter(
+                      (v): v is string => Boolean(v),
+                    )
+                  }
+                  placeholder={
+                    !invoiceSupplierId
+                      ? "Сначала выберите поставщика"
+                      : supplierContactsLoading
+                        ? "Загрузка контактов…"
+                        : supplierContacts.length === 0
+                          ? "У поставщика нет контактов"
+                          : "Выберите контакт"
+                  }
+                  searchPlaceholder="Поиск контакта…"
+                  emptyMessage="Контакты не найдены"
+                  ariaLabel="Контакт поставщика"
+                  disabled={!invoiceSupplierId || supplierContactsLoading}
+                />
+                {/* Read-only summary line below the picker, kept so the full
+                    реквизиты (position + phone + email) of the currently
+                    selected contact are visible at a glance — the picker
+                    trigger only shows the name. */}
+                {invoice.supplier_contact && (
+                  <div className="text-xs text-muted-foreground">
+                    {[
+                      invoice.supplier_contact.position,
+                      invoice.supplier_contact.phone,
+                      invoice.supplier_contact.email,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
               {/* Row: Currency + VAT */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">

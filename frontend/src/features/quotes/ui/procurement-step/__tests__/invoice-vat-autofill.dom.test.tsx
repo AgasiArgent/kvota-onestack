@@ -42,11 +42,22 @@ function makeChain(table: string) {
       ? mockData.vat_rates_by_country ?? null
       : null;
 
+  // `.order()` is a thenable AND can be chained again — Testing 2 row 25
+  // added `.order().order()` for the supplier_contacts fetch.
+  interface Orderable {
+    order: () => Orderable;
+    then: (resolve: (v: { data: unknown[]; error: null }) => unknown) => unknown;
+  }
+  const makeOrderable = (): Orderable => ({
+    order: () => makeOrderable(),
+    then: (resolve) => resolve({ data: [], error: null }),
+  });
+
   const chain: Record<string, unknown> = {
     select: () => chain,
     eq: () => chain,
     in: () => Promise.resolve({ data: [], error: null }),
-    order: () => Promise.resolve({ data: [], error: null }),
+    order: () => makeOrderable(),
     maybeSingle: () => Promise.resolve({ data: result, error: null }),
     update: (payload: Record<string, unknown>) => {
       updateCalls.push({ table, payload });
