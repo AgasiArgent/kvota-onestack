@@ -37,6 +37,7 @@ import { EntityNotesPanel } from "@/entities/entity-note";
 import type { EntityNoteCardData } from "@/entities/entity-note/ui/entity-note-card";
 import { CustomsInfoBlock } from "./customs-info-block";
 import { CustomsItemDialog } from "./customs-item-dialog";
+import { InvoiceCargoSummary } from "../logistics-step/invoice-cargo-summary";
 
 function ext<T>(row: unknown): T {
   return row as T;
@@ -538,6 +539,27 @@ export function CustomsStep({
               pending={bulkAcceptPending}
             />
           )}
+
+        {/*
+          Cargo digest from procurement — Testing 2 row 14 (МВЭД).
+          МВЭД (head_of_customs) is routed to the customs step regardless of
+          ?step=logistics URL param, so the panel must also live here.
+          Same component used on the logistics step (see PR #152). One panel
+          per invoice — customs sees all items at once and needs the
+          origin/destination/cargo digest scoped to each КПП.
+        */}
+        {invoices.map((inv) => (
+          <InvoiceCargoSummary
+            key={inv.id}
+            invoice={inv}
+            destination={{
+              country: quote.delivery_country ?? null,
+              city: quote.delivery_city ?? null,
+              address: quote.delivery_address ?? null,
+            }}
+            items={items}
+          />
+        ))}
 
         {userId && quote.organization_id && (
           <div className="flex items-center justify-end">
