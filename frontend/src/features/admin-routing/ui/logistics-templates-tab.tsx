@@ -12,6 +12,11 @@ import {
 } from "@/entities/logistics-template";
 import type { LocationOption } from "@/entities/location";
 import type { LocationType } from "@/entities/location/ui/location-chip";
+import {
+  extractErrorMessage,
+  isStaleServerActionError,
+  STALE_SERVER_ACTION_MESSAGE,
+} from "@/shared/lib/errors";
 import type { LogisticsTemplateAdmin } from "../model/types";
 import { LogisticsTemplateDialog } from "./logistics-template-dialog";
 
@@ -135,9 +140,14 @@ export function LogisticsTemplatesTab({ templates, locations = [] }: Props) {
         setDialogMode({ kind: "closed" });
         router.refresh();
       } catch (err) {
-        toast.error(
-          err instanceof Error ? err.message : "Не удалось сохранить шаблон",
-        );
+        if (isStaleServerActionError(err)) {
+          toast.error(STALE_SERVER_ACTION_MESSAGE);
+          router.refresh();
+        } else {
+          toast.error(
+            extractErrorMessage(err) ?? "Не удалось сохранить шаблон",
+          );
+        }
       }
     });
   };
@@ -154,9 +164,12 @@ export function LogisticsTemplatesTab({ templates, locations = [] }: Props) {
         toast.success("Шаблон удалён");
         router.refresh();
       } catch (err) {
-        toast.error(
-          err instanceof Error ? err.message : "Не удалось удалить",
-        );
+        if (isStaleServerActionError(err)) {
+          toast.error(STALE_SERVER_ACTION_MESSAGE);
+          router.refresh();
+        } else {
+          toast.error(extractErrorMessage(err) ?? "Не удалось удалить");
+        }
       } finally {
         setDeletingId(null);
       }
