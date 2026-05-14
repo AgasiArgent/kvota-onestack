@@ -1,6 +1,7 @@
 "use client";
 
-import { CheckCircle, Loader2, SkipForward } from "lucide-react";
+import { Check, CheckCircle, Loader2, SkipForward } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { QuoteItemRow } from "@/entities/quote/queries";
@@ -138,9 +139,28 @@ export function CustomsActionBar({
     </Button>
   );
 
+  // Testing 2 row 11 (part 2): once customs is complete on the server,
+  // render a static badge instead of a disabled-but-green Button. The
+  // disabled `bg-success` Button still reads as "active/clickable" to
+  // testers — they click it, get a silent no-op, and report «горит, но
+  // ничего не происходит». A Badge has no button affordance, so the
+  // "done" state is visually unambiguous.
+  const completedBadge = (
+    <Badge
+      variant="default"
+      className="bg-green-100 text-green-700 px-3 py-1.5 h-auto inline-flex items-center gap-1.5"
+      data-testid="customs-completed-badge"
+    >
+      <Check size={14} aria-hidden />
+      <span>Таможня завершена</span>
+    </Badge>
+  );
+
   return (
     <div className="sticky top-[52px] z-[5] bg-card border-b border-border px-6 py-2 flex items-center gap-3">
-      {disabledReason ? (
+      {alreadyCompleted ? (
+        completedBadge
+      ) : disabledReason ? (
         <Tooltip>
           <TooltipTrigger render={<span className="inline-block" />}>
             {completeButton}
