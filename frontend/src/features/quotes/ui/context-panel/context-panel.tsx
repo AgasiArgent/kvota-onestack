@@ -321,14 +321,20 @@ function QuoteInfoBlock({
           />
         ))}
         {participants.length > 0 ? (
-          <>
-            {/* Visual separator between the active-responsibles block above
-                and the workflow_transitions history below. Testing 2 row 2 —
-                tester read the two regions as one merged blob. */}
-            <h5 className="pt-2 mt-1 border-t border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-              История переходов
-            </h5>
-            <ul className="space-y-1.5 max-h-32 overflow-y-auto">
+          /* Collapsed by default — Testing 2 row 2: 8 testers reported the
+             history occupied too much space. Native <details> keeps the
+             interaction cost low (one click, no JS) and the count gives the
+             user a glanceable signal of how much is behind the disclosure. */
+          <details
+            className="pt-2 mt-1 border-t border-border group/history"
+            data-testid="context-panel-history"
+          >
+            <summary className="cursor-pointer list-none text-[10px] font-semibold text-muted-foreground uppercase tracking-wide hover:text-foreground transition-colors flex items-center gap-1">
+              <span className="inline-block transition-transform group-open/history:rotate-90">▸</span>
+              <span>История переходов</span>
+              <span className="text-muted-foreground/60 normal-case font-normal">({participants.length})</span>
+            </summary>
+            <ul className="space-y-1.5 max-h-32 overflow-y-auto mt-2">
               {participants.map((p) => (
                 <li key={p.id} className="text-sm text-muted-foreground truncate">
                   <span className="tabular-nums">
@@ -343,7 +349,7 @@ function QuoteInfoBlock({
                 </li>
               ))}
             </ul>
-          </>
+          </details>
         ) : (
           !salesManager &&
           procurementAssignees.length === 0 &&
