@@ -105,6 +105,14 @@ interface QuoteStatusRailProps {
   quoteId: string;
   workflowStatus: string;
   stageDeadline: StageDeadlineData;
+  /**
+   * Per-stage completion timestamps. When `workflow_status` is the combined
+   * `pending_logistics_and_customs` stage, these flip the corresponding rail
+   * step to a green check ✓ as soon as it's done, even if the sibling stage
+   * is still pending. See Testing 2 row 11.
+   */
+  logisticsCompletedAt?: string | null;
+  customsCompletedAt?: string | null;
 }
 
 export function QuoteStatusRail({
@@ -114,6 +122,8 @@ export function QuoteStatusRail({
   quoteId,
   workflowStatus,
   stageDeadline,
+  logisticsCompletedAt = null,
+  customsCompletedAt = null,
 }: QuoteStatusRailProps) {
   const router = useRouter();
 
@@ -135,8 +145,21 @@ export function QuoteStatusRail({
     >
       <ul className="flex flex-col gap-0.5">
         {STEPS.map((step, idx) => {
-          const isCurrent = step.statuses.includes(workflowStatus);
-          const isCompleted = currentStepIdx >= 0 && idx < currentStepIdx && !isCurrent;
+          const rawIsCurrent = step.statuses.includes(workflowStatus);
+
+          // Within the combined `pending_logistics_and_customs` stage, allow
+          // the logistics or customs side to flip to "completed" independently
+          // once its dedicated timestamp is set. Otherwise both render as
+          // current and the user can't see which sub-stage is already done.
+          const isPartiallyComplete =
+            workflowStatus === "pending_logistics_and_customs" &&
+            ((step.key === "customs" && !!customsCompletedAt) ||
+              (step.key === "logistics" && !!logisticsCompletedAt));
+
+          const isCurrent = rawIsCurrent && !isPartiallyComplete;
+          const isCompleted =
+            (currentStepIdx >= 0 && idx < currentStepIdx && !isCurrent) ||
+            isPartiallyComplete;
           const isActive = step.key === activeStep;
           const isClickable = isAdmin || allowedSteps.includes(step.key);
 
