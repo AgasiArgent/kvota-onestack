@@ -184,6 +184,8 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
             quoteId={id}
             workflowStatus={workflowStatus}
             stageDeadline={stageDeadline}
+            logisticsCompletedAt={quote.logistics_completed_at ?? null}
+            customsCompletedAt={quote.customs_completed_at ?? null}
           />
         }
       />
