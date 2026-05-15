@@ -1,4 +1,4 @@
--- Migration: 316_logistics_segment_locations_nullable
+-- Migration: 317_logistics_segment_locations_nullable
 -- Description: Drop NOT NULL on kvota.logistics_route_segments.from_location_id
 --   and to_location_id so a route template with an intentionally-empty FIRST
 --   (Откуда) or LAST (Куда) location can be applied without the API falling
@@ -22,17 +22,13 @@ ALTER TABLE kvota.logistics_route_segments
     ALTER COLUMN to_location_id DROP NOT NULL;
 
 COMMENT ON COLUMN kvota.logistics_route_segments.from_location_id IS
-    'Origin location (FK to locations). Nullable since m316: an applied '
+    'Origin location (FK to locations). Nullable since m317: an applied '
     'route template may leave the first segment''s origin empty for the '
     'logistician to fill from МОЗ data.';
 
 COMMENT ON COLUMN kvota.logistics_route_segments.to_location_id IS
-    'Destination location (FK to locations). Nullable since m316: an applied '
+    'Destination location (FK to locations). Nullable since m317: an applied '
     'route template may leave the last segment''s destination empty for the '
     'logistician to fill from МОЗ data.';
-
-INSERT INTO kvota.migrations (id, filename, applied_at)
-VALUES (316, '316_logistics_segment_locations_nullable', now())
-ON CONFLICT (id) DO NOTHING;
 
 COMMIT;
