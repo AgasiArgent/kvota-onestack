@@ -210,13 +210,14 @@ class TestCompleteProcurementAuth:
         # tests/test_workflow_service.py.
         from services.workflow_service import InvoiceProcurementCompletionResult
 
+        # logistics_assigned / customs_assigned are always False since
+        # auto-distribution was removed (logistics-customs-kanban REQ-3) —
+        # assignment is now manual via the workspace kanban.
         helper_result = InvoiceProcurementCompletionResult(
             success=True,
             invoice_id=invoice_id,
             quote_id=quote_id,
             workflow_advanced=True,
-            logistics_assigned=True,
-            customs_assigned=True,
         )
 
         with patch("api.invoices.get_supabase") as mock_sb:
@@ -250,8 +251,9 @@ class TestCompleteProcurementAuth:
         body = json.loads(response.body)
         assert body["success"] is True
         assert body["data"]["workflow_advanced"] is True
-        assert body["data"]["logistics_assigned"] is True
-        assert body["data"]["customs_assigned"] is True
+        # No auto-distribution — flags are always False (REQ-3).
+        assert body["data"]["logistics_assigned"] is False
+        assert body["data"]["customs_assigned"] is False
 
         # Helper was called with the actor + roles.
         mock_helper.assert_called_once()

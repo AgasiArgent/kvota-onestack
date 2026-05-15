@@ -3221,71 +3221,14 @@ def complete_procurement(
     except Exception:
         transition_id = None  # Non-critical, continue
 
-    # Best-effort: auto-assign logistics managers to invoices
-    logistics_warning = None
-    try:
-        assignment_result = assign_logistics_to_invoices(quote_id)
-        if assignment_result and not assignment_result.get("success"):
-            logistics_warning = assignment_result.get("error_message") or "Не удалось назначить логистов на инвойсы"
-            logger.warning(
-                "Logistics assignment failed for quote %s: %s",
-                quote_id, logistics_warning
-            )
-        elif assignment_result and assignment_result.get("unmatched_invoice_ids"):
-            unmatched_count = len(assignment_result["unmatched_invoice_ids"])
-            logistics_warning = (
-                f"Логисты назначены не на все инвойсы: {unmatched_count} инвойс(ов) "
-                f"без назначения (проверьте страну отгрузки и маршруты логистики)"
-            )
-            logger.info(
-                "Logistics assignment partial for quote %s: %d unmatched invoices",
-                quote_id, unmatched_count
-            )
-    except Exception as e:
-        logistics_warning = f"Ошибка при назначении логистов: {str(e)}"
-        logger.warning(
-            "Failed to auto-assign logistics to invoices for quote %s: %s",
-            quote_id, str(e)
-        )
-
-    # Best-effort: auto-assign customs users to invoices (Wave 1 Task 7.3)
-    # Least-loaded strategy inside RPC with per-org advisory lock (m286).
-    customs_warning = None
-    try:
-        customs_result = assign_customs_to_invoices(quote_id)
-        if customs_result and not customs_result.get("success"):
-            customs_warning = customs_result.get("error_message") or "Не удалось назначить таможенников на инвойсы"
-            logger.warning(
-                "Customs assignment failed for quote %s: %s",
-                quote_id, customs_warning
-            )
-        elif customs_result and customs_result.get("unmatched_invoice_ids"):
-            unmatched_count = len(customs_result["unmatched_invoice_ids"])
-            customs_warning = (
-                f"Таможенники назначены не на все инвойсы: {unmatched_count} инвойс(ов) "
-                f"без назначения (нет пользователей с ролью customs в организации)"
-            )
-            logger.info(
-                "Customs assignment partial for quote %s: %d unmatched invoices",
-                quote_id, unmatched_count
-            )
-    except Exception as e:
-        customs_warning = f"Ошибка при назначении таможенников: {str(e)}"
-        logger.warning(
-            "Failed to auto-assign customs to invoices for quote %s: %s",
-            quote_id, str(e)
-        )
-
-    # Build an informational warning message if logistics or customs had issues.
-    # The transition itself succeeded — warnings are advisory.
-    warnings = [w for w in (logistics_warning, customs_warning) if w]
-    result_error = None
-    if warnings:
-        result_error = "Закупки завершены, но: " + "; ".join(warnings)
+    # No auto-distribution: logistics/customs assignment is now manual via the
+    # workspace kanban (logistics-customs-kanban spec, REQ-3). Completing
+    # procurement advances the workflow to pending_logistics_and_customs and
+    # leaves every invoice unassigned — invoices surface in the «Нераспределено»
+    # kanban column until a human pulls or assigns them.
 
     return TransitionResult(
         success=True,
-        error_message=result_error,
         quote_id=quote_id,
         from_status=current_status,
         to_status=WorkflowStatus.PENDING_LOGISTICS_AND_CUSTOMS.value,
@@ -3428,8 +3371,12 @@ def _atomic_advance_to_logistics_and_customs(
 class InvoiceProcurementCompletionResult:
     """Outcome of completing procurement for a single invoice.
 
-    Mirrors the success/error signal of TransitionResult but adds three
-    quote-scope flags so the API can report what side effects fired.
+    Mirrors the success/error signal of TransitionResult plus ``workflow_advanced``.
+
+    ``logistics_assigned`` / ``customs_assigned`` are retained for API response
+    backwards-compatibility but are always ``False`` since auto-distribution was
+    removed (logistics-customs-kanban REQ-3) — assignment is now manual via the
+    workspace kanban.
     """
     success: bool
     error_message: Optional[str] = None
@@ -3448,11 +3395,14 @@ def complete_procurement_for_invoice(
     """Complete procurement for a single invoice (КП).
 
     Per-invoice analogue of the quote-level ``complete_procurement``. Stamps
-    invoice flags (procurement_completed_at + procurement_completed_by), then
-    runs the two invoice-level assigners (best-effort, idempotent — they only
-    touch rows lacking assignment), and finally — if this was the last
-    incomplete invoice on the quote — atomically advances the quote workflow
-    status to ``pending_logistics_and_customs`` with a race guard.
+    invoice flags (procurement_completed_at + procurement_completed_by), and
+    finally — if this was the last incomplete invoice on the quote —
+    atomically advances the quote workflow status to
+    ``pending_logistics_and_customs`` with a race guard.
+
+    No logistics/customs auto-distribution occurs (logistics-customs-kanban
+    REQ-3) — invoices are left unassigned and assigned manually via the
+    workspace kanban.
 
     Args:
         invoice_id: UUID of the invoice being completed.
@@ -3520,15 +3470,10 @@ def complete_procurement_for_invoice(
             quote_id=quote_id,
         )
 
-    # Run the assigners now — they are idempotent (only assign rows lacking
-    # assignment) so calling them after every per-invoice completion ensures
-    # mid-completion invoices show in per-user inboxes, not just the final one.
-    warnings = _assign_logistics_and_customs_to_invoices(quote_id)
-    # The assigners returning no warnings doesn't strictly imply rows were
-    # written — but signal-wise it means "the assignment step ran without
-    # surfacing partial/failure issues".
-    logistics_assigned = True
-    customs_assigned = True
+    # No auto-distribution: logistics/customs assignment is now manual via the
+    # workspace kanban (logistics-customs-kanban spec, REQ-3). The invoice is
+    # left unassigned and surfaces in the «Нераспределено» kanban column once
+    # the quote reaches the logistics+customs stage.
 
     # Was this the last incomplete invoice on the quote? If yes, advance the
     # workflow_status atomically.
@@ -3573,18 +3518,14 @@ def complete_procurement_for_invoice(
         # workflow_advanced=False here means the race guard saw the quote was
         # already advanced by another worker. Not an error.
 
-    result_error = None
-    if warnings:
-        result_error = "Закупка по КП завершена, но: " + "; ".join(warnings)
-
     return InvoiceProcurementCompletionResult(
         success=True,
-        error_message=result_error,
         invoice_id=invoice_id,
         quote_id=quote_id,
         workflow_advanced=workflow_advanced,
-        logistics_assigned=logistics_assigned,
-        customs_assigned=customs_assigned,
+        # logistics_assigned / customs_assigned stay at their dataclass default
+        # of False — auto-distribution was removed (logistics-customs-kanban
+        # REQ-3); assignment is now manual via the workspace kanban.
     )
 
 
