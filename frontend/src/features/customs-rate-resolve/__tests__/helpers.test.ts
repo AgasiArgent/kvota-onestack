@@ -113,13 +113,22 @@ describe("isValidTnvedCode", () => {
     expect(isValidTnvedCode("12345678901")).toBe(false);
   });
 
-  it("rejects non-numeric content", () => {
+  it("rejects content with no digits", () => {
     expect(isValidTnvedCode("abcdefghij")).toBe(false);
+  });
+
+  it("rejects codes that are too short after stripping separators", () => {
     expect(isValidTnvedCode("12345 6789")).toBe(false);
   });
 
   it("trims surrounding whitespace", () => {
     expect(isValidTnvedCode("  0123456789  ")).toBe(true);
+  });
+
+  it("accepts 10-digit codes pasted with separators", () => {
+    expect(isValidTnvedCode("4002 31 0000")).toBe(true);
+    expect(isValidTnvedCode("4002.31.0000")).toBe(true);
+    expect(isValidTnvedCode("4002-31-0000")).toBe(true);
   });
 });
 

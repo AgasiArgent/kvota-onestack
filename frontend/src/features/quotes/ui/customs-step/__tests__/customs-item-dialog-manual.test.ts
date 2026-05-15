@@ -148,6 +148,16 @@ describe("buildUpdates — Auto mode (legacy compatibility)", () => {
     expect(updates.customs_manual_override).toBe(false);
     expect(updates.customs_manual_rate_payload).toBeNull();
   });
+
+  it("normalizes hs_code — strips separators from pasted code", () => {
+    const updates = buildUpdates({ ...BASE_FORM, hs_code: "8517 12 0000" });
+    expect(updates.hs_code).toBe("8517120000");
+  });
+
+  it("normalizes hs_code — empty after normalization becomes null", () => {
+    const updates = buildUpdates({ ...BASE_FORM, hs_code: "  " });
+    expect(updates.hs_code).toBeNull();
+  });
 });
 
 describe("buildUpdates — Manual mode persists payload", () => {

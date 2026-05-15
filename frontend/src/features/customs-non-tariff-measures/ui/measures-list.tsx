@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { normalizeHsCode } from "@/shared/lib/hs-code";
 
 import {
   fetchMeasures,
@@ -68,7 +69,7 @@ export function MeasuresList({
 }: MeasuresListProps) {
   const [state, setState] = useState<MeasuresState>(INITIAL_STATE);
 
-  const codeReady = /^\d{10}$/.test(tnvedCode.trim());
+  const codeReady = /^\d{10}$/.test(normalizeHsCode(tnvedCode));
   const countryReady = countryOksm != null;
   const canFetch = codeReady && countryReady && state.status !== "loading";
 
@@ -77,7 +78,7 @@ export function MeasuresList({
     setState({ status: "loading", measures: [], error: null });
     try {
       const res = await fetchMeasures({
-        tnved_code: tnvedCode.trim(),
+        tnved_code: normalizeHsCode(tnvedCode),
         country_oksm: countryOksm,
         mode,
       });

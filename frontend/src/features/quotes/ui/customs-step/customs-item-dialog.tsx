@@ -42,6 +42,7 @@ import type { QuoteItemRow } from "@/entities/quote/queries";
 import { ClassifyButton } from "@/features/customs-classify";
 import { CustomsCountryDropdown } from "@/features/customs-country-dropdown";
 import { ALTA_FEATURES_ENABLED } from "@/shared/lib/feature-flags";
+import { normalizeHsCode } from "@/shared/lib/hs-code";
 import {
   AutoResolveButton,
   RateBreakdown,
@@ -285,7 +286,7 @@ export function buildUpdates(form: FormState): Record<string, unknown> {
         : { customs_duty: dutyValue, customs_duty_per_kg: null };
 
     return {
-      hs_code: form.hs_code.trim() || null,
+      hs_code: normalizeHsCode(form.hs_code) || null,
       ...dutyColumns,
       customs_util_fee: parseNumOrNull(form.customs_util_fee),
       customs_excise: parseNumOrNull(form.customs_excise),
@@ -320,7 +321,7 @@ export function buildUpdates(form: FormState): Record<string, unknown> {
       : { customs_duty: null, customs_duty_per_kg: value1 };
 
   return {
-    hs_code: form.hs_code.trim() || null,
+    hs_code: normalizeHsCode(form.hs_code) || null,
     ...dutyColumns,
     customs_util_fee: parseNumOrNull(form.customs_util_fee),
     customs_excise: parseNumOrNull(form.customs_excise),
@@ -1049,7 +1050,7 @@ export function CustomsItemDialog({
                       .then(
                         ({ resolveRates }) =>
                           resolveRates({
-                            tnved_code: form.hs_code.trim(),
+                            tnved_code: normalizeHsCode(form.hs_code),
                             country_oksm: form.country_of_origin_oksm!,
                             certificate: form.has_origin_certificate,
                             sp_certificate: form.has_fta_certificate,

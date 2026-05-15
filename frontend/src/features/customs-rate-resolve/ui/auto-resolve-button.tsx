@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Loader2, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { normalizeHsCode } from "@/shared/lib/hs-code";
 
 import { resolveRates } from "../api/resolve-rates";
 import type { ApiError, ResolveRatesData } from "../model/types";
@@ -26,10 +27,11 @@ export interface AutoResolveButtonProps {
 
 /**
  * Validate that a string is a 10-digit ТН ВЭД code.
- * Pure helper — testable without DOM.
+ * Normalizes first so codes pasted with separators («4002 31 0000»)
+ * still validate. Pure helper — testable without DOM.
  */
 export function isValidTnvedCode(code: string): boolean {
-  return /^\d{10}$/.test(code.trim());
+  return /^\d{10}$/.test(normalizeHsCode(code));
 }
 
 export function AutoResolveButton({
@@ -71,7 +73,7 @@ export function AutoResolveButton({
     setLoading(true);
     try {
       const res = await resolveRates({
-        tnved_code: tnvedCode.trim(),
+        tnved_code: normalizeHsCode(tnvedCode),
         country_oksm: countryOksm!,
         certificate: hasOriginCertificate,
         sp_certificate: hasFtaCertificate,
