@@ -301,9 +301,26 @@ export function InvoiceCard({
       }
     >
   >({});
-  const [invoiceItemsLoading, setInvoiceItemsLoading] = useState(
-    invoiceItemsOverride === undefined
+  // Testing 2 row 20 (v3) — distinguish initial load from autosave refetch.
+  //
+  // Earlier the single `invoiceItemsLoading` flag flipped to `true` on EVERY
+  // refetch — including refetches triggered by `setRefreshKey((k) => k + 1)`
+  // after a cell autosave. The render branch at line 1580 then replaced the
+  // mounted `<ProcurementItemsEditor>` with a "Загрузка..." text placeholder
+  // for the duration of the fetch (~200-400ms), then remounted Handsontable
+  // from scratch when data arrived. To the user this reads as the table
+  // "прыгает" every time they press Enter on a cell — РОЗ/СтМОЗ/МОЗ all
+  // reported this on round 3 after PR #156's scroll-preservation fix only
+  // reduced (didn't eliminate) the jump.
+  //
+  // Fix: only gate the placeholder on the very first load. On subsequent
+  // refetches we keep the existing table mounted and let the imperative
+  // `setDataAtRowProp("external")` sync in procurement-handsontable patch
+  // cell values in place — no remount, no scroll reset, no flash.
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(
+    invoiceItemsOverride !== undefined
   );
+  const invoiceItemsLoading = !hasLoadedOnce && invoiceItemsOverride === undefined;
   // 1:1-covered quote_items in THIS invoice — candidates for Split/Merge.
   // A quote_item is 1:1-covered when it has exactly one invoice_item in this
   // invoice covering it AND that invoice_item covers only this quote_item
@@ -419,7 +436,10 @@ export function InvoiceCard({
 
     let cancelled = false;
     async function load() {
-      setInvoiceItemsLoading(true);
+      // Note: do NOT flip a loading flag here. The `hasLoadedOnce` ref-driven
+      // gate above keeps the placeholder only for the initial mount. Flipping
+      // a flag on every refetch would unmount Handsontable mid-edit (Testing 2
+      // row 20 v3 root cause).
       try {
         const { data: ii } = await supabase
           .from("invoice_items")
@@ -680,7 +700,7 @@ export function InvoiceCard({
           setMergeResultByItemId(mergeResult);
         }
       } finally {
-        if (!cancelled) setInvoiceItemsLoading(false);
+        if (!cancelled) setHasLoadedOnce(true);
       }
     }
     void load();
