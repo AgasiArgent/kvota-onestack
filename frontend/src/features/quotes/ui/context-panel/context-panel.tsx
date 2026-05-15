@@ -6,6 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import type { QuoteDetailRow } from "@/entities/quote/queries";
 import { ContactDropdownSelect } from "./contact-dropdown-select";
 import { AddressDropdownSelect } from "./address-dropdown-select";
+import {
+  SalesChecklistBlock,
+  hasSalesChecklistContent,
+} from "./sales-checklist-block";
 import type { ParticipantRow } from "./participants-block";
 import { ROLE_LABELS_RU } from "@/entities/user/types";
 import { canEditQuoteCustomerFields, canViewQuoteFinancials } from "@/shared/lib/roles";
@@ -55,6 +59,7 @@ interface ContextPanelProps {
 export function ContextPanel({ quote, data, userRoles }: ContextPanelProps) {
   const showFinancials = canViewQuoteFinancials(userRoles);
   const canEditCustomerFields = canEditQuoteCustomerFields(userRoles);
+  const showSalesChecklist = hasSalesChecklistContent(data.salesChecklist);
   return (
     <div className="mx-6 mt-3 mb-1 rounded-lg border border-border bg-muted/30 p-4">
       <QuoteInfoBlock
@@ -67,6 +72,18 @@ export function ContextPanel({ quote, data, userRoles }: ContextPanelProps) {
         showFinancials={showFinancials}
         canEditCustomerFields={canEditCustomerFields}
       />
+      {/* Testing 2 row 29 (FB-260514-220805-be23): МОП's «Контрольный список»
+          (проценка / тендер / прямой / через торгующих + equipment description)
+          is captured at hand-off but was invisible on procurement+ steps. The
+          fetch in queries.ts already loads it; this block surfaces it for
+          every role that can read the quote past Заявка. Hidden entirely when
+          the checklist carries no content (legacy quotes / quotes that
+          skipped the dialog). */}
+      {showSalesChecklist && (
+        <div className="mt-4 pt-4 border-t border-border">
+          <SalesChecklistBlock checklist={data.salesChecklist} />
+        </div>
+      )}
     </div>
   );
 }

@@ -584,3 +584,150 @@ describe("ContextPanel — МОЗ + МОП date + history separator (row 2)", ()
     expect(screen.queryByText("История переходов")).not.toBeInTheDocument();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Testing 2 row 29 (FB-260514-220805-be23) — МОП «Контрольный список» surface
+// ---------------------------------------------------------------------------
+//
+// МОП fills the checklist when transferring a quote to procurement. The
+// payload lands on `kvota.quotes.sales_checklist` (JSONB) and is fetched in
+// `fetchQuoteContextData`, but the rendering was orphaned during the April
+// 2026 context-panel merge. These tests pin the surface: data present →
+// render badges + description; empty payload → block hidden.
+
+describe("ContextPanel — sales checklist visible on every step (Testing 2 row 29)", () => {
+  it("renders all active request-type badges and equipment description", () => {
+    const dataWithChecklist: QuoteContextData = {
+      ...data,
+      salesChecklist: {
+        is_estimate: true,
+        is_tender: true,
+        direct_request: true,
+        trading_org_request: true,
+        equipment_description: "Сервер HP DL380 для серверной клиента в Москве",
+        completed_at: "2026-05-14T10:00:00Z",
+        completed_by: "user-1",
+      },
+    };
+
+    render(
+      <ContextPanel
+        quote={makeQuote()}
+        data={dataWithChecklist}
+        userRoles={["procurement"]}
+      />,
+    );
+
+    const block = screen.getByTestId("context-panel-sales-checklist");
+    expect(block).toBeInTheDocument();
+    expect(block).toHaveTextContent("От МОП");
+    expect(block).toHaveTextContent("Проценка");
+    expect(block).toHaveTextContent("Тендер");
+    expect(block).toHaveTextContent("Прямой запрос");
+    expect(block).toHaveTextContent("Через торгующих");
+    expect(block).toHaveTextContent(
+      "Сервер HP DL380 для серверной клиента в Москве",
+    );
+  });
+
+  it("renders only the selected badges (partial checklist)", () => {
+    const dataPartial: QuoteContextData = {
+      ...data,
+      salesChecklist: {
+        is_estimate: false,
+        is_tender: true,
+        direct_request: false,
+        trading_org_request: false,
+        equipment_description: "Срочный тендер",
+        completed_at: null,
+        completed_by: null,
+      },
+    };
+
+    render(
+      <ContextPanel
+        quote={makeQuote()}
+        data={dataPartial}
+        userRoles={["procurement"]}
+      />,
+    );
+
+    const block = screen.getByTestId("context-panel-sales-checklist");
+    expect(block).toHaveTextContent("Тендер");
+    expect(block).not.toHaveTextContent("Проценка");
+    expect(block).not.toHaveTextContent("Прямой запрос");
+    expect(block).not.toHaveTextContent("Через торгующих");
+    expect(block).toHaveTextContent("Срочный тендер");
+  });
+
+  it("hides the block entirely when checklist is null (legacy quote)", () => {
+    render(
+      <ContextPanel
+        quote={makeQuote()}
+        data={data}
+        userRoles={["procurement"]}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("context-panel-sales-checklist"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("От МОП")).not.toBeInTheDocument();
+  });
+
+  it("hides the block when all checklist fields are empty", () => {
+    const dataEmpty: QuoteContextData = {
+      ...data,
+      salesChecklist: {
+        is_estimate: false,
+        is_tender: false,
+        direct_request: false,
+        trading_org_request: false,
+        equipment_description: "   ",
+        completed_at: null,
+        completed_by: null,
+      },
+    };
+
+    render(
+      <ContextPanel
+        quote={makeQuote()}
+        data={dataEmpty}
+        userRoles={["procurement"]}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("context-panel-sales-checklist"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("is visible to non-procurement roles too (logistics, customs, admin)", () => {
+    const dataWithChecklist: QuoteContextData = {
+      ...data,
+      salesChecklist: {
+        is_estimate: false,
+        is_tender: false,
+        direct_request: true,
+        trading_org_request: false,
+        equipment_description: "Описание для всех ролей",
+        completed_at: null,
+        completed_by: null,
+      },
+    };
+
+    for (const role of ["logistics", "customs", "admin", "head_of_procurement"]) {
+      const { unmount } = render(
+        <ContextPanel
+          quote={makeQuote()}
+          data={dataWithChecklist}
+          userRoles={[role]}
+        />,
+      );
+      expect(
+        screen.getByTestId("context-panel-sales-checklist"),
+      ).toBeInTheDocument();
+      unmount();
+    }
+  });
+});

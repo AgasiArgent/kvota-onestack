@@ -1,8 +1,22 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
-import { Phone, Mail, UserCog } from "lucide-react";
+import { ClipboardList } from "lucide-react";
 
+/**
+ * Shape of the JSONB `kvota.quotes.sales_checklist` payload written by the
+ * МОП «Передать в закупки» dialog (`transfer-dialog.tsx::handleSubmit` via
+ * `submitToProcurementWithChecklist`).
+ *
+ * Testing 2 row 29 (FB-260514-220805-be23): МОП fills these fields when
+ * transferring a quote to procurement; the procurement-side roles (МОЗ /
+ * РОЗ / СтМОЗ) were seeing «Данных нет» because the rendering was orphaned
+ * during the April 2026 context-panel merge (see commit 35ea2e44). The
+ * fetch in `queries.ts::fetchQuoteContextData` was kept; this component is
+ * the missing render surface, now wired back into `ContextPanel` so the
+ * checklist is visible from procurement-onward without re-opening the
+ * sales-step dialog.
+ */
 export interface SalesChecklist {
   is_estimate: boolean;
   is_tender: boolean;
@@ -15,18 +29,6 @@ export interface SalesChecklist {
 
 interface SalesChecklistBlockProps {
   checklist: SalesChecklist | null;
-  contactPerson: {
-    name: string;
-    phone: string | null;
-    email: string | null;
-  } | null;
-  salesManager: {
-    id: string;
-    full_name: string;
-    phone: string | null;
-    email: string | null;
-  } | null;
-  additionalInfo: string | null;
 }
 
 const REQUEST_TYPE_BADGES: {
@@ -42,26 +44,46 @@ const REQUEST_TYPE_BADGES: {
   { key: "trading_org_request", label: "Через торгующих" },
 ];
 
-export function SalesChecklistBlock({
-  checklist,
-  contactPerson,
-  salesManager,
-  additionalInfo,
-}: SalesChecklistBlockProps) {
-  const activeBadges = checklist
-    ? REQUEST_TYPE_BADGES.filter((b) => checklist[b.key])
-    : [];
+/**
+ * Returns true if the checklist carries any user-entered content. Used to
+ * hide the entire block when the quote came through a path that never
+ * populated `sales_checklist` (e.g., legacy quotes pre-dating the dialog).
+ *
+ * Tester edge case (Testing 2 row 29): "if all fields null → hide block".
+ */
+export function hasSalesChecklistContent(
+  checklist: SalesChecklist | null,
+): checklist is SalesChecklist {
+  if (!checklist) return false;
+  if (
+    checklist.is_estimate ||
+    checklist.is_tender ||
+    checklist.direct_request ||
+    checklist.trading_org_request
+  ) {
+    return true;
+  }
+  return checklist.equipment_description?.trim().length > 0;
+}
 
-  const hasAnyContent =
-    checklist || contactPerson || salesManager || additionalInfo;
+export function SalesChecklistBlock({ checklist }: SalesChecklistBlockProps) {
+  if (!hasSalesChecklistContent(checklist)) return null;
+
+  const activeBadges = REQUEST_TYPE_BADGES.filter((b) => checklist[b.key]);
+  const description = checklist.equipment_description?.trim();
 
   return (
-    <div className="space-y-3">
-      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-        Контекст продаж
-      </h4>
+    <div
+      className="space-y-2 min-w-0"
+      data-testid="context-panel-sales-checklist"
+    >
+      <div className="flex items-center gap-2 mb-2">
+        <ClipboardList size={14} className="text-muted-foreground" />
+        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+          От МОП
+        </h4>
+      </div>
 
-      {/* Request type badges */}
       {activeBadges.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {activeBadges.map((b) => (
@@ -76,52 +98,15 @@ export function SalesChecklistBlock({
         </div>
       )}
 
-      {/* Equipment description (from sales_checklist JSON) */}
-      {checklist?.equipment_description && (
-        <div className="rounded-md bg-muted/30 px-3 py-2 text-sm text-foreground whitespace-pre-wrap">
-          {checklist.equipment_description}
-        </div>
-      )}
-
-      {/* Additional info (quotes.additional_info column) */}
-      {additionalInfo && (
+      {description && (
         <div className="space-y-1">
-          <span className="text-xs text-muted-foreground">Доп. информация</span>
-          <div className="rounded-md bg-muted/30 px-3 py-2 text-sm text-foreground whitespace-pre-wrap">
-            {additionalInfo}
+          <span className="text-xs text-muted-foreground">
+            Описание оборудования
+          </span>
+          <div className="rounded-md bg-muted/30 px-3 py-2 text-sm text-foreground whitespace-pre-wrap break-words">
+            {description}
           </div>
         </div>
-      )}
-
-      {/* Sales manager (responsible МОП) */}
-      {salesManager && (
-        <div className="space-y-1">
-          <span className="text-xs text-muted-foreground">Ответственный МОП</span>
-          <div className="flex items-center flex-wrap gap-x-4 gap-y-1 text-sm">
-            <div className="flex items-center gap-1.5 text-foreground">
-              <UserCog size={13} className="text-muted-foreground" />
-              <span>{salesManager.full_name || "\u2014"}</span>
-            </div>
-            {salesManager.phone && (
-              <div className="flex items-center gap-1 text-muted-foreground">
-                <Phone size={12} />
-                <span className="tabular-nums">{salesManager.phone}</span>
-              </div>
-            )}
-            {salesManager.email && (
-              <div className="flex items-center gap-1 text-muted-foreground">
-                <Mail size={12} />
-                <span>{salesManager.email}</span>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {!hasAnyContent && (
-        <p className="text-sm text-muted-foreground">
-          Контекст продаж не заполнен
-        </p>
       )}
     </div>
   );
