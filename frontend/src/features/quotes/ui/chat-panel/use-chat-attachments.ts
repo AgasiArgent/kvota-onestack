@@ -23,44 +23,16 @@ export interface PendingAttachment {
 }
 
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
-const ALLOWED_MIME_PREFIXES = [
-  "image/",
-  "application/pdf",
-  "application/msword",
-  "application/vnd.openxmlformats-officedocument",
-  "application/vnd.ms-excel",
-  // Some browsers/OSes report .xls as application/excel or x-msexcel
-  "application/excel",
-  "application/x-excel",
-  "application/x-msexcel",
-  "application/zip",
-] as const;
 
-// Extension allowlist — used when file.type is empty or non-standard
-// (common on Windows for older Office formats like .xls).
-const ALLOWED_EXTENSIONS = [
-  "pdf",
-  "jpg",
-  "jpeg",
-  "png",
-  "webp",
-  "gif",
-  "doc",
-  "docx",
-  "xls",
-  "xlsx",
-  "zip",
-] as const;
-
-function isAllowedFile(file: File): boolean {
-  const mime = (file.type || "").toLowerCase();
-  if (mime && ALLOWED_MIME_PREFIXES.some((prefix) => mime.startsWith(prefix))) {
-    return true;
-  }
-  // Fallback: check extension. Catches .xls files reported with empty or
-  // unusual MIME types by some browsers.
-  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
-  return (ALLOWED_EXTENSIONS as readonly string[]).includes(ext);
+/**
+ * Chat attachments accept any file type. These are internal authenticated
+ * users uploading to a quote chat — there is no type restriction, only a
+ * size cap ({@link MAX_FILE_SIZE_BYTES}). A previous mime-type allowlist
+ * rejected macro-enabled Office formats (.xlsm, .docm) and other valid
+ * files; it has been removed (Testing 2 row 32).
+ */
+export function isAllowedFile(file: File): boolean {
+  return file.size <= MAX_FILE_SIZE_BYTES;
 }
 
 function formatSizeMb(bytes: number): string {
@@ -105,14 +77,11 @@ export function useChatAttachments({
       // Validate and seed state
       const toUpload: PendingAttachment[] = [];
       for (const file of files) {
-        if (file.size > MAX_FILE_SIZE_BYTES) {
+        // Any file type is accepted — only the size cap is enforced.
+        if (!isAllowedFile(file)) {
           toast.error(
             `${file.name}: размер ${formatSizeMb(file.size)} превышает лимит 50 МБ`
           );
-          continue;
-        }
-        if (!isAllowedFile(file)) {
-          toast.error(`${file.name}: неподдерживаемый формат (${file.type || "unknown"})`);
           continue;
         }
         toUpload.push({
