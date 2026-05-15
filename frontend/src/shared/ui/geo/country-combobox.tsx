@@ -104,6 +104,7 @@ export function CountryCombobox({
   const [search, setSearch] = useState("");
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   const selected = findCountryByCode(value);
   const triggerLabel = selected
@@ -138,6 +139,21 @@ export function CountryCombobox({
     );
     el?.scrollIntoView({ block: "nearest" });
   }, [focusedIndex]);
+
+  // Testing 2 row 39 — focus the search box WITHOUT scrolling the page.
+  //
+  // The popover content is portaled to <body> (near the bottom of the DOM).
+  // base-ui's default `initialFocus` moves focus to the first tabbable
+  // element (the search input) via a plain `.focus()` — the browser then
+  // scrolls the portaled input into view and the whole КПП page jumps to
+  // the top. Passing `initialFocus` as a function lets us own the focus
+  // move: base-ui invokes it once the popup is mounted, we focus the search
+  // box with `{ preventScroll: true }`, and return `false` so base-ui does
+  // not additionally move focus on its own.
+  function focusSearchInput(): false {
+    searchInputRef.current?.focus({ preventScroll: true });
+    return false;
+  }
 
   function commitSelection(code: string) {
     onChange(code);
@@ -230,7 +246,14 @@ export function CountryCombobox({
           </button>
         }
       />
-      <PopoverContent className="w-72 p-0" side="bottom" align="start">
+      <PopoverContent
+        className="w-72 p-0"
+        side="bottom"
+        align="start"
+        // Testing 2 row 39 — own the initial-focus move so it doesn't scroll
+        // the page (см. focusSearchInput above).
+        initialFocus={focusSearchInput}
+      >
         <div className="flex flex-col">
           {/* Search input */}
           <div className="border-b border-border p-2">
@@ -240,12 +263,12 @@ export function CountryCombobox({
                 size={14}
               />
               <Input
+                ref={searchInputRef}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onKeyDown={handleSearchKeyDown}
                 placeholder="Поиск страны..."
                 className="h-7 pl-7 text-xs"
-                autoFocus
                 aria-label="Поиск страны"
               />
               {search.length > 0 && (
