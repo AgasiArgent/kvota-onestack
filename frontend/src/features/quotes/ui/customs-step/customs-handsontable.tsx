@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { updateQuoteItem } from "@/entities/quote/mutations";
 import type { QuoteItemRow } from "@/entities/quote/queries";
+import { normalizeHsCode } from "@/shared/lib/hs-code";
 import type { CustomsAutofillSuggestion } from "@/features/customs-autofill";
 import type { SystemView } from "@/features/customs-certificates";
 import { CustomsViewHintBanner } from "@/features/customs-certificates";
@@ -1144,6 +1145,10 @@ export function CustomsHandsontable({
             updates[field] = isNaN(parsed) ? null : parsed;
           } else if (BOOLEAN_FIELDS.has(field)) {
             updates[field] = Boolean(val);
+          } else if (field === "hs_code") {
+            // ТН ВЭД is semantically 10 digits — strip pasted separators
+            // so search / rate auto-resolve / comparison stay consistent.
+            updates[field] = normalizeHsCode(val as string) || null;
           } else if (TEXT_FIELDS.has(field)) {
             updates[field] = val || null;
           }
