@@ -957,11 +957,27 @@ async def apply_template(request: Request, template_id: str) -> JSONResponse:
     # behaviour for legacy type-only templates identical while letting
     # admins pin specific locations on the template ("Хоргос таможня" vs
     # any 'customs' row).
+    #
+    # Endpoint slots stay empty (Testing 2 row 30 #3): a template may
+    # intentionally leave the FIRST segment's origin (Откуда) and/or the
+    # LAST segment's destination (Куда) blank so the logistician fills them
+    # from МОЗ data. For those two slots, a missing concrete location id is
+    # NOT resolved to a default — the segment is created with a NULL FK.
+    # Interior slots (hub→hub, customs, etc.) still fall back as before so
+    # the route stays connected.
+    last_idx = len(template_segments) - 1
+
+    def _from_is_open_endpoint(idx: int) -> bool:
+        return idx == 0
+
+    def _to_is_open_endpoint(idx: int) -> bool:
+        return idx == last_idx
+
     needed_types: set[str] = set()
-    for s in template_segments:
-        if not s.get("from_location_id"):
+    for idx, s in enumerate(template_segments):
+        if not s.get("from_location_id") and not _from_is_open_endpoint(idx):
             needed_types.add(s["from_location_type"])
-        if not s.get("to_location_id"):
+        if not s.get("to_location_id") and not _to_is_open_endpoint(idx):
             needed_types.add(s["to_location_type"])
 
     resolved: dict[str, str] = {}
@@ -1009,18 +1025,28 @@ async def apply_template(request: Request, template_id: str) -> JSONResponse:
             (existing.data[0]["sequence_order"] + 1) if existing.data else 1
         )
 
+    def _resolve_from(idx: int, ts: dict) -> str | None:
+        concrete = ts.get("from_location_id")
+        if concrete:
+            return concrete
+        if _from_is_open_endpoint(idx):
+            return None  # open endpoint — logistician fills it later
+        return resolved[ts["from_location_type"]]
+
+    def _resolve_to(idx: int, ts: dict) -> str | None:
+        concrete = ts.get("to_location_id")
+        if concrete:
+            return concrete
+        if _to_is_open_endpoint(idx):
+            return None  # open endpoint — logistician fills it later
+        return resolved[ts["to_location_type"]]
+
     new_rows = [
         {
             "invoice_id": invoice_id,
             "sequence_order": starting_order + idx,
-            "from_location_id": (
-                ts.get("from_location_id")
-                or resolved[ts["from_location_type"]]
-            ),
-            "to_location_id": (
-                ts.get("to_location_id")
-                or resolved[ts["to_location_type"]]
-            ),
+            "from_location_id": _resolve_from(idx, ts),
+            "to_location_id": _resolve_to(idx, ts),
             "label": ts.get("default_label"),
             "transit_days": ts.get("default_days"),
             "main_cost_rub": 0,

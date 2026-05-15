@@ -174,6 +174,91 @@ describe("SegmentDetailsPanel (РОЛ Тест 07 #3.6)", () => {
     expect(labelInput.value).toBe("test");
   });
 
+  // -------------------------------------------------------------------------
+  // Testing 2 row 30 #2 — clicking a cell without editing must NOT save.
+  // -------------------------------------------------------------------------
+  describe("no-op edit guard (Testing 2 row 30 #2)", () => {
+    it("does not call updateSegment when a text field is blurred without a change", async () => {
+      const { updateSegment } = (await import(
+        "@/entities/logistics-segment"
+      )) as unknown as { updateSegment: ReturnType<typeof vi.fn> };
+      const user = userEvent.setup();
+      const onMutation = vi.fn();
+
+      render(
+        <SegmentDetailsPanel
+          segment={makeSegment({ carrier: "DHL", label: "Main", notes: "n" })}
+          locations={[LOC_A, LOC_B]}
+          revalidatePath="/quotes/x"
+          onMutation={onMutation}
+        />,
+      );
+
+      const carrierInput = screen.getByPlaceholderText(
+        /Название перевозчика/i,
+      ) as HTMLInputElement;
+
+      // Click into the carrier cell, then click away — no edit made.
+      await user.click(carrierInput);
+      await user.tab();
+
+      expect(updateSegment).not.toHaveBeenCalled();
+      expect(onMutation).not.toHaveBeenCalled();
+    });
+
+    it("does not call updateSegment when a numeric field is blurred without a change", async () => {
+      const { updateSegment } = (await import(
+        "@/entities/logistics-segment"
+      )) as unknown as { updateSegment: ReturnType<typeof vi.fn> };
+      const user = userEvent.setup();
+
+      render(
+        <SegmentDetailsPanel
+          segment={makeSegment({ transitDays: 7, mainCostRub: 500 })}
+          locations={[LOC_A, LOC_B]}
+          revalidatePath="/quotes/x"
+        />,
+      );
+
+      const costInput = screen.getByLabelText("Сумма") as HTMLInputElement;
+      await user.click(costInput);
+      await user.tab();
+
+      expect(updateSegment).not.toHaveBeenCalled();
+    });
+
+    it("still calls updateSegment when a text field IS edited", async () => {
+      const { updateSegment } = (await import(
+        "@/entities/logistics-segment"
+      )) as unknown as { updateSegment: ReturnType<typeof vi.fn> };
+      const user = userEvent.setup();
+
+      render(
+        <SegmentDetailsPanel
+          segment={makeSegment({ carrier: "DHL" })}
+          locations={[LOC_A, LOC_B]}
+          revalidatePath="/quotes/x"
+        />,
+      );
+
+      const carrierInput = screen.getByPlaceholderText(
+        /Название перевозчика/i,
+      ) as HTMLInputElement;
+
+      await user.clear(carrierInput);
+      await user.type(carrierInput, "FedEx");
+      await user.tab();
+
+      expect(updateSegment).toHaveBeenCalledTimes(1);
+      expect(updateSegment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          segment_id: "seg-1",
+          patch: { carrier: "FedEx" },
+        }),
+      );
+    });
+  });
+
   it("re-syncs local state when the user switches to a different segment", () => {
     const { rerender } = render(
       <SegmentDetailsPanel
