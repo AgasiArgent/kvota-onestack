@@ -14,6 +14,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { assignUnassignedItem } from "../api/routing-api";
+import {
+  extractErrorMessage,
+  isStaleServerActionError,
+  STALE_SERVER_ACTION_MESSAGE,
+} from "@/shared/lib/errors";
 import { UserSelect } from "./user-select";
 import type { UnassignedItem } from "../model/types";
 
@@ -59,8 +64,12 @@ export function UnassignedTab({ items, orgId }: Props) {
       toast.success("Позиция назначена");
       router.refresh();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Ошибка назначения";
-      toast.error(msg);
+      if (isStaleServerActionError(err)) {
+        toast.error(STALE_SERVER_ACTION_MESSAGE);
+        router.refresh();
+      } else {
+        toast.error(extractErrorMessage(err) ?? "Ошибка назначения");
+      }
     } finally {
       setAssigningId(null);
     }

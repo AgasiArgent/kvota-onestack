@@ -19,6 +19,11 @@ import {
   deleteGroupAssignment,
   fetchSalesGroups,
 } from "../api/routing-api";
+import {
+  extractErrorMessage,
+  isStaleServerActionError,
+  STALE_SERVER_ACTION_MESSAGE,
+} from "@/shared/lib/errors";
 import { UserSelect } from "./user-select";
 import { GroupAssignmentDialog } from "./group-assignment-dialog";
 import type { GroupAssignment, SalesGroup } from "../model/types";
@@ -53,13 +58,22 @@ export function GroupsTab({ assignments, orgId }: Props) {
   const assignedGroupIds = new Set(assignments.map((a) => a.sales_group_id));
   const availableGroups = salesGroups.filter((g) => !assignedGroupIds.has(g.id));
 
+  function handleMutationError(err: unknown, fallback: string) {
+    if (isStaleServerActionError(err)) {
+      toast.error(STALE_SERVER_ACTION_MESSAGE);
+      router.refresh();
+    } else {
+      toast.error(extractErrorMessage(err) ?? fallback);
+    }
+  }
+
   async function handleDialogSubmit(groupId: string, userId: string) {
     try {
       await createGroupAssignment(orgId, groupId, userId);
       toast.success("Правило группы создано");
       router.refresh();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Ошибка создания правила");
+      handleMutationError(err, "Ошибка создания правила");
     }
   }
 
@@ -71,7 +85,7 @@ export function GroupsTab({ assignments, orgId }: Props) {
       setEditingId(null);
       router.refresh();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Ошибка обновления");
+      handleMutationError(err, "Ошибка обновления");
     }
   }
 
@@ -82,7 +96,7 @@ export function GroupsTab({ assignments, orgId }: Props) {
       toast.success("Правило удалено");
       router.refresh();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Ошибка удаления");
+      handleMutationError(err, "Ошибка удаления");
     } finally {
       setDeletingId(null);
     }

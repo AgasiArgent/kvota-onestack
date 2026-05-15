@@ -18,6 +18,11 @@ import {
   deleteTenderStep,
   reorderTenderSteps,
 } from "../api/routing-api";
+import {
+  extractErrorMessage,
+  isStaleServerActionError,
+  STALE_SERVER_ACTION_MESSAGE,
+} from "@/shared/lib/errors";
 import { TenderStepDialog } from "./tender-step-dialog";
 import type { TenderChainStep } from "../model/types";
 
@@ -32,6 +37,15 @@ export function TenderTab({ steps, orgId }: Props) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [reordering, setReordering] = useState(false);
 
+  function handleMutationError(err: unknown, fallback: string) {
+    if (isStaleServerActionError(err)) {
+      toast.error(STALE_SERVER_ACTION_MESSAGE);
+      router.refresh();
+    } else {
+      toast.error(extractErrorMessage(err) ?? fallback);
+    }
+  }
+
   async function handleDialogSubmit(roleLabel: string, userId: string) {
     try {
       const nextOrder = steps.length > 0
@@ -41,7 +55,7 @@ export function TenderTab({ steps, orgId }: Props) {
       toast.success("Шаг добавлен");
       router.refresh();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Ошибка добавления шага");
+      handleMutationError(err, "Ошибка добавления шага");
     }
   }
 
@@ -52,7 +66,7 @@ export function TenderTab({ steps, orgId }: Props) {
       toast.success("Шаг удалён");
       router.refresh();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Ошибка удаления");
+      handleMutationError(err, "Ошибка удаления");
     } finally {
       setDeletingId(null);
     }
@@ -65,7 +79,7 @@ export function TenderTab({ steps, orgId }: Props) {
       await reorderTenderSteps(steps[index], steps[index - 1], orgId);
       router.refresh();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Ошибка перемещения");
+      handleMutationError(err, "Ошибка перемещения");
     } finally {
       setReordering(false);
     }
@@ -78,7 +92,7 @@ export function TenderTab({ steps, orgId }: Props) {
       await reorderTenderSteps(steps[index], steps[index + 1], orgId);
       router.refresh();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Ошибка перемещения");
+      handleMutationError(err, "Ошибка перемещения");
     } finally {
       setReordering(false);
     }
