@@ -1124,17 +1124,13 @@ class TestCompleteProcurementForInvoice:
         assert "already" in (result.error_message or "").lower()
         assert result.quote_id == "quote-1"
 
-    @patch('services.workflow_service.assign_customs_to_invoices')
-    @patch('services.workflow_service.assign_logistics_to_invoices')
     @patch('services.workflow_service.get_supabase')
     def test_not_last_invoice_does_not_advance_quote(
         self,
         mock_supabase,
-        mock_assign_logistics,
-        mock_assign_customs,
     ):
-        """When sibling invoices remain incomplete, assigners fire but the
-        quote workflow_status is NOT advanced."""
+        """When sibling invoices remain incomplete, the quote workflow_status
+        is NOT advanced (and no auto-distribution occurs)."""
         from services.workflow_service import complete_procurement_for_invoice
 
         client = MagicMock()
@@ -1178,18 +1174,6 @@ class TestCompleteProcurementForInvoice:
 
         client.table.side_effect = table_side_effect
 
-        # Assigners return clean success (no warnings)
-        mock_assign_logistics.return_value = {
-            "success": True,
-            "assigned_invoices": [],
-            "unmatched_invoice_ids": [],
-        }
-        mock_assign_customs.return_value = {
-            "success": True,
-            "assigned_invoices": [],
-            "unmatched_invoice_ids": [],
-        }
-
         result = complete_procurement_for_invoice(
             invoice_id="inv-1",
             actor_id="user-1",
@@ -1201,18 +1185,14 @@ class TestCompleteProcurementForInvoice:
         assert update_quote_calls["count"] == 0, (
             "Quote should NOT be touched when sibling invoices remain"
         )
-        # Assigners were both called for partial-state propagation
-        mock_assign_logistics.assert_called_once_with("quote-1")
-        mock_assign_customs.assert_called_once_with("quote-1")
+        # No auto-distribution — assignment is manual via the kanban (REQ-3).
+        assert result.logistics_assigned is False
+        assert result.customs_assigned is False
 
-    @patch('services.workflow_service.assign_customs_to_invoices')
-    @patch('services.workflow_service.assign_logistics_to_invoices')
     @patch('services.workflow_service.get_supabase')
     def test_last_invoice_advances_quote_atomically(
         self,
         mock_supabase,
-        mock_assign_logistics,
-        mock_assign_customs,
     ):
         """When this is the last incomplete invoice, helper atomically
         advances the quote workflow_status."""
@@ -1265,9 +1245,6 @@ class TestCompleteProcurementForInvoice:
 
         client.table.side_effect = table_side_effect
 
-        mock_assign_logistics.return_value = {"success": True, "assigned_invoices": [], "unmatched_invoice_ids": []}
-        mock_assign_customs.return_value = {"success": True, "assigned_invoices": [], "unmatched_invoice_ids": []}
-
         result = complete_procurement_for_invoice(
             invoice_id="inv-1",
             actor_id="user-1",
@@ -1283,14 +1260,10 @@ class TestCompleteProcurementForInvoice:
         assert payload["procurement_completed_at"] is not None
         assert payload["stage_entered_at"] is not None
 
-    @patch('services.workflow_service.assign_customs_to_invoices')
-    @patch('services.workflow_service.assign_logistics_to_invoices')
     @patch('services.workflow_service.get_supabase')
     def test_race_condition_lost_returns_advanced_false_no_error(
         self,
         mock_supabase,
-        mock_assign_logistics,
-        mock_assign_customs,
     ):
         """Race: another worker already advanced the quote concurrently.
         The conditional UPDATE matches 0 rows; helper must return
@@ -1331,9 +1304,6 @@ class TestCompleteProcurementForInvoice:
 
         client.table.side_effect = table_side_effect
 
-        mock_assign_logistics.return_value = {"success": True, "assigned_invoices": [], "unmatched_invoice_ids": []}
-        mock_assign_customs.return_value = {"success": True, "assigned_invoices": [], "unmatched_invoice_ids": []}
-
         result = complete_procurement_for_invoice(
             invoice_id="inv-1",
             actor_id="user-1",
@@ -1344,14 +1314,10 @@ class TestCompleteProcurementForInvoice:
         assert result.success is True
         assert result.workflow_advanced is False
 
-    @patch('services.workflow_service.assign_customs_to_invoices')
-    @patch('services.workflow_service.assign_logistics_to_invoices')
     @patch('services.workflow_service.get_supabase')
     def test_count_query_does_not_filter_deleted_at(
         self,
         mock_supabase,
-        mock_assign_logistics,
-        mock_assign_customs,
     ):
         """Regression for prod incident with Q-202604-0061.
 
@@ -1417,8 +1383,6 @@ class TestCompleteProcurementForInvoice:
             return chain
 
         client.table.side_effect = table_side_effect
-        mock_assign_logistics.return_value = {"success": True, "assigned_invoices": [], "unmatched_invoice_ids": []}
-        mock_assign_customs.return_value = {"success": True, "assigned_invoices": [], "unmatched_invoice_ids": []}
 
         result = complete_procurement_for_invoice(
             invoice_id="inv-1",
@@ -1438,25 +1402,27 @@ class TestCompleteProcurementForInvoice:
             "Count query must filter on procurement_completed_at IS NULL"
         )
 
-    @patch('services.workflow_service.assign_customs_to_invoices')
-    @patch('services.workflow_service.assign_logistics_to_invoices')
     @patch('services.workflow_service.get_supabase')
-    def test_dual_assignment_runs_when_advancing_quote(
+    def test_no_auto_distribution_on_last_invoice_advance(
         self,
         mock_supabase,
-        mock_assign_logistics,
-        mock_assign_customs,
     ):
-        """When this is the last invoice and quote advances, BOTH assigners
-        must have been called. Regression for prod follow-up: customs was
-        firing but logistics propagation reported as broken — the helper must
-        invoke assign_logistics_to_invoices on every per-invoice completion,
-        not just the final one.
+        """Regression for logistics-customs-kanban REQ-3.
+
+        When the last invoice completes procurement and the quote advances to
+        pending_logistics_and_customs, NO logistician/customs officer is
+        auto-assigned: the invoice's ``assigned_logistics_user`` /
+        ``assigned_customs_user`` stay NULL and the only ``invoices.update()``
+        is the procurement-completion stamp. Invoices surface in the
+        «Нераспределено» kanban column until a human pulls/assigns them.
         """
         from services.workflow_service import complete_procurement_for_invoice
 
         client = MagicMock()
         mock_supabase.return_value = client
+
+        # Capture every invoices.update() payload to assert no assignment write.
+        invoice_update_payloads: list[dict] = []
 
         def table_side_effect(name):
             chain = MagicMock()
@@ -1467,8 +1433,15 @@ class TestCompleteProcurementForInvoice:
                         "quote_id": "quote-1",
                         "procurement_completed_at": None,
                     })
-                chain.update.return_value.eq.return_value.execute.return_value = \
-                    MagicMock(data=[{"id": "inv-1"}])
+
+                def invoice_update(payload):
+                    invoice_update_payloads.append(payload)
+                    sub = MagicMock()
+                    sub.eq.return_value.execute.return_value = \
+                        MagicMock(data=[{"id": "inv-1"}])
+                    return sub
+                chain.update.side_effect = invoice_update
+
                 count_resp = MagicMock(count=0, data=[])
                 chain.select.return_value.eq.return_value.is_.return_value \
                     .execute.return_value = count_resp
@@ -1488,8 +1461,6 @@ class TestCompleteProcurementForInvoice:
             return chain
 
         client.table.side_effect = table_side_effect
-        mock_assign_logistics.return_value = {"success": True, "assigned_invoices": [], "unmatched_invoice_ids": []}
-        mock_assign_customs.return_value = {"success": True, "assigned_invoices": [], "unmatched_invoice_ids": []}
 
         result = complete_procurement_for_invoice(
             invoice_id="inv-1",
@@ -1497,13 +1468,21 @@ class TestCompleteProcurementForInvoice:
             actor_roles=["procurement"],
         )
 
+        # Workflow still advances to the logistics+customs stage.
         assert result.success is True
         assert result.workflow_advanced is True
-        assert result.logistics_assigned is True
-        assert result.customs_assigned is True
-        # Both assigners must have fired — Q-202604-0061 incident.
-        mock_assign_logistics.assert_called_once_with("quote-1")
-        mock_assign_customs.assert_called_once_with("quote-1")
+        # No auto-distribution — flags stay False (kanban does manual assign).
+        assert result.logistics_assigned is False
+        assert result.customs_assigned is False
+        # The only invoices.update() is the procurement-completion stamp —
+        # it must NOT write assigned_logistics_user / assigned_customs_user.
+        assert len(invoice_update_payloads) == 1
+        stamp = invoice_update_payloads[0]
+        assert "procurement_completed_at" in stamp
+        assert "assigned_logistics_user" not in stamp
+        assert "assigned_customs_user" not in stamp
+        assert "logistics_assigned_at" not in stamp
+        assert "customs_assigned_at" not in stamp
 
 
 # =============================================================================

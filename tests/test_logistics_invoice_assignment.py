@@ -857,7 +857,11 @@ class TestAssignLogisticsToInvoices:
 # =============================================================================
 
 class TestCompleteProcurementLogisticsWiring:
-    """Integration tests: complete_procurement calls assign_logistics_to_invoices."""
+    """Integration tests: complete_procurement must NOT auto-assign logistics.
+
+    Auto-distribution was removed (logistics-customs-kanban REQ-3); logistics
+    assignment is now manual via the workspace kanban.
+    """
 
     def _setup_successful_procurement_mocks(self, sb: FakeSupabase):
         """Seed FakeSupabase for a successful complete_procurement call.
@@ -916,28 +920,25 @@ class TestCompleteProcurementLogisticsWiring:
         sb.set_select_override("invoice_item_coverage", coverage_select)
 
     # -------------------------------------------------------------------------
-    # Test 13: complete_procurement calls assign_logistics_to_invoices
+    # Regression: complete_procurement must NOT auto-assign logistics (REQ-3)
     # -------------------------------------------------------------------------
     @patch("services.workflow_service.get_supabase")
     @patch(
         "services.workflow_service.assign_logistics_to_invoices",
         create=True,
     )
-    def test_complete_procurement_calls_assign_logistics(
+    def test_complete_procurement_does_not_call_assign_logistics(
         self, mock_assign_logistics, mock_get_sb
     ):
-        """complete_procurement calls assign_logistics_to_invoices after status transition."""
+        """complete_procurement advances the workflow WITHOUT auto-assigning.
+
+        Logistics assignment is manual via the kanban now — the transition to
+        pending_logistics_and_customs must still happen, but
+        assign_logistics_to_invoices must NOT be invoked.
+        """
         sb = FakeSupabase()
         mock_get_sb.return_value = sb
         self._setup_successful_procurement_mocks(sb)
-
-        mock_assign_logistics.return_value = {
-            "success": True,
-            "assigned_invoices": [],
-            "unmatched_invoice_ids": [],
-            "quote_level_user_id": None,
-            "error_message": None,
-        }
 
         result = complete_procurement(
             quote_id=QUOTE_ID,
@@ -945,80 +946,12 @@ class TestCompleteProcurementLogisticsWiring:
             actor_roles=["procurement"],
         )
 
-        # Procurement should succeed
+        # Procurement should still succeed and advance the workflow.
         assert result.success is True
         assert result.to_status == WorkflowStatus.PENDING_LOGISTICS_AND_CUSTOMS.value
 
-        # assign_logistics_to_invoices should have been called
-        mock_assign_logistics.assert_called_once_with(QUOTE_ID)
-
-    # -------------------------------------------------------------------------
-    # Test 14: complete_procurement succeeds even if assign_logistics raises
-    # -------------------------------------------------------------------------
-    @patch("services.workflow_service.get_supabase")
-    @patch(
-        "services.workflow_service.assign_logistics_to_invoices",
-        create=True,
-    )
-    def test_complete_procurement_survives_assignment_exception(
-        self, mock_assign_logistics, mock_get_sb
-    ):
-        """complete_procurement succeeds even if assign_logistics_to_invoices raises."""
-        sb = FakeSupabase()
-        mock_get_sb.return_value = sb
-        self._setup_successful_procurement_mocks(sb)
-
-        mock_assign_logistics.side_effect = Exception("Logistics routing DB down")
-
-        result = complete_procurement(
-            quote_id=QUOTE_ID,
-            actor_id=_make_uuid("actor001"),
-            actor_roles=["procurement"],
-        )
-
-        # Procurement should still succeed (logistics assignment is best-effort)
-        assert result.success is True
-        assert result.to_status == WorkflowStatus.PENDING_LOGISTICS_AND_CUSTOMS.value
-
-        # The function must have been called (wiring exists) even though it raised
-        mock_assign_logistics.assert_called_once_with(QUOTE_ID)
-
-    # -------------------------------------------------------------------------
-    # Test 15: complete_procurement succeeds when assignment returns failure
-    # -------------------------------------------------------------------------
-    @patch("services.workflow_service.get_supabase")
-    @patch(
-        "services.workflow_service.assign_logistics_to_invoices",
-        create=True,
-    )
-    def test_complete_procurement_ok_when_assignment_fails(
-        self, mock_assign_logistics, mock_get_sb
-    ):
-        """complete_procurement succeeds when assignment returns success=False."""
-        sb = FakeSupabase()
-        mock_get_sb.return_value = sb
-        self._setup_successful_procurement_mocks(sb)
-
-        mock_assign_logistics.return_value = {
-            "success": False,
-            "assigned_invoices": [],
-            "unmatched_invoice_ids": [INVOICE_1],
-            "quote_level_user_id": None,
-            "error_message": "No routes configured",
-        }
-
-        result = complete_procurement(
-            quote_id=QUOTE_ID,
-            actor_id=_make_uuid("actor001"),
-            actor_roles=["procurement"],
-        )
-
-        # Procurement should still succeed
-        assert result.success is True
-        assert result.to_status == WorkflowStatus.PENDING_LOGISTICS_AND_CUSTOMS.value
-
-        # The function must have been called (wiring exists)
-        mock_assign_logistics.assert_called_once_with(QUOTE_ID)
+        # No auto-distribution — the assigner must never be called.
+        mock_assign_logistics.assert_not_called()
 
 
 if __name__ == "__main__":
