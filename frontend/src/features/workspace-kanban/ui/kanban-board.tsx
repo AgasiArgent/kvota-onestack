@@ -99,24 +99,21 @@ export function KanbanBoard({
     });
   }
 
-  /** Move a card between columns in local state; returns the moved card. */
+  /** Move a card between columns in local state (optimistic). */
   function moveCard(
     cardId: string,
     from: WorkspaceKanbanColumnKey,
     to: WorkspaceKanbanColumnKey,
-  ): WorkspaceKanbanCard | null {
-    let moved: WorkspaceKanbanCard | null = null;
+  ): void {
     setBoard((prev) => {
       const card = prev[from].find((c) => c.id === cardId);
       if (!card) return prev;
-      moved = card;
       return {
         ...prev,
         [from]: prev[from].filter((c) => c.id !== cardId),
         [to]: [card, ...prev[to]],
       };
     });
-    return moved;
   }
 
   function handleDragStart(event: DragStartEvent) {
@@ -164,8 +161,10 @@ export function KanbanBoard({
 
     if (action === "self-pull") {
       // Member self-assign — optimistic move + server commit (REQ-7).
-      const moved = moveCard(card.id, from, to);
-      if (moved) void commitSelfPull(moved, from);
+      // `moveCard` assigns its result inside the async `setBoard` updater, so
+      // it is not available synchronously — use the `card` already in scope.
+      moveCard(card.id, from, to);
+      void commitSelfPull(card, from);
       return;
     }
 
