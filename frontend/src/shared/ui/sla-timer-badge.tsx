@@ -13,6 +13,12 @@ import { cn } from "@/lib/utils";
  *   - overdue   (now > deadlineAt)          → --error tones
  *   - warning   (< 24h left)                → --warning tones
  *   - on-track  (>= 24h left)               → --success tones
+ *   - elapsed   (deadlineAt is null)        → neutral, counts time since
+ *                                             `assignedAt`, no overdue state
+ *
+ * The `elapsed` state covers kanban cards in «Нераспределено»: the deadline
+ * is only stamped on assignment, so an unassigned card still shows a running
+ * timer counting from stage entry.
  *
  * Self-updating: re-renders every 60s via a cheap `Date.now()` tick.
  * `<time dateTime=...>` + tooltip with absolute deadline for assistive tech.
@@ -22,14 +28,24 @@ import { cn } from "@/lib/utils";
 
 interface SlaTimerBadgeProps {
   assignedAt: string | Date;
-  deadlineAt: string | Date;
+  /** Null when the invoice is unassigned — badge renders an elapsed timer. */
+  deadlineAt: string | Date | null;
   completedAt?: string | Date | null;
   /** `sm` for table rows, `md` for standalone usage. */
   size?: "sm" | "md";
   className?: string;
 }
 
-type TimerState = "completed" | "overdue" | "warning" | "on-track";
+type TimerState = "completed" | "overdue" | "warning" | "on-track" | "elapsed";
+
+function formatElapsed(msSince: number): string {
+  const minutes = Math.floor(Math.abs(msSince) / 60_000);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  if (days >= 1) return `${days} ${pluralDays(days)} в работе`;
+  if (hours >= 1) return `${hours} ${pluralHours(hours)} в работе`;
+  return `${minutes} ${pluralMinutes(minutes)} в работе`;
+}
 
 function resolveState(
   now: number,
@@ -86,11 +102,24 @@ export function SlaTimerBadge({
   size = "sm",
   className,
 }: SlaTimerBadgeProps) {
-  const deadlineMs = new Date(deadlineAt).getTime();
+  const deadlineMs = deadlineAt != null ? new Date(deadlineAt).getTime() : NaN;
+  const assignedMs = assignedAt != null ? new Date(assignedAt).getTime() : NaN;
+  const hasDeadline = deadlineAt != null && !Number.isNaN(deadlineMs);
+  const hasAssigned = !Number.isNaN(assignedMs);
   const [now, setNow] = useState<number>(() => Date.now());
 
-  // Guard: invalid or missing deadline — render placeholder, no timer.
-  if (!deadlineAt || Number.isNaN(deadlineMs)) {
+  useEffect(() => {
+    if (completedAt) return;
+    const tick = () => setNow(Date.now());
+    const id = window.setInterval(tick, 60_000);
+    return () => window.clearInterval(id);
+  }, [completedAt]);
+
+  const paddingCls = size === "md" ? "px-2.5 py-1" : "px-2 py-0.5";
+  const iconSize = size === "md" ? 14 : 12;
+
+  // Guard: no deadline AND no stage-entry timestamp — nothing to count.
+  if (!hasDeadline && !hasAssigned) {
     return (
       <span
         className={cn(
@@ -105,56 +134,65 @@ export function SlaTimerBadge({
     );
   }
 
-  useEffect(() => {
-    if (completedAt) return;
-    const tick = () => setNow(Date.now());
-    const id = window.setInterval(tick, 60_000);
-    return () => window.clearInterval(id);
-  }, [completedAt]);
+  const state: TimerState = completedAt
+    ? "completed"
+    : hasDeadline
+      ? resolveState(now, deadlineMs, completedAt)
+      : "elapsed";
 
-  const state = resolveState(now, deadlineMs, completedAt);
-  const msLeft = deadlineMs - now;
+  const Icon =
+    state === "completed"
+      ? CheckCircle2
+      : state === "overdue"
+        ? AlertTriangle
+        : Clock;
 
-  const Icon = state === "completed" ? CheckCircle2 : state === "overdue" ? AlertTriangle : Clock;
   const label =
     state === "completed"
       ? "Завершено"
-      : formatRelative(msLeft);
-
-  const paddingCls = size === "md" ? "px-2.5 py-1" : "px-2 py-0.5";
-  const textCls = size === "md" ? "text-xs" : "text-xs";
-  const iconSize = size === "md" ? 14 : 12;
+      : state === "elapsed"
+        ? formatElapsed(now - assignedMs)
+        : formatRelative(deadlineMs - now);
 
   const stateCls: Record<TimerState, string> = {
     completed: "bg-sidebar text-text-muted border-border-light",
     overdue: "bg-error-bg text-error border-error/30",
     warning: "bg-warning-bg text-warning border-warning/30",
     "on-track": "bg-success-bg text-success border-success/30",
+    elapsed: "bg-sidebar text-text-muted border-border-light",
   };
 
-  const absoluteDeadline = new Date(deadlineAt).toLocaleString("ru-RU", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-  const absoluteAssigned = new Date(assignedAt).toLocaleString("ru-RU", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  // `<time dateTime>` points at the deadline when known, else the stage-entry
+  // timestamp (the meaningful instant for the elapsed timer).
+  const timeAnchor = hasDeadline ? deadlineMs : assignedMs;
+
+  const absoluteAssigned = hasAssigned
+    ? new Date(assignedMs).toLocaleString("ru-RU", {
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "—";
+  const absoluteDeadline = hasDeadline
+    ? new Date(deadlineMs).toLocaleString("ru-RU", {
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "не установлен";
 
   return (
     <Tooltip>
       <TooltipTrigger
         render={
           <time
-            dateTime={new Date(deadlineAt).toISOString()}
+            dateTime={new Date(timeAnchor).toISOString()}
             className={cn(
               "inline-flex items-center gap-1 rounded-sm border font-medium tabular-nums transition-colors",
               paddingCls,
-              textCls,
+              "text-xs",
               stateCls[state],
               className,
             )}
