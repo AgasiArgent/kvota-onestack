@@ -381,7 +381,6 @@ export function ChatInput({
           type="file"
           className="sr-only"
           multiple
-          accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.zip"
           onChange={handleFileSelect}
         />
         <textarea
