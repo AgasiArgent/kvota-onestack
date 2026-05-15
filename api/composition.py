@@ -522,6 +522,17 @@ async def approve_procurement_unlock(request, invoice_id: str, approval_id: str)
     if approval_row.get("approval_type") == "edit_completed_procurement":
         new_values["procurement_completed_at"] = None
         new_values["procurement_completed_by"] = None
+        # Reopening procurement invalidates the downstream logistics+customs
+        # stage — reset its assignment columns so the invoice returns to
+        # «Нераспределено» when the КП is re-completed (symmetric with the
+        # reopenInvoiceProcurement frontend mutation; prevents stale
+        # auto-assigned users resurfacing on the kanban).
+        new_values["assigned_logistics_user"] = None
+        new_values["logistics_assigned_at"] = None
+        new_values["logistics_deadline_at"] = None
+        new_values["assigned_customs_user"] = None
+        new_values["customs_assigned_at"] = None
+        new_values["customs_deadline_at"] = None
 
     sb = get_supabase()
     now_iso = datetime.now(timezone.utc).isoformat()

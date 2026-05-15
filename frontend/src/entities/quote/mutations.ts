@@ -1397,7 +1397,11 @@ export async function createInvoice(data: {
  * inbox all stayed broken until a head manually intervened.
  *
  * `reopenInvoiceProcurement` is the inverse — used by the existing
- * ProcurementUnlockButton role-gated flow when typos need fixing.
+ * ProcurementUnlockButton role-gated flow when typos need fixing. It also
+ * resets the downstream logistics/customs assignment columns: reopening
+ * procurement invalidates the logistics+customs stage, so any prior
+ * assignment must clear and the invoice re-enters «Нераспределено» when the
+ * КП is completed again.
  */
 export async function completeInvoiceProcurement(invoiceId: string): Promise<void> {
   const supabase = createClient();
@@ -1438,6 +1442,15 @@ export async function reopenInvoiceProcurement(invoiceId: string): Promise<void>
     .update({
       procurement_completed_at: null,
       procurement_completed_by: null,
+      // Downstream logistics/customs stage is no longer valid — reset its
+      // assignments so the invoice returns to «Нераспределено» when the КП
+      // is re-completed (prevents stale auto-assigned users resurfacing).
+      assigned_logistics_user: null,
+      logistics_assigned_at: null,
+      logistics_deadline_at: null,
+      assigned_customs_user: null,
+      customs_assigned_at: null,
+      customs_deadline_at: null,
     } as never)
     .eq("id", invoiceId);
   if (error) throw error;
