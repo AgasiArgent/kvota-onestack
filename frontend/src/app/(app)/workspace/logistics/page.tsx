@@ -1,29 +1,25 @@
-import { redirect, notFound } from "next/navigation";
+import { redirect } from "next/navigation";
 import { getSessionUser } from "@/entities/user";
 import {
-  fetchMyAssignedInvoices,
-  fetchMyCompletedInvoices,
-  fetchUnassignedInvoices,
-  fetchAllActiveInvoices,
+  fetchKanbanInvoices,
   fetchTeamUsers,
   fetchWorkspaceStats,
 } from "@/entities/workspace-invoice";
-import { WorkspaceInvoicesTable } from "@/features/workspace-logistics/ui/workspace-invoices-table";
-import { WorkspaceStatsStrip } from "@/features/workspace-logistics/ui/workspace-stats-strip";
-import { UnassignedInbox } from "@/features/workspace-logistics/ui/unassigned-inbox";
+import { WorkspaceStatsStrip } from "@/features/workspace-logistics";
+import { KanbanPage } from "@/features/workspace-kanban";
 import {
   AnalyticsPanel,
   fetchWorkspaceAnalytics,
 } from "@/features/workspace-analytics";
-import { WorkspaceLogisticsClient } from "./workspace-logistics-client";
 
-type Tab = "my" | "completed" | "unassigned" | "all";
-
-interface PageProps {
-  searchParams: Promise<{ tab?: string }>;
-}
-
-export default async function WorkspaceLogisticsPage({ searchParams }: PageProps) {
+/**
+ * /workspace/logistics — logistics kanban board (REQ-1).
+ *
+ * Three columns: Нераспределено / В работе / Завершено, derived from invoice
+ * fields. Members see only their own «В работе» cards; heads see all and get
+ * an assignee picker + stats/analytics strip.
+ */
+export default async function WorkspaceLogisticsPage() {
   const user = await getSessionUser();
   if (!user?.orgId) redirect("/login");
   const orgId = user.orgId;
@@ -36,52 +32,34 @@ export default async function WorkspaceLogisticsPage({ searchParams }: PageProps
     user.roles.includes("admin") ||
     user.roles.includes("top_manager");
 
-  const { tab } = await searchParams;
-  // Heads (head_of_logistics / head_of_customs / admin / top_manager) manage
-  // the team queue, so their landing tab is «Все заявки» — mirrors the
-  // sales-style scope where head_of_sales lands on the org-wide list, not
-  // their personal one (L-D 1.1).
-  const defaultTab: Tab = isHead ? "all" : "my";
-  const activeTab: Tab =
-    (["my", "completed", "unassigned", "all"] as const).find((t) => t === tab) ?? defaultTab;
-
-  if (!isHead && (activeTab === "unassigned" || activeTab === "all")) notFound();
-
-  const [my, completed, unassigned, all, teamUsers, stats, analyticsRows] =
-    await Promise.all([
-      fetchMyAssignedInvoices("logistics", user.id, orgId),
-      fetchMyCompletedInvoices("logistics", user.id, orgId),
-      isHead ? fetchUnassignedInvoices("logistics", orgId) : Promise.resolve([]),
-      isHead ? fetchAllActiveInvoices("logistics", orgId) : Promise.resolve([]),
-      isHead ? fetchTeamUsers("logistics", orgId) : Promise.resolve([]),
-      isHead ? fetchWorkspaceStats("logistics", orgId) : Promise.resolve(null),
-      isHead ? fetchWorkspaceAnalytics("logistics") : Promise.resolve([]),
-    ]);
+  const [board, teamUsers, stats, analyticsRows] = await Promise.all([
+    fetchKanbanInvoices("logistics", user.id, orgId, isHead),
+    isHead ? fetchTeamUsers("logistics", orgId) : Promise.resolve([]),
+    isHead ? fetchWorkspaceStats("logistics", orgId) : Promise.resolve(null),
+    isHead ? fetchWorkspaceAnalytics("logistics") : Promise.resolve([]),
+  ]);
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6 p-6">
       <header>
-        <h1 className="text-2xl font-semibold text-text tracking-tight">Логистика</h1>
-        <p className="text-sm text-text-muted mt-1">
+        <h1 className="text-2xl font-semibold tracking-tight text-text">
+          Логистика
+        </h1>
+        <p className="mt-1 text-sm text-text-muted">
           {isHead ? "Управление очередью команды" : "Ваши заявки"}
         </p>
       </header>
 
-      {isHead && stats && <WorkspaceStatsStrip domain="logistics" stats={stats} />}
+      {isHead && stats && (
+        <WorkspaceStatsStrip domain="logistics" stats={stats} />
+      )}
 
-      <WorkspaceLogisticsClient
-        userRoles={user.roles}
-        activeTab={activeTab}
-        defaultTab={defaultTab}
-        counts={{ my: my.length, completed: completed.length, unassigned: unassigned.length, all: all.length }}
-      >
-        {{
-          my: <WorkspaceInvoicesTable domain="logistics" viewKind="my" invoices={my} emptyLabel="Свободен — заявок в работе нет" />,
-          completed: <WorkspaceInvoicesTable domain="logistics" viewKind="completed" invoices={completed} emptyLabel="Завершённых заявок ещё нет" />,
-          unassigned: <UnassignedInbox domain="logistics" invoices={unassigned} teamUsers={teamUsers} />,
-          all: <WorkspaceInvoicesTable domain="logistics" viewKind="all" invoices={all} emptyLabel="Нет заявок" />,
-        }}
-      </WorkspaceLogisticsClient>
+      <KanbanPage
+        domain="logistics"
+        board={board}
+        isHead={isHead}
+        teamUsers={teamUsers}
+      />
 
       {isHead && <AnalyticsPanel domain="logistics" rows={analyticsRows} />}
     </div>
