@@ -18,6 +18,11 @@ import {
   updateBrandAssignment,
   deleteBrandAssignment,
 } from "../api/routing-api";
+import {
+  extractErrorMessage,
+  isStaleServerActionError,
+  STALE_SERVER_ACTION_MESSAGE,
+} from "@/shared/lib/errors";
 import { UserSelect } from "./user-select";
 import { BrandAssignmentDialog } from "./brand-assignment-dialog";
 import type { BrandAssignment } from "../model/types";
@@ -41,13 +46,22 @@ export function BrandsTab({ assignments, unassignedBrands, orgId }: Props) {
     setDialogOpen(true);
   }
 
+  function handleMutationError(err: unknown, fallback: string) {
+    if (isStaleServerActionError(err)) {
+      toast.error(STALE_SERVER_ACTION_MESSAGE);
+      router.refresh();
+    } else {
+      toast.error(extractErrorMessage(err) ?? fallback);
+    }
+  }
+
   async function handleDialogSubmit(brand: string, userId: string) {
     try {
       await createBrandAssignment(orgId, brand, userId);
       toast.success(`Бренд "${brand}" назначен`);
       router.refresh();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Ошибка назначения бренда");
+      handleMutationError(err, "Ошибка назначения бренда");
     }
   }
 
@@ -59,7 +73,7 @@ export function BrandsTab({ assignments, unassignedBrands, orgId }: Props) {
       setEditingId(null);
       router.refresh();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Ошибка обновления");
+      handleMutationError(err, "Ошибка обновления");
     }
   }
 
@@ -70,7 +84,7 @@ export function BrandsTab({ assignments, unassignedBrands, orgId }: Props) {
       toast.success("Назначение удалено");
       router.refresh();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Ошибка удаления");
+      handleMutationError(err, "Ошибка удаления");
     } finally {
       setDeletingId(null);
     }
