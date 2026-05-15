@@ -508,23 +508,38 @@ export async function fetchQuoteInvoices(quoteId: string) {
     ...new Set(invoices.map((i) => i.supplier_contact_id).filter(Boolean)),
   ] as string[];
 
-  const [suppliersRes, buyersRes, supplierContactsRes] = await Promise.all([
-    supplierIds.length
-      ? supabase.from("suppliers").select("id, name").in("id", supplierIds)
-      : null,
-    buyerIds.length
-      ? supabase
-          .from("buyer_companies")
-          .select("id, name, company_code")
-          .in("id", buyerIds)
-      : null,
-    supplierContactIds.length
-      ? supabase
-          .from("supplier_contacts")
-          .select("id, name, position, email, phone")
-          .in("id", supplierContactIds)
-      : null,
-  ]);
+  // Testing 2 row 14 v4: per-invoice cargo places are entered by procurement
+  // in invoice-create-modal and live in kvota.invoice_cargo_places. The
+  // invoice-level length_m/width_m/height_m triple is almost never filled,
+  // but boxes always are. We batch-fetch them here so logistics + customs
+  // can render «Мест: N» + per-box dimensions in InvoiceCargoSummary.
+  const invoiceIds = invoices.map((i) => i.id);
+
+  const [suppliersRes, buyersRes, supplierContactsRes, cargoPlacesRes] =
+    await Promise.all([
+      supplierIds.length
+        ? supabase.from("suppliers").select("id, name").in("id", supplierIds)
+        : null,
+      buyerIds.length
+        ? supabase
+            .from("buyer_companies")
+            .select("id, name, company_code")
+            .in("id", buyerIds)
+        : null,
+      supplierContactIds.length
+        ? supabase
+            .from("supplier_contacts")
+            .select("id, name, position, email, phone")
+            .in("id", supplierContactIds)
+        : null,
+      supabase
+        .from("invoice_cargo_places")
+        .select(
+          "id, invoice_id, position, weight_kg, length_mm, width_mm, height_mm"
+        )
+        .in("invoice_id", invoiceIds)
+        .order("position", { ascending: true }),
+    ]);
 
   const supplierMap = new Map(
     (suppliersRes?.data ?? []).map((s) => [s.id, s])
@@ -533,6 +548,12 @@ export async function fetchQuoteInvoices(quoteId: string) {
   const supplierContactMap = new Map(
     (supplierContactsRes?.data ?? []).map((c) => [c.id, c])
   );
+  const cargoPlacesByInvoice = new Map<string, CargoPlace[]>();
+  for (const place of cargoPlacesRes?.data ?? []) {
+    const list = cargoPlacesByInvoice.get(place.invoice_id) ?? [];
+    list.push(place);
+    cargoPlacesByInvoice.set(place.invoice_id, list);
+  }
 
   return invoices.map((inv) => ({
     ...inv,
@@ -542,7 +563,23 @@ export async function fetchQuoteInvoices(quoteId: string) {
       (inv.buyer_company_id && buyerMap.get(inv.buyer_company_id)) || null,
     supplier_contact:
       (inv.supplier_contact_id && supplierContactMap.get(inv.supplier_contact_id)) || null,
+    cargo_places: cargoPlacesByInvoice.get(inv.id) ?? [],
   }));
+}
+
+/**
+ * Cargo place row from kvota.invoice_cargo_places, exposed alongside the
+ * invoice row so logistics + customs can render «Мест: N» and per-box
+ * dimensions in InvoiceCargoSummary (Testing 2 row 14 v4).
+ */
+export interface CargoPlace {
+  id: string;
+  invoice_id: string;
+  position: number;
+  weight_kg: number | null;
+  length_mm: number | null;
+  width_mm: number | null;
+  height_mm: number | null;
 }
 
 export type CalcVariablesRow = Awaited<

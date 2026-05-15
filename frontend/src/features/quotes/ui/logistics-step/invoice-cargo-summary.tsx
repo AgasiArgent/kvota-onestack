@@ -12,27 +12,31 @@ import { cn } from "@/lib/utils";
  * actually moving, shown above the route constructor on the logistics
  * step.
  *
- * Procurement enters origin + dimensions on the invoice
- * (kvota.invoices.pickup_country, pickup_city, total_weight_kg,
- * total_volume_m3, package_count, length_m/width_m/height_m,
- * supplier_incoterms). Destination is a quote-level concern
+ * Procurement enters origin on the invoice (kvota.invoices.pickup_country,
+ * pickup_city, supplier_incoterms) and per-package dimensions in
+ * kvota.invoice_cargo_places (weight_kg + length_mm × width_mm × height_mm
+ * per box). Destination is a quote-level concern
  * (kvota.quotes.delivery_country/city/address) and is passed in
  * through the `destination` prop. The cargo digest is derived from
  * `quote_items.composition_selected_invoice_id` — items the buyer
  * picked to ride in this КПП — passed in via `items`.
  *
+ * The «Мест» count and dimensions list come from
+ * `invoice.cargo_places` (Testing 2 row 14 v4) when procurement has
+ * filled the per-box table. If it's empty we fall back to the legacy
+ * invoice-level `package_count` + `length_m/width_m/height_m` triple so
+ * historical КПП still render something.
+ *
  * Closes:
  *   - РОЛ Тест 07 #3.3 (origin + dimensions, original release).
  *   - МОЛ Тест row 14 (destination + cargo digest extension).
  *   - Testing 2 row 14 v3 (cargo items as a vertical bullet list).
+ *   - Testing 2 row 14 v4 (показывать места и габариты из
+ *     invoice_cargo_places, заполняемые procurement на КПП).
  *
  * Schema gap (deferred): kvota.invoices does NOT have a
- * `transit_via_turkey` flag or a `pickup_address` column. Those
- * tester-requested fields are tracked separately and require a
- * migration before they can be rendered. Per-position dimensions on
- * `quote_items` do not exist either, so when invoice-level габариты
- * are NULL there is no derived fallback to show — the «Габариты» row
- * is simply omitted.
+ * `transit_via_turkey` flag. That tester-requested field is tracked
+ * separately and requires a migration before it can be rendered.
  */
 
 interface Destination {
@@ -60,6 +64,61 @@ interface InvoiceCargoSummaryProps {
 const KG_FMT = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
 const M3_FMT = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 });
 const M_FMT = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 });
+const MM_FMT = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
+
+interface CargoPlaceLike {
+  weight_kg: number | null;
+  length_mm: number | null;
+  width_mm: number | null;
+  height_mm: number | null;
+}
+
+/**
+ * Group equal-size boxes so «6 одинаковых мест 800×1200×600» renders as
+ * one row instead of six. Grouping key is the L×W×H×weight tuple — if a
+ * dimension is NULL it forms its own group (we keep NULL distinct from
+ * 0 so the user sees that procurement hasn't filled it yet).
+ */
+function groupBoxes(
+  boxes: readonly CargoPlaceLike[],
+): { box: CargoPlaceLike; count: number }[] {
+  const groups: { box: CargoPlaceLike; count: number; key: string }[] = [];
+  for (const b of boxes) {
+    const key = `${b.length_mm ?? "_"}|${b.width_mm ?? "_"}|${b.height_mm ?? "_"}|${b.weight_kg ?? "_"}`;
+    const existing = groups.find((g) => g.key === key);
+    if (existing) existing.count += 1;
+    else groups.push({ box: b, count: 1, key });
+  }
+  return groups.map(({ box, count }) => ({ box, count }));
+}
+
+function formatBoxDimensions(box: CargoPlaceLike): string | null {
+  const { length_mm, width_mm, height_mm } = box;
+  if (length_mm == null && width_mm == null && height_mm == null) return null;
+  const fmt = (v: number | null) => (v == null ? "—" : MM_FMT.format(v));
+  return `${fmt(length_mm)}×${fmt(width_mm)}×${fmt(height_mm)} мм`;
+}
+
+function renderBoxesList(boxes: readonly CargoPlaceLike[]): React.ReactNode {
+  const groups = groupBoxes(boxes);
+  return (
+    <ul className="list-disc pl-5 text-text">
+      {groups.map((g, idx) => {
+        const dims = formatBoxDimensions(g.box);
+        const weight =
+          g.box.weight_kg != null
+            ? `${KG_FMT.format(g.box.weight_kg)} кг`
+            : null;
+        const prefix = g.count > 1 ? `${g.count} × ` : "";
+        const parts = [dims, weight].filter(
+          (s): s is string => typeof s === "string",
+        );
+        const body = parts.length === 0 ? "размер не указан" : parts.join(", ");
+        return <li key={idx}>{`${prefix}${body}`}</li>;
+      })}
+    </ul>
+  );
+}
 
 const POSITIONS_PLURAL = new Intl.PluralRules("ru-RU");
 
@@ -144,7 +203,24 @@ function buildFields(
     (invoice.buyer_company as { name?: string } | null)?.name ?? null;
   if (buyerName) out.push({ icon: Truck, label: "Получатель", value: buyerName });
 
-  if (invoice.total_weight_kg != null) {
+  // Testing 2 row 14 v4: per-box data from invoice_cargo_places is the
+  // source of truth when procurement has filled it. Aggregate weight
+  // from boxes; fall back to invoice.total_weight_kg only when boxes
+  // are empty.
+  const boxes = invoice.cargo_places ?? [];
+  const boxesWeightTotal = boxes.reduce(
+    (acc, b) => acc + (b.weight_kg ?? 0),
+    0,
+  );
+  const anyBoxWeight = boxes.some((b) => b.weight_kg != null);
+
+  if (boxes.length > 0 && anyBoxWeight) {
+    out.push({
+      icon: Boxes,
+      label: "Вес",
+      value: `${KG_FMT.format(boxesWeightTotal)} кг`,
+    });
+  } else if (invoice.total_weight_kg != null) {
     out.push({
       icon: Boxes,
       label: "Вес",
@@ -158,15 +234,38 @@ function buildFields(
       value: `${M3_FMT.format(invoice.total_volume_m3)} м³`,
     });
   }
-  if (invoice.package_count != null) {
+
+  if (boxes.length > 0) {
     out.push({
       icon: Package,
       label: "Мест",
-      value: String(invoice.package_count),
+      value: String(boxes.length),
     });
+    // Show per-box dimension list only when at least one box has a
+    // non-null dimension — a list full of «размер не указан» is noise.
+    const anyBoxDims = boxes.some(
+      (b) =>
+        b.length_mm != null || b.width_mm != null || b.height_mm != null,
+    );
+    if (anyBoxDims) {
+      out.push({
+        icon: Ruler,
+        label: "Габариты",
+        value: renderBoxesList(boxes),
+        block: true,
+      });
+    }
+  } else {
+    if (invoice.package_count != null) {
+      out.push({
+        icon: Package,
+        label: "Мест",
+        value: String(invoice.package_count),
+      });
+    }
+    const dims = formatDimensions(invoice);
+    if (dims) out.push({ icon: Ruler, label: "Габариты", value: dims });
   }
-  const dims = formatDimensions(invoice);
-  if (dims) out.push({ icon: Ruler, label: "Габариты", value: dims });
 
   if (invoice.supplier_incoterms) {
     out.push({
