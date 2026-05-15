@@ -77,6 +77,7 @@ function makeInvoice(
     customs_needs_review_since: null,
     supplier: null,
     buyer_company: null,
+    cargo_places: [],
     ...overrides,
   } as QuoteInvoiceRow;
 }
@@ -335,6 +336,128 @@ describe("InvoiceCargoSummary (РОЛ Тест 07 #3.3)", () => {
     );
     expect(liTexts).toEqual(names);
     expect(ul!.textContent ?? "").not.toMatch(/\+\d/);
+  });
+
+  // Testing 2 row 14 v4: места + габариты теперь читаются из
+  // invoice_cargo_places (procurement заполняет на КПП), а не из
+  // single-triple length_m/width_m/height_m, которая почти всегда NULL.
+  describe("cargo_places from procurement (Testing 2 row 14 v4)", () => {
+    it("renders «Мест: N» + per-box dimensions list when boxes are present", () => {
+      const boxes = [
+        {
+          id: "b1",
+          invoice_id: "inv-1",
+          position: 1,
+          weight_kg: 50,
+          length_mm: 800,
+          width_mm: 1200,
+          height_mm: 600,
+        },
+        {
+          id: "b2",
+          invoice_id: "inv-1",
+          position: 2,
+          weight_kg: 20,
+          length_mm: 600,
+          width_mm: 400,
+          height_mm: 400,
+        },
+        {
+          id: "b3",
+          invoice_id: "inv-1",
+          position: 3,
+          weight_kg: 20,
+          length_mm: 600,
+          width_mm: 400,
+          height_mm: 400,
+        },
+      ];
+      render(
+        <InvoiceCargoSummary
+          invoice={makeInvoice({ cargo_places: boxes } as Partial<QuoteInvoiceRow>)}
+        />,
+      );
+      // «Мест: 3» count comes from boxes.length, not invoice.package_count.
+      expect(screen.getByText("Мест:")).toBeTruthy();
+      expect(screen.getByText("3")).toBeTruthy();
+      // Equal-size boxes are grouped: «2 × 600×400×400 мм, 20 кг».
+      // ru-RU NumberFormat inserts   (NBSP) as a thousand separator;
+      // match with \s so we don't care about spacing inside the literal.
+      expect(screen.getByText(/800×1\s*200×600 мм/)).toBeTruthy();
+      expect(screen.getByText(/2 × 600×400×400 мм/)).toBeTruthy();
+      // Total weight aggregated from boxes (50 + 20 + 20 = 90 кг).
+      expect(screen.getByText(/90 кг/)).toBeTruthy();
+    });
+
+    it("falls back to invoice.length_m/width_m/height_m when cargo_places is empty", () => {
+      render(
+        <InvoiceCargoSummary
+          invoice={makeInvoice({
+            cargo_places: [],
+            package_count: 7,
+            length_m: 1.2,
+            width_m: 0.8,
+            height_m: 1.05,
+          } as Partial<QuoteInvoiceRow>)}
+        />,
+      );
+      // Legacy invoice-level fields still show when procurement hasn't
+      // filled the per-box table.
+      expect(screen.getByText("7")).toBeTruthy();
+      expect(
+        screen.getByText((s) => /1,2.+×.+0,8.+×.+1,05.+м/.test(s)),
+      ).toBeTruthy();
+    });
+
+    it("groups equal-size boxes (6 одинаковых мест → «6 × …»)", () => {
+      const sameBox = {
+        weight_kg: 15,
+        length_mm: 500,
+        width_mm: 400,
+        height_mm: 300,
+      };
+      const boxes = Array.from({ length: 6 }, (_, idx) => ({
+        id: `b${idx}`,
+        invoice_id: "inv-1",
+        position: idx + 1,
+        ...sameBox,
+      }));
+      const { container } = render(
+        <InvoiceCargoSummary
+          invoice={makeInvoice({ cargo_places: boxes } as Partial<QuoteInvoiceRow>)}
+        />,
+      );
+      expect(screen.getByText("6")).toBeTruthy(); // count
+      const liTexts = Array.from(container.querySelectorAll("li")).map(
+        (li) => li.textContent ?? "",
+      );
+      // Single grouped row, NOT 6 separate rows.
+      expect(liTexts.some((t) => /6 × 500×400×300 мм/.test(t))).toBe(true);
+      expect(liTexts.filter((t) => /500×400×300/.test(t))).toHaveLength(1);
+    });
+
+    it("renders boxes with missing dimensions as «размер не указан»", () => {
+      const boxes = [
+        {
+          id: "b1",
+          invoice_id: "inv-1",
+          position: 1,
+          weight_kg: 10,
+          length_mm: null,
+          width_mm: null,
+          height_mm: null,
+        },
+      ];
+      render(
+        <InvoiceCargoSummary
+          invoice={makeInvoice({ cargo_places: boxes } as Partial<QuoteInvoiceRow>)}
+        />,
+      );
+      // No Габариты row when no box has any dimension at all.
+      expect(screen.queryByText("Габариты:")).toBeNull();
+      // But weight still aggregates from the box.
+      expect(screen.getByText(/10 кг/)).toBeTruthy();
+    });
   });
 
   it("does not render cargo digest when no items belong to this invoice", () => {
