@@ -46,6 +46,23 @@ export const SALES_COLUMN_KEYS = [
 ] as const;
 const COLUMN_KEYS = SALES_COLUMN_KEYS;
 
+/** Units of measure offered by the "Ед." dropdown column. */
+export const UNIT_OPTIONS = [
+  "шт",
+  "упак",
+  "компл",
+  "кг",
+  "г",
+  "т",
+  "м",
+  "мм",
+  "см",
+  "м²",
+  "м³",
+  "л",
+  "мл",
+] as const;
+
 interface RowData {
   id: string | null;
   brand: string;
@@ -328,21 +345,12 @@ export function SalesItemsHandsontable({
             {
               data: "unit",
               type: "dropdown",
-              source: [
-                "шт",
-                "упак",
-                "компл",
-                "кг",
-                "г",
-                "т",
-                "м",
-                "мм",
-                "см",
-                "м²",
-                "м³",
-                "л",
-                "мл",
-              ],
+              source: [...UNIT_OPTIONS],
+              // visibleRows must be >= UNIT_OPTIONS.length so the dropdown
+              // editor renders the full units list instead of being clipped
+              // to a few rows (Testing 2 row 31).
+              visibleRows: UNIT_OPTIONS.length,
+              trimDropdown: false,
               width: 80,
             },
           ]}
