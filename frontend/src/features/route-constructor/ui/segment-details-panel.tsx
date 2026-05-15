@@ -217,6 +217,11 @@ function SegmentFields({
       );
       return;
     }
+    // No-op guard (Testing 2 row 30 #2): re-selecting the location already
+    // assigned to this side must not trigger a PATCH / refetch.
+    const currentId =
+      side === "from" ? segment.fromLocation?.id : segment.toLocation?.id;
+    if (value === currentId) return;
     const selected = locations.find((l) => l.id === value);
     if (!selected) {
       console.warn(
@@ -244,12 +249,20 @@ function SegmentFields({
   function handleIntBlur(value: string, key: "transit_days") {
     const parsed = value === "" ? null : Number.parseInt(value, 10);
     if (parsed != null && Number.isNaN(parsed)) return;
+    // No-op guard (Testing 2 row 30 #2): a blur with no change must not save.
+    const current = segment.transitDays ?? null;
+    if (parsed === current) return;
     patch({ [key]: parsed }, { transitDays: parsed ?? undefined });
   }
 
   function handleCostBlur(value: string) {
     const parsed = value === "" ? 0 : Number.parseFloat(value);
     if (Number.isNaN(parsed)) return;
+    // No-op guard (Testing 2 row 30 #2): a blur with no change must not save.
+    if (parsed === (segment.mainCostRub ?? 0)) {
+      setMainCost(String(parsed));
+      return;
+    }
     patch({ main_cost_rub: parsed }, { mainCostRub: parsed });
     setMainCost(String(parsed));
   }
@@ -265,8 +278,15 @@ function SegmentFields({
     key: "label" | "carrier" | "notes",
   ) {
     const trimmed = value;
+    // No-op guard (Testing 2 row 30 #2): clicking a Перевозчик / Метка /
+    // Примечание cell and blurring without an edit must not persist or
+    // trigger a refetch. Compare the normalised new value against the
+    // segment's current value (both empty-string and null mean "unset").
+    const next = trimmed === "" ? null : trimmed;
+    const current = (segment[key] ?? null) || null;
+    if (next === current) return;
     patch(
-      { [key]: trimmed === "" ? null : trimmed },
+      { [key]: next },
       {
         label: key === "label" ? (trimmed || undefined) : segment.label,
         carrier: key === "carrier" ? (trimmed || undefined) : segment.carrier,

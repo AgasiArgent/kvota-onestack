@@ -160,6 +160,7 @@ export function SearchableCombobox<T extends SearchableComboboxItem>({
   const [search, setSearch] = useState("");
   const [rawFocusedIndex, setRawFocusedIndex] = useState(-1);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   const selected = useMemo(
     () => items.find((it) => it.id === value) ?? null,
@@ -296,6 +297,15 @@ export function SearchableCombobox<T extends SearchableComboboxItem>({
         className={cn(popoverWidthClass, "p-0")}
         side="bottom"
         align="start"
+        // Focus the search input WITHOUT scrolling the page (Testing 2 row
+        // 30 #1). Base UI focuses the popup's first focusable element on
+        // open; a plain .focus() on an element below the fold makes the
+        // browser jump to the top. preventScroll keeps the viewport put.
+        // Returning false tells Base UI not to apply its own focus on top.
+        initialFocus={() => {
+          searchInputRef.current?.focus({ preventScroll: true });
+          return false;
+        }}
       >
         <div className="flex flex-col">
           {/* Search input */}
@@ -306,12 +316,12 @@ export function SearchableCombobox<T extends SearchableComboboxItem>({
                 size={14}
               />
               <Input
+                ref={searchInputRef}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onKeyDown={handleSearchKeyDown}
                 placeholder={searchPlaceholder}
                 className="h-7 pl-7 text-xs"
-                autoFocus
                 aria-label={searchPlaceholder}
               />
               {search.length > 0 && (
