@@ -1,16 +1,13 @@
 // @vitest-environment jsdom
 /**
  * Testing 2 row 24 (FB 2026-05-14) — «Адрес доставки» dropdown on quote info
- * panel used to read only from `customer_delivery_addresses`, leaving МОП
- * users staring at «Нет адресов» whenever the customer's addresses lived on
- * the `customers` row itself (legal/actual/postal text fields +
- * `warehouse_addresses` jsonb array). This dom test pins the merged source
- * behavior:
- *   - delivery rows keep their own name
- *   - warehouse jsonb entries surface as "Склад: <label>"
- *   - legal/actual/postal text fields surface as «Юридический» /
- *     «Фактический» / «Почтовый»
- *   - duplicate address strings dedupe (case-insensitive, trimmed)
+ * panel lists ONLY warehouses (склады). It merges two warehouse sources:
+ *   - explicit rows in `customer_delivery_addresses` (keep their own name)
+ *   - the customer's `warehouse_addresses` jsonb array (surface as
+ *     "Склад: <label>")
+ * The customer's legal/actual/postal address text fields are intentionally
+ * NOT listed — the tester wants «Оставить только склады». This dom test pins
+ * that behavior, including dedupe by trimmed/lowercased address string.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -139,13 +136,13 @@ afterEach(() => {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe("AddressDropdownSelect — merged address sources (Testing 2 row 24)", () => {
-  it("shows warehouses + legal/actual/postal addresses from customers row when delivery table is empty", async () => {
+describe("AddressDropdownSelect — warehouses-only address list (Testing 2 row 24)", () => {
+  it("lists warehouses from the customers row but NOT legal/actual/postal addresses", async () => {
     dbState.deliveryRows = [];
     dbState.customer = {
       legal_address: "111677, г Москва, ул Маресьева, д 6",
       actual_address: "Фактический адрес, Москва",
-      postal_address: null,
+      postal_address: "Почтовый адрес, Москва",
       warehouse_addresses: [
         { label: "Химки", address: "Россия, Химки, ул. Панфилова, 37" },
       ],
@@ -161,19 +158,20 @@ describe("AddressDropdownSelect — merged address sources (Testing 2 row 24)", 
       ).toBeTruthy();
     });
     expect(screen.getByText("Склад: Химки")).toBeTruthy();
+    // Legal/actual/postal address fields must NOT be listed.
     expect(
-      screen.getByText("111677, г Москва, ул Маресьева, д 6"),
-    ).toBeTruthy();
-    expect(screen.getByText("Юридический")).toBeTruthy();
-    expect(screen.getByText("Фактический адрес, Москва")).toBeTruthy();
-    expect(screen.getByText("Фактический")).toBeTruthy();
-    // postal_address was null — must not appear.
+      screen.queryByText("111677, г Москва, ул Маресьева, д 6"),
+    ).toBeNull();
+    expect(screen.queryByText("Юридический")).toBeNull();
+    expect(screen.queryByText("Фактический адрес, Москва")).toBeNull();
+    expect(screen.queryByText("Фактический")).toBeNull();
+    expect(screen.queryByText("Почтовый адрес, Москва")).toBeNull();
     expect(screen.queryByText("Почтовый")).toBeNull();
     // «Нет адресов» empty state must NOT appear.
     expect(screen.queryByText(/Нет адресов/i)).toBeNull();
   });
 
-  it("merges delivery rows with customer addresses and dedupes by trimmed/lowercased address", async () => {
+  it("merges delivery rows with customer warehouses and dedupes by trimmed/lowercased address", async () => {
     dbState.deliveryRows = [
       {
         id: "dlv-1",
@@ -200,22 +198,24 @@ describe("AddressDropdownSelect — merged address sources (Testing 2 row 24)", 
     await waitFor(() => {
       expect(screen.getByText("Основной склад")).toBeTruthy();
     });
-    // The shared address string appears once across both sources.
+    // The shared address string appears once across both warehouse sources.
     const matches = screen.getAllByText("Россия, Химки, ул. Панфилова, 37");
     expect(matches.length).toBe(1);
     // Warehouse-prefixed name must NOT appear since it was deduped out.
     expect(screen.queryByText("Склад: Химки")).toBeNull();
-    // Legal address still appears as its own entry.
-    expect(screen.getByText("Юр. адрес ООО")).toBeTruthy();
-    expect(screen.getByText("Юридический")).toBeTruthy();
+    // Legal address must NOT appear — only warehouses are listed.
+    expect(screen.queryByText("Юр. адрес ООО")).toBeNull();
+    expect(screen.queryByText("Юридический")).toBeNull();
   });
 
-  it("renders «Нет адресов» when neither table has any address", async () => {
+  it("renders «Нет адресов» when the customer has no warehouses", async () => {
     dbState.deliveryRows = [];
     dbState.customer = {
-      legal_address: null,
-      actual_address: null,
-      postal_address: null,
+      // Legal/actual/postal are present but must be ignored — only the
+      // absence of warehouses drives the empty state.
+      legal_address: "Юр. адрес ООО",
+      actual_address: "Фактический адрес",
+      postal_address: "Почтовый адрес",
       warehouse_addresses: null,
     };
 
