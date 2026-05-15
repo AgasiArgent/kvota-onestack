@@ -59,13 +59,13 @@ export function AddressDropdownSelect({
     if (addresses !== null) return;
     setLoading(true);
 
-    // Testing 2 row 24 (FB 2026-05-14): the dropdown previously only listed
-    // rows from `customer_delivery_addresses`, which left МОП users staring
-    // at «Нет адресов» whenever the customer's addresses lived on the
-    // `customers` row itself (legal/actual/postal text fields + a
-    // `warehouse_addresses` jsonb array). We now merge both sources and
-    // dedupe by trimmed/lowercased address string so a warehouse that also
-    // happens to be in `customer_delivery_addresses` shows up once.
+    // Testing 2 row 24 (FB 2026-05-14): the delivery-address dropdown lists
+    // only warehouses (склады). It merges two warehouse sources — explicit
+    // rows in `customer_delivery_addresses` and the customer's
+    // `warehouse_addresses` jsonb array — deduping by trimmed/lowercased
+    // address string so a warehouse present in both shows up once. The
+    // customer's legal/actual/postal address text fields are intentionally
+    // NOT listed: the tester wants warehouses only.
     try {
       const supabase = createClient();
       const [deliveryRes, customerRes] = await Promise.all([
@@ -77,9 +77,7 @@ export function AddressDropdownSelect({
           .order("name"),
         supabase
           .from("customers")
-          .select(
-            "legal_address, actual_address, postal_address, warehouse_addresses"
-          )
+          .select("warehouse_addresses")
           .eq("id", customerId)
           .maybeSingle(),
       ]);
@@ -127,27 +125,6 @@ export function AddressDropdownSelect({
           is_default: false,
         });
       });
-
-      // 3. Single-value address fields on customers.
-      const singles: Array<[
-        "legal_address" | "actual_address" | "postal_address",
-        string,
-      ]> = [
-        ["legal_address", "Юридический"],
-        ["actual_address", "Фактический"],
-        ["postal_address", "Почтовый"],
-      ];
-      for (const [field, label] of singles) {
-        const raw = customerRecord ? customerRecord[field] : null;
-        const value = typeof raw === "string" ? raw.trim() : "";
-        if (!value) continue;
-        pushIfFresh({
-          id: `customer-${field}`,
-          name: label,
-          address: value,
-          is_default: false,
-        });
-      }
 
       setAddresses(merged);
     } catch {
