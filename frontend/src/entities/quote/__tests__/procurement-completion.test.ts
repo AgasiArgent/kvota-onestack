@@ -165,13 +165,22 @@ describe("reopenInvoiceProcurement", () => {
     fakeSupabase = makeFakeSupabase();
   });
 
-  it("clears both procurement_completed_* columns", async () => {
+  it("clears procurement_completed_* AND downstream assignment columns", async () => {
     const { reopenInvoiceProcurement } = await import("../mutations");
     await reopenInvoiceProcurement("inv-3");
     expect(fakeSupabase.updatedId).toBe("inv-3");
+    // Reopening procurement invalidates the logistics+customs stage — its
+    // assignment columns must reset so the invoice returns to «Нераспределено»
+    // when the КП is re-completed (no stale auto-assigned users resurface).
     expect(fakeSupabase.updatedRow).toEqual({
       procurement_completed_at: null,
       procurement_completed_by: null,
+      assigned_logistics_user: null,
+      logistics_assigned_at: null,
+      logistics_deadline_at: null,
+      assigned_customs_user: null,
+      customs_assigned_at: null,
+      customs_deadline_at: null,
     });
   });
 

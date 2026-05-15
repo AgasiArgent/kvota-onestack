@@ -61,6 +61,7 @@ const INVOICE_COLUMNS = `
     id,
     idn_quote,
     organization_id,
+    workflow_status,
     delivery_city,
     delivery_country,
     deleted_at,
@@ -103,6 +104,7 @@ interface InvoiceRowRaw {
     id: string;
     idn_quote: string | null;
     organization_id: string | null;
+    workflow_status: string | null;
     delivery_city: string | null;
     delivery_country: string | null;
     deleted_at: string | null;
@@ -158,8 +160,14 @@ async function fetchItemCountsByQuoteId(
 }
 
 /**
- * Resolve user display info for a set of user ids using auth.admin.getUserById
- * (same pattern as fetchTeamUsers). Safe-soft: unresolved ids are skipped.
+ * Resolve user display info for a set of user ids.
+ *
+ * The ФИО (full name) lives in `kvota.user_profiles.full_name` — the same
+ * source the quotes-list МОЛ/МОЗ chips read. `auth.users.user_metadata` is
+ * NOT a reliable name source (most accounts only have an email there), so the
+ * kanban card would show an email instead of a name. We batch-fetch
+ * user_profiles for the name and fall back to the auth email only when no
+ * profile name exists. Safe-soft: unresolved ids are skipped.
  */
 async function fetchUserMetaMap(
   admin: ReturnType<typeof createAdminClient>,
@@ -169,6 +177,21 @@ async function fetchUserMetaMap(
   const unique = Array.from(new Set(userIds.filter(Boolean)));
   if (unique.length === 0) return map;
 
+  // ФИО from user_profiles (single round-trip).
+  const { data: profiles, error: profilesErr } = await admin
+    .from("user_profiles")
+    .select("user_id, full_name")
+    .in("user_id", unique);
+  if (profilesErr) {
+    console.error("fetchUserMetaMap: user_profiles query failed", profilesErr);
+  }
+  const nameById = new Map<string, string>();
+  for (const p of profiles ?? []) {
+    const name = (p.full_name ?? "").trim();
+    if (name) nameById.set(p.user_id, name);
+  }
+
+  // Email fallback (and avatar) from auth — only used when no ФИО exists.
   const results = await Promise.all(
     unique.map(async (uid) => {
       try {
@@ -178,7 +201,12 @@ async function fetchUserMetaMap(
         const meta = (u.user_metadata ?? {}) as UserMeta;
         const display: UserAvatarChipUser = {
           id: u.id,
-          name: meta.full_name || meta.name || u.email || "—",
+          name:
+            nameById.get(uid) ||
+            meta.full_name ||
+            meta.name ||
+            u.email ||
+            "—",
           email: u.email ?? undefined,
           avatarUrl: meta.avatar_url ?? undefined,
         };
@@ -296,14 +324,18 @@ export async function fetchKanbanInvoices(
     Date.now() - 90 * 24 * 60 * 60 * 1000
   ).toISOString();
 
-  // Active rows: unassigned + in-progress. Gated on procurement completion so
-  // only invoices that have entered the logistics/customs stage surface.
+  // Active rows: unassigned + in-progress. Gated on BOTH per-invoice
+  // procurement completion AND the parent quote having actually transitioned
+  // to the logistics+customs stage. Without the workflow_status filter, a
+  // single completed КП of a multi-invoice quote would surface here while the
+  // quote stage rail (correctly) still sits at pending_procurement.
   const activeQuery = admin
     .from("invoices")
     // Types on this branch lag migration 285 — runtime select is authoritative.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .select(INVOICE_COLUMNS as any)
     .eq("quote.organization_id", orgId)
+    .eq("quote.workflow_status", "pending_logistics_and_customs")
     .is("quote.deleted_at", null)
     .is(completedCol, null)
     .not("procurement_completed_at", "is", null)
