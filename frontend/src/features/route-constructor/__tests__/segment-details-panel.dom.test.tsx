@@ -259,6 +259,69 @@ describe("SegmentDetailsPanel (РОЛ Тест 07 #3.6)", () => {
     });
   });
 
+  // -------------------------------------------------------------------------
+  // Testing 2 row 58 — a real field edit must persist silently (optimistic
+  // local update + updateSegment) WITHOUT firing onMutation/router.refresh,
+  // which would full-refresh the quote page and lose input focus.
+  // -------------------------------------------------------------------------
+  describe("field edit does not trigger a full page refresh (Testing 2 row 58)", () => {
+    it("persists a carrier edit via updateSegment but does NOT call onMutation", async () => {
+      const { updateSegment } = (await import(
+        "@/entities/logistics-segment"
+      )) as unknown as { updateSegment: ReturnType<typeof vi.fn> };
+      const user = userEvent.setup();
+      const onMutation = vi.fn();
+
+      render(
+        <SegmentDetailsPanel
+          segment={makeSegment({ carrier: "DHL" })}
+          locations={[LOC_A, LOC_B]}
+          revalidatePath="/quotes/x"
+          onMutation={onMutation}
+        />,
+      );
+
+      const carrierInput = screen.getByPlaceholderText(
+        /Название перевозчика/i,
+      ) as HTMLInputElement;
+
+      await user.clear(carrierInput);
+      await user.type(carrierInput, "FedEx");
+      await user.tab();
+
+      // The edit is persisted...
+      expect(updateSegment).toHaveBeenCalledTimes(1);
+      // ...but onMutation (which the parent wires to router.refresh) must
+      // NOT fire — field edits are optimistic-only.
+      expect(onMutation).not.toHaveBeenCalled();
+    });
+
+    it("persists a numeric (cost) edit via updateSegment but does NOT call onMutation", async () => {
+      const { updateSegment } = (await import(
+        "@/entities/logistics-segment"
+      )) as unknown as { updateSegment: ReturnType<typeof vi.fn> };
+      const user = userEvent.setup();
+      const onMutation = vi.fn();
+
+      render(
+        <SegmentDetailsPanel
+          segment={makeSegment({ mainCostRub: 500 })}
+          locations={[LOC_A, LOC_B]}
+          revalidatePath="/quotes/x"
+          onMutation={onMutation}
+        />,
+      );
+
+      const costInput = screen.getByLabelText("Сумма") as HTMLInputElement;
+      await user.clear(costInput);
+      await user.type(costInput, "1200");
+      await user.tab();
+
+      expect(updateSegment).toHaveBeenCalledTimes(1);
+      expect(onMutation).not.toHaveBeenCalled();
+    });
+  });
+
   it("re-syncs local state when the user switches to a different segment", () => {
     const { rerender } = render(
       <SegmentDetailsPanel

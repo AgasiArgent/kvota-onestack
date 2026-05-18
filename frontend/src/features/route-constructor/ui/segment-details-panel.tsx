@@ -32,8 +32,13 @@ import { cn } from "@/lib/utils";
  *
  * Pattern: fields are locally controlled for instant feedback; on `blur`
  * (or select change) the patch is flushed to the server via
- * {@link updateSegment}, then Next router.refresh() reloads fresh server
- * props. Optimistic UI is intentional — failures surface via toast.
+ * {@link updateSegment}. Field edits are optimistic-only — `onLocalUpdate`
+ * mirrors the change into the parent's `segments` state (route totals
+ * recompute client-side), and `updateSegment` calls `revalidatePath`
+ * server-side so the next real navigation gets fresh data. No
+ * `router.refresh()` is fired for field edits — that would re-run the
+ * whole `/quotes/[id]` route, remounting this panel and losing focus
+ * (Testing 2 row 58). Failures surface via toast.
  *
  * Expenses are managed inline (create/delete) through their own server
  * actions. Expense edits require delete + re-create in the current API;
@@ -118,7 +123,6 @@ export function SegmentDetailsPanel({
           locations={locations}
           revalidatePath={revalidatePath}
           onLocalUpdate={onLocalUpdate}
-          onMutation={onMutation}
           disabled={disabled}
         />
 
@@ -143,7 +147,6 @@ interface SegmentFieldsProps {
   locations: LocationOption[];
   revalidatePath: string;
   onLocalUpdate?: (id: string, patch: Partial<LogisticsSegment>) => void;
-  onMutation?: () => void;
   disabled?: boolean;
 }
 
@@ -152,7 +155,6 @@ function SegmentFields({
   locations,
   revalidatePath,
   onLocalUpdate,
-  onMutation,
   disabled,
 }: SegmentFieldsProps) {
   const [label, setLabel] = useState(segment.label ?? "");
@@ -188,6 +190,15 @@ function SegmentFields({
   }, [segment.id]);
 
   function patch(patch: SegmentPatch, local?: Partial<LogisticsSegment>) {
+    // Field edits are optimistic-only: `onLocalUpdate` keeps the parent's
+    // `segments` state (and the client-computed route totals) correct, and
+    // `updateSegment` persists + revalidates the Next cache server-side.
+    // We deliberately do NOT call `onMutation()` here — that would trigger
+    // router.refresh(), re-running the whole /quotes/[id] route and
+    // remounting this panel mid-edit (Testing 2 row 58: scroll jump +
+    // focus loss). Structural ops (create/delete/reorder/template) still
+    // refresh in route-constructor.tsx because they need server-generated
+    // IDs / re-sequencing.
     if (local && onLocalUpdate) onLocalUpdate(segment.id, local);
     startTransition(async () => {
       try {
@@ -196,7 +207,6 @@ function SegmentFields({
           patch,
           revalidate_path: revalidatePath,
         });
-        onMutation?.();
       } catch (err) {
         toast.error(
           err instanceof Error ? err.message : "Не удалось сохранить",
