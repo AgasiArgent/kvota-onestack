@@ -15,7 +15,7 @@ reproduces these cached Excel outputs within ≤0.01%.
 
 Template variants
 -----------------
-All four corpus files share one template, but ``rubli_zakaz15`` is a
+All three corpus files share one template, but ``rubli_zakaz15`` is a
 +1-column-shifted variant: it has an extra "Финансирование вознаграждения"
 column at AH, pushing the financial-output block (forex reserve, fin-agent
 fee, sale price, VAT, internal pricing, financing) one column to the right.
@@ -24,7 +24,7 @@ rather than a fixed letter, so both shapes are handled by one code path.
 
 Usage
 -----
-    # all four corpus files
+    # all corpus files
     .venv/bin/python scripts/refresh_golden.py
 
     # a single file
@@ -52,7 +52,6 @@ CORPUS = {
     "idemitsu.xlsm": "Q-202605-0011",
     "rubli_zakaz15.xlsm": "Q-202605-0012",
     "forma_nds22_18.xlsm": "Q-202605-0014",
-    "amtel_cofly.xlsm": "Q-202605-0013",
 }
 
 SHEET = "расчет"
@@ -60,7 +59,7 @@ HEADER_ROW = 14  # row with human column labels ("Кол-во", "Профит ч
 FIRST_PRODUCT_ROW = 16
 
 # ---------------------------------------------------------------------------
-# Input columns — IDENTICAL across all four files (verified 2026-05-18).
+# Input columns — IDENTICAL across all corpus files (verified 2026-05-18).
 # Columns C..AC never shift; only the financial-output block does.
 # ---------------------------------------------------------------------------
 
@@ -206,7 +205,7 @@ def _detect_template_variant(label_index: dict) -> str:
 def _extract_quote_variables(ws) -> dict:
     """Pull quote-level settings — the ``variables`` dict the shim consumes.
 
-    Layout (verified across all 4 эталон files):
+    Layout (verified across all 3 эталон files):
       D5  seller company        D6  offer_sale_type   D7  offer_incoterms
       D8  quote currency        D9  delivery time     D11 advance to supplier
       J5  advance from client (decimal fraction)

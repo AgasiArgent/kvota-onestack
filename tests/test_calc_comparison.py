@@ -106,7 +106,7 @@ def test_per_position_logistics_customs_cells_are_segment_informational():
     for cell in ("T16", "U16", "V16", "Y16", "Z16"):
         assert golden_support.is_segment_informational("idemitsu.xlsm", cell)
         assert golden_support.is_segment_informational("rubli_zakaz15.xlsm", cell)
-        assert golden_support.is_segment_informational("amtel_cofly.xlsm", cell)
+        assert golden_support.is_segment_informational("forma_nds22_18.xlsm", cell)
 
 
 def test_downstream_per_product_cells_are_segment_informational_only_for_rubli():
@@ -114,7 +114,7 @@ def test_downstream_per_product_cells_are_segment_informational_only_for_rubli()
 
     rubli is the one corpus file with product weights AND a multi-segment
     logistics split, so its weight-based per-leg distribution reallocates
-    logistics across positions. idemitsu/forma/amtel split logistics
+    logistics across positions. idemitsu/forma split logistics
     value-based on both sides — their per-product divergences are genuine.
     """
     # rubli: AB16 (COGS per product) inherits the logistics reallocation.
@@ -128,7 +128,7 @@ def test_downstream_per_product_cells_are_segment_informational_only_for_rubli()
 def test_purchase_cells_never_segment_informational():
     """Purchase-price cells (N16/P16/S16) carry a verdict for every file."""
     for cell in ("N16", "P16", "R16", "S16"):
-        for src in ("idemitsu.xlsm", "rubli_zakaz15.xlsm", "amtel_cofly.xlsm"):
+        for src in ("idemitsu.xlsm", "rubli_zakaz15.xlsm", "forma_nds22_18.xlsm"):
             assert not golden_support.is_segment_informational(src, cell)
 
 

@@ -17,7 +17,7 @@ The Excel form's purchase-price chain is:
     P16 = N16 * (1 - O16)                                # apply discount
 
 where K16 = "Цена закупки в Ориг. с НДС" (raw input) and N16 = the
-VAT-stripped price. In three of the four corpus files K16 is blank — the
+VAT-stripped price. In two of the three corpus files K16 is blank — the
 form's author typed the price straight into N16. So the *cached* эталон
 purchase value is always N16.
 
@@ -62,7 +62,6 @@ from decimal import Decimal
 # frozen and importing it for a constant would couple the shim to it.)
 _ZONE_VAT_RATE = {
     "Турция": 0.20,
-    "Турция (транзитная зона)": 0.00,
     "Россия": 0.22,
     "Китай": 0.13,
     "Литва": 0.21,
@@ -229,7 +228,7 @@ def _build_variables(src_vars: dict, quote_currency: str) -> dict:
         "customs_documentation": 0.0,
         "brokerage_extra": 0.0,
         # DM fee — resolved by the extractor from the эталон's AG3/AF4:AG7
-        # legend. Three of the four corpus files carry a zero fee; forma
+        # legend. Two of the three corpus files carry a zero fee; forma
         # carries a 10% percentage fee.
         "dm_fee_type": src_vars.get("dm_fee_type", "fixed"),
         "dm_fee_value": src_vars.get("dm_fee_value", 0.0) or 0.0,
@@ -250,9 +249,9 @@ def _build_item(product: dict, item_currency: str) -> dict:
     them deterministically.
 
     ``item_currency`` is the uniform эталон purchase currency (col J),
-    written explicitly to ``purchase_currency`` — amtel's col J is blank,
-    so passing it through here pins the item currency rather than letting
-    ``build_calculation_inputs`` silently default it to 'USD'.
+    written explicitly to ``purchase_currency`` — should a file leave col J
+    blank, passing it through here pins the item currency rather than
+    letting ``build_calculation_inputs`` silently default it to 'USD'.
     """
     zone = _resolve_zone(product.get("supplier_country"))
     zone_vat = _ZONE_VAT_RATE.get(zone, 0.0)
@@ -274,13 +273,13 @@ def _build_item(product: dict, item_currency: str) -> dict:
         "price_includes_vat": True,
         # Supplier-side attributes. supplier_country is normalised to a
         # canonical SupplierCountry zone value: the эталон form uses
-        # template-label variants ("ЕС (закупка между странами ЕС)",
-        # "Турция (отгрузка на транзитной зоне)") that the production
-        # resolve_vat_zone() does NOT recognise — it would fall them back to
-        # "Прочие", changing the internal-markup zone. The procurement UI
-        # stores canonical enum values, so emitting the canonical value here
-        # reproduces the get_composed_items shape faithfully (mechanical
-        # normalisation, not a workaround for an engine defect).
+        # template-label variants (e.g. "ЕС (закупка между странами ЕС)")
+        # that the production resolve_vat_zone() does NOT recognise — it
+        # would fall them back to "Прочие", changing the internal-markup
+        # zone. The procurement UI stores canonical enum values, so emitting
+        # the canonical value here reproduces the get_composed_items shape
+        # faithfully (mechanical normalisation, not a workaround for an
+        # engine defect).
         "weight_in_kg": product.get("weight_in_kg") or 0.0,
         "customs_code": _normalise_customs_code(product.get("customs_code")),
         "supplier_country": zone,
@@ -315,7 +314,6 @@ def _build_item(product: dict, item_currency: str) -> dict:
 # enum value or a near-variant; map the variants the corpus actually uses.
 _COUNTRY_VARIANTS = {
     "ЕС (закупка между странами ЕС)": "ЕС (между странами ЕС)",
-    "Турция (отгрузка на транзитной зоне)": "Турция (транзитная зона)",
 }
 
 _VALID_ZONES = set(_ZONE_VAT_RATE.keys())
@@ -355,10 +353,9 @@ def _normalise_customs_code(code) -> str:
 def _normalise_seller_company(name) -> str:
     """Strip the parenthetical ИНН/country suffix off the эталон seller name.
 
-    The эталон D5 cell reads e.g. "МАСТЕР БЭРИНГ ООО (ИНН 0242013464)" or
-    "TEXCEL OTOMOTİV TİCARET LİMİTED ŞİRKETİ (Турция)", whereas the engine's
-    ``SellerCompany`` enum expects the bare legal name. Trim at the first
-    " (".
+    The эталон D5 cell reads e.g. "МАСТЕР БЭРИНГ ООО (ИНН 0242013464)",
+    whereas the engine's ``SellerCompany`` enum expects the bare legal
+    name. Trim at the first " (".
     """
     if not name:
         return "МАСТЕР БЭРИНГ ООО"

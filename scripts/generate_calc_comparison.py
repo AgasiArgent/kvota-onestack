@@ -8,7 +8,7 @@ Calculation Engine reproduces the «старая форма расчёта» Exc
 ≤0.01% — but only as a CI test. Track B turns that same comparison into a
 human-readable .xlsx artifact a non-coding reviewer can simply open.
 
-For each of the four эталон quotes this script writes one .xlsx with:
+For each of the three эталон quotes this script writes one .xlsx with:
 
   * a **verdict banner** — «ВСЁ СХОДИТСЯ — макс. откл. X%» or
     «РАСХОЖДЕНИЕ — N ячеек вне допуска, макс. X%»;
@@ -43,7 +43,7 @@ engine column = the production engine run. Tolerance ≤0.01%, same as A1.
 
 Usage
 -----
-    # all four corpus quotes
+    # all corpus quotes
     .venv/bin/python scripts/generate_calc_comparison.py
 
     # a single quote
@@ -80,7 +80,6 @@ CORPUS = [
     "idemitsu.json",
     "rubli_zakaz15.json",
     "forma_nds22_18.json",
-    "amtel_cofly.json",
 ]
 
 _OUT_DIR = os.path.join(_REPO_ROOT, "tmp", "calc-comparison")

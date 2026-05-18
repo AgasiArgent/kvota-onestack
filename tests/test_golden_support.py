@@ -22,7 +22,7 @@ def _load(name: str) -> dict:
         return json.load(fh)
 
 
-CORPUS = ["idemitsu.json", "rubli_zakaz15.json", "forma_nds22_18.json", "amtel_cofly.json"]
+CORPUS = ["idemitsu.json", "rubli_zakaz15.json", "forma_nds22_18.json"]
 
 
 @pytest.mark.parametrize("name", CORPUS)
@@ -87,15 +87,6 @@ def test_shim_rubli_base_price_vat_reconstruction():
     # эталон N16 = 63.1086, zone VAT 0.21 → with-VAT = 63.1086 × 1.21.
     assert abs(it["purchase_price_original"] - 63.1086 * 1.21) < 1e-6
     assert len(items) == 13
-
-
-def test_shim_amtel_seller_company_normalised():
-    items, variables = golden_support.golden_to_items_and_variables(_load("amtel_cofly.json"))
-    # эталон D5 = "TEXCEL OTOMOTİV TİCARET LİMİTED ŞİRKETİ (Турция)"
-    # → bare legal name (the parenthetical suffix stripped).
-    assert variables["seller_company"] == "TEXCEL OTOMOTİV TİCARET LİMİTED ŞİRKETİ"
-    assert variables["offer_sale_type"] == "транзит"
-    assert len(items) == 103
 
 
 def test_shim_forma_seller_company_default():

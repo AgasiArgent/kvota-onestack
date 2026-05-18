@@ -696,13 +696,19 @@ def phase11_sales_price(
     internal_markup: Decimal,
     T16: Decimal,
     offer_sale_type: OfferSaleType,
-    seller_region: str
+    seller_region: str,
+    AB13: Decimal
 ) -> Dict[str, Decimal]:
     """
     Calculate profit and final sales price
-    
+
     Steps: Final-4, Final-5, Final-38, Final-6, Final-7, Final-2
     Returns: AF16, AG16, AD16, AE16, AH16, AI16, AJ16, AK16
+
+    AB13 is the quote-level total COGS (Σ AB16 over every product). It is
+    needed only by the percentage DM-fee branch (Final-5): the эталон
+    computes the percentage fee against the quote-level COGS total, not the
+    per-product COGS. For a single-product quote AB13 == AB16.
     """
     # Convert markup to decimal
     AC16 = markup / Decimal("100")
@@ -720,9 +726,12 @@ def phase11_sales_price(
     if dm_fee_type == DMFeeType.FIXED:
         AG16 = round_decimal(BD16 * dm_fee_value)
     else:  # Percentage
-        # For percentage DM fee, it's based on some base amount
-        # Assuming it's based on AB16 (COGS) - verify with Excel
-        AG16 = round_decimal(BD16 * AB16 * (dm_fee_value / Decimal("100")))
+        # эталон: AG16 = BD16 * VLOOKUP("комиссия %", AF4:AG7, 2) =
+        # BD16 * (pct * AB13). The percentage is applied to the quote-level
+        # COGS total AB13 (Σ AB16), then distributed to the product by BD16
+        # — NOT applied to the per-product COGS AB16. For a multi-product
+        # quote Σ(BD16·AB16) ≠ AB13, so the per-product COGS is wrong here.
+        AG16 = round_decimal(BD16 * AB13 * (dm_fee_value / Decimal("100")))
     
     # Final-38: AD16 = Sale price per unit (excl. financial expenses)
     # Excel formula: IFERROR(ROUND((IFS(offer_sale_type="поставка", AB16, offer_sale_type="транзит", S16) * (1+AC16)) / E16, 2), 0)
@@ -1046,12 +1055,15 @@ def calculate_multiproduct_quote(products: List[QuoteCalculationInput]) -> List[
         shared.system.rate_loan_interest_daily
     )
 
-    # STEP 10: Now finalize each product with financing and sales pricing
-    results = []
+    # STEP 9.5: Phase 9 + Phase 10 for every product FIRST, so the
+    # quote-level total COGS AB13 = Σ AB16 is known before Phase 11.
+    # Phase 11's percentage DM-fee branch needs AB13 (the эталон applies the
+    # percentage to the quote-level COGS total, then distributes by BD16).
+    phase9_results_list = []
+    phase10_results_list = []
     for i, product_input in enumerate(products):
         BD16 = BD16_list[i]
         phase1 = phase1_results_list[i]
-        phase2_5 = phase2_5_results_list[i]
         phase3 = phase3_results_list[i]
         phase4 = phase4_results_list[i]
 
@@ -1061,6 +1073,7 @@ def calculate_multiproduct_quote(products: List[QuoteCalculationInput]) -> List[
             phase8_results["BL5"],
             BD16
         )
+        phase9_results_list.append(phase9_results)
 
         # PHASE 10: Final COGS
         phase10_results = phase10_final_cogs(
@@ -1072,6 +1085,21 @@ def calculate_multiproduct_quote(products: List[QuoteCalculationInput]) -> List[
             phase9_results["BB16"],
             product_input.product.quantity
         )
+        phase10_results_list.append(phase10_results)
+
+    # Quote-level total COGS — Σ AB16 over every product (the эталон's AB13).
+    AB13 = sum(p["AB16"] for p in phase10_results_list)
+
+    # STEP 10: Now finalize each product with sales pricing
+    results = []
+    for i, product_input in enumerate(products):
+        BD16 = BD16_list[i]
+        phase1 = phase1_results_list[i]
+        phase2_5 = phase2_5_results_list[i]
+        phase3 = phase3_results_list[i]
+        phase4 = phase4_results_list[i]
+        phase9_results = phase9_results_list[i]
+        phase10_results = phase10_results_list[i]
 
         # PHASE 11: Sales Price
         phase11_results = phase11_sales_price(
@@ -1089,7 +1117,8 @@ def calculate_multiproduct_quote(products: List[QuoteCalculationInput]) -> List[
             internal_markup_list[i],  # Use per-product internal markup
             phase3["T16"],
             product_input.company.offer_sale_type,
-            seller_region
+            seller_region,
+            AB13  # quote-level total COGS — for the percentage DM-fee
         )
 
         # PHASE 12: VAT
@@ -1328,6 +1357,7 @@ def calculate_single_product_quote(inputs: QuoteCalculationInput) -> ProductCalc
     )
     
     # PHASE 11: Sales Price
+    # Single product: the quote-level total COGS AB13 == this product's AB16.
     phase11_results = phase11_sales_price(
         phase10_results["AB16"],
         phase1_results["S16"],
@@ -1343,7 +1373,8 @@ def calculate_single_product_quote(inputs: QuoteCalculationInput) -> ProductCalc
         internal_markup,
         phase3_results["T16"],
         inputs.company.offer_sale_type,
-        seller_region
+        seller_region,
+        phase10_results["AB16"]  # AB13 == AB16 for a single product
     )
     
     # PHASE 12: VAT

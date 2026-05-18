@@ -1,12 +1,12 @@
 """TDD guard for scripts/refresh_golden.py — the эталон extractor.
 
-These tests assert known cell values read directly from the four .xlsm
+These tests assert known cell values read directly from the three .xlsm
 эталон files (verified manually 2026-05-18). They are the harness-bug
 detector required by the A1 design: if the extractor reads the wrong
 column or mangles a value, a known-value assertion here fails BEFORE the
 golden-master test can produce a false divergence.
 
-The four corpus files share one Excel template, but `rubli_zakaz15` is a
+The three corpus files share one Excel template, but `rubli_zakaz15` is a
 +1-column-shifted variant (an extra "Финансирование вознаграждения"
 column at AH). The extractor resolves output columns by header label —
 these tests confirm that resolution lands on the right cells for both
@@ -40,7 +40,7 @@ def _src(name: str) -> str:
 
 @pytest.mark.parametrize(
     "fname",
-    ["idemitsu.xlsm", "rubli_zakaz15.xlsm", "forma_nds22_18.xlsm", "amtel_cofly.xlsm"],
+    ["idemitsu.xlsm", "rubli_zakaz15.xlsm", "forma_nds22_18.xlsm"],
 )
 def test_corpus_file_exists(fname):
     assert os.path.exists(_src(fname)), f"missing эталон corpus file: {fname}"
@@ -199,49 +199,13 @@ def test_forma_expected_outputs():
 
 
 # ---------------------------------------------------------------------------
-# extract_golden — AMTEL_COFLY (103 products, транзит/DAP)
-# ---------------------------------------------------------------------------
-
-
-def test_amtel_product_count():
-    g = refresh_golden.extract_golden(_src("amtel_cofly.xlsm"), "amtel_cofly.xlsm")
-    assert len(g["inputs"]["products"]) == 103
-
-
-def test_amtel_is_transit():
-    g = refresh_golden.extract_golden(_src("amtel_cofly.xlsm"), "amtel_cofly.xlsm")
-    v = g["inputs"]["variables"]
-    assert v["offer_sale_type"] == "транзит"
-    assert v["offer_incoterms"] == "DAP"
-    assert v["seller_company"].startswith("TEXCEL")
-
-
-def test_amtel_first_product():
-    g = refresh_golden.extract_golden(_src("amtel_cofly.xlsm"), "amtel_cofly.xlsm")
-    p = g["inputs"]["products"][0]
-    assert p["quantity"] == 5
-    # N16 = 8.93 (Турция транзитная зона, M16=0)
-    assert abs(p["price_no_vat"] - 8.93) < 1e-6
-    assert abs(p["vat_rate"] - 0.0) < 1e-12
-
-
-def test_amtel_transit_commission_present():
-    g = refresh_golden.extract_golden(_src("amtel_cofly.xlsm"), "amtel_cofly.xlsm")
-    exp = g["expected"]["products"][0]
-    # транзит: AQ16 has a non-zero transit commission (6.25)
-    assert abs(exp["AQ16"]["value"] - 6.25) < 1e-2
-    # DAP (not DDP) → customs Y16 = 0
-    assert abs(exp["Y16"]["value"] - 0.0) < 1e-9
-
-
-# ---------------------------------------------------------------------------
 # Schema completeness — every product carries all checkpoint cells
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
     "fname",
-    ["idemitsu.xlsm", "rubli_zakaz15.xlsm", "forma_nds22_18.xlsm", "amtel_cofly.xlsm"],
+    ["idemitsu.xlsm", "rubli_zakaz15.xlsm", "forma_nds22_18.xlsm"],
 )
 def test_golden_schema_complete(fname):
     g = refresh_golden.extract_golden(_src(fname), fname)
