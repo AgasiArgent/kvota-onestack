@@ -3,6 +3,7 @@
     "main.py",
     "api",
     "services",
+    "scripts",
     "tests"
   ],
   "exclude": [
@@ -18,7 +19,7 @@
     ".serena",
     ".playwright-mcp"
   ],
-  "extraPaths": ["."],
+  "extraPaths": [".", "scripts"],
   "venvPath": ".",
   "venv": "venv",
   "pythonVersion": "3.12",

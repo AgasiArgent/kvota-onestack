@@ -14,7 +14,17 @@ from decimal import Decimal
 from datetime import datetime, date
 from uuid import uuid4
 
-# Set test environment before importing app
+# Set test environment before importing app.
+#
+# SUPABASE_URL is deliberately overwritten with a dummy host so the offline
+# unit-test suite can never accidentally hit a real database. Before that
+# overwrite, the ORIGINAL value (if any) is stashed in _REAL_SUPABASE_URL:
+# the Track A2 composition-snapshot test (tests/test_composition_snapshot.py)
+# DOES need the real DB, and in CI the real URL only exists as an env var
+# (no .env file is committed). A2 reads _REAL_SUPABASE_URL to recover it
+# without weakening this protection for any other test.
+_REAL_SUPABASE_URL = os.environ.get("SUPABASE_URL")
+
 os.environ["TESTING"] = "true"
 os.environ["SUPABASE_URL"] = "https://test.supabase.co"
 os.environ["SUPABASE_KEY"] = "test-key"
