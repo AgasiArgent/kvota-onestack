@@ -127,6 +127,21 @@ _ENUM_TO_ISO = {
     "Латвия": "LV", "Болгария": "BG", "Польша": "PL", "ОАЭ": "AE",
 }
 
+# EU cross-border zone — the supplier-country value used when goods are
+# bought between EU member states (0% VAT at purchase, 4% EU-route internal
+# markup). This is NOT a country with an ISO code; it is a SupplierCountry
+# *zone* in its own right (SupplierCountry.EU_CROSS_BORDER). The procurement
+# form / templates store it as one of these string variants, so resolve_vat_zone
+# must recognise them directly rather than route them through ISO resolution
+# (which would fail and fall back to the "Прочие" zone — wrong internal markup).
+_EU_CROSS_BORDER_ZONE = "ЕС (между странами ЕС)"
+_EU_CROSS_BORDER_VARIANTS = frozenset(
+    {
+        "ЕС (между странами ЕС)",
+        "ЕС (закупка между странами ЕС)",
+    }
+)
+
 
 def normalize_country_to_iso(value: str) -> str:
     """Normalize any country representation to ISO 2-letter code.
@@ -177,6 +192,19 @@ def resolve_vat_zone(country_raw: str, price_includes_vat: bool) -> dict:
     """
     iso = normalize_country_to_iso(country_raw)
     name_ru = COUNTRY_NAME_MAP.get(iso, "") or EU_COUNTRY_VAT_RATES.get(iso, {}).get("name_ru", country_raw or "неизвестная")
+
+    # 0. EU cross-border zone — the supplier-country value is already a
+    # SupplierCountry zone (goods bought between EU member states), not a
+    # country with an ISO code. Recognise it directly: 0% VAT at purchase,
+    # 4% EU-route internal markup. Without this it would fall through to the
+    # "Прочие" zone (2% internal markup) — a wrong-zone calculation bug.
+    if country_raw and str(country_raw).strip() in _EU_CROSS_BORDER_VARIANTS:
+        return {
+            "zone": _EU_CROSS_BORDER_ZONE,
+            "reason": "ЕС (закупка между странами ЕС) → ЕС cross-border (0% НДС, 4% наценка)",
+            "warning": None,
+            "error": None,
+        }
 
     # 1. Empty/unknown country → Прочие with warning
     if not iso:

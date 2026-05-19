@@ -1,0 +1,206 @@
+{
+  "expected": {
+    "products": [
+      {
+        "AA16": {
+          "currency": "EUR",
+          "value": 10.73669375
+        },
+        "AB16": {
+          "currency": "EUR",
+          "value": 85893.55
+        },
+        "AD16": {
+          "currency": "EUR",
+          "value": 13.0
+        },
+        "AE16": {
+          "currency": "EUR",
+          "value": 104000.0
+        },
+        "AF16": {
+          "currency": "EUR",
+          "value": 18140.72
+        },
+        "AG16": {
+          "currency": "EUR",
+          "value": 0.0
+        },
+        "AH16": {
+          "currency": "EUR",
+          "value": 3168.89688
+        },
+        "AI16": {
+          "currency": "EUR",
+          "value": 1629.8960000000002
+        },
+        "AJ16": {
+          "currency": "EUR",
+          "value": 13.6
+        },
+        "AK16": {
+          "currency": "EUR",
+          "value": 108800.0
+        },
+        "AL16": {
+          "currency": "EUR",
+          "value": 132720.0
+        },
+        "AM16": {
+          "currency": "EUR",
+          "value": 16.59
+        },
+        "AN16": {
+          "currency": "EUR",
+          "value": 23920.0
+        },
+        "AO16": {
+          "currency": "EUR",
+          "value": 18832.3388
+        },
+        "AP16": {
+          "currency": "EUR",
+          "value": 5087.661199999999
+        },
+        "AQ16": {
+          "currency": "EUR",
+          "value": 0.0
+        },
+        "AY16": {
+          "currency": "EUR",
+          "value": 78240.0
+        },
+        "BA16": {
+          "currency": "EUR",
+          "value": 866.3439751627393
+        },
+        "BB16": {
+          "currency": "EUR",
+          "value": 265.6708253199977
+        },
+        "N16": {
+          "currency": "EUR",
+          "value": 9.4
+        },
+        "P16": {
+          "currency": "EUR",
+          "value": 9.4
+        },
+        "R16": {
+          "currency": "EUR",
+          "value": 9.4
+        },
+        "S16": {
+          "currency": "EUR",
+          "value": 75200.0
+        },
+        "T16": {
+          "currency": "EUR",
+          "value": 3286.8
+        },
+        "U16": {
+          "currency": "EUR",
+          "value": 2200.0
+        },
+        "V16": {
+          "currency": "EUR",
+          "value": 5486.8
+        },
+        "Y16": {
+          "currency": "EUR",
+          "value": 4074.74
+        },
+        "Z16": {
+          "currency": "EUR",
+          "value": null
+        },
+        "row": 16
+      }
+    ],
+    "totals": {
+      "AB13": {
+        "currency": "EUR",
+        "value": 85893.55
+      },
+      "AF13": {
+        "currency": "EUR",
+        "value": 18140.72
+      },
+      "AK13": {
+        "currency": "EUR",
+        "value": 108800.0
+      },
+      "AL13": {
+        "currency": "EUR",
+        "value": 132720.0
+      },
+      "S13": {
+        "currency": "EUR",
+        "value": 75200.0
+      },
+      "V13": {
+        "currency": "EUR",
+        "value": 5486.8
+      },
+      "Y13": {
+        "currency": "EUR",
+        "value": 4074.74
+      }
+    }
+  },
+  "inputs": {
+    "products": [
+      {
+        "article": null,
+        "currency_of_base_price": "EUR",
+        "customs_code": 3926909709,
+        "fx_rate": 1.0,
+        "import_tariff": 0.05,
+        "markup": 0.2112,
+        "name": "Масло DAPHNE CH/ MASTER 260NZ ",
+        "price_no_vat": 9.4,
+        "price_vat": 9.4,
+        "quantity": 8000,
+        "row": 16,
+        "supplier_country": "ЕС (закупка между странами ЕС)",
+        "supplier_discount": 0.0,
+        "vat_rate": 0.0,
+        "weight_in_kg": 0.0
+      }
+    ],
+    "variables": {
+      "advance_from_client": 0.49999999999999994,
+      "advance_to_supplier": 1.0,
+      "currency_of_quote": "EUR",
+      "delivery_time": 80,
+      "dm_fee_type": "%",
+      "dm_fee_value": 0.0,
+      "insurance_line": 36.800000000000004,
+      "legend": {
+        "\"ОТКУДА\" - Стамбул": 1450.0,
+        "3286.8": 2200.0,
+        "Порт и СВХ в РФ": 500.0,
+        "РФ (граница)  - \"КУДА\"": 1300.0,
+        "Страховка (% от валютной спеки)": 36.800000000000004,
+        "ТР - РФ (граница)": 1800.0,
+        "брокерские в РФ": null,
+        "брокерские до РФ": null,
+        "сертификация": null,
+        "указать доп. расход": 400.0
+      },
+      "logistics_first_leg_excl_insurance": 3250.0,
+      "logistics_first_leg_total": 3286.8,
+      "logistics_second_leg_total": 2200.0,
+      "offer_incoterms": "DDP",
+      "offer_sale_type": "поставка",
+      "rate_forex_risk": 0.03,
+      "seller_company": "МАСТЕР БЭРИНГ ООО (ИНН 0242013464)",
+      "time_to_advance": 5,
+      "time_to_advance_on_receiving": 10
+    }
+  },
+  "quote_currency": "EUR",
+  "quote_idn": "Q-202605-0011",
+  "source_xlsm": "idemitsu.xlsm",
+  "template_variant": "standard"
+}

@@ -1,0 +1,1130 @@
+{
+  "expected": {
+    "products": [
+      {
+        "AA16": {
+          "currency": "EUR",
+          "value": 253.86
+        },
+        "AB16": {
+          "currency": "EUR",
+          "value": 253.86
+        },
+        "AD16": {
+          "currency": "EUR",
+          "value": 304.63
+        },
+        "AE16": {
+          "currency": "EUR",
+          "value": 304.63
+        },
+        "AF16": {
+          "currency": "EUR",
+          "value": 50.77
+        },
+        "AG16": {
+          "currency": "EUR",
+          "value": 25.385975390925406
+        },
+        "AH16": {
+          "currency": "EUR",
+          "value": 10.059716942322481
+        },
+        "AI16": {
+          "currency": "EUR",
+          "value": 5.3079226864906435
+        },
+        "AJ16": {
+          "currency": "EUR",
+          "value": 345.38
+        },
+        "AK16": {
+          "currency": "EUR",
+          "value": 345.38
+        },
+        "AL16": {
+          "currency": "EUR",
+          "value": 421.36
+        },
+        "AM16": {
+          "currency": "EUR",
+          "value": 421.36
+        },
+        "AN16": {
+          "currency": "EUR",
+          "value": 75.98000000000002
+        },
+        "AO16": {
+          "currency": "EUR",
+          "value": 55.340149551397076
+        },
+        "AP16": {
+          "currency": "EUR",
+          "value": 20.639850448602942
+        },
+        "AQ16": {
+          "currency": "EUR",
+          "value": 0.0
+        },
+        "AY16": {
+          "currency": "EUR",
+          "value": 183.6
+        },
+        "BA16": {
+          "currency": "EUR",
+          "value": 4.685629810147034
+        },
+        "BB16": {
+          "currency": "EUR",
+          "value": 1.2302902706717378
+        },
+        "N16": {
+          "currency": "EUR",
+          "value": 180.0
+        },
+        "P16": {
+          "currency": "EUR",
+          "value": 180.0
+        },
+        "R16": {
+          "currency": "EUR",
+          "value": 180.0
+        },
+        "S16": {
+          "currency": "EUR",
+          "value": 180.0
+        },
+        "T16": {
+          "currency": "EUR",
+          "value": 45.07613432453217
+        },
+        "U16": {
+          "currency": "EUR",
+          "value": 0.0
+        },
+        "V16": {
+          "currency": "EUR",
+          "value": 45.07613432453217
+        },
+        "Y16": {
+          "currency": "EUR",
+          "value": 22.87
+        },
+        "Z16": {
+          "currency": "EUR",
+          "value": null
+        },
+        "row": 16
+      },
+      {
+        "AA16": {
+          "currency": "EUR",
+          "value": 4.230833333333334
+        },
+        "AB16": {
+          "currency": "EUR",
+          "value": 50.77
+        },
+        "AD16": {
+          "currency": "EUR",
+          "value": 5.08
+        },
+        "AE16": {
+          "currency": "EUR",
+          "value": 60.96
+        },
+        "AF16": {
+          "currency": "EUR",
+          "value": 10.15
+        },
+        "AG16": {
+          "currency": "EUR",
+          "value": 5.077195078185081
+        },
+        "AH16": {
+          "currency": "EUR",
+          "value": 2.012963388464496
+        },
+        "AI16": {
+          "currency": "EUR",
+          "value": 1.0615845372981287
+        },
+        "AJ16": {
+          "currency": "EUR",
+          "value": 5.76
+        },
+        "AK16": {
+          "currency": "EUR",
+          "value": 69.12
+        },
+        "AL16": {
+          "currency": "EUR",
+          "value": 84.36
+        },
+        "AM16": {
+          "currency": "EUR",
+          "value": 7.03
+        },
+        "AN16": {
+          "currency": "EUR",
+          "value": 15.239999999999995
+        },
+        "AO16": {
+          "currency": "EUR",
+          "value": 11.067149910279415
+        },
+        "AP16": {
+          "currency": "EUR",
+          "value": 4.17285008972058
+        },
+        "AQ16": {
+          "currency": "EUR",
+          "value": 0.0
+        },
+        "AY16": {
+          "currency": "EUR",
+          "value": 36.72
+        },
+        "BA16": {
+          "currency": "EUR",
+          "value": 0.9371259620294069
+        },
+        "BB16": {
+          "currency": "EUR",
+          "value": 0.2460580541343476
+        },
+        "N16": {
+          "currency": "EUR",
+          "value": 3.0
+        },
+        "P16": {
+          "currency": "EUR",
+          "value": 3.0
+        },
+        "R16": {
+          "currency": "EUR",
+          "value": 3.0
+        },
+        "S16": {
+          "currency": "EUR",
+          "value": 36.0
+        },
+        "T16": {
+          "currency": "EUR",
+          "value": 9.015226864906435
+        },
+        "U16": {
+          "currency": "EUR",
+          "value": 0.0
+        },
+        "V16": {
+          "currency": "EUR",
+          "value": 9.015226864906435
+        },
+        "Y16": {
+          "currency": "EUR",
+          "value": 4.57
+        },
+        "Z16": {
+          "currency": "EUR",
+          "value": null
+        },
+        "row": 17
+      },
+      {
+        "AA16": {
+          "currency": "EUR",
+          "value": 53.59
+        },
+        "AB16": {
+          "currency": "EUR",
+          "value": 53.59
+        },
+        "AD16": {
+          "currency": "EUR",
+          "value": 64.31
+        },
+        "AE16": {
+          "currency": "EUR",
+          "value": 64.31
+        },
+        "AF16": {
+          "currency": "EUR",
+          "value": 10.72
+        },
+        "AG16": {
+          "currency": "EUR",
+          "value": 5.359261471417585
+        },
+        "AH16": {
+          "currency": "EUR",
+          "value": 2.123694687823635
+        },
+        "AI16": {
+          "currency": "EUR",
+          "value": 1.1205614560369137
+        },
+        "AJ16": {
+          "currency": "EUR",
+          "value": 72.91
+        },
+        "AK16": {
+          "currency": "EUR",
+          "value": 72.91
+        },
+        "AL16": {
+          "currency": "EUR",
+          "value": 88.95
+        },
+        "AM16": {
+          "currency": "EUR",
+          "value": 88.95
+        },
+        "AN16": {
+          "currency": "EUR",
+          "value": 16.040000000000006
+        },
+        "AO16": {
+          "currency": "EUR",
+          "value": 11.683336016406049
+        },
+        "AP16": {
+          "currency": "EUR",
+          "value": 4.356663983593958
+        },
+        "AQ16": {
+          "currency": "EUR",
+          "value": 0.0
+        },
+        "AY16": {
+          "currency": "EUR",
+          "value": 38.76
+        },
+        "BA16": {
+          "currency": "EUR",
+          "value": 0.9891885154754849
+        },
+        "BB16": {
+          "currency": "EUR",
+          "value": 0.2597279460307002
+        },
+        "N16": {
+          "currency": "EUR",
+          "value": 38.0
+        },
+        "P16": {
+          "currency": "EUR",
+          "value": 38.0
+        },
+        "R16": {
+          "currency": "EUR",
+          "value": 38.0
+        },
+        "S16": {
+          "currency": "EUR",
+          "value": 38.0
+        },
+        "T16": {
+          "currency": "EUR",
+          "value": 9.516072801845679
+        },
+        "U16": {
+          "currency": "EUR",
+          "value": 0.0
+        },
+        "V16": {
+          "currency": "EUR",
+          "value": 9.516072801845679
+        },
+        "Y16": {
+          "currency": "EUR",
+          "value": 4.83
+        },
+        "Z16": {
+          "currency": "EUR",
+          "value": null
+        },
+        "row": 18
+      },
+      {
+        "AA16": {
+          "currency": "EUR",
+          "value": 4.230833333333334
+        },
+        "AB16": {
+          "currency": "EUR",
+          "value": 50.77
+        },
+        "AD16": {
+          "currency": "EUR",
+          "value": 5.08
+        },
+        "AE16": {
+          "currency": "EUR",
+          "value": 60.96
+        },
+        "AF16": {
+          "currency": "EUR",
+          "value": 10.15
+        },
+        "AG16": {
+          "currency": "EUR",
+          "value": 5.077195078185081
+        },
+        "AH16": {
+          "currency": "EUR",
+          "value": 2.012963388464496
+        },
+        "AI16": {
+          "currency": "EUR",
+          "value": 1.0615845372981287
+        },
+        "AJ16": {
+          "currency": "EUR",
+          "value": 5.76
+        },
+        "AK16": {
+          "currency": "EUR",
+          "value": 69.12
+        },
+        "AL16": {
+          "currency": "EUR",
+          "value": 84.36
+        },
+        "AM16": {
+          "currency": "EUR",
+          "value": 7.03
+        },
+        "AN16": {
+          "currency": "EUR",
+          "value": 15.239999999999995
+        },
+        "AO16": {
+          "currency": "EUR",
+          "value": 11.067149910279415
+        },
+        "AP16": {
+          "currency": "EUR",
+          "value": 4.17285008972058
+        },
+        "AQ16": {
+          "currency": "EUR",
+          "value": 0.0
+        },
+        "AY16": {
+          "currency": "EUR",
+          "value": 36.72
+        },
+        "BA16": {
+          "currency": "EUR",
+          "value": 0.9371259620294069
+        },
+        "BB16": {
+          "currency": "EUR",
+          "value": 0.2460580541343476
+        },
+        "N16": {
+          "currency": "EUR",
+          "value": 3.0
+        },
+        "P16": {
+          "currency": "EUR",
+          "value": 3.0
+        },
+        "R16": {
+          "currency": "EUR",
+          "value": 3.0
+        },
+        "S16": {
+          "currency": "EUR",
+          "value": 36.0
+        },
+        "T16": {
+          "currency": "EUR",
+          "value": 9.015226864906435
+        },
+        "U16": {
+          "currency": "EUR",
+          "value": 0.0
+        },
+        "V16": {
+          "currency": "EUR",
+          "value": 9.015226864906435
+        },
+        "Y16": {
+          "currency": "EUR",
+          "value": 4.57
+        },
+        "Z16": {
+          "currency": "EUR",
+          "value": null
+        },
+        "row": 19
+      },
+      {
+        "AA16": {
+          "currency": "EUR",
+          "value": 108.596
+        },
+        "AB16": {
+          "currency": "EUR",
+          "value": 542.98
+        },
+        "AD16": {
+          "currency": "EUR",
+          "value": 130.32
+        },
+        "AE16": {
+          "currency": "EUR",
+          "value": 651.5999999999999
+        },
+        "AF16": {
+          "currency": "EUR",
+          "value": 108.6
+        },
+        "AG16": {
+          "currency": "EUR",
+          "value": 54.297780697257124
+        },
+        "AH16": {
+          "currency": "EUR",
+          "value": 21.517525126634194
+        },
+        "AI16": {
+          "currency": "EUR",
+          "value": 11.3530568572161
+        },
+        "AJ16": {
+          "currency": "EUR",
+          "value": 147.75
+        },
+        "AK16": {
+          "currency": "EUR",
+          "value": 738.75
+        },
+        "AL16": {
+          "currency": "EUR",
+          "value": 901.3
+        },
+        "AM16": {
+          "currency": "EUR",
+          "value": 180.26
+        },
+        "AN16": {
+          "currency": "EUR",
+          "value": 162.54999999999995
+        },
+        "AO16": {
+          "currency": "EUR",
+          "value": 118.3650254293771
+        },
+        "AP16": {
+          "currency": "EUR",
+          "value": 44.184974570622856
+        },
+        "AQ16": {
+          "currency": "EUR",
+          "value": 0.0
+        },
+        "AY16": {
+          "currency": "EUR",
+          "value": 392.70000000000005
+        },
+        "BA16": {
+          "currency": "EUR",
+          "value": 10.022041538370045
+        },
+        "BB16": {
+          "currency": "EUR",
+          "value": 2.631454190047884
+        },
+        "N16": {
+          "currency": "EUR",
+          "value": 77.0
+        },
+        "P16": {
+          "currency": "EUR",
+          "value": 77.0
+        },
+        "R16": {
+          "currency": "EUR",
+          "value": 77.0
+        },
+        "S16": {
+          "currency": "EUR",
+          "value": 385.0
+        },
+        "T16": {
+          "currency": "EUR",
+          "value": 96.41284286080493
+        },
+        "U16": {
+          "currency": "EUR",
+          "value": 0.0
+        },
+        "V16": {
+          "currency": "EUR",
+          "value": 96.41284286080493
+        },
+        "Y16": {
+          "currency": "EUR",
+          "value": 48.91
+        },
+        "Z16": {
+          "currency": "EUR",
+          "value": null
+        },
+        "row": 20
+      },
+      {
+        "AA16": {
+          "currency": "EUR",
+          "value": 52.18300000000001
+        },
+        "AB16": {
+          "currency": "EUR",
+          "value": 521.83
+        },
+        "AD16": {
+          "currency": "EUR",
+          "value": 62.62
+        },
+        "AE16": {
+          "currency": "EUR",
+          "value": 626.1999999999999
+        },
+        "AF16": {
+          "currency": "EUR",
+          "value": 104.37
+        },
+        "AG16": {
+          "currency": "EUR",
+          "value": 52.182282748013336
+        },
+        "AH16": {
+          "currency": "EUR",
+          "value": 20.678790381440656
+        },
+        "AI16": {
+          "currency": "EUR",
+          "value": 10.910729966675213
+        },
+        "AJ16": {
+          "currency": "EUR",
+          "value": 71.0
+        },
+        "AK16": {
+          "currency": "EUR",
+          "value": 710.0
+        },
+        "AL16": {
+          "currency": "EUR",
+          "value": 866.2
+        },
+        "AM16": {
+          "currency": "EUR",
+          "value": 86.62
+        },
+        "AN16": {
+          "currency": "EUR",
+          "value": 156.20000000000005
+        },
+        "AO16": {
+          "currency": "EUR",
+          "value": 113.75462963342733
+        },
+        "AP16": {
+          "currency": "EUR",
+          "value": 42.44537036657272
+        },
+        "AQ16": {
+          "currency": "EUR",
+          "value": 0.0
+        },
+        "AY16": {
+          "currency": "EUR",
+          "value": 377.40000000000003
+        },
+        "BA16": {
+          "currency": "EUR",
+          "value": 9.631572387524459
+        },
+        "BB16": {
+          "currency": "EUR",
+          "value": 2.528930000825239
+        },
+        "N16": {
+          "currency": "EUR",
+          "value": 37.0
+        },
+        "P16": {
+          "currency": "EUR",
+          "value": 37.0
+        },
+        "R16": {
+          "currency": "EUR",
+          "value": 37.0
+        },
+        "S16": {
+          "currency": "EUR",
+          "value": 370.0
+        },
+        "T16": {
+          "currency": "EUR",
+          "value": 92.65649833376057
+        },
+        "U16": {
+          "currency": "EUR",
+          "value": 0.0
+        },
+        "V16": {
+          "currency": "EUR",
+          "value": 92.65649833376057
+        },
+        "Y16": {
+          "currency": "EUR",
+          "value": 47.01
+        },
+        "Z16": {
+          "currency": "EUR",
+          "value": null
+        },
+        "row": 21
+      },
+      {
+        "AA16": {
+          "currency": "EUR",
+          "value": 6003.78
+        },
+        "AB16": {
+          "currency": "EUR",
+          "value": 6003.78
+        },
+        "AD16": {
+          "currency": "EUR",
+          "value": 7204.54
+        },
+        "AE16": {
+          "currency": "EUR",
+          "value": 7204.54
+        },
+        "AF16": {
+          "currency": "EUR",
+          "value": 1200.76
+        },
+        "AG16": {
+          "currency": "EUR",
+          "value": 600.3783179953859
+        },
+        "AH16": {
+          "currency": "EUR",
+          "value": 237.91352068592667
+        },
+        "AI16": {
+          "currency": "EUR",
+          "value": 125.5323715355037
+        },
+        "AJ16": {
+          "currency": "EUR",
+          "value": 8168.36
+        },
+        "AK16": {
+          "currency": "EUR",
+          "value": 8168.36
+        },
+        "AL16": {
+          "currency": "EUR",
+          "value": 9965.4
+        },
+        "AM16": {
+          "currency": "EUR",
+          "value": 9965.4
+        },
+        "AN16": {
+          "currency": "EUR",
+          "value": 1797.04
+        },
+        "AO16": {
+          "currency": "EUR",
+          "value": 1308.7823268905408
+        },
+        "AP16": {
+          "currency": "EUR",
+          "value": 488.2576731094591
+        },
+        "AQ16": {
+          "currency": "EUR",
+          "value": 0.0
+        },
+        "AY16": {
+          "currency": "EUR",
+          "value": 4342.14
+        },
+        "BA16": {
+          "currency": "EUR",
+          "value": 110.81514500997736
+        },
+        "BB16": {
+          "currency": "EUR",
+          "value": 29.0963649013866
+        },
+        "N16": {
+          "currency": "EUR",
+          "value": 4257.0
+        },
+        "P16": {
+          "currency": "EUR",
+          "value": 4257.0
+        },
+        "R16": {
+          "currency": "EUR",
+          "value": 4257.0
+        },
+        "S16": {
+          "currency": "EUR",
+          "value": 4257.0
+        },
+        "T16": {
+          "currency": "EUR",
+          "value": 1066.0505767751858
+        },
+        "U16": {
+          "currency": "EUR",
+          "value": 0.0
+        },
+        "V16": {
+          "currency": "EUR",
+          "value": 1066.0505767751858
+        },
+        "Y16": {
+          "currency": "EUR",
+          "value": 540.82
+        },
+        "Z16": {
+          "currency": "EUR",
+          "value": null
+        },
+        "row": 22
+      },
+      {
+        "AA16": {
+          "currency": "EUR",
+          "value": 3525.83
+        },
+        "AB16": {
+          "currency": "EUR",
+          "value": 3525.83
+        },
+        "AD16": {
+          "currency": "EUR",
+          "value": 4231.0
+        },
+        "AE16": {
+          "currency": "EUR",
+          "value": 4231.0
+        },
+        "AF16": {
+          "currency": "EUR",
+          "value": 705.17
+        },
+        "AG16": {
+          "currency": "EUR",
+          "value": 352.5829915406307
+        },
+        "AH16": {
+          "currency": "EUR",
+          "value": 139.71912419892334
+        },
+        "AI16": {
+          "currency": "EUR",
+          "value": 73.72114842348115
+        },
+        "AJ16": {
+          "currency": "EUR",
+          "value": 4797.02
+        },
+        "AK16": {
+          "currency": "EUR",
+          "value": 4797.02
+        },
+        "AL16": {
+          "currency": "EUR",
+          "value": 5852.36
+        },
+        "AM16": {
+          "currency": "EUR",
+          "value": 5852.36
+        },
+        "AN16": {
+          "currency": "EUR",
+          "value": 1055.3399999999992
+        },
+        "AO16": {
+          "currency": "EUR",
+          "value": 768.6068326582928
+        },
+        "AP16": {
+          "currency": "EUR",
+          "value": 286.73316734170646
+        },
+        "AQ16": {
+          "currency": "EUR",
+          "value": 0.0
+        },
+        "AY16": {
+          "currency": "EUR",
+          "value": 2550.0
+        },
+        "BA16": {
+          "currency": "EUR",
+          "value": 65.0781918075977
+        },
+        "BB16": {
+          "currency": "EUR",
+          "value": 17.087364870440805
+        },
+        "N16": {
+          "currency": "EUR",
+          "value": 2500.0
+        },
+        "P16": {
+          "currency": "EUR",
+          "value": 2500.0
+        },
+        "R16": {
+          "currency": "EUR",
+          "value": 2500.0
+        },
+        "S16": {
+          "currency": "EUR",
+          "value": 2500.0
+        },
+        "T16": {
+          "currency": "EUR",
+          "value": 626.0574211740579
+        },
+        "U16": {
+          "currency": "EUR",
+          "value": 0.0
+        },
+        "V16": {
+          "currency": "EUR",
+          "value": 626.0574211740579
+        },
+        "Y16": {
+          "currency": "EUR",
+          "value": 317.61
+        },
+        "Z16": {
+          "currency": "EUR",
+          "value": null
+        },
+        "row": 23
+      }
+    ],
+    "totals": {
+      "AB13": {
+        "currency": "EUR",
+        "value": 11003.41
+      },
+      "AF13": {
+        "currency": "EUR",
+        "value": 2200.69
+      },
+      "AK13": {
+        "currency": "EUR",
+        "value": 14970.66
+      },
+      "AL13": {
+        "currency": "EUR",
+        "value": 18264.29
+      },
+      "S13": {
+        "currency": "EUR",
+        "value": 7802.0
+      },
+      "V13": {
+        "currency": "EUR",
+        "value": 1953.8
+      },
+      "Y13": {
+        "currency": "EUR",
+        "value": 991.19
+      }
+    }
+  },
+  "inputs": {
+    "products": [
+      {
+        "article": 990800914,
+        "currency_of_base_price": "EUR",
+        "customs_code": null,
+        "fx_rate": 1.0,
+        "import_tariff": 0.1,
+        "markup": 0.2,
+        "name": null,
+        "price_no_vat": 180.0,
+        "price_vat": null,
+        "quantity": 1,
+        "row": 16,
+        "supplier_country": "Турция",
+        "supplier_discount": 0.0,
+        "vat_rate": 0.2,
+        "weight_in_kg": 0.0
+      },
+      {
+        "article": 411516914,
+        "currency_of_base_price": "EUR",
+        "customs_code": null,
+        "fx_rate": 1.0,
+        "import_tariff": 0.1,
+        "markup": 0.2,
+        "name": null,
+        "price_no_vat": 3.0,
+        "price_vat": null,
+        "quantity": 12,
+        "row": 17,
+        "supplier_country": "Турция",
+        "supplier_discount": 0.0,
+        "vat_rate": 0.2,
+        "weight_in_kg": 0.0
+      },
+      {
+        "article": 774376008,
+        "currency_of_base_price": "EUR",
+        "customs_code": null,
+        "fx_rate": 1.0,
+        "import_tariff": 0.1,
+        "markup": 0.2,
+        "name": null,
+        "price_no_vat": 38.0,
+        "price_vat": null,
+        "quantity": 1,
+        "row": 18,
+        "supplier_country": "Турция",
+        "supplier_discount": 0.0,
+        "vat_rate": 0.2,
+        "weight_in_kg": 0.0
+      },
+      {
+        "article": 4901782,
+        "currency_of_base_price": "EUR",
+        "customs_code": null,
+        "fx_rate": 1.0,
+        "import_tariff": 0.1,
+        "markup": 0.2,
+        "name": null,
+        "price_no_vat": 3.0,
+        "price_vat": null,
+        "quantity": 12,
+        "row": 19,
+        "supplier_country": "Турция",
+        "supplier_discount": 0.0,
+        "vat_rate": 0.2,
+        "weight_in_kg": 0.0
+      },
+      {
+        "article": 511701914,
+        "currency_of_base_price": "EUR",
+        "customs_code": null,
+        "fx_rate": 1.0,
+        "import_tariff": 0.1,
+        "markup": 0.2,
+        "name": null,
+        "price_no_vat": 77.0,
+        "price_vat": null,
+        "quantity": 5,
+        "row": 20,
+        "supplier_country": "Турция",
+        "supplier_discount": 0.0,
+        "vat_rate": 0.2,
+        "weight_in_kg": 0.0
+      },
+      {
+        "article": 600365314,
+        "currency_of_base_price": "EUR",
+        "customs_code": null,
+        "fx_rate": 1.0,
+        "import_tariff": 0.1,
+        "markup": 0.2,
+        "name": null,
+        "price_no_vat": 37.0,
+        "price_vat": null,
+        "quantity": 10,
+        "row": 21,
+        "supplier_country": "Турция",
+        "supplier_discount": 0.0,
+        "vat_rate": 0.2,
+        "weight_in_kg": 0.0
+      },
+      {
+        "article": 10552752,
+        "currency_of_base_price": "EUR",
+        "customs_code": null,
+        "fx_rate": 1.0,
+        "import_tariff": 0.1,
+        "markup": 0.2,
+        "name": null,
+        "price_no_vat": 4257.0,
+        "price_vat": null,
+        "quantity": 1,
+        "row": 22,
+        "supplier_country": "Турция",
+        "supplier_discount": 0.0,
+        "vat_rate": 0.2,
+        "weight_in_kg": 0.0
+      },
+      {
+        "article": 10585596,
+        "currency_of_base_price": "EUR",
+        "customs_code": null,
+        "fx_rate": 1.0,
+        "import_tariff": 0.1,
+        "markup": 0.2,
+        "name": null,
+        "price_no_vat": 2500.0,
+        "price_vat": null,
+        "quantity": 1,
+        "row": 23,
+        "supplier_country": "Турция",
+        "supplier_discount": 0.0,
+        "vat_rate": 0.2,
+        "weight_in_kg": 0.0
+      }
+    ],
+    "variables": {
+      "advance_from_client": 0.49999999999999994,
+      "advance_to_supplier": 1.0,
+      "currency_of_quote": "EUR",
+      "delivery_time": 101,
+      "dm_fee_type": "%",
+      "dm_fee_value": 10.0,
+      "insurance_line": 3.8000000000000003,
+      "legend": {
+        "\"ОТКУДА\" - Стамбул": 1700.0,
+        "1953.8": 0.0,
+        "Порт и СВХ в РФ": null,
+        "РФ (граница)  - \"КУДА\"": null,
+        "Страховка (% от валютной спеки)": 3.8000000000000003,
+        "ТР - РФ (граница)": null,
+        "брокерские в РФ": null,
+        "брокерские до РФ": null,
+        "сертификация": 250.0,
+        "указать доп. расход": null
+      },
+      "logistics_first_leg_excl_insurance": 1950.0,
+      "logistics_first_leg_total": 1953.8,
+      "logistics_second_leg_total": 0.0,
+      "offer_incoterms": "DDP",
+      "offer_sale_type": "поставка",
+      "rate_forex_risk": 0.03,
+      "seller_company": null,
+      "time_to_advance": 5,
+      "time_to_advance_on_receiving": 10
+    }
+  },
+  "quote_currency": "EUR",
+  "quote_idn": "Q-202605-0014",
+  "source_xlsm": "forma_nds22_18.xlsm",
+  "template_variant": "standard"
+}
