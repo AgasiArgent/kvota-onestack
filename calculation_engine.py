@@ -262,9 +262,10 @@ def phase2_5_internal_pricing(
 
     Created: 2025-11-09 (to resolve Phase 3 → Phase 4 circular dependency)
     """
-    # Final-46: AX16 = S16 * (1 + AW16) / E16
+    # Final-46: AX16 = ROUND(S16 * (1 + AW16) / E16, 2)
+    # эталон rounds this money cell to 2 decimals (kopeck precision).
     if quantity > 0:
-        AX16 = round_decimal(S16 * (Decimal("1") + internal_markup) / Decimal(quantity))
+        AX16 = round_decimal(S16 * (Decimal("1") + internal_markup) / Decimal(quantity), 2)
     else:
         AX16 = Decimal("0")
 
@@ -375,7 +376,8 @@ def phase4_duties(
     # BUGFIX 2025-11-28: Insurance is already in T16 (added in Phase 3), don't add again!
     # Y16 = import_tariff × (AY16 + T16) where T16 already contains insurance_per_product
     if offer_incoterms == Incoterms.DDP:
-        Y16 = round_decimal((import_tariff / Decimal("100")) * (AY16 + T16))
+        # эталон: Y16 = ROUND(IF(DDP, X16*(S16*(1+AW16)+T16), 0), 2) — money cell, 2dp.
+        Y16 = round_decimal((import_tariff / Decimal("100")) * (AY16 + T16), 2)
     else:
         Y16 = Decimal("0")
 
@@ -663,7 +665,8 @@ def phase10_final_cogs(
     Returns: AB16, AA16
     """
     # Final-3: AB16 = ROUND(SUM(S16, V16, Y16, Z16, BA16, BB16), 2)
-    AB16 = round_decimal(S16 + V16 + Y16 + Z16 + BA16 + BB16)
+    # эталон rounds COGS to 2 decimals (kopeck precision).
+    AB16 = round_decimal(S16 + V16 + Y16 + Z16 + BA16 + BB16, 2)
     
     # Final-37: AA16 = IFERROR(AB16 / E16, 0)
     if quantity > 0:
@@ -761,9 +764,9 @@ def phase11_sales_price(
     AH16 = round_decimal((AE16 + AG16 + AI16) * forex_rate)
     
     # Final-2: AJ16 = FINAL sales price per unit
-    # IFERROR(ROUND(SUM(AB16, AF16:AI16) / E16, 2), 0)
+    # IFERROR(ROUND(SUM(AB16, AF16:AI16) / E16, 2), 0) — money cell, 2dp.
     if quantity > 0:
-        AJ16 = round_decimal((AB16 + AF16 + AG16 + AH16 + AI16) / Decimal(quantity))
+        AJ16 = round_decimal((AB16 + AF16 + AG16 + AH16 + AI16) / Decimal(quantity), 2)
     else:
         AJ16 = Decimal("0")
     
@@ -810,10 +813,11 @@ def phase12_vat_calculations(
         vat_multiplier = Decimal("1") + rate_vat_ru
     else:
         vat_multiplier = Decimal("1")
-    AM16 = round_decimal(AJ16 * vat_multiplier)
+    # эталон: AM16 = ROUND(AJ16 * (1 + VAT), 2) — money cell, 2dp.
+    AM16 = round_decimal(AJ16 * vat_multiplier, 2)
 
-    # Final-40: AL16 = IFERROR(AM16 * E16, 0)
-    AL16 = round_decimal(AM16 * Decimal(quantity))
+    # Final-40: AL16 = ROUND(IFERROR(AM16 * E16, 0), 2) — money cell, 2dp.
+    AL16 = round_decimal(AM16 * Decimal(quantity), 2)
 
     # Final-41: AN16 = AL16 - AK16
     AK16 = AJ16 * Decimal(quantity)  # Sales price total no VAT

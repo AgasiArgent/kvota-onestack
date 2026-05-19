@@ -32,9 +32,9 @@ into one of two categories:
     until the bug is fixed; then the entry is removed. After the Phase-2
     closeout (2026-05-19) this dict is EMPTY: the two targeted Phase-2
     bugs (idemitsu input-mapping, forma %-DM-fee) were fixed, and the two
-    residual differences (idemitsu AX16 rounding, forma blank-seller
-    financing) were reviewed and ACCEPTED by the user — moved to
-    ``ACCEPTED_DIFFERENCES`` below.
+    residual differences (idemitsu Y16/Y13 rounding residual, forma
+    blank-seller financing) were reviewed and ACCEPTED by the user — moved
+    to ``ACCEPTED_DIFFERENCES`` below.
   * ``ACCEPTED_DIFFERENCES`` — a CORRECT, PERMANENT difference (an
     intentional engine design choice, e.g. rubli's value-based logistics
     distribution, or a known incomplete эталон file). Logged as accepted,
@@ -202,11 +202,17 @@ class AcceptedDifference:
 # bug (services/calculation_helpers.py — resolve_vat_zone now resolves the
 # EU-cross-border zone → internal markup 0.04 not 0.02) and the forma
 # percentage-DM-fee engine bug (calculation_engine.py phase11 — AG16 now
-# computes BD16·pct·AB13). Two residual differences then remained. The user
-# reviewed both (2026-05-19) and ACCEPTED both — they are NOT pending bugs:
-#   * idemitsu AX16 rounding (~0.04%) — a rounding-granularity mismatch
-#     (эталон ROUND(,2) vs engine round_decimal(,4)), accepted as
-#     negligible. → ACCEPTED_DIFFERENCES.
+# computes BD16·pct·AB13). Phase 2c (2026-05-19, user-authorized) aligned
+# the engine's rounding policy to the эталон: the 6 money cells the эталон
+# rounds to 2dp (Y16, AB16, AJ16, AL16, AM16, AX16) now round to 2dp in
+# the engine. Two residual differences remain. The user reviewed both and
+# ACCEPTED both — they are NOT pending bugs:
+#   * idemitsu Y16/Y13 (~0.039%) — after the rounding alignment AX16 → 2dp
+#     matched the эталон's AY16 cell and collapsed the former 13-cell
+#     downstream cascade; one residual is left at Y13 because the эталон's
+#     Y16 formula uses an INLINE UNROUNDED S16·(1+AW16) rather than its
+#     rounded AY16 cell. Same rounding-granularity mismatch, now on Y13,
+#     accepted as negligible. → ACCEPTED_DIFFERENCES.
 #   * forma financing block (~1.086%) — NOT an engine bug: the forma эталон
 #     .xlsm has a blank seller company, so its revenue-estimate BH2 omits
 #     the 22% RU VAT and the shortfall cascades through financing/COGS.
@@ -262,32 +268,46 @@ ACCEPTED_DIFFERENCES: dict[str, list[AcceptedDifference]] = {
             },
         ),
     ],
-    # IDEMITSU — AX16 rounding granularity (ACCEPTED, not a bug). Phase 2
-    # fixed the idemitsu input-mapping bug (supplier country "ЕС (закупка
-    # между странами ЕС)" → wrong "Прочие" zone → internal markup 0.02):
-    # resolve_vat_zone now resolves the EU-cross-border zone and the engine
-    # uses internal markup 0.04. What remains is a ~0.04% gap on the
-    # internal-pricing chain: the эталон computes AX16 = ROUND(S16·(1+AW16)
-    # /E16, 2) — rounding the intermediate per-unit internal price to 2dp
-    # (9.78) — while the engine's round_decimal keeps 4dp (9.7760), so
-    # AY16 = 78240 vs 78208. That 2dp-vs-4dp difference cascades ≤0.6% into
-    # the forex reserve, credit financing, VAT and the sale price. The user
-    # reviewed this (2026-05-19) and ACCEPTED it: a rounding-granularity
-    # mismatch between эталон and engine, ~0.04%, negligible — not a logic
-    # bug. Permanent; no fix to remove it.
+    # IDEMITSU — Y16-cascade residual after the эталон rounding alignment
+    # (ACCEPTED, not a bug). Phase 2 fixed the idemitsu input-mapping bug
+    # (supplier country "ЕС (закупка между странами ЕС)" → wrong "Прочие"
+    # zone → internal markup 0.02): resolve_vat_zone now resolves the
+    # EU-cross-border zone and the engine uses internal markup 0.04.
+    # Phase 2c (2026-05-19, user-authorized) then aligned the engine's
+    # rounding policy to the эталон: the 6 money cells the эталон rounds to
+    # 2dp (Y16, AB16, AJ16, AL16, AM16, AX16) now round to 2dp in the
+    # engine too. AX16 = ROUND(S16·(1+AW16)/E16, 2) = 9.78 (was 9.7760),
+    # so AY16 = 78240 — matching the эталон's AY16 cell exactly. That
+    # collapsed 9 of the former 13 downstream cells (AY16/AJ16/AK16/AL16/
+    # AN16/AO16/AP16/BB16/AK13/AL13 — all GREEN now). FOUR residual cells
+    # remain — AD16, AE16, AH16, Y13 — all the SAME root cause: the
+    # эталон's Y16 formula = ROUND(X16·(S16·(1+AW16) + T16), 2) recomputes
+    # S16·(1+AW16) INLINE and UNROUNDED (78208); it does NOT reference the
+    # эталон's rounded AY16 cell. The engine's phase4_duties Y16 consumes
+    # the single internal AY16 value, now rounded (78240). So engine Y16
+    # is 0.05·(78240−78208) = 1.60 above the эталон → Y13 (Σ Y16) = 4076.34
+    # vs 4074.74 (~0.039%), and the +1.60 flows through AB16 = S16+V16+
+    # Y16+Z16+… into the sale price AD16/AE16 and the forex reserve AH16
+    # (~0.035%). The эталон is internally inconsistent — it rounds AX16
+    # for its AY16 cell but uses the unrounded product inside Y16.
+    # Removing this residual would require a Y16 formula change (a
+    # separate unrounded S16·(1+AW16) input) — out of scope for a
+    # precision-only alignment. ~0.039%, negligible — not a logic bug.
+    # Permanent.
     "idemitsu.xlsm": [
         AcceptedDifference(
             surface="engine",
             reason=(
-                "AX16 округление: эталон ROUND(,2), движок round_decimal(,4) "
-                "— рассинхрон гранулярности ~0.04%, принято как "
+                "Y16-каскад после выравнивания округления к эталону: "
+                "эталон Y16 = ROUND(X16·(S16·(1+AW16)+T16), 2) считает "
+                "S16·(1+AW16) внутри формулы НЕокруглённым (78208), не "
+                "берёт округлённую ячейку AY16; движок Y16 потребляет "
+                "единое AY16 = 78240 (округлённое). Тот же рассинхрон "
+                "гранулярности AX16, +1.60 в Y16 → Y13 ~0.039% и через "
+                "AB16 в AD16/AE16/AH16 ~0.035%; принято как "
                 "несущественное (пользователь 2026-05-19)."
             ),
-            cells={
-                "AD16", "AE16", "AH16", "BB16", "AJ16", "AK16", "AL16",
-                "AN16", "AO16", "AP16", "AY16",
-                "AK13", "AL13",
-            },
+            cells={"AD16", "AE16", "AH16", "Y13"},
         ),
     ],
     # FORMA_NDS22_18 — blank-seller эталон file (ACCEPTED, not an engine
