@@ -29,15 +29,16 @@ into one of two categories:
 
   * ``KNOWN_DIVERGENCES`` — a still-unfixed engine/mapping BUG. The
     offending cell is recorded as XFAIL so the branch stays mergeable
-    until the bug is fixed; then the entry is removed. The two targeted
-    Phase-2 bugs (idemitsu input-mapping, forma %-DM-fee) were both
-    fixed; two SEPARATE, pre-existing engine divergences remain here
-    (idemitsu AX16 rounding, forma financing block) — out of scope for
-    this task's engine change and pending a separate decision.
-  * ``ACCEPTED_DIFFERENCES`` — a CORRECT, PERMANENT methodological
-    difference (an intentional engine design choice, e.g. rubli's
-    value-based logistics distribution). Logged as accepted, never
-    hard-failed; permanent, no future fix removes it.
+    until the bug is fixed; then the entry is removed. After the Phase-2
+    closeout (2026-05-19) this dict is EMPTY: the two targeted Phase-2
+    bugs (idemitsu input-mapping, forma %-DM-fee) were fixed, and the two
+    residual differences (idemitsu AX16 rounding, forma blank-seller
+    financing) were reviewed and ACCEPTED by the user — moved to
+    ``ACCEPTED_DIFFERENCES`` below.
+  * ``ACCEPTED_DIFFERENCES`` — a CORRECT, PERMANENT difference (an
+    intentional engine design choice, e.g. rubli's value-based logistics
+    distribution, or a known incomplete эталон file). Logged as accepted,
+    never hard-failed; permanent, no future fix removes it.
 
 Passing checkpoints remain hard asserts. A failing checkpoint covered by
 NEITHER category is a HARD failure — a regression or a new divergence.
@@ -117,17 +118,20 @@ _GOLDEN_DIR = os.path.join(_REPO_ROOT, "tests", "golden")
 #     XFAIL so the branch stays mergeable while the bug is tracked; when
 #     the bug is fixed the cell starts passing and its entry is removed.
 #     The two targeted Phase-2 bugs (idemitsu input-mapping, forma
-#     %-DM-fee) were fixed 2026-05-18; this dict still holds two SEPARATE,
-#     pre-existing engine divergences (idemitsu AX16 rounding, forma
-#     financing block) — out of scope for that work, pending a decision.
+#     %-DM-fee) were fixed 2026-05-18. After the Phase-2 closeout
+#     (2026-05-19) this dict is EMPTY: the two residual differences
+#     (idemitsu AX16 rounding, forma blank-seller financing) were reviewed
+#     and ACCEPTED by the user — they are now ACCEPTED_DIFFERENCES entries.
 #
 #   * ACCEPTED_DIFFERENCES — CORRECT & PERMANENT, not a bug. An accepted
-#     methodological difference between the engine and the эталон: the
-#     engine's behaviour is the chosen, intentional design and will NOT
-#     change. The test still must not hard-fail on these cells, but they
-#     are logged as "accepted methodological difference", never as a
-#     pending xfail. An ACCEPTED_DIFFERENCES entry is permanent — there is
-#     no future fix to remove it.
+#     difference between the engine and the эталон: either an intentional
+#     engine design choice (the engine's behaviour is the chosen design
+#     and will NOT change) or a known incomplete эталон file (the engine
+#     is correct, the эталон .xlsm is the imperfect side). The test still
+#     must not hard-fail on these cells, but they are logged as "accepted
+#     methodological difference", never as a pending xfail. An
+#     ACCEPTED_DIFFERENCES entry is permanent — there is no future fix to
+#     remove it.
 #
 # Both dicts map source_xlsm → list of entries; each entry lists every
 # verdict-bearing checkpoint cell it covers (a PRODUCT_CHECKPOINTS per-
@@ -166,15 +170,19 @@ class Divergence:
 class AcceptedDifference:
     """One accepted methodological difference — CORRECT & PERMANENT.
 
-    Distinct from ``Divergence``: this is NOT a bug and there is no future
-    fix. The engine's behaviour here is the chosen, intentional design; the
-    difference from the эталон is a known, accepted consequence of that
-    design choice. The golden-master test does not hard-fail on these cells
-    and logs them as "accepted methodological difference".
+    Distinct from ``Divergence``: this is NOT an engine/mapping bug and
+    there is no future fix. The engine is correct here; the difference from
+    the эталон is a known, accepted consequence of either an intentional
+    engine design choice (e.g. rubli's value-based logistics distribution)
+    or a known incomplete эталон file (e.g. forma's blank-seller .xlsm,
+    where the эталон cell omits RU VAT). The golden-master test does not
+    hard-fail on these cells and logs them as "accepted methodological
+    difference".
 
     Attributes:
-        surface: the verification surface — always "engine" in practice
-            (an accepted difference is an engine design choice).
+        surface: the verification surface — "engine" for an accepted engine
+            design choice, "эталон" when the эталон file itself is the
+            incomplete side and the engine is confirmed correct.
         reason: human-readable explanation of why the difference is
             accepted and permanent.
         cells: set of checkpoint cell names this difference covers.
@@ -188,103 +196,26 @@ class AcceptedDifference:
 
 # source_xlsm → list of PENDING-bug divergences for that file.
 #
-# Phase-2 fixes (2026-05-18): the idemitsu EU-cross-border input-mapping bug
-# was fixed in services/calculation_helpers.py (resolve_vat_zone now resolves
-# the EU-cross-border zone → internal markup 0.04 not 0.02); the forma
-# percentage-DM-fee engine bug was fixed in calculation_engine.py (phase11
-# now computes AG16 = BD16·pct·AB13).
+# EMPTY after the Phase-2 closeout (2026-05-19).
 #
-# Two residual divergences remain — both are SEPARATE, pre-existing engine
-# divergences distinct from the two bugs fixed above, and both are OUT OF
-# SCOPE for this Phase-2 work (whose engine change is limited to the forma
-# AG16 formula). Each is documented in its entry below and pending a
-# separate decision/fix:
-#   * idemitsu — AX16 rounding precision (2dp эталон vs 4dp engine), the
-#     ~0.04% residual the original idemitsu entry already flagged as a
-#     secondary effect surviving the zone fix.
-#   * forma — financing-block divergence (BA16/BB16 ~half the эталон), a
-#     ~1.086% residual that survives the (now-correct) AG16 formula because
-#     AG16's base AB13 = Σ AB16 inherits the financing shortfall.
-KNOWN_DIVERGENCES: dict[str, list[Divergence]] = {
-    # IDEMITSU — AX16 rounding precision (engine), residual after the
-    # input-mapping fix. The input-mapping bug (supplier country "ЕС
-    # (закупка между странами ЕС)" → wrong "Прочие" zone → internal markup
-    # 0.02) is FIXED: resolve_vat_zone now resolves the EU-cross-border zone
-    # and the engine uses internal markup 0.04, so the large divergence is
-    # gone. What remains is a ~0.04% gap on the internal-pricing chain: the
-    # эталон computes AX16 = ROUND(S16·(1+AW16)/E16, 2) — rounding the
-    # intermediate per-unit internal price to 2dp — while the engine's
-    # round_decimal keeps 4dp (AX16 9.78 vs 9.7760 → AY16 78240 vs 78208).
-    # That 2dp-vs-4dp difference cascades ≤0.6% into the forex reserve,
-    # credit financing, VAT and the sale price. This is an ENGINE rounding
-    # difference, not the input-mapping bug; closing it needs a
-    # calculation_engine.py change (out of scope here — the engine change in
-    # this task is limited to the forma AG16 formula). Pending a separate
-    # decision on engine rounding precision.
-    "idemitsu.xlsm": [
-        Divergence(
-            surface="engine",
-            reason=(
-                "AX16 rounding precision: the эталон rounds the intermediate "
-                "per-unit internal price AX16 = S16·(1+AW16)/E16 to 2dp "
-                "(9.78); the engine's round_decimal keeps 4dp (9.7760), so "
-                "AY16 = 78240 vs 78208 (~0.04%). Cascades ≤0.6% into the "
-                "forex reserve, credit financing, VAT and the sale price. "
-                "Distinct from the input-mapping bug (fixed): closing this "
-                "needs an engine rounding change, out of scope for this task."
-            ),
-            cells={
-                "AD16", "AE16", "AH16", "BB16", "AJ16", "AK16", "AL16",
-                "AN16", "AO16", "AP16", "AY16",
-                "AK13", "AL13",
-            },
-        ),
-    ],
-    # FORMA_NDS22_18 — financing-block divergence (engine), residual after
-    # the percentage-DM-fee fix. The %-DM-fee bug IS fixed: phase11 now
-    # computes AG16 = BD16·pct·AB13 (the эталон's "комиссия %" formula —
-    # percentage applied to the quote-level COGS total) instead of the old
-    # BD16·AB16·pct. Verified exact: fed the эталон's own AB13, the new
-    # formula reproduces the эталон AG16 to <0.001 on every forma row.
-    #
-    # What remains is a SEPARATE, pre-existing engine divergence in the
-    # financing block: the per-product financing costs BA16 (= BJ11·BD16)
-    # and BB16 (= BL5·BD16) are roughly half the эталон (forma row 16:
-    # BA16 engine 2.18 vs эталон 4.69; BB16 0.98 vs 1.23). That financing
-    # shortfall flows into AB16 = S16+V16+Y16+Z16+BA16+BB16, leaving every
-    # forma COGS / profit / sale-price / VAT cell ~1.086% short — and,
-    # because AG16's quote-level base AB13 = Σ AB16 inherits that same
-    # shortfall, the (now-correct) AG16 formula reports a ~1.086% residual
-    # too. Closing this needs a calculation_engine.py change in the
-    # financing phases (phase7/phase9) — out of scope for this task, whose
-    # engine change is limited to the AG16 formula. The original forma
-    # divergence entry attributed BA16/BB16 to the "AG16 cascade", but
-    # phase9 runs before phase11, so the financing divergence is in fact
-    # independent of AG16 and survives the AG16 fix. Pending a separate
-    # decision/fix on the engine financing block.
-    "forma_nds22_18.xlsm": [
-        Divergence(
-            surface="engine",
-            reason=(
-                "Financing-block divergence: per-product financing BA16 = "
-                "BJ11·BD16 and BB16 = BL5·BD16 come out ~half the эталон "
-                "(forma row 16: BA16 2.18 vs 4.69). That shortfall flows "
-                "into AB16 (= S16+V16+Y16+Z16+BA16+BB16), leaving every "
-                "forma COGS/profit/sale-price/VAT cell ~1.086% short; AG16 "
-                "inherits the same ~1.086% via AB13 = Σ AB16. Separate from "
-                "the %-DM-fee bug (fixed — AG16 = BD16·pct·AB13 verified "
-                "exact against the эталон's AB13). Closing the financing "
-                "divergence needs an engine change in phase7/phase9, out of "
-                "scope for this task (engine change limited to AG16)."
-            ),
-            cells={
-                "AA16", "AB16", "AD16", "AE16", "AF16", "AG16", "AH16",
-                "AJ16", "AK16", "AL16", "AN16", "AP16", "BA16", "BB16",
-                "AB13", "AF13", "AK13", "AL13",
-            },
-        ),
-    ],
-}
+# Phase 2 fixed two real bugs: the idemitsu EU-cross-border input-mapping
+# bug (services/calculation_helpers.py — resolve_vat_zone now resolves the
+# EU-cross-border zone → internal markup 0.04 not 0.02) and the forma
+# percentage-DM-fee engine bug (calculation_engine.py phase11 — AG16 now
+# computes BD16·pct·AB13). Two residual differences then remained. The user
+# reviewed both (2026-05-19) and ACCEPTED both — they are NOT pending bugs:
+#   * idemitsu AX16 rounding (~0.04%) — a rounding-granularity mismatch
+#     (эталон ROUND(,2) vs engine round_decimal(,4)), accepted as
+#     negligible. → ACCEPTED_DIFFERENCES.
+#   * forma financing block (~1.086%) — NOT an engine bug: the forma эталон
+#     .xlsm has a blank seller company, so its revenue-estimate BH2 omits
+#     the 22% RU VAT and the shortfall cascades through financing/COGS.
+#     The engine is correct (engine BH2 = эталон BH2 × 1.22 exactly); the
+#     эталон FILE is incomplete. → ACCEPTED_DIFFERENCES.
+#
+# KNOWN_DIVERGENCES is therefore empty. A new entry would be added here only
+# if a future change surfaces a genuine, still-unfixed engine/mapping bug.
+KNOWN_DIVERGENCES: dict[str, list[Divergence]] = {}
 
 # source_xlsm → list of ACCEPTED, permanent methodological differences.
 ACCEPTED_DIFFERENCES: dict[str, list[AcceptedDifference]] = {
@@ -328,6 +259,65 @@ ACCEPTED_DIFFERENCES: dict[str, list[AcceptedDifference]] = {
             ),
             cells={
                 "Y13", "AB13", "AF13", "AK13", "AL13",
+            },
+        ),
+    ],
+    # IDEMITSU — AX16 rounding granularity (ACCEPTED, not a bug). Phase 2
+    # fixed the idemitsu input-mapping bug (supplier country "ЕС (закупка
+    # между странами ЕС)" → wrong "Прочие" zone → internal markup 0.02):
+    # resolve_vat_zone now resolves the EU-cross-border zone and the engine
+    # uses internal markup 0.04. What remains is a ~0.04% gap on the
+    # internal-pricing chain: the эталон computes AX16 = ROUND(S16·(1+AW16)
+    # /E16, 2) — rounding the intermediate per-unit internal price to 2dp
+    # (9.78) — while the engine's round_decimal keeps 4dp (9.7760), so
+    # AY16 = 78240 vs 78208. That 2dp-vs-4dp difference cascades ≤0.6% into
+    # the forex reserve, credit financing, VAT and the sale price. The user
+    # reviewed this (2026-05-19) and ACCEPTED it: a rounding-granularity
+    # mismatch between эталон and engine, ~0.04%, negligible — not a logic
+    # bug. Permanent; no fix to remove it.
+    "idemitsu.xlsm": [
+        AcceptedDifference(
+            surface="engine",
+            reason=(
+                "AX16 округление: эталон ROUND(,2), движок round_decimal(,4) "
+                "— рассинхрон гранулярности ~0.04%, принято как "
+                "несущественное (пользователь 2026-05-19)."
+            ),
+            cells={
+                "AD16", "AE16", "AH16", "BB16", "AJ16", "AK16", "AL16",
+                "AN16", "AO16", "AP16", "AY16",
+                "AK13", "AL13",
+            },
+        ),
+    ],
+    # FORMA_NDS22_18 — blank-seller эталон file (ACCEPTED, not an engine
+    # bug). Phase 2 fixed the percentage-DM-fee engine bug: phase11 now
+    # computes AG16 = BD16·pct·AB13 (the эталон "комиссия %" formula). What
+    # remains is a ~1.086% financing-block difference that is NOT an engine
+    # bug — root cause traced: the forma эталон .xlsm has a BLANK seller
+    # company. With no seller the эталон's revenue-estimate BH2 omits the
+    # 22% RU VAT a RU seller would carry, and that shortfall cascades
+    # through the financing block (BA16/BB16 come out ~half the эталон) into
+    # AB16 = S16+V16+Y16+Z16+BA16+BB16 and on into every forma COGS /
+    # profit / sale-price / VAT cell, ~1.086% short; AG16 inherits the same
+    # ~1.086% via its quote-level base AB13 = Σ AB16. The engine is correct
+    # — it applies RU VAT for a RU seller, and engine BH2 = эталон BH2 ×
+    # 1.22 exactly. The эталон FILE is incomplete, not the engine. The user
+    # reviewed this (2026-05-19) and ACCEPTED it. Permanent; the difference
+    # would only disappear if the эталон file were re-saved with a seller.
+    "forma_nds22_18.xlsm": [
+        AcceptedDifference(
+            surface="эталон",
+            reason=(
+                "forma: эталонный файл с НЕзаполненным продавцом → BH2 без "
+                "НДС РФ → каскад в финансирование/COGS/ниже. Движок "
+                "корректен; расхождение из-за неполного эталонного файла, "
+                "не баг движка (пользователь 2026-05-19)."
+            ),
+            cells={
+                "AA16", "AB16", "AD16", "AE16", "AF16", "AG16", "AH16",
+                "AJ16", "AK16", "AL16", "AN16", "AP16", "BA16", "BB16",
+                "AB13", "AF13", "AK13", "AL13",
             },
         ),
     ],
