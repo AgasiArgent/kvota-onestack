@@ -7,7 +7,11 @@ import { registerAllModules } from "handsontable/registry";
 import Handsontable from "handsontable";
 import { toast } from "sonner";
 import { extractErrorMessage } from "@/shared/lib/errors";
-import { updateInvoiceItem, unassignInvoiceItem } from "@/entities/quote/mutations";
+import {
+  updateInvoiceItem,
+  updateQuoteItem,
+  unassignInvoiceItem,
+} from "@/entities/quote/mutations";
 import { isMoqViolation } from "./moq-warning";
 
 import "handsontable/styles/handsontable.css";
@@ -59,10 +63,34 @@ export const PROCUREMENT_COLUMN_KEYS = [
   "quantity",
   "minimum_order_quantity",
   "purchase_price_original",
+  "advance_to_supplier_percent",
+  "supplier_payment_terms",
   "production_time_days",
   "weight_in_kg",
   "dimensions",
 ] as const;
+
+/**
+ * feat/kpp-supplier-fields — supplier-side payment-terms fields live on
+ * `quote_items` (migration 016), not `invoice_items`. The handsontable rowId
+ * is `invoice_items.id`; to surface and persist payment terms per row, the
+ * parent (invoice-card) joins via `invoice_item_coverage` and forwards a
+ * per-row metadata map keyed by invoice_item.id:
+ *
+ *   - `quoteItemIds`: every quote_item covered by this invoice_item. For 1:1
+ *     and split rows, length 1. For merge rows (N qi → 1 ii), length ≥ 2.
+ *     Edits to the two payment fields write to ALL quote_items in the list
+ *     because a merged row IS one supplier КП row with one set of terms.
+ *   - `supplier_payment_terms` + `advance_to_supplier_percent`: the values
+ *     pulled from the (first) covering quote_item — they should be identical
+ *     across siblings/merge-members in practice; the invoice-card chooses
+ *     one to display. Edits propagate to all.
+ */
+export interface QuoteItemPaymentMetadata {
+  quoteItemIds: string[];
+  supplier_payment_terms: string | null;
+  advance_to_supplier_percent: number | null;
+}
 
 // Back-compat alias for internal array math.
 const COLUMN_KEYS = PROCUREMENT_COLUMN_KEYS;
@@ -83,6 +111,17 @@ interface RowData {
   minimum_order_quantity: number | null;
   purchase_price_original: number | null;
   purchase_currency: string;
+  /**
+   * Required advance payment percent (0-100). Lives on quote_items, joined
+   * via invoice_item_coverage. Edits route through updateQuoteItem.
+   */
+  advance_to_supplier_percent: number | null;
+  /**
+   * Free-text payment terms (e.g., "30% advance, 70% before shipment").
+   * Lives on quote_items, joined via invoice_item_coverage. Edits route
+   * through updateQuoteItem.
+   */
+  supplier_payment_terms: string;
   production_time_days: number | null;
   weight_in_kg: number | null;
   dimensions: string;
@@ -129,7 +168,8 @@ function itemToRow(
   item: ProcurementEditorItem,
   sales:
     | { product_code: string; product_name: string; unit: string }
-    | undefined
+    | undefined,
+  payment: QuoteItemPaymentMetadata | undefined
 ): RowData {
   // Manufacturer-substitution semantics: "Артикул производителя" /
   // "Наименование производителя" are filled by procurement ONLY when the
@@ -166,6 +206,8 @@ function itemToRow(
     minimum_order_quantity: item.minimum_order_quantity ?? null,
     purchase_price_original: item.purchase_price_original ?? null,
     purchase_currency: item.purchase_currency ?? "",
+    advance_to_supplier_percent: payment?.advance_to_supplier_percent ?? null,
+    supplier_payment_terms: payment?.supplier_payment_terms ?? "",
     production_time_days: item.production_time_days ?? null,
     weight_in_kg: item.weight_in_kg ?? null,
     dimensions: formatDimensions(
@@ -184,6 +226,14 @@ interface ProcurementHandsontableProps {
     string,
     { product_code: string; product_name: string; unit: string }
   >;
+  /**
+   * feat/kpp-supplier-fields — per-row metadata for the two quote_items-only
+   * columns (% аванса + Условия оплаты). Indexed by invoice_item.id.
+   * Provided by invoice-card from the existing coverage join. Rows missing
+   * from the map render blank cells but remain editable; the first edit
+   * uses the underlying coverage to write to all covered quote_items.
+   */
+  quoteItemMetadataByItemId?: Record<string, QuoteItemPaymentMetadata>;
   /**
    * Per-row eligibility for the inline split action. Indexed by
    * invoice_item.id. Rows present in this map render a "↧" split icon next
@@ -325,6 +375,7 @@ export function ProcurementHandsontable({
   items,
   procurementCompleted,
   salesByItemId,
+  quoteItemMetadataByItemId,
   splitableByItemId,
   splitChildByItemId,
   mergeableByItemId,
@@ -376,8 +427,10 @@ export function ProcurementHandsontable({
   // `initialData` depend on the items reference directly.
   const itemsRef = useRef(items);
   const salesByItemIdRef = useRef(salesByItemId);
+  const quoteItemMetadataByItemIdRef = useRef(quoteItemMetadataByItemId);
   itemsRef.current = items;
   salesByItemIdRef.current = salesByItemId;
+  quoteItemMetadataByItemIdRef.current = quoteItemMetadataByItemId;
 
   // Computed once per stable row-id signature. The array identity is stable
   // across renders that don't add/remove/reorder rows, so HotTable's React
@@ -389,7 +442,11 @@ export function ProcurementHandsontable({
   const initialData = useMemo(
     () =>
       itemsRef.current.map((it) =>
-        itemToRow(it, salesByItemIdRef.current?.[it.id])
+        itemToRow(
+          it,
+          salesByItemIdRef.current?.[it.id],
+          quoteItemMetadataByItemIdRef.current?.[it.id]
+        )
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [rowIdSignature]
@@ -454,7 +511,13 @@ export function ProcurementHandsontable({
     // mount time. Only later items-prop updates need the imperative sync.
     if (hot.countRows() === 0) return;
 
-    const next = items.map((it) => itemToRow(it, salesByItemId?.[it.id]));
+    const next = items.map((it) =>
+      itemToRow(
+        it,
+        salesByItemId?.[it.id],
+        quoteItemMetadataByItemId?.[it.id]
+      )
+    );
     const rowIds = rowIdsRef.current;
 
     // Defensive — if row structure changed, the rowIdSignature memo will
@@ -475,7 +538,7 @@ export function ProcurementHandsontable({
         }
       }
     }
-  }, [items, salesByItemId]);
+  }, [items, salesByItemId, quoteItemMetadataByItemId]);
 
   const rowActionsRenderer = useCallback(
     (
@@ -763,8 +826,23 @@ export function ProcurementHandsontable({
       const hot = hotRef.current?.hotInstance;
       if (!hot) return;
 
-      // Group changes by row
-      const changedRows = new Map<number, Map<string, unknown>>();
+      // feat/kpp-supplier-fields — two of the editable columns live on
+      // `quote_items`, not `invoice_items`. They get routed through a
+      // separate update path below (via the coverage join).
+      const QUOTE_ITEM_FIELDS = new Set<string>([
+        "supplier_payment_terms",
+        "advance_to_supplier_percent",
+      ]);
+
+      // Group changes by row. Separate invoice_items-bound updates from
+      // quote_items-bound updates so each route hits the right table.
+      const changedRows = new Map<
+        number,
+        {
+          invoiceItem: Map<string, unknown>;
+          quoteItem: Map<string, unknown>;
+        }
+      >();
       for (const [row, prop, , newVal] of changes) {
         const field =
           typeof prop === "number"
@@ -785,56 +863,128 @@ export function ProcurementHandsontable({
         }
 
         if (!changedRows.has(row)) {
-          changedRows.set(row, new Map());
+          changedRows.set(row, {
+            invoiceItem: new Map(),
+            quoteItem: new Map(),
+          });
         }
-        changedRows.get(row)!.set(field, newVal);
+        const bucket = changedRows.get(row)!;
+        if (QUOTE_ITEM_FIELDS.has(field)) {
+          bucket.quoteItem.set(field, newVal);
+        } else {
+          bucket.invoiceItem.set(field, newVal);
+        }
       }
 
       for (const [rowIndex, fieldChanges] of changedRows) {
         const rowId = rowIdsRef.current[rowIndex];
         if (!rowId) continue;
 
-        const updates: Record<string, unknown> = {};
+        // ---- invoice_items-bound updates (existing path) ----
+        if (fieldChanges.invoiceItem.size > 0) {
+          const updates: Record<string, unknown> = {};
 
-        for (const [field, val] of fieldChanges) {
-          if (field === "dimensions") {
-            // Parse "HxWxL" into three separate DB columns
-            const dims = parseDimensions(String(val ?? ""));
-            updates.dimension_height_mm = dims.height;
-            updates.dimension_width_mm = dims.width;
-            updates.dimension_length_mm = dims.length;
-          } else if (
-            field === "purchase_price_original" ||
-            field === "weight_in_kg" ||
-            field === "production_time_days" ||
-            field === "minimum_order_quantity"
-          ) {
-            const parsed = parseFloat(String(val));
-            updates[field] = isNaN(parsed) ? null : parsed;
-          } else if (field === "purchase_currency") {
-            updates[field] = val || null;
-          } else {
-            // Text fields: supplier_sku, product_name
-            updates[field] = val || null;
+          for (const [field, val] of fieldChanges.invoiceItem) {
+            if (field === "dimensions") {
+              // Parse "HxWxL" into three separate DB columns
+              const dims = parseDimensions(String(val ?? ""));
+              updates.dimension_height_mm = dims.height;
+              updates.dimension_width_mm = dims.width;
+              updates.dimension_length_mm = dims.length;
+            } else if (
+              field === "purchase_price_original" ||
+              field === "weight_in_kg" ||
+              field === "production_time_days" ||
+              field === "minimum_order_quantity"
+            ) {
+              const parsed = parseFloat(String(val));
+              updates[field] = isNaN(parsed) ? null : parsed;
+            } else if (field === "purchase_currency") {
+              updates[field] = val || null;
+            } else {
+              // Text fields: brand, supplier_sku, product_name
+              updates[field] = val || null;
+            }
+          }
+
+          if (Object.keys(updates).length > 0) {
+            const lockKey = `update-ii-${rowId}`;
+            if (!pendingOps.current.has(lockKey)) {
+              pendingOps.current.add(lockKey);
+              updateInvoiceItem(rowId, updates)
+                .then(() => {
+                  router.refresh();
+                  onMutatedRef.current?.();
+                })
+                .catch((err) => {
+                  console.error(
+                    "[procurement-handsontable] update invoice_item failed:",
+                    err
+                  );
+                  toast.error(
+                    extractErrorMessage(err) ?? "Не удалось сохранить"
+                  );
+                })
+                .finally(() => pendingOps.current.delete(lockKey));
+            }
           }
         }
 
-        if (Object.keys(updates).length === 0) continue;
+        // ---- quote_items-bound updates (payment terms / advance %) ----
+        if (fieldChanges.quoteItem.size > 0) {
+          const meta = quoteItemMetadataByItemIdRef.current?.[rowId];
+          const targetQuoteItemIds = meta?.quoteItemIds ?? [];
+          if (targetQuoteItemIds.length === 0) {
+            // No coverage mapping → cannot persist. Surface to user and skip.
+            // This shouldn't happen in practice: every invoice_item assigned
+            // via the procurement flow has at least one coverage row.
+            console.error(
+              "[procurement-handsontable] no quote_item coverage for invoice_item",
+              rowId
+            );
+            toast.error(
+              "Не удалось определить позицию КП для сохранения условий оплаты"
+            );
+            continue;
+          }
 
-        const lockKey = `update-${rowId}`;
-        if (pendingOps.current.has(lockKey)) continue;
-        pendingOps.current.add(lockKey);
+          const updates: Record<string, unknown> = {};
+          for (const [field, val] of fieldChanges.quoteItem) {
+            if (field === "advance_to_supplier_percent") {
+              if (val === "" || val == null) {
+                updates[field] = null;
+              } else {
+                const parsed = parseFloat(String(val));
+                updates[field] = isNaN(parsed) ? null : parsed;
+              }
+            } else {
+              // supplier_payment_terms — free text
+              updates[field] = val || null;
+            }
+          }
 
-        updateInvoiceItem(rowId, updates)
-          .then(() => {
-            router.refresh();
-            onMutatedRef.current?.();
-          })
-          .catch((err) => {
-            console.error("[procurement-handsontable] update failed:", err);
-            toast.error(extractErrorMessage(err) ?? "Не удалось сохранить");
-          })
-          .finally(() => pendingOps.current.delete(lockKey));
+          if (Object.keys(updates).length === 0) continue;
+
+          const lockKey = `update-qi-${rowId}`;
+          if (pendingOps.current.has(lockKey)) continue;
+          pendingOps.current.add(lockKey);
+
+          Promise.all(
+            targetQuoteItemIds.map((qiId) => updateQuoteItem(qiId, updates))
+          )
+            .then(() => {
+              router.refresh();
+              onMutatedRef.current?.();
+            })
+            .catch((err) => {
+              console.error(
+                "[procurement-handsontable] update quote_item failed:",
+                err
+              );
+              toast.error(extractErrorMessage(err) ?? "Не удалось сохранить");
+            })
+            .finally(() => pendingOps.current.delete(lockKey));
+        }
       }
     },
     [router]
@@ -854,6 +1004,8 @@ export function ProcurementHandsontable({
     "sales_unit",
     "minimum_order_quantity",
     "purchase_price_original",
+    "advance_to_supplier_percent",
+    "supplier_payment_terms",
     "production_time_days",
     "weight_in_kg",
     "dimensions",
@@ -865,6 +1017,8 @@ export function ProcurementHandsontable({
     return [
       VISIBLE_KEYS.indexOf("supplier_sku"),
       VISIBLE_KEYS.indexOf("purchase_price_original"),
+      VISIBLE_KEYS.indexOf("advance_to_supplier_percent"),
+      VISIBLE_KEYS.indexOf("supplier_payment_terms"),
       VISIBLE_KEYS.indexOf("production_time_days"),
     ];
     // VISIBLE_KEYS is module-stable; no need to depend on it.
@@ -963,13 +1117,18 @@ export function ProcurementHandsontable({
           "Ед. Изм",
           "Мин. заказ",
           "Цена",
+          "% аванса",
+          "Условия оплаты",
           "Срок, к.дн",
           "Вес, кг",
           "В×Ш×Д, мм",
           "",
         ]}
         columns={[
-          { data: "brand", type: "text", width: 55, readOnly: true },
+          // feat/kpp-supplier-fields P2: brand is now editable by procurement
+          // (МОЗ can change brand when supplier replies with a substitute).
+          // Lock only when the КПП itself is completed, mirroring supplier_sku.
+          { data: "brand", type: "text", width: 60, readOnly: procurementCompleted },
           // Sales-side columns: read-only, joined from quote_items.
           { data: "sales_product_code", type: "text", width: 70, readOnly: true },
           { data: "sales_product_name", type: "text", width: 140, readOnly: true },
@@ -993,6 +1152,34 @@ export function ProcurementHandsontable({
             renderer: moqWarningRenderer,
           },
           { data: "purchase_price_original", type: "numeric", width: 55, readOnly: procurementCompleted },
+          // feat/kpp-supplier-fields P1: payment terms columns. Wired to
+          // quote_items via the coverage join (see itemToRow + handleAfterChange).
+          // % аванса: 0-100 inline validator; «Завершить закупку» gate enforces
+          // not-null per row (see invoice-card.tsx cannotComplete).
+          {
+            data: "advance_to_supplier_percent",
+            type: "numeric",
+            numericFormat: { pattern: "0.[00]" },
+            width: 60,
+            readOnly: procurementCompleted,
+            validator: (
+              value: unknown,
+              callback: (valid: boolean) => void
+            ) => {
+              if (value === "" || value == null) {
+                callback(true);
+                return;
+              }
+              const n = Number(value);
+              callback(Number.isFinite(n) && n >= 0 && n <= 100);
+            },
+          },
+          {
+            data: "supplier_payment_terms",
+            type: "text",
+            width: 160,
+            readOnly: procurementCompleted,
+          },
           { data: "production_time_days", type: "numeric", width: 45, readOnly: procurementCompleted },
           { data: "weight_in_kg", type: "numeric", width: 45 },
           { data: "dimensions", type: "text", width: 60 },

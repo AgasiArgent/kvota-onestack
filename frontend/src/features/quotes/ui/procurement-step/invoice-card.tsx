@@ -23,7 +23,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ProcurementItemsEditor } from "./procurement-items-editor";
-import type { ProcurementEditorItem } from "./procurement-handsontable";
+import type {
+  ProcurementEditorItem,
+  QuoteItemPaymentMetadata,
+} from "./procurement-handsontable";
 import { SendHistoryPanel } from "./send-history-panel";
 import { ProcurementUnlockButton } from "./procurement-unlock-button";
 import { LetterDraftComposer } from "./letter-draft-composer";
@@ -301,6 +304,17 @@ export function InvoiceCard({
       }
     >
   >({});
+  // feat/kpp-supplier-fields — per-row supplier-payment metadata joined from
+  // quote_items via invoice_item_coverage. Each entry carries the underlying
+  // quote_item_id(s) needed to persist edits + the current values for the
+  // two editable cells (% аванса and Условия оплаты). For 1:1 covered rows
+  // the list has one element; for merge rows it has multiple, and edits
+  // propagate to all of them. The «Завершить закупку» gate (cannotComplete
+  // below) reads `advance_to_supplier_percent` from this map to enforce the
+  // P1 rule that advance % is required before finalising the КП.
+  const [paymentMetaByItemId, setPaymentMetaByItemId] = useState<
+    Record<string, QuoteItemPaymentMetadata>
+  >({});
   // Testing 2 row 20 (v3) — distinguish initial load from autosave refetch.
   //
   // Earlier the single `invoiceItemsLoading` flag flipped to `true` on EVERY
@@ -455,6 +469,7 @@ export function InvoiceCard({
         if (rows.length === 0) {
           setFetchedCoverage({});
           setSalesByItemId({});
+          setPaymentMetaByItemId({});
           setSplitableByItemId({});
           setSplitChildByItemId({});
           setMergeableByItemId({});
@@ -499,12 +514,16 @@ export function InvoiceCard({
             quantity: number;
             unit: string | null;
             name_en: string | null;
+            supplier_payment_terms: string | null;
+            advance_to_supplier_percent: number | null;
           }
         >();
         if (referencedQiIds.length > 0) {
           const { data: qis } = await supabase
             .from("quote_items")
-            .select("id, product_code, product_name, quantity, unit, name_en")
+            .select(
+              "id, product_code, product_name, quantity, unit, name_en, supplier_payment_terms, advance_to_supplier_percent"
+            )
             .in("id", referencedQiIds);
           for (const qi of (qis ?? []) as Array<{
             id: string;
@@ -513,6 +532,8 @@ export function InvoiceCard({
             quantity: number;
             unit: string | null;
             name_en: string | null;
+            supplier_payment_terms: string | null;
+            advance_to_supplier_percent: number | null;
           }>) {
             qiById.set(qi.id, {
               product_code: qi.product_code,
@@ -520,6 +541,8 @@ export function InvoiceCard({
               quantity: qi.quantity,
               unit: qi.unit,
               name_en: qi.name_en,
+              supplier_payment_terms: qi.supplier_payment_terms,
+              advance_to_supplier_percent: qi.advance_to_supplier_percent,
             });
           }
         }
@@ -690,9 +713,29 @@ export function InvoiceCard({
           }
         }
 
+        // feat/kpp-supplier-fields — payment metadata: per invoice_item, list
+        // all covered quote_item_ids + read-back values (% аванса and Условия
+        // оплаты). The first covering quote_item supplies the displayed
+        // values. For merged rows (N qi → 1 ii) the displayed value matches
+        // the first qi; edits propagate to all qi in `quoteItemIds`.
+        const paymentMap: Record<string, QuoteItemPaymentMetadata> = {};
+        for (const ii of rows) {
+          const covers = coverageByIi.get(ii.id) ?? [];
+          if (covers.length === 0) continue;
+          const ids = covers.map((c) => c.quote_item_id);
+          const firstQi = qiById.get(ids[0]);
+          paymentMap[ii.id] = {
+            quoteItemIds: ids,
+            supplier_payment_terms: firstQi?.supplier_payment_terms ?? null,
+            advance_to_supplier_percent:
+              firstQi?.advance_to_supplier_percent ?? null,
+          };
+        }
+
         if (!cancelled) {
           setFetchedCoverage(summary);
           setSalesByItemId(salesMap);
+          setPaymentMetaByItemId(paymentMap);
           setOneToOneCandidates(candidates);
           setSplitableByItemId(splitable);
           setSplitChildByItemId(splitChild);
@@ -885,7 +928,27 @@ export function InvoiceCard({
   );
   const hasNoPositions = invoiceItems.length === 0;
   const hasNoPricedPositions = positionsWithPriceCount === 0;
-  const cannotComplete = hasNoPositions || hasNoPricedPositions;
+  // feat/kpp-supplier-fields P1 — «обязательно должен быть % аванса»: every
+  // *covered* invoice_item must have a non-null advance_to_supplier_percent
+  // on its covering quote_item before procurement can be completed.
+  //
+  // Skip rows whose meta is missing — that means either (a) the load() effect
+  // for `invoice_item_coverage` is still in flight (don't block the button
+  // during the initial fetch race) or (b) the row has zero covers and was
+  // omitted from the paymentMap at construction time (uncovered rows aren't
+  // in the КПП yet, so they shouldn't gate completion). Only flag rows where
+  // we know the linked quote_item exists AND its advance % is unset.
+  const positionsMissingAdvance = invoiceItems.filter((item) => {
+    const meta = paymentMetaByItemId[item.id];
+    if (!meta) return false;
+    return (
+      meta.advance_to_supplier_percent == null ||
+      Number.isNaN(meta.advance_to_supplier_percent)
+    );
+  });
+  const hasMissingAdvance = positionsMissingAdvance.length > 0;
+  const cannotComplete =
+    hasNoPositions || hasNoPricedPositions || hasMissingAdvance;
 
   const sentAt = invoice.sent_at;
   const hasSentAt = sentAt != null;
@@ -1650,6 +1713,7 @@ export function InvoiceCard({
               invoiceId={invoice.id}
               procurementCompleted={procurementCompleted}
               salesByItemId={salesByItemId}
+              quoteItemMetadataByItemId={paymentMetaByItemId}
               splitableByItemId={splitableByItemId}
               splitChildByItemId={splitChildByItemId}
               mergeableByItemId={mergeableByItemId}
@@ -1898,7 +1962,9 @@ export function InvoiceCard({
               {cannotComplete
                 ? hasNoPositions
                   ? `КПП ${invoice.invoice_number} не содержит позиций. Добавьте позиции, прежде чем завершать закупку.`
-                  : `В КПП ${invoice.invoice_number} ни у одной позиции не указана цена закупки. Заполните цены, прежде чем завершать закупку.`
+                  : hasNoPricedPositions
+                    ? `В КПП ${invoice.invoice_number} ни у одной позиции не указана цена закупки. Заполните цены, прежде чем завершать закупку.`
+                    : `В КПП ${invoice.invoice_number} у ${positionsMissingAdvance.length} поз. не указан % аванса поставщику. Заполните «% аванса» для всех позиций, прежде чем завершать закупку.`
                 : `Закупка по КПП ${invoice.invoice_number} будет завершена. КП перейдёт на этап логистики. Изменения после этого требуют отдельного одобрения. Продолжить?`}
             </DialogDescription>
           </DialogHeader>
