@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { Calculator, FileDown, Loader2, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { config } from "@/shared/config";
 
 interface CalculationActionBarProps {
   quoteId: string;
@@ -75,7 +74,7 @@ export function CalculationActionBar({
   }
 
   function handleExportValidation() {
-    window.open(`${config.legacyAppUrl}/quotes/${quoteId}/export/validation`, "_blank");
+    window.open(`/export/validation/${quoteId}`, "_blank");
   }
 
   // Show "Передать на контроль" after calculation, before control
@@ -133,8 +132,6 @@ export function CalculationActionBar({
             size="sm"
             variant="outline"
             onClick={handleExportValidation}
-            disabled={!isApproved}
-            title={!isApproved ? "Доступно после одобрения на контроле" : undefined}
           >
             <FileDown size={14} />
             Validation Excel
