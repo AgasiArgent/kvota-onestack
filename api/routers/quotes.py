@@ -14,7 +14,7 @@ path variable.
 
 from fastapi import APIRouter
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
 from api.composition import (
     apply_composition_endpoint as _apply_composition,
@@ -32,6 +32,7 @@ from api.customs import (
 from api.quotes import (
     calculate_quote as _calculate_quote,
     cancel_quote as _cancel_quote,
+    export_validation as _export_validation,
     submit_procurement as _submit_procurement,
     transition_workflow as _transition_workflow,
 )
@@ -143,3 +144,16 @@ async def post_refresh_customs_snapshot(
     fallback (Q4): live → 30-day cache → 409 FREEZE_ABORTED. Customs roles only.
     """
     return await _refresh_customs_snapshot(request, quote_id, alta_client)
+
+
+@router.get("/{quote_id}/export/validation")
+async def get_export_validation(
+    request: Request, quote_id: str
+) -> Response:
+    """Download validation Excel (.xlsm) for a quote.
+
+    Replaces the archived FastHTML route
+    ``/quotes/{quote_id}/export/validation`` (Phase 6C-2B-Mega-C, 2026-04-20).
+    Dual auth: JWT (Next.js) first, then legacy session (FastHTML).
+    """
+    return await _export_validation(request, quote_id)

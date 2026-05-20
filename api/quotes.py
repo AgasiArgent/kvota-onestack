@@ -23,13 +23,15 @@ from decimal import Decimal
 from typing import Any, Dict, cast
 
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
 from calculation_engine import calculate_multiproduct_quote
 from calculation_mapper import safe_decimal, safe_int
 from services.composition_service import get_composed_items
 from services.currency_service import convert_amount
 from services.database import get_supabase
+from services.export_data_mapper import fetch_export_data
+from services.export_validation_service import create_validation_excel
 from services.quote_version_service import (
     can_update_version,
     create_quote_version,
@@ -52,6 +54,7 @@ __all__ = [
     "submit_procurement",
     "cancel_quote",
     "transition_workflow",
+    "export_validation",
 ]
 
 
@@ -967,3 +970,97 @@ async def transition_workflow(
             "success": False,
             "error": result.error_message,
         }, status_code=422)
+
+
+async def export_validation(
+    request: Request,
+    quote_id: str,
+) -> Response:
+    """Export validation Excel (.xlsm) for a quote.
+
+    Path: GET /api/quotes/{quote_id}/export/validation
+    Auth: dual — JWT (Next.js) first, then legacy session (FastHTML).
+    Returns:
+        Binary XLSM file (Content-Type:
+        ``application/vnd.ms-excel.sheet.macroEnabled.12``) with
+        ``Content-Disposition: attachment; filename="validation_<quote_number>.xlsm"``.
+    Side Effects: none — read-only.
+    Errors:
+        401 — no auth
+        403 — authed but no organization membership
+        404 — quote doesn't exist for this org (raised as ValueError by
+              ``fetch_export_data``)
+    Roles: any authenticated user with an organization (RLS-enforced).
+
+    Replaces the archived FastHTML route
+    ``/quotes/{quote_id}/export/validation`` (Phase 6C-2B-Mega-C,
+    2026-04-20). The download itself is implemented by
+    ``services.export_validation_service.create_validation_excel`` — this
+    handler only wires auth + the file response.
+    """
+    # Dual auth: JWT (Next.js) first, then legacy session (FastHTML).
+    api_user = getattr(request.state, "api_user", None)
+    if api_user:
+        user_id = str(api_user.id)
+        supabase = get_supabase()
+        om = (
+            supabase.table("organization_members")
+            .select("organization_id")
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        org_id = om.data[0]["organization_id"] if om.data else None
+    else:
+        try:
+            session = request.session
+        except (AssertionError, AttributeError):
+            session = None
+        if not session or not session.get("user"):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        user_data = session.get("user", {})
+        user_id = user_data.get("id")
+        org_id = user_data.get("org_id")
+
+    if not user_id:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    if not org_id:
+        return JSONResponse({"error": "No organization"}, status_code=403)
+
+    try:
+        data = fetch_export_data(quote_id, org_id)
+    except ValueError as e:
+        # fetch_export_data raises ValueError when the quote can't be found
+        # in the user's org (RLS-equivalent miss).
+        return JSONResponse({"error": str(e)}, status_code=404)
+    except Exception:
+        # DB / network / missing-field failures inside the data-mapper. Log
+        # with traceback so prod ops can diagnose; return a controlled 500
+        # so the proxy doesn't forward an HTML traceback to the browser.
+        logger.exception(
+            "export_validation: fetch_export_data failed for quote %s", quote_id
+        )
+        return JSONResponse(
+            {"error": "Failed to fetch quote data"}, status_code=500
+        )
+
+    try:
+        excel_bytes = create_validation_excel(data)
+    except Exception:
+        # Template-load or openpyxl-write failures. Log and return 500;
+        # otherwise FastAPI's default handler would surface a stack trace.
+        logger.exception(
+            "export_validation: create_validation_excel failed for quote %s",
+            quote_id,
+        )
+        return JSONResponse(
+            {"error": "Failed to generate validation Excel"}, status_code=500
+        )
+
+    quote_number = data.quote.get("quote_number") or quote_id
+    filename = f"validation_{quote_number}.xlsm"
+    return Response(
+        content=excel_bytes,
+        media_type="application/vnd.ms-excel.sheet.macroEnabled.12",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
