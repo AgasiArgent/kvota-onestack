@@ -23,6 +23,17 @@ export interface SalesChecklist {
   direct_request: boolean;
   trading_org_request: boolean;
   equipment_description: string;
+  /**
+   * Optional free-text note МОП can attach in the «Контрольный список» modal.
+   * Surfaced on the «Нераспределено» kanban cards (logistics + customs) and
+   * here on the context panel so МОЛ / МОТ can read the distribution hint
+   * without re-opening the modal. Persisted to JSONB, null when empty.
+   *
+   * Marked optional because legacy quotes pre-dating the field carry a
+   * sales_checklist JSONB without this key — readers fall through `?.trim()`
+   * to "" and the hint surface is skipped.
+   */
+  distribution_comment?: string | null;
   completed_at: string | null;
   completed_by: string | null;
 }
@@ -63,7 +74,10 @@ export function hasSalesChecklistContent(
   ) {
     return true;
   }
-  return checklist.equipment_description?.trim().length > 0;
+  if (checklist.equipment_description?.trim().length > 0) {
+    return true;
+  }
+  return (checklist.distribution_comment?.trim().length ?? 0) > 0;
 }
 
 export function SalesChecklistBlock({ checklist }: SalesChecklistBlockProps) {
@@ -71,6 +85,7 @@ export function SalesChecklistBlock({ checklist }: SalesChecklistBlockProps) {
 
   const activeBadges = REQUEST_TYPE_BADGES.filter((b) => checklist[b.key]);
   const description = checklist.equipment_description?.trim();
+  const distributionComment = checklist.distribution_comment?.trim();
 
   return (
     <div
@@ -105,6 +120,20 @@ export function SalesChecklistBlock({ checklist }: SalesChecklistBlockProps) {
           </span>
           <div className="rounded-md bg-muted/30 px-3 py-2 text-sm text-foreground whitespace-pre-wrap break-words">
             {description}
+          </div>
+        </div>
+      )}
+
+      {distributionComment && (
+        <div
+          className="space-y-1"
+          data-testid="context-panel-distribution-comment"
+        >
+          <span className="text-xs text-muted-foreground">
+            Комментарий для распределения
+          </span>
+          <div className="rounded-md bg-muted/30 px-3 py-2 text-sm text-foreground whitespace-pre-wrap break-words">
+            {distributionComment}
           </div>
         </div>
       )}

@@ -67,6 +67,7 @@ const INVOICE_COLUMNS = `
     deleted_at,
     total_amount,
     currency,
+    sales_checklist,
     customer:customers(id, name, country, city)
   )
 `;
@@ -77,6 +78,16 @@ interface CargoPlaceRaw {
   length_mm: number | null;
   width_mm: number | null;
   height_mm: number | null;
+}
+
+/**
+ * Minimal projection of `kvota.quotes.sales_checklist` (JSONB) — only the
+ * `distribution_comment` is consumed on the kanban card surface. Other keys
+ * (is_estimate / is_tender / equipment_description / …) are read on the
+ * context panel via its own fetcher and don't need to be replicated here.
+ */
+interface SalesChecklistRaw {
+  distribution_comment?: string | null;
 }
 
 interface InvoiceRowRaw {
@@ -110,6 +121,7 @@ interface InvoiceRowRaw {
     deleted_at: string | null;
     total_amount: number | null;
     currency: string | null;
+    sales_checklist: SalesChecklistRaw | null;
     customer: {
       id: string;
       name: string | null;
@@ -420,6 +432,15 @@ export async function fetchKanbanInvoices(
       totalVolumeM3: inv.total_volume_m3,
       packageCount: inv.package_count,
       cargoPlaces: buildCargoPlaces(inv),
+      // Pull only the distribution comment off `sales_checklist` — the rest of
+      // the JSONB payload is consumed by the quote/deal context panel via its
+      // own fetcher. Empty / whitespace-only values normalize to null so the
+      // kanban-card render check is a simple truthy test.
+      distributionComment:
+        (inv.quote?.sales_checklist?.distribution_comment ?? "").trim().length >
+        0
+          ? inv.quote!.sales_checklist!.distribution_comment!.trim()
+          : null,
     };
   }
 

@@ -672,13 +672,29 @@ async def submit_procurement(
         print(f"[SUBMIT-PROCUREMENT] Checklist validation failed: checklist_data={checklist_data}")
         return JSONResponse({"error": "Заполните контрольный список перед передачей в закупки"}, status_code=400)
 
-    # Save checklist to quotes table
+    # Save checklist to quotes table.
+    #
+    # `distribution_comment` is an optional free-text note for the «Нераспределено»
+    # stage of the logistics + customs kanban — МОП uses it to flag urgency or
+    # name a preferred МОЛ/МОТ. We persist it as None when missing or
+    # whitespace-only so downstream readers can rely on a clean
+    # ``sales_checklist.distribution_comment ?? null`` shape.
+    raw_distribution_comment = checklist_data.get("distribution_comment")
+    distribution_comment_value = (
+        raw_distribution_comment.strip()
+        if isinstance(raw_distribution_comment, str)
+        else None
+    )
+    if not distribution_comment_value:
+        distribution_comment_value = None
+
     checklist_to_save = {
         "is_estimate": bool(checklist_data.get("is_estimate", False)),
         "is_tender": bool(checklist_data.get("is_tender", False)),
         "direct_request": bool(checklist_data.get("direct_request", False)),
         "trading_org_request": bool(checklist_data.get("trading_org_request", False)),
         "equipment_description": checklist_data["equipment_description"].strip(),
+        "distribution_comment": distribution_comment_value,
         "completed_at": datetime.utcnow().isoformat(),
         "completed_by": user["id"]
     }
