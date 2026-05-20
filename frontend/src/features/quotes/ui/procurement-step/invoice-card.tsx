@@ -929,14 +929,19 @@ export function InvoiceCard({
   const hasNoPositions = invoiceItems.length === 0;
   const hasNoPricedPositions = positionsWithPriceCount === 0;
   // feat/kpp-supplier-fields P1 — «обязательно должен быть % аванса»: every
-  // invoice_item must have a non-null advance_to_supplier_percent on its
-  // covering quote_item before procurement can be completed. The metadata
-  // map is keyed by invoice_item.id; we treat a missing entry as missing
-  // value (the load() effect populates the map for every covered row).
+  // *covered* invoice_item must have a non-null advance_to_supplier_percent
+  // on its covering quote_item before procurement can be completed.
+  //
+  // Skip rows whose meta is missing — that means either (a) the load() effect
+  // for `invoice_item_coverage` is still in flight (don't block the button
+  // during the initial fetch race) or (b) the row has zero covers and was
+  // omitted from the paymentMap at construction time (uncovered rows aren't
+  // in the КПП yet, so they shouldn't gate completion). Only flag rows where
+  // we know the linked quote_item exists AND its advance % is unset.
   const positionsMissingAdvance = invoiceItems.filter((item) => {
     const meta = paymentMetaByItemId[item.id];
+    if (!meta) return false;
     return (
-      !meta ||
       meta.advance_to_supplier_percent == null ||
       Number.isNaN(meta.advance_to_supplier_percent)
     );
