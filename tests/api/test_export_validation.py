@@ -10,7 +10,7 @@ dual-auth (JWT primary, session fallback).
 Covers:
 - Happy path: JWT-authed user in correct org → 200 + xlsm bytes + correct
   ``Content-Type`` (``application/vnd.ms-excel.sheet.macroEnabled.12``)
-  and ``Content-Disposition: attachment; filename="validation_<quote_number>.xlsm"``.
+  and ``Content-Disposition: attachment; filename="validation_<idn_quote>.xlsm"``.
 - 401 when no JWT (and no session).
 - 404 when the underlying ``fetch_export_data`` raises ``ValueError``
   (unknown quote / wrong org — RLS-style behavior).
@@ -89,7 +89,7 @@ def _run(coro):
 def _fake_export_data():
     """Return a minimal ExportData-compatible namespace for create_validation_excel.
 
-    The validator only reads ``data.quote.get("quote_number", ...)`` from the
+    The validator only reads ``data.quote.get("idn_quote", ...)`` from the
     handler's perspective; the underlying ``create_validation_excel`` will
     walk through the full ExportData shape. We import the real dataclass
     so the structure is correct.
@@ -98,7 +98,7 @@ def _fake_export_data():
 
     quote = {
         "id": "q-1",
-        "quote_number": "Q-202605-0018",
+        "idn_quote": "Q-202605-0018",
         "customer_id": "cust-1",
         "currency": "USD",
         "title": "Test Quote",
@@ -188,7 +188,7 @@ class TestExportValidationHandler:
         )
         # Body is non-empty bytes
         assert resp.body == b"PK\x03\x04 fake-xlsm-bytes"
-        # Filename is based on the quote_number from fetch_export_data result
+        # Filename is based on the idn_quote from fetch_export_data result
         assert (
             resp.headers["content-disposition"]
             == 'attachment; filename="validation_Q-202605-0018.xlsm"'
@@ -238,15 +238,15 @@ class TestExportValidationHandler:
     @patch("api.quotes.create_validation_excel")
     @patch("api.quotes.fetch_export_data")
     @patch("api.quotes.get_supabase")
-    def test_filename_falls_back_to_quote_id_when_number_missing(
+    def test_filename_falls_back_to_quote_id_when_idn_missing(
         self, mock_get_sb, mock_fetch, mock_create
     ):
-        """When quote dict lacks ``quote_number``, filename uses the quote_id."""
+        """When quote dict lacks ``idn_quote``, filename uses the quote_id."""
         from services.export_data_mapper import ExportData
 
         mock_get_sb.return_value = _mock_supabase_for_org()
         data = ExportData(
-            quote={"id": "q-fallback"},  # no quote_number
+            quote={"id": "q-fallback"},  # no idn_quote
             items=[],
             customer={},
             organization={},

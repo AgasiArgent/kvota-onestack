@@ -983,7 +983,7 @@ async def export_validation(
     Returns:
         Binary XLSM file (Content-Type:
         ``application/vnd.ms-excel.sheet.macroEnabled.12``) with
-        ``Content-Disposition: attachment; filename="validation_<quote_number>.xlsm"``.
+        ``Content-Disposition: attachment; filename="validation_<idn_quote>.xlsm"``.
     Side Effects: none — read-only.
     Errors:
         401 — no auth
@@ -1057,7 +1057,11 @@ async def export_validation(
             {"error": "Failed to generate validation Excel"}, status_code=500
         )
 
-    quote_number = data.quote.get("quote_number") or quote_id
+    # `idn_quote` is the active IDN column (format Q-YYYYMM-NNNN) per
+    # migration 152. Legacy `quote_number` reference (from the archived
+    # FastHTML handler) was a stale attribute that never existed on the
+    # quotes row, so the filename always fell through to the UUID.
+    quote_number = data.quote.get("idn_quote") or quote_id
     filename = f"validation_{quote_number}.xlsm"
     return Response(
         content=excel_bytes,

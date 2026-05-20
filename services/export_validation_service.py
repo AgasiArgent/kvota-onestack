@@ -1230,10 +1230,12 @@ def create_validation_excel(data) -> bytes:
     # Debug: log raw values before conversion
     raw_docs = variables.get('customs_documentation', 0)
     raw_docs_currency = variables.get('customs_documentation_currency', 'USD')
-    print(f"[export-debug] customs_documentation: raw={raw_docs}, currency={raw_docs_currency}")
+    logger.debug(
+        "customs_documentation: raw=%s, currency=%s", raw_docs, raw_docs_currency
+    )
 
     documentation_usd = to_usd(raw_docs, raw_docs_currency)
-    print(f"[export-debug] customs_documentation: after to_usd={documentation_usd}")
+    logger.debug("customs_documentation: after to_usd=%s", documentation_usd)
 
     other_costs_usd = to_usd(
         variables.get('brokerage_extra', 0),
@@ -1247,9 +1249,21 @@ def create_validation_excel(data) -> bytes:
     )
 
     # Debug: log key variables
-    print(f"[export-debug] logistics: hub={variables.get('logistics_supplier_hub')}, customs={variables.get('logistics_hub_customs')}, client={variables.get('logistics_customs_client')}")
-    print(f"[export-debug] time_to_advance_on_receiving={variables.get('time_to_advance_on_receiving')}")
-    print(f"[export-debug] brokerage: docs_usd={documentation_usd}, warehousing_usd={warehousing_usd}")
+    logger.debug(
+        "logistics: hub=%s, customs=%s, client=%s",
+        variables.get("logistics_supplier_hub"),
+        variables.get("logistics_hub_customs"),
+        variables.get("logistics_customs_client"),
+    )
+    logger.debug(
+        "time_to_advance_on_receiving=%s",
+        variables.get("time_to_advance_on_receiving"),
+    )
+    logger.debug(
+        "brokerage: docs_usd=%s, warehousing_usd=%s",
+        documentation_usd,
+        warehousing_usd,
+    )
 
     # Build quote_inputs from variables
     quote_inputs = {
