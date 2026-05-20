@@ -126,6 +126,10 @@ export function TransferDialog({ quote, items }: TransferDialogProps) {
   const [isTender, setIsTender] = useState(false);
   const [directRequest, setDirectRequest] = useState(false);
   const [tradingOrgRequest, setTradingOrgRequest] = useState(false);
+  // Optional free-text note shown later on the «Нераспределено» kanban card
+  // (logistics + customs) and on the quote/deal context panel. Persists to
+  // `kvota.quotes.sales_checklist.distribution_comment` (JSONB).
+  const [distributionComment, setDistributionComment] = useState("");
   const [deliveryPriority, setDeliveryPriority] = useState(
     quote.delivery_priority ?? ""
   );
@@ -160,6 +164,7 @@ export function TransferDialog({ quote, items }: TransferDialogProps) {
     setIsTender(false);
     setDirectRequest(false);
     setTradingOrgRequest(false);
+    setDistributionComment("");
     setDeliveryPriority(quote.delivery_priority ?? "");
     setError(null);
   }
@@ -176,12 +181,17 @@ export function TransferDialog({ quote, items }: TransferDialogProps) {
       if (deliveryPriority) {
         await patchQuote(quote.id, { delivery_priority: deliveryPriority });
       }
+      // distribution_comment is optional — forward the trimmed value or null
+      // so the JSONB payload stays clean (matches the server-side
+      // normalisation in api/quotes.py::submit_procurement).
+      const trimmedComment = distributionComment.trim();
       await submitToProcurementWithChecklist(quote.id, {
         is_estimate: isEstimate,
         is_tender: isTender,
         direct_request: directRequest,
         trading_org_request: tradingOrgRequest,
         equipment_description: desc,
+        distribution_comment: trimmedComment.length > 0 ? trimmedComment : null,
       });
       toast.success("КП передана в закупки");
       setOpen(false);
@@ -345,6 +355,25 @@ export function TransferDialog({ quote, items }: TransferDialogProps) {
               {error && (
                 <p className="text-xs text-destructive">{error}</p>
               )}
+            </div>
+
+            {/* Optional distribution comment — surfaced later on the
+                «Нераспределено» kanban card (logistics + customs) and on the
+                quote/deal context panel. Plain optional field, no validation. */}
+            <div className="space-y-1.5">
+              <Label
+                htmlFor="checklist-distribution-comment"
+                className="text-sm font-medium"
+              >
+                Комментарий для распределения
+              </Label>
+              <Textarea
+                id="checklist-distribution-comment"
+                value={distributionComment}
+                onChange={(e) => setDistributionComment(e.target.value)}
+                placeholder="Опционально: уточнения для МОЛ/МОТ"
+                rows={2}
+              />
             </div>
           </div>
 

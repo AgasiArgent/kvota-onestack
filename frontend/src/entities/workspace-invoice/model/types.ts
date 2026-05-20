@@ -59,6 +59,17 @@ export interface WorkspaceKanbanCard {
   totalVolumeM3: number | null;
   packageCount: number | null;
   cargoPlaces: WorkspaceCargoPlace[];
+  /**
+   * Optional «Комментарий для распределения» captured by МОП in the «Контрольный
+   * список» modal. Sourced from `kvota.quotes.sales_checklist.distribution_comment`.
+   * Surfaced only on cards still in the «Нераспределено» column — once a user is
+   * assigned the hint becomes stale and the card hides it. Null when missing.
+   *
+   * Marked optional so legacy callers / fixtures that didn't go through
+   * `fetchKanbanInvoices` (older tests, optimistic local construction) still
+   * type-check; the render path tolerates `undefined` via the same trim guard.
+   */
+  distributionComment?: string | null;
 }
 
 /** Cards bucketed by kanban column — one key per column. */

@@ -97,6 +97,20 @@ export function KanbanCard({
 
   const cargoCount = card.cargoPlaces.length;
   const showAssignee = card.assignedUser != null;
+  // Distribution hint is meaningful only while the card sits in
+  // «Нераспределено» (no assignee + not completed). Once a МОЛ / МОТ has
+  // picked the card up, the hint is stale and would clutter the «В работе»
+  // view; the context panel on the quote/deal page keeps showing it as
+  // historical reference for the entire pipeline.
+  //
+  // Defensive trim: while `fetchKanbanInvoices` normalizes whitespace-only
+  // values to null, the card may be re-rendered from a parent component
+  // that didn't go through the fetcher (optimistic updates, etc.).
+  const trimmedDistributionComment = card.distributionComment?.trim() ?? "";
+  const showDistributionComment =
+    trimmedDistributionComment.length > 0 &&
+    card.assignedUserId == null &&
+    card.completedAt == null;
 
   return (
     <div
@@ -182,6 +196,17 @@ export function KanbanCard({
           </ul>
         )}
       </div>
+
+      {/* Distribution hint from МОП — visible only in «Нераспределено». */}
+      {showDistributionComment && (
+        <div
+          data-testid="kanban-card-distribution-comment"
+          className="mt-2 rounded-sm border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs italic text-amber-900 whitespace-pre-wrap break-words"
+          title="Комментарий для распределения"
+        >
+          {trimmedDistributionComment}
+        </div>
+      )}
 
       {/* Assignee (in-progress / completed cards) */}
       {showAssignee && card.assignedUser && (

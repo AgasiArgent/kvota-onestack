@@ -1867,6 +1867,14 @@ export async function submitToProcurementWithChecklist(
     direct_request: boolean;
     trading_org_request: boolean;
     equipment_description: string;
+    /**
+     * Free-text note for the «Нераспределено» stage of the logistics + customs
+     * kanban — surfaced on the card AND on the deal/quote context panel so МОЛ /
+     * МОТ can read the МОП's distribution hint without re-opening the modal.
+     * Optional: trimmed server-side; empty becomes `null` in
+     * `sales_checklist.distribution_comment`.
+     */
+    distribution_comment?: string | null;
   }
 ): Promise<void> {
   const supabase = createClient();
