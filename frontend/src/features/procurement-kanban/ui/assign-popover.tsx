@@ -14,6 +14,7 @@ import { UserSearchSelect } from "@/shared/ui/procurement/user-search-select";
 import { assignBrandGroup } from "@/entities/quote/server-actions";
 import { SUBSTATUS_LABELS_RU } from "@/shared/lib/workflow-substates";
 import { createClient } from "@/shared/lib/supabase/client";
+import { extractErrorMessage } from "@/shared/lib/errors";
 import type { ProcurementUserWorkload } from "@/shared/types/procurement-user";
 import type { KanbanBrandCard } from "../model/types";
 
@@ -87,7 +88,7 @@ export function AssignPopover({
         brandForApi
       );
       if (!result.success) {
-        toast.error(result.error ?? "Ошибка назначения");
+        toast.error(extractErrorMessage(result) ?? "Ошибка назначения");
         return;
       }
       const userName =
