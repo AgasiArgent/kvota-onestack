@@ -25,6 +25,7 @@ from typing import Any, Dict, cast
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from api.lib.errors import error_response
 from calculation_engine import calculate_multiproduct_quote
 from calculation_mapper import safe_decimal, safe_int
 from services.composition_service import get_composed_items
@@ -110,15 +111,15 @@ async def calculate_quote(
         except (AssertionError, AttributeError):
             session = None
         if not session:
-            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            return error_response("UNAUTHORIZED", "Unauthorized", status_code=401)
         user = session.get("user", {})
 
     if not user.get("id"):
-        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        return error_response("UNAUTHORIZED", "Unauthorized", status_code=401)
 
     org_id = user.get("org_id")
     if not org_id:
-        return JSONResponse({"error": "No organization"}, status_code=403)
+        return error_response("FORBIDDEN", "No organization", status_code=403)
 
     # Dual input: JSON (Next.js) or form (FastHTML)
     content_type = request.headers.get("content-type", "")
@@ -138,7 +139,7 @@ async def calculate_quote(
         .execute()
 
     if not quote_result.data:
-        return JSONResponse({"error": "Quote not found"}, status_code=404)
+        return error_response("NOT_FOUND", "Quote not found", status_code=404)
 
     quote = cast(dict, quote_result.data[0])
 
@@ -150,7 +151,7 @@ async def calculate_quote(
     items = get_composed_items(quote_id, supabase)
 
     if not items:
-        return JSONResponse({"error": "Cannot calculate - no products in quote"}, status_code=400)
+        return error_response("EMPTY_QUOTE", "Cannot calculate - no products in quote", status_code=400)
 
     # Extract parameters from body
     currency = str(body.get("currency") or quote.get("currency") or "USD")
@@ -206,7 +207,8 @@ async def calculate_quote(
 
     if items_without_price:
         return JSONResponse({
-            "error": "Not all items have prices",
+            "success": False,
+            "error": {"code": "MISSING_PRICES", "message": "Not all items have prices"},
             "items_without_price": items_without_price,
         }, status_code=400)
 
@@ -594,7 +596,7 @@ async def calculate_quote(
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return error_response("INTERNAL_ERROR", str(e), status_code=500)
 
 
 async def submit_procurement(
@@ -647,13 +649,13 @@ async def submit_procurement(
         except (AssertionError, AttributeError):
             session = None
         if not session or not session.get("user"):
-            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            return error_response("UNAUTHORIZED", "Unauthorized", status_code=401)
         user = session["user"]
         user_roles = user.get("roles", [])
         org_id = user["org_id"]
 
     if not user or not user.get("id"):
-        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        return error_response("UNAUTHORIZED", "Unauthorized", status_code=401)
 
     # Parse checklist from JSON body
     checklist_data = None
@@ -670,7 +672,7 @@ async def submit_procurement(
     # Validate checklist is present and has required field
     if not checklist_data or not checklist_data.get("equipment_description", "").strip():
         print(f"[SUBMIT-PROCUREMENT] Checklist validation failed: checklist_data={checklist_data}")
-        return JSONResponse({"error": "Заполните контрольный список перед передачей в закупки"}, status_code=400)
+        return error_response("CHECKLIST_INCOMPLETE", "Заполните контрольный список перед передачей в закупки", status_code=400)
 
     # Save checklist to quotes table.
     #
@@ -707,7 +709,7 @@ async def submit_procurement(
             .eq("organization_id", org_id) \
             .execute()
     except Exception as e:
-        return JSONResponse({"error": f"Ошибка сохранения чеклиста: {str(e)}"}, status_code=500)
+        return error_response("INTERNAL_ERROR", f"Ошибка сохранения чеклиста: {str(e)}", status_code=500)
 
     # Use the workflow service to transition to pending_procurement
     result = transition_to_pending_procurement(
@@ -722,7 +724,7 @@ async def submit_procurement(
         return JSONResponse({"redirect": f"/quotes/{quote_id}"})
     else:
         print(f"[SUBMIT-PROCUREMENT] TRANSITION FAILED: {result.error_message}")
-        return JSONResponse({"error": f"Ошибка перехода: {result.error_message}"}, status_code=400)
+        return error_response("TRANSITION_FAILED", f"Ошибка перехода: {result.error_message}", status_code=400)
 
 
 async def cancel_quote(
@@ -760,21 +762,21 @@ async def cancel_quote(
         except (AssertionError, AttributeError):
             session = None
         if not session or not session.get("user"):
-            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            return error_response("UNAUTHORIZED", "Unauthorized", status_code=401)
         user_data = session.get("user", {})
         user_id = user_data.get("id")
         org_id = user_data.get("org_id")
         user_roles = user_data.get("roles", [])
 
     if not user_id:
-        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        return error_response("UNAUTHORIZED", "Unauthorized", status_code=401)
     if not org_id:
-        return JSONResponse({"error": "No organization"}, status_code=403)
+        return error_response("FORBIDDEN", "No organization", status_code=403)
 
     # Only sales users and admins can cancel
     cancel_roles = {"sales", "head_of_sales", "admin"}
     if not cancel_roles.intersection(user_roles):
-        return JSONResponse({"error": "У вас нет прав для отмены КП"}, status_code=403)
+        return error_response("FORBIDDEN", "У вас нет прав для отмены КП", status_code=403)
 
     # Parse request body
     content_type = request.headers.get("content-type", "")
@@ -785,7 +787,7 @@ async def cancel_quote(
 
     reason = (body.get("reason") or "").strip()
     if not reason:
-        return JSONResponse({"error": "Причина отмены обязательна"}, status_code=400)
+        return error_response("VALIDATION_ERROR", "Причина отмены обязательна", status_code=400)
 
     supabase = get_supabase()
 
@@ -798,18 +800,18 @@ async def cancel_quote(
         .execute()
 
     if not quote_result.data:
-        return JSONResponse({"error": "КП не найдено"}, status_code=404)
+        return error_response("NOT_FOUND", "КП не найдено", status_code=404)
 
     quote = cast(dict, quote_result.data[0])
     current_status = quote.get("workflow_status", "draft")
 
     # Cannot cancel already cancelled quotes
     if current_status == "cancelled":
-        return JSONResponse({"error": "КП уже отменена"}, status_code=422)
+        return error_response("ALREADY_CANCELLED", "КП уже отменена", status_code=422)
 
     # Cannot cancel deals (spec_signed, deal)
     if current_status in ("spec_signed", "deal"):
-        return JSONResponse({"error": "Невозможно отменить КП на этапе сделки"}, status_code=422)
+        return error_response("INVALID_STATE", "Невозможно отменить КП на этапе сделки", status_code=422)
 
     # Determine if we need to notify procurement/logistics users
     notify_statuses = {"pending_procurement", "logistics", "pending_customs", "pending_logistics_and_customs"}
@@ -887,7 +889,7 @@ async def cancel_quote(
         return JSONResponse({"success": True})
     except Exception as e:
         logger.error(f"Failed to cancel quote {quote_id}: {e}")
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return error_response("INTERNAL_ERROR", str(e), status_code=500)
 
 
 async def transition_workflow(
@@ -926,16 +928,16 @@ async def transition_workflow(
         except (AssertionError, AttributeError):
             session = None
         if not session or not session.get("user"):
-            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            return error_response("UNAUTHORIZED", "Unauthorized", status_code=401)
         user_data = session.get("user", {})
         user_id = user_data.get("id")
         org_id = user_data.get("org_id")
         user_roles = user_data.get("roles", [])
 
     if not user_id:
-        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        return error_response("UNAUTHORIZED", "Unauthorized", status_code=401)
     if not org_id:
-        return JSONResponse({"error": "No organization"}, status_code=403)
+        return error_response("FORBIDDEN", "No organization", status_code=403)
 
     # Parse request body
     content_type = request.headers.get("content-type", "")
@@ -949,7 +951,7 @@ async def transition_workflow(
     comment = body.get("comment")
 
     if not to_status and not action:
-        return JSONResponse({"error": "to_status or action is required"}, status_code=400)
+        return error_response("VALIDATION_ERROR", "to_status or action is required", status_code=400)
 
     # Handle special actions that have dedicated workflow functions
     if action == "complete_procurement":
@@ -966,7 +968,7 @@ async def transition_workflow(
         )
     else:
         if not to_status:
-            return JSONResponse({"error": "to_status is required"}, status_code=400)
+            return error_response("VALIDATION_ERROR", "to_status is required", status_code=400)
         result = transition_quote_status(
             quote_id=quote_id,
             to_status=to_status,
@@ -982,10 +984,7 @@ async def transition_workflow(
             "to_status": result.to_status,
         })
     else:
-        return JSONResponse({
-            "success": False,
-            "error": result.error_message,
-        }, status_code=422)
+        return error_response("TRANSITION_FAILED", result.error_message, status_code=422)
 
 
 async def export_validation(
@@ -1033,22 +1032,22 @@ async def export_validation(
         except (AssertionError, AttributeError):
             session = None
         if not session or not session.get("user"):
-            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+            return error_response("UNAUTHORIZED", "Unauthorized", status_code=401)
         user_data = session.get("user", {})
         user_id = user_data.get("id")
         org_id = user_data.get("org_id")
 
     if not user_id:
-        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        return error_response("UNAUTHORIZED", "Unauthorized", status_code=401)
     if not org_id:
-        return JSONResponse({"error": "No organization"}, status_code=403)
+        return error_response("FORBIDDEN", "No organization", status_code=403)
 
     try:
         data = fetch_export_data(quote_id, org_id)
     except ValueError as e:
         # fetch_export_data raises ValueError when the quote can't be found
         # in the user's org (RLS-equivalent miss).
-        return JSONResponse({"error": str(e)}, status_code=404)
+        return error_response("NOT_FOUND", str(e), status_code=404)
     except Exception:
         # DB / network / missing-field failures inside the data-mapper. Log
         # with traceback so prod ops can diagnose; return a controlled 500
@@ -1056,8 +1055,8 @@ async def export_validation(
         logger.exception(
             "export_validation: fetch_export_data failed for quote %s", quote_id
         )
-        return JSONResponse(
-            {"error": "Failed to fetch quote data"}, status_code=500
+        return error_response(
+            "INTERNAL_ERROR", "Failed to fetch quote data", status_code=500
         )
 
     try:
@@ -1069,8 +1068,8 @@ async def export_validation(
             "export_validation: create_validation_excel failed for quote %s",
             quote_id,
         )
-        return JSONResponse(
-            {"error": "Failed to generate validation Excel"}, status_code=500
+        return error_response(
+            "INTERNAL_ERROR", "Failed to generate validation Excel", status_code=500
         )
 
     # `idn_quote` is the active IDN column (format Q-YYYYMM-NNNN) per
