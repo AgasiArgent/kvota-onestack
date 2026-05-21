@@ -204,7 +204,11 @@ export function ControlStep({
   const clientPrepayment = toNumber(getVar(calcVariables, "advance_from_client"), 100);
   const supplierAdvance = toNumber(getVar(calcVariables, "supplier_advance"));
   const lprReward = toNumber(getVar(calcVariables, "lpr_reward")) + toNumber(getVar(calcVariables, "decision_maker_reward"));
-  const totalAmount = quote.total_amount_quote ?? null;
+  // Duplicate-column fallback: `quotes.total_amount_quote` is unwritten
+  // legacy; `total_quote_currency` is what calculate_quote populates.
+  // Schema cleanup is a separate PR.
+  const totalAmount =
+    quote.total_amount_quote ?? quote.total_quote_currency ?? null;
 
   // Financing amount & import VAT from calc summary
   const financingAmount = calcSummary
