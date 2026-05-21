@@ -108,7 +108,10 @@ class TestSubmitProcurement:
         req = _make_request(api_user_id=None)
         resp = _run(submit_procurement(req, "q-1"))
         assert resp.status_code == 401
-        assert _body(resp) == {"error": "Unauthorized"}
+        assert _body(resp) == {
+            "success": False,
+            "error": {"code": "UNAUTHORIZED", "message": "Unauthorized"},
+        }
 
     @patch("api.quotes.transition_to_pending_procurement")
     @patch("api.quotes.get_user_role_codes")
@@ -171,7 +174,10 @@ class TestSubmitProcurement:
         resp = _run(submit_procurement(req, "q-1"))
 
         assert resp.status_code == 400
-        assert "контрольный список" in _body(resp)["error"]
+        body = _body(resp)
+        assert body["success"] is False
+        assert body["error"]["code"] == "CHECKLIST_INCOMPLETE"
+        assert "контрольный список" in body["error"]["message"]
         mock_transition.assert_not_called()
 
 
@@ -211,7 +217,10 @@ class TestCancelQuote:
         req = _make_request(api_user_id=None)
         resp = _run(cancel_quote(req, "q-1"))
         assert resp.status_code == 401
-        assert _body(resp) == {"error": "Unauthorized"}
+        assert _body(resp) == {
+            "success": False,
+            "error": {"code": "UNAUTHORIZED", "message": "Unauthorized"},
+        }
 
     @patch("api.quotes.get_user_role_codes")
     @patch("api.quotes.get_supabase")
@@ -226,7 +235,13 @@ class TestCancelQuote:
         resp = _run(cancel_quote(req, "q-1"))
 
         assert resp.status_code == 400
-        assert _body(resp) == {"error": "Причина отмены обязательна"}
+        assert _body(resp) == {
+            "success": False,
+            "error": {
+                "code": "VALIDATION_ERROR",
+                "message": "Причина отмены обязательна",
+            },
+        }
 
     @patch("api.quotes.get_user_role_codes")
     @patch("api.quotes.get_supabase")
@@ -241,7 +256,10 @@ class TestCancelQuote:
         resp = _run(cancel_quote(req, "q-1"))
 
         assert resp.status_code == 403
-        assert "прав для отмены" in _body(resp)["error"]
+        body = _body(resp)
+        assert body["success"] is False
+        assert body["error"]["code"] == "FORBIDDEN"
+        assert "прав для отмены" in body["error"]["message"]
 
     @patch("api.quotes.get_user_role_codes")
     @patch("api.quotes.get_supabase")
@@ -288,7 +306,10 @@ class TestTransitionWorkflow:
         req = _make_request(api_user_id=None)
         resp = _run(transition_workflow(req, "q-1"))
         assert resp.status_code == 401
-        assert _body(resp) == {"error": "Unauthorized"}
+        assert _body(resp) == {
+            "success": False,
+            "error": {"code": "UNAUTHORIZED", "message": "Unauthorized"},
+        }
 
     @patch("api.quotes.transition_quote_status")
     @patch("api.quotes.get_user_role_codes")
@@ -304,9 +325,13 @@ class TestTransitionWorkflow:
         resp = _run(transition_workflow(req, "q-1"))
 
         assert resp.status_code == 400
-        assert (
-            _body(resp)["error"] == "to_status or action is required"
-        )
+        assert _body(resp) == {
+            "success": False,
+            "error": {
+                "code": "VALIDATION_ERROR",
+                "message": "to_status or action is required",
+            },
+        }
         mock_transition.assert_not_called()
 
     @patch("api.quotes.transition_quote_status")

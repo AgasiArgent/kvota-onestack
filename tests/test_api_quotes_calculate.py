@@ -172,7 +172,10 @@ class TestCalculateAuth:
         req = _make_request(api_user_id=None)
         resp = _run(calculate_quote(req, "q-1"))
         assert resp.status_code == 401
-        assert _body(resp) == {"error": "Unauthorized"}
+        assert _body(resp) == {
+            "success": False,
+            "error": {"code": "UNAUTHORIZED", "message": "Unauthorized"},
+        }
 
     @patch("api.quotes.get_supabase")
     def test_jwt_without_org_returns_403(self, mock_get_sb):
@@ -182,7 +185,10 @@ class TestCalculateAuth:
 
         resp = _run(calculate_quote(req, "q-1"))
         assert resp.status_code == 403
-        assert _body(resp) == {"error": "No organization"}
+        assert _body(resp) == {
+            "success": False,
+            "error": {"code": "FORBIDDEN", "message": "No organization"},
+        }
 
 
 # ----------------------------------------------------------------------------
@@ -201,7 +207,10 @@ class TestCalculateQuoteShape:
         resp = _run(calculate_quote(req, "q-missing"))
 
         assert resp.status_code == 404
-        assert _body(resp) == {"error": "Quote not found"}
+        assert _body(resp) == {
+            "success": False,
+            "error": {"code": "NOT_FOUND", "message": "Quote not found"},
+        }
         # get_composed_items must NOT have been called — 404 short-circuits
         mock_composed.assert_not_called()
 
@@ -218,7 +227,13 @@ class TestCalculateQuoteShape:
         resp = _run(calculate_quote(req, "q-1"))
 
         assert resp.status_code == 400
-        assert _body(resp) == {"error": "Cannot calculate - no products in quote"}
+        assert _body(resp) == {
+            "success": False,
+            "error": {
+                "code": "EMPTY_QUOTE",
+                "message": "Cannot calculate - no products in quote",
+            },
+        }
 
     @patch("api.quotes.get_composed_items")
     @patch("api.quotes.get_supabase")
@@ -243,7 +258,11 @@ class TestCalculateQuoteShape:
 
         assert resp.status_code == 400
         body = _body(resp)
-        assert body["error"] == "Not all items have prices"
+        assert body["success"] is False
+        assert body["error"] == {
+            "code": "MISSING_PRICES",
+            "message": "Not all items have prices",
+        }
         assert body["items_without_price"] == ["Acme — Widget"]
 
 
@@ -346,4 +365,7 @@ class TestCalculateHappyPath:
         resp = _run(calculate_quote(req, "q-1"))
 
         assert resp.status_code == 500
-        assert _body(resp) == {"error": "engine exploded"}
+        assert _body(resp) == {
+            "success": False,
+            "error": {"code": "INTERNAL_ERROR", "message": "engine exploded"},
+        }
