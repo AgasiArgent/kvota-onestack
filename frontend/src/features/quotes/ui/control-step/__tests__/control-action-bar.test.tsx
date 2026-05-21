@@ -9,9 +9,14 @@
  *   1. Hardcoded `disabled` — controllers couldn't click the button at all.
  *   2. URL — the FastHTML route was archived 2026-04-20.
  *
- * Post-fix: button is enabled (the component already early-returns if the
- * quote isn't in a control state, so when it renders it should be usable)
- * and opens `/export/validation/{quoteId}` (the Next.js proxy).
+ * Intermediate fix: button called
+ *   window.open('/export/validation/{quoteId}', '_blank')
+ * but a non-200 response from the Python endpoint rendered raw JSON in the
+ * new tab.
+ *
+ * Current contract (downloadValidationExcel helper): click runs the
+ * blob-or-toast flow via the helper, no new tab is opened. We mock the
+ * helper module and assert it is called with the quote id.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
@@ -34,12 +39,22 @@ vi.mock("@/entities/quote/mutations", () => ({
   escalateQuote: vi.fn(),
 }));
 
+const { downloadValidationExcelMock } = vi.hoisted(() => ({
+  downloadValidationExcelMock: vi.fn(),
+}));
+vi.mock("@/features/quotes/lib/download-validation-excel", () => ({
+  downloadValidationExcel: downloadValidationExcelMock,
+}));
+
 import { ControlActionBar } from "../control-action-bar";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  downloadValidationExcelMock.mockReset();
+});
 
 describe("ControlActionBar — Validation Excel button", () => {
-  it("opens /export/validation/{quoteId} (not legacyAppUrl) when clicked", () => {
+  it("calls downloadValidationExcel(quoteId) when clicked (no window.open)", () => {
     const openSpy = vi
       .spyOn(window, "open")
       .mockImplementation(() => null as unknown as Window);
@@ -56,9 +71,10 @@ describe("ControlActionBar — Validation Excel button", () => {
     const button = screen.getByRole("button", { name: /Validation Excel/ });
     button.click();
 
-    expect(openSpy).toHaveBeenCalledTimes(1);
-    expect(openSpy).toHaveBeenCalledWith("/export/validation/q-1", "_blank");
-    expect(openSpy.mock.calls[0][0]).not.toMatch(/legacy|kvotaflow\.ru/);
+    expect(downloadValidationExcelMock).toHaveBeenCalledTimes(1);
+    expect(downloadValidationExcelMock).toHaveBeenCalledWith("q-1");
+    // No new tab — the helper handles success/error inline.
+    expect(openSpy).not.toHaveBeenCalled();
 
     openSpy.mockRestore();
   });
