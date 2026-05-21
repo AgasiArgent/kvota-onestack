@@ -260,7 +260,7 @@ export function QuotesTableClient({
         label: "Сумма",
         accessor: (q) => (
           <span className="text-right tabular-nums block">
-            {formatAmount(q.total_amount_quote, q.currency)}
+            {formatAmount(q.total_quote_currency, q.currency)}
           </span>
         ),
         sortable: true,

@@ -52,7 +52,7 @@ const quote = {
   idn_quote: "Q-202605-0001",
   workflow_status: "draft",
   created_at: "2026-05-13T10:00:00Z",
-  total_amount_quote: 1000,
+  total_quote_currency: 1000,
   profit_quote_currency: 100,
   revenue_no_vat_quote_currency: 900,
   currency: "RUB",

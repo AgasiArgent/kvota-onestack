@@ -171,7 +171,6 @@ function makeItem(overrides: Partial<QuoteItemRow> = {}): QuoteItemRow {
     license_sgr_required: null,
     supplier_sku: null,
     item_idn: null,
-    supplier_advance_percent: null,
     weight_kg: null,
     customs_duty_percent: null,
     customs_extra_cost: null,

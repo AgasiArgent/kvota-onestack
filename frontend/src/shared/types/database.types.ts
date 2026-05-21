@@ -4124,7 +4124,6 @@ export type Database = {
           license_sgr_required: boolean | null
           supplier_sku: string | null
           item_idn: string | null
-          supplier_advance_percent: number | null
           weight_kg: number | null
           customs_duty_percent: number | null
           customs_extra_cost: number | null
@@ -4201,7 +4200,6 @@ export type Database = {
           license_sgr_required?: boolean | null
           supplier_sku?: string | null
           item_idn?: string | null
-          supplier_advance_percent?: number | null
           weight_kg?: number | null
           customs_duty_percent?: number | null
           customs_extra_cost?: number | null
@@ -4278,7 +4276,6 @@ export type Database = {
           license_sgr_required?: boolean | null
           supplier_sku?: string | null
           item_idn?: string | null
-          supplier_advance_percent?: number | null
           weight_kg?: number | null
           customs_duty_percent?: number | null
           customs_extra_cost?: number | null
@@ -4512,7 +4509,6 @@ export type Database = {
           usd_to_quote_rate: number | null
           exchange_rate_source: string | null
           exchange_rate_timestamp: string | null
-          total_amount_quote: number | null
           total_with_vat_quote: number | null
           total_with_vat_usd: number | null
           payment_terms: string | null
@@ -4635,7 +4631,6 @@ export type Database = {
           usd_to_quote_rate?: number | null
           exchange_rate_source?: string | null
           exchange_rate_timestamp?: string | null
-          total_amount_quote?: number | null
           total_with_vat_quote?: number | null
           total_with_vat_usd?: number | null
           payment_terms?: string | null
@@ -4758,7 +4753,6 @@ export type Database = {
           usd_to_quote_rate?: number | null
           exchange_rate_source?: string | null
           exchange_rate_timestamp?: string | null
-          total_amount_quote?: number | null
           total_with_vat_quote?: number | null
           total_with_vat_usd?: number | null
           payment_terms?: string | null

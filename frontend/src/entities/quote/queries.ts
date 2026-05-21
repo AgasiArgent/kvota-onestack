@@ -28,15 +28,13 @@ export async function fetchQuotesList(
   const offset = (page - 1) * pageSize;
 
   // Build base query — select scalar columns only (FK joins resolved separately).
-  // Note: `kvota.quotes` has TWO columns for the quote total in quote currency
-  // — the legacy `total_amount_quote` (never written by anyone) and
-  // `total_quote_currency` (written by api/quotes.calculate_quote, see line ~347).
-  // Alias the populated one to the TS field name so the registry actually
-  // shows what calc produced. Schema cleanup (drop the dupe) — separate PR.
+  // `total_quote_currency` is the canonical column written by
+  // api/quotes.calculate_quote (see line ~347). The legacy duplicate
+  // `total_amount_quote` was dropped in migration 318.
   let query = supabase
     .from("quotes")
     .select(
-      "id, idn_quote, created_at, workflow_status, total_amount_quote:total_quote_currency, total_profit_usd, currency, customer_id, created_by, version_count, current_version, assigned_logistics_user, assigned_customs_user",
+      "id, idn_quote, created_at, workflow_status, total_quote_currency, total_profit_usd, currency, customer_id, created_by, version_count, current_version, assigned_logistics_user, assigned_customs_user",
       { count: "exact" }
     )
     .eq("organization_id", user.orgId)
@@ -376,7 +374,7 @@ export async function fetchQuotesList(
       idn_quote: row.idn_quote,
       created_at: row.created_at ?? "",
       workflow_status: row.workflow_status ?? "draft",
-      total_amount_quote: row.total_amount_quote,
+      total_quote_currency: row.total_quote_currency,
       total_profit_usd: row.total_profit_usd,
       currency: row.currency,
       customer: row.customer_id ? customerMap.get(row.customer_id) ?? null : null,

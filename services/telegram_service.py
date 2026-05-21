@@ -2472,7 +2472,7 @@ async def send_approval_notification_for_quote(
 
         # Get quote details
         quote_response = supabase.table("quotes").select(
-            "id, idn, organization_id, total_amount_quote, currency, payment_terms, customer:customers(name)"
+            "id, idn, organization_id, total_quote_currency, currency, payment_terms, customer:customers(name)"
         ).eq("id", quote_id).execute()
 
         if not quote_response.data or len(quote_response.data) == 0:
@@ -2488,7 +2488,7 @@ async def send_approval_notification_for_quote(
         customer_name = customer.get("name", "N/A")
 
         # Format total amount
-        total_price = quote.get("total_amount_quote", 0) or 0
+        total_price = quote.get("total_quote_currency", 0) or 0
         currency = quote.get("currency", "USD")
         total_amount = f"{total_price:,.0f} {currency}".replace(",", " ")
 
