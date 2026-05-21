@@ -36,6 +36,7 @@ from starlette.responses import JSONResponse
 
 from postgrest.exceptions import APIError as PostgrestAPIError
 
+from api.lib.errors import error_response
 from services import rate_resolver
 from services.alta_client import AltaApiError
 from services.database import get_supabase
@@ -608,14 +609,6 @@ async def _append_resolver_suggestions(
 # ---------------------------------------------------------------------------
 
 
-def _err(code: str, message: str, status: int) -> JSONResponse:
-    """Standard error envelope used by the REQ-5 handlers."""
-    return JSONResponse(
-        {"success": False, "error": {"code": code, "message": message}},
-        status_code=status,
-    )
-
-
 def _validate_country_oksm(country_oksm: int) -> JSONResponse | None:
     """Verify country_oksm exists in kvota.countries; None on success.
 
@@ -635,7 +628,7 @@ def _validate_country_oksm(country_oksm: int) -> JSONResponse | None:
     except Exception as exc:
         # Connectivity / RLS / network failure — never treat as bad input.
         logger.warning("countries lookup failed: %s", exc)
-        return _err(
+        return error_response(
             "DB_ERROR",
             "Country verification failed; please retry",
             503,
@@ -646,13 +639,13 @@ def _validate_country_oksm(country_oksm: int) -> JSONResponse | None:
         logger.warning(
             "countries lookup returned None for oksm=%s", country_oksm
         )
-        return _err(
+        return error_response(
             "DB_ERROR",
             "Country verification failed; please retry",
             503,
         )
     if not (result.data or []):
-        return _err(
+        return error_response(
             "INVALID_OKSM",
             f"country_oksm {country_oksm} not found in kvota.countries",
             400,
@@ -665,11 +658,11 @@ def _parse_target_date(raw: str | None) -> tuple[date | None, JSONResponse | Non
     if raw is None:
         return date.today(), None
     if not isinstance(raw, str):
-        return None, _err("BAD_REQUEST", "date must be ISO date string", 400)
+        return None, error_response("BAD_REQUEST", "date must be ISO date string", 400)
     try:
         return date.fromisoformat(raw), None
     except ValueError:
-        return None, _err(
+        return None, error_response(
             "BAD_REQUEST", f"date {raw!r} is not a valid ISO date", 400,
         )
 
@@ -768,20 +761,20 @@ async def resolve_rates_handler(request: Request, alta_client) -> JSONResponse:
 
     user, role_codes = _resolve_dual_auth(request)
     if not user or not user.get("org_id"):
-        return _err("UNAUTHORIZED", "Not authenticated", 401)
+        return error_response("UNAUTHORIZED", "Not authenticated", 401)
     if not (set(role_codes) & _CUSTOMS_ROLES):
-        return _err("FORBIDDEN", "Forbidden", 403)
+        return error_response("FORBIDDEN", "Forbidden", 403)
 
     try:
         body = await request.json()
     except Exception:
-        return _err("BAD_REQUEST", "Invalid JSON", 400)
+        return error_response("BAD_REQUEST", "Invalid JSON", 400)
     if not isinstance(body, dict):
-        return _err("BAD_REQUEST", "body must be a JSON object", 400)
+        return error_response("BAD_REQUEST", "body must be a JSON object", 400)
 
     tnved_code = (body.get("tnved_code") or "").strip()
     if not tnved_code or not _TNVED_RE.match(tnved_code):
-        return _err(
+        return error_response(
             "INVALID_TNVED_CODE",
             "tnved_code must be a 10-digit ТН ВЭД code (got %r)" % tnved_code,
             400,
@@ -791,7 +784,7 @@ async def resolve_rates_handler(request: Request, alta_client) -> JSONResponse:
     try:
         country_oksm = int(country_oksm_raw)
     except (TypeError, ValueError):
-        return _err(
+        return error_response(
             "BAD_REQUEST",
             "country_oksm must be an integer (got %r)" % country_oksm_raw,
             400,
@@ -812,7 +805,7 @@ async def resolve_rates_handler(request: Request, alta_client) -> JSONResponse:
     ):
         payment_types = tuple(include_payment_types)
     else:
-        return _err(
+        return error_response(
             "BAD_REQUEST",
             "include_payment_types must be a list of strings",
             400,
@@ -887,7 +880,7 @@ async def resolve_rates_handler(request: Request, alta_client) -> JSONResponse:
         # transient; user should retry). Otherwise all NOT_FOUND → 404 with
         # actionable message ("enter manually").
         if saw_alta_error:
-            return _err(
+            return error_response(
                 "ALTA_UNAVAILABLE",
                 "Alta API недоступен. Попробуйте позже.",
                 503,
@@ -895,7 +888,7 @@ async def resolve_rates_handler(request: Request, alta_client) -> JSONResponse:
         # All requested payment_types resolved to NOT_FOUND — Alta succeeded
         # but has no data for this combination. No amount of retrying will
         # change that; the user must enter the rate manually.
-        return _err(
+        return error_response(
             "RATE_NOT_FOUND",
             (
                 f"Ставки для {tnved_code} с {country_oksm} не найдены в Alta — "
@@ -1001,20 +994,20 @@ async def non_tariff_measures_handler(
 
     user, role_codes = _resolve_dual_auth(request)
     if not user or not user.get("org_id"):
-        return _err("UNAUTHORIZED", "Not authenticated", 401)
+        return error_response("UNAUTHORIZED", "Not authenticated", 401)
     if not (set(role_codes) & _CUSTOMS_ROLES):
-        return _err("FORBIDDEN", "Forbidden", 403)
+        return error_response("FORBIDDEN", "Forbidden", 403)
 
     try:
         body = await request.json()
     except Exception:
-        return _err("BAD_REQUEST", "Invalid JSON", 400)
+        return error_response("BAD_REQUEST", "Invalid JSON", 400)
     if not isinstance(body, dict):
-        return _err("BAD_REQUEST", "body must be a JSON object", 400)
+        return error_response("BAD_REQUEST", "body must be a JSON object", 400)
 
     tnved_code = (body.get("tnved_code") or "").strip()
     if not tnved_code or not _TNVED_RE.match(tnved_code):
-        return _err(
+        return error_response(
             "INVALID_TNVED_CODE",
             "tnved_code must be a 10-digit ТН ВЭД code (got %r)" % tnved_code,
             400,
@@ -1024,7 +1017,7 @@ async def non_tariff_measures_handler(
     try:
         country_oksm = int(country_oksm_raw)
     except (TypeError, ValueError):
-        return _err(
+        return error_response(
             "BAD_REQUEST",
             "country_oksm must be an integer (got %r)" % country_oksm_raw,
             400,
@@ -1032,7 +1025,7 @@ async def non_tariff_measures_handler(
 
     mode = body.get("mode", "import")
     if mode not in ("import", "export"):
-        return _err(
+        return error_response(
             "BAD_REQUEST",
             "mode must be 'import' or 'export' (got %r)" % mode,
             400,
@@ -1051,7 +1044,7 @@ async def non_tariff_measures_handler(
             "non_tariff_measures: Alta error %s for tnved_code=%s country=%s",
             exc.code, tnved_code, country_oksm,
         )
-        return _err(
+        return error_response(
             "ALTA_UNAVAILABLE",
             "Alta API недоступен, попробуйте позже.",
             503,
@@ -1061,7 +1054,7 @@ async def non_tariff_measures_handler(
             "non_tariff_measures: Alta call failed for tnved_code=%s: %s",
             tnved_code, exc,
         )
-        return _err(
+        return error_response(
             "ALTA_UNAVAILABLE",
             "Alta API недоступен, попробуйте позже.",
             503,
@@ -1159,9 +1152,9 @@ async def refresh_customs_snapshot_handler(
     """
     user, role_codes = _resolve_dual_auth(request)
     if user is None:
-        return _err("UNAUTHORIZED", "Authentication required", 401)
+        return error_response("UNAUTHORIZED", "Authentication required", 401)
     if not (set(role_codes) & _CUSTOMS_ROLES):
-        return _err(
+        return error_response(
             "FORBIDDEN",
             f"Customs role required (got {role_codes!r})",
             403,
@@ -1189,14 +1182,14 @@ async def refresh_customs_snapshot_handler(
             "refresh_customs_snapshot: quote lookup PostgrestAPIError code=%s msg=%s",
             getattr(exc, "code", None), exc,
         )
-        return _err("NOT_FOUND", f"quote {quote_id} not found", 404)
+        return error_response("NOT_FOUND", f"quote {quote_id} not found", 404)
     except Exception as exc:
         # JSON decode failures, connection errors, anything we did not expect.
         logger.error(
             "refresh_customs_snapshot: quote lookup failed for %s: %s",
             quote_id, exc,
         )
-        return _err(
+        return error_response(
             "DB_ERROR",
             "Quote lookup failed; please retry",
             500,
@@ -1204,7 +1197,7 @@ async def refresh_customs_snapshot_handler(
 
     quote = getattr(quote_resp, "data", None)
     if not quote:
-        return _err("NOT_FOUND", f"quote {quote_id} not found", 404)
+        return error_response("NOT_FOUND", f"quote {quote_id} not found", 404)
 
     # Optional reason for audit (recorded in quote_versions.input_variables.change_reason)
     body = {}
@@ -1258,7 +1251,7 @@ async def refresh_customs_snapshot_handler(
         )
     except Exception as exc:
         logger.warning("quote_versions lookup failed for %s: %s", quote_id, exc)
-        return _err(
+        return error_response(
             "NO_VERSION",
             f"No quote_versions row exists for quote {quote_id} — calculate first",
             409,
@@ -1266,7 +1259,7 @@ async def refresh_customs_snapshot_handler(
 
     latest = (latest_resp.data or [None])[0]
     if latest is None:
-        return _err(
+        return error_response(
             "NO_VERSION",
             f"No quote_versions row exists for quote {quote_id} — calculate first",
             409,
@@ -1293,7 +1286,7 @@ async def refresh_customs_snapshot_handler(
             "Failed to persist refreshed customs snapshot for quote %s: %s",
             quote_id, exc,
         )
-        return _err(
+        return error_response(
             "DB_ERROR",
             "Snapshot built but persistence failed; please retry",
             500,
@@ -1382,20 +1375,20 @@ async def classify_handler(request: Request, alta_client) -> JSONResponse:
     """
     user, role_codes = _resolve_dual_auth(request)
     if not user or not user.get("org_id"):
-        return _err("UNAUTHORIZED", "Not authenticated", 401)
+        return error_response("UNAUTHORIZED", "Not authenticated", 401)
     if not (set(role_codes) & _CUSTOMS_ROLES):
-        return _err("FORBIDDEN", "Forbidden", 403)
+        return error_response("FORBIDDEN", "Forbidden", 403)
 
     try:
         body = await request.json()
     except Exception:
-        return _err("BAD_REQUEST", "Invalid JSON", 400)
+        return error_response("BAD_REQUEST", "Invalid JSON", 400)
     if not isinstance(body, dict):
-        return _err("BAD_REQUEST", "body must be a JSON object", 400)
+        return error_response("BAD_REQUEST", "body must be a JSON object", 400)
 
     raw_items = body.get("items")
     if not isinstance(raw_items, list) or not raw_items:
-        return _err(
+        return error_response(
             "BAD_REQUEST",
             "items must be a non-empty list of {name, brand?, description?, quote_item_id?}",
             400,
@@ -1410,14 +1403,14 @@ async def classify_handler(request: Request, alta_client) -> JSONResponse:
     inputs: list = []
     for idx, raw in enumerate(raw_items):
         if not isinstance(raw, dict):
-            return _err(
+            return error_response(
                 "BAD_REQUEST",
                 f"items[{idx}] must be an object",
                 400,
             )
         name = (raw.get("name") or "").strip()
         if not name:
-            return _err(
+            return error_response(
                 "BAD_REQUEST",
                 f"items[{idx}].name must be a non-empty string",
                 400,
@@ -1444,10 +1437,10 @@ async def classify_handler(request: Request, alta_client) -> JSONResponse:
             "PACKET_EXHAUSTED": 429,
             "ALTA_UNAVAILABLE": 503,
         }.get(e.code, 500)
-        return _err(e.code, e.message, status)
+        return error_response(e.code, e.message, status)
     except Exception as e:
         logger.error("classify_handler: unexpected error: %s", e)
-        return _err("INTERNAL", "Classification failed", 500)
+        return error_response("INTERNAL", "Classification failed", 500)
 
     logger.info(
         "customs_classify",
@@ -1503,19 +1496,19 @@ async def history_lookup_handler(
     """
     user, role_codes = _resolve_dual_auth(request)
     if not user or not user.get("org_id"):
-        return _err("UNAUTHORIZED", "Not authenticated", 401)
+        return error_response("UNAUTHORIZED", "Not authenticated", 401)
     if not (set(role_codes) & _CUSTOMS_ROLES):
-        return _err("FORBIDDEN", "Forbidden", 403)
+        return error_response("FORBIDDEN", "Forbidden", 403)
 
     tnved_code = (tnved_code or "").strip()
     if not _TNVED_RE.match(tnved_code):
-        return _err(
+        return error_response(
             "BAD_REQUEST",
             f"tnved_code must be a 10-digit ТН ВЭД code (got {tnved_code!r})",
             400,
         )
     if not isinstance(country_oksm, int) or country_oksm <= 0:
-        return _err(
+        return error_response(
             "BAD_REQUEST",
             f"country_oksm must be a positive integer (got {country_oksm!r})",
             400,
@@ -1578,24 +1571,24 @@ async def classify_select_handler(request: Request) -> JSONResponse:
     """
     user, role_codes = _resolve_dual_auth(request)
     if not user or not user.get("org_id"):
-        return _err("UNAUTHORIZED", "Not authenticated", 401)
+        return error_response("UNAUTHORIZED", "Not authenticated", 401)
     if not (set(role_codes) & _CUSTOMS_ROLES):
-        return _err("FORBIDDEN", "Forbidden", 403)
+        return error_response("FORBIDDEN", "Forbidden", 403)
 
     try:
         body = await request.json()
     except Exception:
-        return _err("BAD_REQUEST", "Invalid JSON", 400)
+        return error_response("BAD_REQUEST", "Invalid JSON", 400)
     if not isinstance(body, dict):
-        return _err("BAD_REQUEST", "body must be a JSON object", 400)
+        return error_response("BAD_REQUEST", "body must be a JSON object", 400)
 
     quote_item_id = (body.get("quote_item_id") or "").strip()
     if not quote_item_id:
-        return _err("BAD_REQUEST", "quote_item_id is required", 400)
+        return error_response("BAD_REQUEST", "quote_item_id is required", 400)
 
     chosen_code = (body.get("chosen_code") or "").strip()
     if not _TNVED_RE.match(chosen_code):
-        return _err(
+        return error_response(
             "INVALID_TNVED_CODE",
             f"chosen_code must be a 10-digit ТН ВЭД code (got {chosen_code!r})",
             400,
@@ -1603,7 +1596,7 @@ async def classify_select_handler(request: Request) -> JSONResponse:
 
     raw_candidates = body.get("candidates_shown") or []
     if not isinstance(raw_candidates, list):
-        return _err("BAD_REQUEST", "candidates_shown must be a list", 400)
+        return error_response("BAD_REQUEST", "candidates_shown must be a list", 400)
     input_text = (body.get("input_text") or "").strip()
 
     from services.classifier import Candidate, log_classification_choice
@@ -1633,7 +1626,7 @@ async def classify_select_handler(request: Request) -> JSONResponse:
               .execute()
         )
         if not getattr(update_resp, "data", None):
-            return _err(
+            return error_response(
                 "NOT_FOUND",
                 f"Quote item {quote_item_id} not found",
                 404,
@@ -1643,7 +1636,7 @@ async def classify_select_handler(request: Request) -> JSONResponse:
             "classify_select: failed to update quote_items.hs_code for %s: %s",
             quote_item_id, e,
         )
-        return _err("DB_ERROR", "Failed to save hs_code", 500)
+        return error_response("DB_ERROR", "Failed to save hs_code", 500)
 
     log_classification_choice(
         quote_item_id=quote_item_id,
@@ -1727,9 +1720,9 @@ def _require_cert_write_auth(
     """
     user, role_codes = _resolve_dual_auth(request)
     if not user or not user.get("org_id"):
-        return None, _err("UNAUTHORIZED", "Not authenticated", 401)
+        return None, error_response("UNAUTHORIZED", "Not authenticated", 401)
     if not (set(role_codes) & _CUSTOMS_ROLES):
-        return None, _err("FORBIDDEN", "Forbidden", 403)
+        return None, error_response("FORBIDDEN", "Forbidden", 403)
     return user, None
 
 
@@ -1745,26 +1738,26 @@ def _require_cert_read_auth(
     """
     user, role_codes = _resolve_dual_auth(request)
     if not user or not user.get("org_id"):
-        return None, _err("UNAUTHORIZED", "Not authenticated", 401)
+        return None, error_response("UNAUTHORIZED", "Not authenticated", 401)
     if not (set(role_codes) & _CERT_READ_ROLES):
-        return None, _err("FORBIDDEN", "Forbidden", 403)
+        return None, error_response("FORBIDDEN", "Forbidden", 403)
     return user, None
 
 
 def _parse_cost_rub(value) -> tuple[float | None, JSONResponse | None]:
     """Parse non-negative RUB amount. Returns (value, error)."""
     if value is None:
-        return None, _err(
+        return None, error_response(
             "VALIDATION_ERROR", "cost_rub is required", 400,
         )
     try:
         parsed = float(value)
     except (TypeError, ValueError):
-        return None, _err(
+        return None, error_response(
             "VALIDATION_ERROR", "cost_rub must be a non-negative number", 400,
         )
     if parsed < 0:
-        return None, _err(
+        return None, error_response(
             "VALIDATION_ERROR", "cost_rub must be a non-negative number", 400,
         )
     return parsed, None
@@ -1807,7 +1800,7 @@ def _verify_items_in_quote(
     found_ids = {row["id"] for row in rows}
     missing = [iid for iid in item_ids if iid not in found_ids]
     if missing:
-        return None, _err(
+        return None, error_response(
             "NOT_FOUND",
             f"Quote item(s) not found: {', '.join(missing)}",
             404,
@@ -1815,7 +1808,7 @@ def _verify_items_in_quote(
 
     wrong_quote = [row["id"] for row in rows if row["quote_id"] != quote_id]
     if wrong_quote:
-        return None, _err(
+        return None, error_response(
             "NOT_IN_QUOTE",
             "Позиция не принадлежит КП сертификата",
             422,
@@ -2019,17 +2012,17 @@ async def create_certificate_handler(request: Request) -> JSONResponse:
     try:
         body = await request.json()
     except Exception:
-        return _err("VALIDATION_ERROR", "Invalid JSON", 400)
+        return error_response("VALIDATION_ERROR", "Invalid JSON", 400)
     if not isinstance(body, dict):
-        return _err("VALIDATION_ERROR", "body must be a JSON object", 400)
+        return error_response("VALIDATION_ERROR", "body must be a JSON object", 400)
 
     quote_id = (body.get("quote_id") or "").strip()
     if not quote_id:
-        return _err("VALIDATION_ERROR", "quote_id is required", 400)
+        return error_response("VALIDATION_ERROR", "quote_id is required", 400)
 
     cert_type = (body.get("type") or "").strip()
     if not cert_type:
-        return _err("VALIDATION_ERROR", "type is required", 400)
+        return error_response("VALIDATION_ERROR", "type is required", 400)
 
     cost_rub, cost_err = _parse_cost_rub(body.get("cost_rub"))
     if cost_err:
@@ -2037,11 +2030,11 @@ async def create_certificate_handler(request: Request) -> JSONResponse:
 
     item_ids_raw = body.get("item_ids")
     if not isinstance(item_ids_raw, list):
-        return _err("VALIDATION_ERROR", "item_ids must be a list", 400)
+        return error_response("VALIDATION_ERROR", "item_ids must be a list", 400)
     item_ids: list[str] = []
     for raw in item_ids_raw:
         if not isinstance(raw, str) or not raw.strip():
-            return _err(
+            return error_response(
                 "VALIDATION_ERROR",
                 "item_ids[] must be a list of non-empty strings",
                 400,
@@ -2054,7 +2047,7 @@ async def create_certificate_handler(request: Request) -> JSONResponse:
 
     quote = _verify_quote_in_org(supabase, quote_id, user["org_id"])
     if not quote:
-        return _err("NOT_FOUND", "Quote not found", 404)
+        return error_response("NOT_FOUND", "Quote not found", 404)
 
     # Cross-quote isolation guard BEFORE we INSERT anything (REQ-2 AC#11).
     _items, items_err = _verify_items_in_quote(supabase, item_ids, quote_id)
@@ -2084,10 +2077,10 @@ async def create_certificate_handler(request: Request) -> JSONResponse:
         )
     except Exception as exc:
         logger.error("create_certificate: cert insert failed: %s", exc)
-        return _err("INTERNAL", "Failed to create certificate", 500)
+        return error_response("INTERNAL", "Failed to create certificate", 500)
 
     if not inserted.data:
-        return _err("INTERNAL", "Failed to create certificate", 500)
+        return error_response("INTERNAL", "Failed to create certificate", 500)
 
     cert_row = inserted.data[0]
     cert_id = cert_row["id"]
@@ -2118,7 +2111,7 @@ async def create_certificate_handler(request: Request) -> JSONResponse:
                     "create_certificate: rollback DELETE failed for cert=%s: %s",
                     cert_id, rollback_exc,
                 )
-            return _err(
+            return error_response(
                 "INTERNAL",
                 "Failed to attach items to certificate",
                 500,
@@ -2158,12 +2151,12 @@ async def list_certificates_handler(request: Request) -> JSONResponse:
 
     quote_id = (request.query_params.get("quote_id") or "").strip()
     if not quote_id:
-        return _err("VALIDATION_ERROR", "quote_id is required", 400)
+        return error_response("VALIDATION_ERROR", "quote_id is required", 400)
 
     supabase = get_supabase()
     quote = _verify_quote_in_org(supabase, quote_id, user["org_id"])
     if not quote:
-        return _err("NOT_FOUND", "Quote not found", 404)
+        return error_response("NOT_FOUND", "Quote not found", 404)
 
     certs_res = (
         supabase.table("quote_certificates")
@@ -2236,19 +2229,19 @@ async def attach_item_handler(request: Request, cert_id: str) -> JSONResponse:
     try:
         body = await request.json()
     except Exception:
-        return _err("VALIDATION_ERROR", "Invalid JSON", 400)
+        return error_response("VALIDATION_ERROR", "Invalid JSON", 400)
     if not isinstance(body, dict):
-        return _err("VALIDATION_ERROR", "body must be a JSON object", 400)
+        return error_response("VALIDATION_ERROR", "body must be a JSON object", 400)
 
     item_id = (body.get("item_id") or "").strip()
     if not item_id:
-        return _err("VALIDATION_ERROR", "item_id is required", 400)
+        return error_response("VALIDATION_ERROR", "item_id is required", 400)
 
     supabase = get_supabase()
 
     cert_row = _fetch_cert_in_org(supabase, cert_id, user["org_id"])
     if not cert_row:
-        return _err("NOT_FOUND", "Certificate not found", 404)
+        return error_response("NOT_FOUND", "Certificate not found", 404)
 
     _items, items_err = _verify_items_in_quote(
         supabase, [item_id], cert_row["quote_id"]
@@ -2266,16 +2259,16 @@ async def attach_item_handler(request: Request, cert_id: str) -> JSONResponse:
         # UNIQUE (certificate_id, item_id) → 23505 unique_violation.
         code = getattr(exc, "code", None) or ""
         if code == "23505":
-            return _err(
+            return error_response(
                 "CONFLICT",
                 "Item already attached to this certificate",
                 409,
             )
         logger.error("attach_item: insert failed for cert=%s: %s", cert_id, exc)
-        return _err("INTERNAL", "Failed to attach item", 500)
+        return error_response("INTERNAL", "Failed to attach item", 500)
     except Exception as exc:
         logger.error("attach_item: insert failed for cert=%s: %s", cert_id, exc)
-        return _err("INTERNAL", "Failed to attach item", 500)
+        return error_response("INTERNAL", "Failed to attach item", 500)
 
     attached_item_ids = _fetch_attached_item_ids_ordered(supabase, cert_id)
     attached_items = _compute_attached_items_payload(
@@ -2310,7 +2303,7 @@ async def detach_item_handler(
 
     cert_row = _fetch_cert_in_org(supabase, cert_id, user["org_id"])
     if not cert_row:
-        return _err("NOT_FOUND", "Certificate not found", 404)
+        return error_response("NOT_FOUND", "Certificate not found", 404)
 
     delete_res = (
         supabase.table("quote_certificate_items")
@@ -2320,7 +2313,7 @@ async def detach_item_handler(
         .execute()
     )
     if not (delete_res.data or []):
-        return _err("NOT_FOUND", "Attachment not found", 404)
+        return error_response("NOT_FOUND", "Attachment not found", 404)
 
     attached_item_ids = _fetch_attached_item_ids_ordered(supabase, cert_id)
     attached_items = _compute_attached_items_payload(
@@ -2356,7 +2349,7 @@ async def delete_certificate_handler(
 
     cert_row = _fetch_cert_in_org(supabase, cert_id, user["org_id"])
     if not cert_row:
-        return _err("NOT_FOUND", "Certificate not found", 404)
+        return error_response("NOT_FOUND", "Certificate not found", 404)
 
     supabase.table("quote_certificates").delete().eq("id", cert_id).execute()
 
@@ -2393,7 +2386,7 @@ async def history_certificate_handler(request: Request) -> JSONResponse:
     qp = request.query_params
     current_quote_id = (qp.get("current_quote_id") or "").strip()
     if not current_quote_id:
-        return _err("VALIDATION_ERROR", "current_quote_id is required", 400)
+        return error_response("VALIDATION_ERROR", "current_quote_id is required", 400)
 
     hs_code = (qp.get("hs_code") or "").strip() or None
     brand = (qp.get("brand") or "").strip() or None

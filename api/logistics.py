@@ -25,6 +25,7 @@ from datetime import datetime, timezone
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+from api.lib.errors import error_response, success_response
 from services.database import get_supabase
 from services.role_service import get_user_role_codes
 from services.workflow_service import complete_logistics
@@ -77,7 +78,7 @@ def _validate_template_location_ids(
     found = {row["id"] for row in (res.data or [])}
     missing = ids - found
     if missing:
-        return ids, _err(
+        return ids, error_response(
             "VALIDATION_ERROR",
             f"Locations not found in organisation: {sorted(missing)}",
             400,
@@ -160,33 +161,17 @@ def _resolve_dual_auth(request: Request) -> tuple[dict | None, list[str]]:
     return user, user.get("roles", [])
 
 
-def _err(code: str, message: str, status: int) -> JSONResponse:
-    """Structured error response envelope."""
-    return JSONResponse(
-        {"success": False, "error": {"code": code, "message": message}},
-        status_code=status,
-    )
-
-
-def _ok(data: dict | list | None = None, status: int = 200) -> JSONResponse:
-    """Success response envelope."""
-    payload: dict = {"success": True}
-    if data is not None:
-        payload["data"] = data
-    return JSONResponse(payload, status_code=status)
-
-
 def _authorize(
     request: Request,
 ) -> tuple[dict, list[str]] | JSONResponse:
     """Reject unauthorized callers; return (user, roles) on success."""
     user, role_codes = _resolve_dual_auth(request)
     if not user:
-        return _err("UNAUTHORIZED", "Not authenticated", 401)
+        return error_response("UNAUTHORIZED", "Not authenticated", 401)
     if not user.get("org_id"):
-        return _err("UNAUTHORIZED", "No organization context", 401)
+        return error_response("UNAUTHORIZED", "No organization context", 401)
     if not (set(role_codes) & _LOGISTICS_ROLES):
-        return _err("FORBIDDEN", "Logistics role required", 403)
+        return error_response("FORBIDDEN", "Logistics role required", 403)
     return user, role_codes
 
 
@@ -259,21 +244,21 @@ async def create_segment(request: Request) -> JSONResponse:
     try:
         body = await request.json()
     except Exception:
-        return _err("BAD_REQUEST", "Invalid JSON", 400)
+        return error_response("BAD_REQUEST", "Invalid JSON", 400)
 
     invoice_id = body.get("invoice_id")
     from_location_id = body.get("from_location_id")
     to_location_id = body.get("to_location_id")
 
     if not invoice_id or not from_location_id or not to_location_id:
-        return _err(
+        return error_response(
             "VALIDATION_ERROR",
             "invoice_id, from_location_id, to_location_id are required",
             400,
         )
 
     if not _assert_invoice_in_org(invoice_id, org_id):
-        return _err("NOT_FOUND", "Invoice not found", 404)
+        return error_response("NOT_FOUND", "Invoice not found", 404)
 
     sb = get_supabase()
 
@@ -309,7 +294,7 @@ async def create_segment(request: Request) -> JSONResponse:
     if "currency_code" in body and body["currency_code"] is not None:
         currency = _validate_currency(body["currency_code"])
         if currency is None:
-            return _err(
+            return error_response(
                 "VALIDATION_ERROR",
                 f"Invalid currency_code. Allowed: {sorted(_SEGMENT_CURRENCIES)}",
                 400,
@@ -318,9 +303,9 @@ async def create_segment(request: Request) -> JSONResponse:
 
     res = sb.table("logistics_route_segments").insert(payload).execute()
     if not res.data:
-        return _err("INTERNAL_ERROR", "Failed to create segment", 500)
+        return error_response("INTERNAL_ERROR", "Failed to create segment", 500)
 
-    return _ok(res.data[0], status=201)
+    return success_response(res.data[0], status_code=201)
 
 
 async def list_segments(request: Request) -> JSONResponse:
@@ -341,10 +326,10 @@ async def list_segments(request: Request) -> JSONResponse:
 
     invoice_id = request.query_params.get("invoice_id")
     if not invoice_id:
-        return _err("VALIDATION_ERROR", "invoice_id is required", 400)
+        return error_response("VALIDATION_ERROR", "invoice_id is required", 400)
 
     if not _assert_invoice_in_org(invoice_id, org_id):
-        return _err("NOT_FOUND", "Invoice not found", 404)
+        return error_response("NOT_FOUND", "Invoice not found", 404)
 
     sb = get_supabase()
     res = (
@@ -354,7 +339,7 @@ async def list_segments(request: Request) -> JSONResponse:
         .order("sequence_order")
         .execute()
     )
-    return _ok(res.data or [])
+    return success_response(res.data or [])
 
 
 async def update_segment(request: Request, segment_id: str) -> JSONResponse:
@@ -375,12 +360,12 @@ async def update_segment(request: Request, segment_id: str) -> JSONResponse:
     org_id = user["org_id"]
 
     if not _assert_segment_in_org(segment_id, org_id):
-        return _err("NOT_FOUND", "Segment not found", 404)
+        return error_response("NOT_FOUND", "Segment not found", 404)
 
     try:
         body = await request.json()
     except Exception:
-        return _err("BAD_REQUEST", "Invalid JSON", 400)
+        return error_response("BAD_REQUEST", "Invalid JSON", 400)
 
     allowed = {
         "from_location_id",
@@ -394,13 +379,13 @@ async def update_segment(request: Request, segment_id: str) -> JSONResponse:
     }
     updates = {k: v for k, v in body.items() if k in allowed}
     if not updates:
-        return _err("VALIDATION_ERROR", "No updatable fields provided", 400)
+        return error_response("VALIDATION_ERROR", "No updatable fields provided", 400)
 
     # Validate currency_code when present (3.7).
     if "currency_code" in updates and updates["currency_code"] is not None:
         currency = _validate_currency(updates["currency_code"])
         if currency is None:
-            return _err(
+            return error_response(
                 "VALIDATION_ERROR",
                 f"Invalid currency_code. Allowed: {sorted(_SEGMENT_CURRENCIES)}",
                 400,
@@ -415,8 +400,8 @@ async def update_segment(request: Request, segment_id: str) -> JSONResponse:
         .execute()
     )
     if not res.data:
-        return _err("INTERNAL_ERROR", "Failed to update segment", 500)
-    return _ok(res.data[0])
+        return error_response("INTERNAL_ERROR", "Failed to update segment", 500)
+    return success_response(res.data[0])
 
 
 async def delete_segment(request: Request, segment_id: str) -> JSONResponse:
@@ -435,11 +420,11 @@ async def delete_segment(request: Request, segment_id: str) -> JSONResponse:
     org_id = user["org_id"]
 
     if not _assert_segment_in_org(segment_id, org_id):
-        return _err("NOT_FOUND", "Segment not found", 404)
+        return error_response("NOT_FOUND", "Segment not found", 404)
 
     sb = get_supabase()
     sb.table("logistics_route_segments").delete().eq("id", segment_id).execute()
-    return _ok()
+    return success_response()
 
 
 async def reorder_segments(request: Request) -> JSONResponse:
@@ -467,19 +452,19 @@ async def reorder_segments(request: Request) -> JSONResponse:
     try:
         body = await request.json()
     except Exception:
-        return _err("BAD_REQUEST", "Invalid JSON", 400)
+        return error_response("BAD_REQUEST", "Invalid JSON", 400)
 
     invoice_id = body.get("invoice_id")
     sequence = body.get("sequence")
     if not invoice_id or not isinstance(sequence, list) or not sequence:
-        return _err(
+        return error_response(
             "VALIDATION_ERROR",
             "invoice_id and non-empty sequence[] are required",
             400,
         )
 
     if not _assert_invoice_in_org(invoice_id, org_id):
-        return _err("NOT_FOUND", "Invoice not found", 404)
+        return error_response("NOT_FOUND", "Invoice not found", 404)
 
     sb = get_supabase()
 
@@ -493,7 +478,7 @@ async def reorder_segments(request: Request) -> JSONResponse:
     )
     found_ids = {row["id"] for row in (existing.data or [])}
     if found_ids != set(sequence):
-        return _err(
+        return error_response(
             "VALIDATION_ERROR",
             "Some segment ids do not belong to this invoice",
             400,
@@ -519,7 +504,7 @@ async def reorder_segments(request: Request) -> JSONResponse:
         .order("sequence_order")
         .execute()
     )
-    return _ok(res.data or [])
+    return success_response(res.data or [])
 
 
 # ---------------------------------------------------------------------------
@@ -551,20 +536,20 @@ async def create_expense(request: Request) -> JSONResponse:
     try:
         body = await request.json()
     except Exception:
-        return _err("BAD_REQUEST", "Invalid JSON", 400)
+        return error_response("BAD_REQUEST", "Invalid JSON", 400)
 
     segment_id = body.get("segment_id")
     label = body.get("label")
     cost_rub = body.get("cost_rub")
     if not segment_id or not label or cost_rub is None:
-        return _err(
+        return error_response(
             "VALIDATION_ERROR",
             "segment_id, label, cost_rub are required",
             400,
         )
 
     if not _assert_segment_in_org(segment_id, org_id):
-        return _err("NOT_FOUND", "Segment not found", 404)
+        return error_response("NOT_FOUND", "Segment not found", 404)
 
     sb = get_supabase()
     payload = {
@@ -580,7 +565,7 @@ async def create_expense(request: Request) -> JSONResponse:
     if "currency_code" in body and body["currency_code"] is not None:
         currency = _validate_currency(body["currency_code"])
         if currency is None:
-            return _err(
+            return error_response(
                 "VALIDATION_ERROR",
                 f"Invalid currency_code. Allowed: {sorted(_SEGMENT_CURRENCIES)}",
                 400,
@@ -589,8 +574,8 @@ async def create_expense(request: Request) -> JSONResponse:
 
     res = sb.table("logistics_segment_expenses").insert(payload).execute()
     if not res.data:
-        return _err("INTERNAL_ERROR", "Failed to create expense", 500)
-    return _ok(res.data[0], status=201)
+        return error_response("INTERNAL_ERROR", "Failed to create expense", 500)
+    return success_response(res.data[0], status_code=201)
 
 
 async def delete_expense(request: Request, expense_id: str) -> JSONResponse:
@@ -625,10 +610,10 @@ async def delete_expense(request: Request, expense_id: str) -> JSONResponse:
         .execute()
     )
     if not res.data:
-        return _err("NOT_FOUND", "Expense not found", 404)
+        return error_response("NOT_FOUND", "Expense not found", 404)
 
     sb.table("logistics_segment_expenses").delete().eq("id", expense_id).execute()
-    return _ok()
+    return success_response()
 
 
 # ---------------------------------------------------------------------------
@@ -672,7 +657,7 @@ async def list_templates(request: Request) -> JSONResponse:
         segs.sort(key=lambda s: s.get("sequence_order") or 0)
         tpl["segments"] = segs
         tpl.pop("logistics_route_template_segments", None)
-    return _ok(templates)
+    return success_response(templates)
 
 
 async def create_template(request: Request) -> JSONResponse:
@@ -697,20 +682,20 @@ async def create_template(request: Request) -> JSONResponse:
     try:
         body = await request.json()
     except Exception:
-        return _err("BAD_REQUEST", "Invalid JSON", 400)
+        return error_response("BAD_REQUEST", "Invalid JSON", 400)
 
     name = (body.get("name") or "").strip()
     segments = body.get("segments") or []
     if not name:
-        return _err("VALIDATION_ERROR", "name is required", 400)
+        return error_response("VALIDATION_ERROR", "name is required", 400)
     if not isinstance(segments, list) or not segments:
-        return _err("VALIDATION_ERROR", "segments[] must be non-empty", 400)
+        return error_response("VALIDATION_ERROR", "segments[] must be non-empty", 400)
 
     for seg in segments:
         ft = seg.get("from_location_type")
         tt = seg.get("to_location_type")
         if ft not in _LOCATION_TYPES or tt not in _LOCATION_TYPES:
-            return _err(
+            return error_response(
                 "VALIDATION_ERROR",
                 f"Invalid location type. Allowed: {sorted(_LOCATION_TYPES)}",
                 400,
@@ -735,7 +720,7 @@ async def create_template(request: Request) -> JSONResponse:
         .execute()
     )
     if not tpl_res.data:
-        return _err("INTERNAL_ERROR", "Failed to create template", 500)
+        return error_response("INTERNAL_ERROR", "Failed to create template", 500)
     template = tpl_res.data[0]
     template_id = template["id"]
 
@@ -747,7 +732,7 @@ async def create_template(request: Request) -> JSONResponse:
         sb.table("logistics_route_template_segments").insert(seg_rows).execute()
     )
     template["segments"] = seg_res.data or []
-    return _ok(template, status=201)
+    return success_response(template, status_code=201)
 
 
 async def update_template(request: Request, template_id: str) -> JSONResponse:
@@ -774,20 +759,20 @@ async def update_template(request: Request, template_id: str) -> JSONResponse:
     try:
         body = await request.json()
     except Exception:
-        return _err("BAD_REQUEST", "Invalid JSON", 400)
+        return error_response("BAD_REQUEST", "Invalid JSON", 400)
 
     name = (body.get("name") or "").strip()
     segments = body.get("segments") or []
     if not name:
-        return _err("VALIDATION_ERROR", "name is required", 400)
+        return error_response("VALIDATION_ERROR", "name is required", 400)
     if not isinstance(segments, list) or not segments:
-        return _err("VALIDATION_ERROR", "segments[] must be non-empty", 400)
+        return error_response("VALIDATION_ERROR", "segments[] must be non-empty", 400)
 
     for seg in segments:
         ft = seg.get("from_location_type")
         tt = seg.get("to_location_type")
         if ft not in _LOCATION_TYPES or tt not in _LOCATION_TYPES:
-            return _err(
+            return error_response(
                 "VALIDATION_ERROR",
                 f"Invalid location type. Allowed: {sorted(_LOCATION_TYPES)}",
                 400,
@@ -807,7 +792,7 @@ async def update_template(request: Request, template_id: str) -> JSONResponse:
         .execute()
     )
     if not existing.data:
-        return _err("NOT_FOUND", "Template not found", 404)
+        return error_response("NOT_FOUND", "Template not found", 404)
 
     sb.table("logistics_route_templates").update(
         {"name": name, "description": body.get("description")}
@@ -824,7 +809,7 @@ async def update_template(request: Request, template_id: str) -> JSONResponse:
     ]
     sb.table("logistics_route_template_segments").insert(seg_rows).execute()
 
-    return _ok({"template_id": template_id})
+    return success_response({"template_id": template_id})
 
 
 async def delete_template(request: Request, template_id: str) -> JSONResponse:
@@ -851,10 +836,10 @@ async def delete_template(request: Request, template_id: str) -> JSONResponse:
         .execute()
     )
     if not tpl.data:
-        return _err("NOT_FOUND", "Template not found", 404)
+        return error_response("NOT_FOUND", "Template not found", 404)
 
     sb.table("logistics_route_templates").delete().eq("id", template_id).execute()
-    return _ok()
+    return success_response()
 
 
 async def apply_template(request: Request, template_id: str) -> JSONResponse:
@@ -888,18 +873,18 @@ async def apply_template(request: Request, template_id: str) -> JSONResponse:
 
     invoice_id = request.query_params.get("invoice_id")
     if not invoice_id:
-        return _err("VALIDATION_ERROR", "invoice_id is required", 400)
+        return error_response("VALIDATION_ERROR", "invoice_id is required", 400)
 
     invoice = _assert_invoice_in_org(invoice_id, org_id)
     if not invoice:
-        return _err("NOT_FOUND", "Invoice not found", 404)
+        return error_response("NOT_FOUND", "Invoice not found", 404)
 
     body: dict = {}
     try:
         if await request.body():
             body = await request.json()
     except Exception:
-        return _err("BAD_REQUEST", "Invalid JSON", 400)
+        return error_response("BAD_REQUEST", "Invalid JSON", 400)
 
     location_map: dict = body.get("location_map") or {}
     replace = bool(body.get("replace"))
@@ -925,7 +910,7 @@ async def apply_template(request: Request, template_id: str) -> JSONResponse:
         found = {row["id"] for row in (check.data or [])}
         bad = override_ids - found
         if bad:
-            return _err(
+            return error_response(
                 "VALIDATION_ERROR",
                 f"Location IDs not in org: {sorted(bad)}",
                 403,
@@ -944,11 +929,11 @@ async def apply_template(request: Request, template_id: str) -> JSONResponse:
         .execute()
     )
     if not tpl.data:
-        return _err("NOT_FOUND", "Template not found", 404)
+        return error_response("NOT_FOUND", "Template not found", 404)
 
     template_segments = tpl.data[0].get("logistics_route_template_segments") or []
     if not template_segments:
-        return _err("VALIDATION_ERROR", "Template has no segments", 400)
+        return error_response("VALIDATION_ERROR", "Template has no segments", 400)
     template_segments.sort(key=lambda s: s.get("sequence_order") or 0)
 
     # Hybrid resolution (3.5): when a template segment carries a concrete
@@ -1000,7 +985,7 @@ async def apply_template(request: Request, template_id: str) -> JSONResponse:
 
     missing = needed_types - set(resolved.keys())
     if missing:
-        return _err(
+        return error_response(
             "VALIDATION_ERROR",
             f"No location available for type(s): {sorted(missing)}. "
             "Provide location_map overrides or create matching locations.",
@@ -1055,7 +1040,7 @@ async def apply_template(request: Request, template_id: str) -> JSONResponse:
         for idx, ts in enumerate(template_segments)
     ]
     res = sb.table("logistics_route_segments").insert(new_rows).execute()
-    return _ok(res.data or [], status=201)
+    return success_response(res.data or [], status_code=201)
 
 
 # ---------------------------------------------------------------------------
@@ -1096,18 +1081,18 @@ async def complete(request: Request) -> JSONResponse:
     try:
         body = await request.json()
     except Exception:
-        return _err("BAD_REQUEST", "Invalid JSON", 400)
+        return error_response("BAD_REQUEST", "Invalid JSON", 400)
 
     invoice_id = body.get("invoice_id")
     if not invoice_id:
-        return _err("VALIDATION_ERROR", "invoice_id is required", 400)
+        return error_response("VALIDATION_ERROR", "invoice_id is required", 400)
 
     invoice = _assert_invoice_in_org(invoice_id, org_id)
     if not invoice:
-        return _err("NOT_FOUND", "Invoice not found", 404)
+        return error_response("NOT_FOUND", "Invoice not found", 404)
 
     if invoice.get("logistics_needs_review_since"):
-        return _err(
+        return error_response(
             "CONFLICT",
             "Pending review: procurement changed items since last completion. "
             "Acknowledge review first.",
@@ -1128,7 +1113,7 @@ async def complete(request: Request) -> JSONResponse:
         .execute()
     )
     if not res.data:
-        return _err("INTERNAL_ERROR", "Failed to complete logistics", 500)
+        return error_response("INTERNAL_ERROR", "Failed to complete logistics", 500)
     row = res.data[0]
 
     # Roll up per-invoice completion to the quote level when ALL invoices
@@ -1167,7 +1152,7 @@ async def complete(request: Request) -> JSONResponse:
                     quote_id,
                 )
 
-    return _ok(
+    return success_response(
         {
             "invoice_id": row["id"],
             "logistics_completed_at": row.get("logistics_completed_at"),
@@ -1199,14 +1184,14 @@ async def acknowledge_review(request: Request) -> JSONResponse:
     try:
         body = await request.json()
     except Exception:
-        return _err("BAD_REQUEST", "Invalid JSON", 400)
+        return error_response("BAD_REQUEST", "Invalid JSON", 400)
 
     invoice_id = body.get("invoice_id")
     if not invoice_id:
-        return _err("VALIDATION_ERROR", "invoice_id is required", 400)
+        return error_response("VALIDATION_ERROR", "invoice_id is required", 400)
 
     if not _assert_invoice_in_org(invoice_id, org_id):
-        return _err("NOT_FOUND", "Invoice not found", 404)
+        return error_response("NOT_FOUND", "Invoice not found", 404)
 
     sb = get_supabase()
     res = (
@@ -1216,8 +1201,8 @@ async def acknowledge_review(request: Request) -> JSONResponse:
         .execute()
     )
     if not res.data:
-        return _err("INTERNAL_ERROR", "Failed to acknowledge review", 500)
-    return _ok(
+        return error_response("INTERNAL_ERROR", "Failed to acknowledge review", 500)
+    return success_response(
         {
             "invoice_id": invoice_id,
             "logistics_needs_review_since": None,

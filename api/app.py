@@ -24,10 +24,12 @@ import os
 
 import sentry_sdk
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from starlette.middleware.sessions import SessionMiddleware
 
 from api.auth import ApiAuthMiddleware
+from api.lib.errors import error_response
 from api.routers import (
     admin,
     chat,
@@ -74,6 +76,28 @@ api_sub_app = FastAPI(
     openapi_url="/openapi.json",  # → /api/openapi.json
     redoc_url=None,
 )
+
+
+@api_sub_app.exception_handler(RequestValidationError)
+async def validation_error_handler(
+    request: Request, exc: RequestValidationError
+):
+    """Normalize Pydantic 422 errors to the canonical envelope shape.
+
+    FastAPI's default returns ``{"detail": [...]}`` which violates
+    ``.kiro/steering/api-first.md``. Surface the first field error in the
+    message; clients that need the full list can read the raw exception via
+    logs.
+    """
+    errors = exc.errors()
+    first = errors[0] if errors else {}
+    # Skip the leading "body"/"query"/"path" element of loc — leaves the field
+    # path the client cares about (e.g. "items.0.quantity").
+    field = ".".join(str(p) for p in first.get("loc", [])[1:])
+    msg = first.get("msg", "Validation failed")
+    message = f"{field}: {msg}" if field else msg
+    return error_response("VALIDATION_ERROR", message, status_code=422)
+
 
 api_sub_app.include_router(public.router)
 api_sub_app.include_router(admin.router, prefix="/admin")  # → /api/admin/*
