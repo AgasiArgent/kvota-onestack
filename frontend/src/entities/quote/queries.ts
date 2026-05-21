@@ -27,11 +27,16 @@ export async function fetchQuotesList(
   const pageSize = params.pageSize ?? DEFAULT_PAGE_SIZE;
   const offset = (page - 1) * pageSize;
 
-  // Build base query — select scalar columns only (FK joins resolved separately)
+  // Build base query — select scalar columns only (FK joins resolved separately).
+  // Note: `kvota.quotes` has TWO columns for the quote total in quote currency
+  // — the legacy `total_amount_quote` (never written by anyone) and
+  // `total_quote_currency` (written by api/quotes.calculate_quote, see line ~347).
+  // Alias the populated one to the TS field name so the registry actually
+  // shows what calc produced. Schema cleanup (drop the dupe) — separate PR.
   let query = supabase
     .from("quotes")
     .select(
-      "id, idn_quote, created_at, workflow_status, total_amount_quote, total_profit_usd, currency, customer_id, created_by, version_count, current_version, assigned_logistics_user, assigned_customs_user",
+      "id, idn_quote, created_at, workflow_status, total_amount_quote:total_quote_currency, total_profit_usd, currency, customer_id, created_by, version_count, current_version, assigned_logistics_user, assigned_customs_user",
       { count: "exact" }
     )
     .eq("organization_id", user.orgId)
@@ -41,7 +46,7 @@ export async function fetchQuotesList(
   const sortField = params.sort?.replace(/^-/, "") ?? "created_at";
   const sortAsc = params.sort ? !params.sort.startsWith("-") : false;
   const sortColumn =
-    sortField === "amount" ? "total_amount_quote" : "created_at";
+    sortField === "amount" ? "total_quote_currency" : "created_at";
   query = query.order(sortColumn, { ascending: sortAsc });
 
   // Role-based filtering per .kiro/steering/access-control.md:
@@ -87,12 +92,13 @@ export async function fetchQuotesList(
     query = query.in("created_by", params.manager as string[]);
   }
 
-  // Amount range filter
+  // Amount range filter — uses the populated `total_quote_currency` column
+  // (see SELECT alias above).
   if (params.amount_min !== undefined) {
-    query = query.gte("total_amount_quote", params.amount_min);
+    query = query.gte("total_quote_currency", params.amount_min);
   }
   if (params.amount_max !== undefined) {
-    query = query.lte("total_amount_quote", params.amount_max);
+    query = query.lte("total_quote_currency", params.amount_max);
   }
 
   // Brand filter — resolve to quote IDs via quote_items pre-query
