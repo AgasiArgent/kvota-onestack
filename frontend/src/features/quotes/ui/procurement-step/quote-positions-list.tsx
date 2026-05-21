@@ -238,7 +238,9 @@ export function QuotePositionsList({
                 <TableCell className="truncate max-w-40 font-mono text-xs">
                   {item.product_code ?? "\u2014"}
                 </TableCell>
-                <TableCell>{item.product_name}</TableCell>
+                <TableCell className="max-w-md whitespace-normal break-words">
+                  {item.product_name}
+                </TableCell>
                 <TableCell>
                   {chips.length === 0 ? (
                     <span className="text-muted-foreground text-xs">
