@@ -7,10 +7,16 @@
  * which pointed at the archived FastHTML route. Result: silent failure
  * on prod (page navigation went to a dead 404 page).
  *
- * Post-fix: the button opens the Next.js proxy
- *   /export/validation/{quoteId}
- * which forwards to the new `/api/quotes/{id}/export/validation`
- * endpoint. Gating moves from `!isApproved` (controller-only) to
+ * Intermediate fix: button called
+ *   window.open('/export/validation/{quoteId}', '_blank')
+ * which forwarded to the new Python endpoint — but on non-200 the new
+ * tab rendered the raw JSON error envelope.
+ *
+ * Current contract (downloadValidationExcel helper): click triggers a
+ * blob-or-toast flow via the helper, no new tab is opened. We mock the
+ * helper module and assert it is called with the quote id.
+ *
+ * Gating: still moves from `!isApproved` (controller-only) to
  * `!hasCalculation` (anyone can download once a calc exists).
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -29,12 +35,22 @@ vi.mock("sonner", () => ({
   },
 }));
 
+const { downloadValidationExcelMock } = vi.hoisted(() => ({
+  downloadValidationExcelMock: vi.fn(),
+}));
+vi.mock("@/features/quotes/lib/download-validation-excel", () => ({
+  downloadValidationExcel: downloadValidationExcelMock,
+}));
+
 import { CalculationActionBar } from "../calculation-action-bar";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  downloadValidationExcelMock.mockReset();
+});
 
 describe("CalculationActionBar — Validation Excel button", () => {
-  it("opens /export/validation/{quoteId} (not legacyAppUrl) when clicked", () => {
+  it("calls downloadValidationExcel(quoteId) when clicked (no window.open)", () => {
     const openSpy = vi
       .spyOn(window, "open")
       .mockImplementation(() => null as unknown as Window);
@@ -52,10 +68,10 @@ describe("CalculationActionBar — Validation Excel button", () => {
     const button = screen.getByRole("button", { name: /Validation Excel/ });
     button.click();
 
-    expect(openSpy).toHaveBeenCalledTimes(1);
-    expect(openSpy).toHaveBeenCalledWith("/export/validation/q-1", "_blank");
-    // Must NOT point at the dead FastHTML route
-    expect(openSpy.mock.calls[0][0]).not.toMatch(/legacy|kvotaflow\.ru/);
+    expect(downloadValidationExcelMock).toHaveBeenCalledTimes(1);
+    expect(downloadValidationExcelMock).toHaveBeenCalledWith("q-1");
+    // Crucially: no new tab opens. The helper handles success/error inline.
+    expect(openSpy).not.toHaveBeenCalled();
 
     openSpy.mockRestore();
   });
@@ -77,9 +93,9 @@ describe("CalculationActionBar — Validation Excel button", () => {
 
   it("is disabled when hasCalculation is false", () => {
     // Note: when hasCalculation is false the entire export section is hidden
-    // (lines 120-143 of calculation-action-bar.tsx wrap the buttons in
-    // `{hasCalculation && (...)}`). So a "disabled when no calc" assertion
-    // collapses into "not rendered". This locks that contract.
+    // (the buttons are wrapped in `{hasCalculation && (...)}`). So a
+    // "disabled when no calc" assertion collapses into "not rendered".
+    // This locks that contract.
     render(
       <CalculationActionBar
         quoteId="q-1"

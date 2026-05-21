@@ -9,6 +9,7 @@ import {
   approveQuote,
   escalateQuote,
 } from "@/entities/quote/mutations";
+import { downloadValidationExcel } from "@/features/quotes/lib/download-validation-excel";
 import { ReturnSheetDialog } from "./return-sheet-dialog";
 
 interface ControlActionBarProps {
@@ -127,7 +128,7 @@ export function ControlActionBar({
             <Button
               size="sm"
               variant="outline"
-              onClick={() => window.open(`/export/validation/${quoteId}`, "_blank")}
+              onClick={() => downloadValidationExcel(quoteId)}
             >
               <FileDown size={14} />
               Validation Excel
