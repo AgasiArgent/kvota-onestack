@@ -25,6 +25,7 @@ from datetime import datetime
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+from api.lib.errors import error_response
 from services.clickup_service import create_clickup_bug_task
 from services.database import get_supabase
 from services.telegram_service import send_admin_bug_report_with_photo
@@ -308,9 +309,7 @@ async def update_feedback_status(
     """
     auth_key = request.headers.get("x-internal-key", "")
     if not INTERNAL_API_KEY or auth_key != INTERNAL_API_KEY:
-        return JSONResponse(
-            {"success": False, "error": "Unauthorized"}, status_code=401
-        )
+        return error_response("UNAUTHORIZED", "Unauthorized", status_code=401)
 
     status = request.query_params.get("status", "resolved")
 

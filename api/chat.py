@@ -14,6 +14,7 @@ import logging
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+from api.lib.errors import error_response
 from services.telegram_service import send_chat_message_notification
 
 logger = logging.getLogger(__name__)
@@ -45,35 +46,27 @@ async def notify(request: Request) -> JSONResponse:
         except (AssertionError, AttributeError):
             session = None
         if not session:
-            return JSONResponse(
-                {"success": False, "error": "Unauthorized"}, status_code=401
-            )
+            return error_response("UNAUTHORIZED", "Unauthorized", status_code=401)
         user = session.get("user", {})
         user_id = user.get("id")
 
     if not user_id:
-        return JSONResponse(
-            {"success": False, "error": "Unauthorized"}, status_code=401
-        )
+        return error_response("UNAUTHORIZED", "Unauthorized", status_code=401)
 
     # Parse JSON body
     try:
         body = await request.json()
     except Exception:
-        return JSONResponse(
-            {"success": False, "error": "Invalid JSON"}, status_code=400
-        )
+        return error_response("BAD_REQUEST", "Invalid JSON", status_code=400)
 
     quote_id = body.get("quote_id", "").strip()
     message_body = body.get("body", "").strip()
     mentions = body.get("mentions") or []
 
     if not quote_id or not message_body:
-        return JSONResponse(
-            {
-                "success": False,
-                "error": "quote_id and body are required",
-            },
+        return error_response(
+            "VALIDATION_ERROR",
+            "quote_id and body are required",
             status_code=400,
         )
 

@@ -36,6 +36,7 @@ from starlette.responses import JSONResponse
 
 from postgrest.exceptions import APIError as PostgrestAPIError
 
+from api.lib.errors import error_response
 from services import rate_resolver
 from services.alta_client import AltaApiError
 from services.database import get_supabase
@@ -209,27 +210,19 @@ async def bulk_update_items(request: Request, quote_id: str) -> JSONResponse:
     """
     user, role_codes = _resolve_dual_auth(request)
     if not user:
-        return JSONResponse(
-            {"success": False, "error": "Not authenticated"}, status_code=401
-        )
+        return error_response("UNAUTHORIZED", "Not authenticated", status_code=401)
 
     org_id = user.get("org_id")
     if not org_id:
-        return JSONResponse(
-            {"success": False, "error": "Not authenticated"}, status_code=401
-        )
+        return error_response("UNAUTHORIZED", "Not authenticated", status_code=401)
 
     if not (set(role_codes) & _CUSTOMS_ROLES):
-        return JSONResponse(
-            {"success": False, "error": "Unauthorized"}, status_code=403
-        )
+        return error_response("FORBIDDEN", "Unauthorized", status_code=403)
 
     try:
         body = await request.json()
     except Exception:
-        return JSONResponse(
-            {"success": False, "error": "Invalid JSON"}, status_code=400
-        )
+        return error_response("BAD_REQUEST", "Invalid JSON", status_code=400)
 
     items = body.get("items", [])
     if not items:
@@ -248,20 +241,16 @@ async def bulk_update_items(request: Request, quote_id: str) -> JSONResponse:
     )
 
     if not quote_result.data:
-        return JSONResponse(
-            {"success": False, "error": "Quote not found"}, status_code=404
-        )
+        return error_response("NOT_FOUND", "Quote not found", status_code=404)
 
     quote = quote_result.data[0]
     workflow_status = quote.get("workflow_status", "draft")
 
     # Procurement must be completed before customs edits are allowed.
     if workflow_status not in _READY_STATUSES or quote.get("customs_completed_at"):
-        return JSONResponse(
-            {
-                "success": False,
-                "error": "Quote not editable - waiting for procurement",
-            },
+        return error_response(
+            "INVALID_STATE",
+            "Quote not editable - waiting for procurement",
             status_code=400,
         )
 
