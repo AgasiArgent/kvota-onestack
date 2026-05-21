@@ -157,7 +157,10 @@ class TestInternalFeedbackStatusHandler:
             req = _make_internal_request(key_header=None)
             resp = _run(update_feedback_status(req, "FB-TEST"))
         assert resp.status_code == 401
-        assert _body(resp) == {"success": False, "error": "Unauthorized"}
+        assert _body(resp) == {
+            "success": False,
+            "error": {"code": "UNAUTHORIZED", "message": "Unauthorized"},
+        }
 
     def test_wrong_key_returns_401(self):
         """Mismatching X-Internal-Key → 401 Unauthorized."""
@@ -165,7 +168,10 @@ class TestInternalFeedbackStatusHandler:
             req = _make_internal_request(key_header="bad-key")
             resp = _run(update_feedback_status(req, "FB-TEST"))
         assert resp.status_code == 401
-        assert _body(resp) == {"success": False, "error": "Unauthorized"}
+        assert _body(resp) == {
+            "success": False,
+            "error": {"code": "UNAUTHORIZED", "message": "Unauthorized"},
+        }
 
     def test_empty_configured_key_rejects_all(self):
         """If INTERNAL_API_KEY is empty, every request is rejected."""

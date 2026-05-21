@@ -135,7 +135,7 @@ class TestBulkUpdateItems:
         assert resp.status_code == 401
         assert _body(resp) == {
             "success": False,
-            "error": "Not authenticated",
+            "error": {"code": "UNAUTHORIZED", "message": "Not authenticated"},
         }
 
     @patch("api.customs.get_user_role_codes")
@@ -149,7 +149,10 @@ class TestBulkUpdateItems:
         )
         resp = _run(bulk_update_items(req, "q-1"))
         assert resp.status_code == 403
-        assert _body(resp) == {"success": False, "error": "Unauthorized"}
+        assert _body(resp) == {
+            "success": False,
+            "error": {"code": "FORBIDDEN", "message": "Unauthorized"},
+        }
 
     @patch("api.customs.get_user_role_codes")
     def test_invalid_json_returns_400(self, mock_roles):
@@ -162,7 +165,10 @@ class TestBulkUpdateItems:
         )
         resp = _run(bulk_update_items(req, "q-1"))
         assert resp.status_code == 400
-        assert _body(resp) == {"success": False, "error": "Invalid JSON"}
+        assert _body(resp) == {
+            "success": False,
+            "error": {"code": "BAD_REQUEST", "message": "Invalid JSON"},
+        }
 
     @patch("api.customs.get_user_role_codes")
     def test_empty_items_returns_success_noop(self, mock_roles):
@@ -195,7 +201,10 @@ class TestBulkUpdateItems:
         )
         resp = _run(bulk_update_items(req, "q-1"))
         assert resp.status_code == 404
-        assert _body(resp) == {"success": False, "error": "Quote not found"}
+        assert _body(resp) == {
+            "success": False,
+            "error": {"code": "NOT_FOUND", "message": "Quote not found"},
+        }
 
     @patch("api.customs.get_supabase")
     @patch("api.customs.get_user_role_codes")
@@ -212,8 +221,10 @@ class TestBulkUpdateItems:
         )
         resp = _run(bulk_update_items(req, "q-1"))
         assert resp.status_code == 400
-        assert _body(resp)["success"] is False
-        assert "waiting for procurement" in _body(resp)["error"]
+        body = _body(resp)
+        assert body["success"] is False
+        assert body["error"]["code"] == "INVALID_STATE"
+        assert "waiting for procurement" in body["error"]["message"]
 
     @patch("api.customs.get_supabase")
     @patch("api.customs.get_user_role_codes")

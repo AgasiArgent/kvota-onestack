@@ -109,7 +109,7 @@ class TestDownloadDocument:
         assert resp.status_code == 404
         assert _body(resp) == {
             "success": False,
-            "error": "Document not found",
+            "error": {"code": "NOT_FOUND", "message": "Document not found"},
         }
 
     @patch("api.documents.get_user_role_codes")
@@ -135,7 +135,10 @@ class TestDeleteDocument:
         req = _make_request(api_user_id=None)
         resp = _run(delete_document_api(req, "doc-1"))
         assert resp.status_code == 401
-        assert _body(resp) == {"success": False, "error": "Unauthorized"}
+        assert _body(resp) == {
+            "success": False,
+            "error": {"code": "UNAUTHORIZED", "message": "Unauthorized"},
+        }
 
     @patch("api.documents.get_user_role_codes")
     def test_missing_role_returns_403(self, mock_roles):
@@ -144,7 +147,10 @@ class TestDeleteDocument:
         req = _make_request(api_user_id="user-1", user_metadata={"org_id": "o-1"})
         resp = _run(delete_document_api(req, "doc-1"))
         assert resp.status_code == 403
-        assert _body(resp) == {"success": False, "error": "Forbidden"}
+        assert _body(resp) == {
+            "success": False,
+            "error": {"code": "FORBIDDEN", "message": "Forbidden"},
+        }
 
     @patch("api.documents.delete_document")
     @patch("api.documents.get_user_role_codes")
@@ -169,7 +175,7 @@ class TestDeleteDocument:
         assert resp.status_code == 500
         assert _body(resp) == {
             "success": False,
-            "error": "Storage error",
+            "error": {"code": "INTERNAL_ERROR", "message": "Storage error"},
         }
 
     @patch("api.documents.delete_document")

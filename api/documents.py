@@ -19,6 +19,7 @@ import logging
 from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse, Response
 
+from api.lib.errors import error_response
 from services.database import get_supabase
 from services.document_service import delete_document, get_download_url
 from services.role_service import get_user_role_codes
@@ -101,9 +102,7 @@ async def download_document(request: Request, document_id: str) -> Response:
 
     download_url = get_download_url(document_id, expires_in=3600, force_download=True)
     if not download_url:
-        return JSONResponse(
-            {"success": False, "error": "Document not found"}, status_code=404
-        )
+        return error_response("NOT_FOUND", "Document not found", status_code=404)
 
     return RedirectResponse(download_url, status_code=302)
 
@@ -124,19 +123,13 @@ async def delete_document_api(request: Request, document_id: str) -> JSONRespons
     """
     user, role_codes = _resolve_dual_auth(request)
     if not user:
-        return JSONResponse(
-            {"success": False, "error": "Unauthorized"}, status_code=401
-        )
+        return error_response("UNAUTHORIZED", "Unauthorized", status_code=401)
 
     allowed_roles = {"procurement", "admin", "head_of_procurement"}
     if not (set(role_codes) & allowed_roles):
-        return JSONResponse(
-            {"success": False, "error": "Forbidden"}, status_code=403
-        )
+        return error_response("FORBIDDEN", "Forbidden", status_code=403)
 
     success, error = delete_document(document_id)
     if success:
         return JSONResponse({"success": True})
-    return JSONResponse(
-        {"success": False, "error": error or "Delete failed"}, status_code=500
-    )
+    return error_response("INTERNAL_ERROR", error or "Delete failed", status_code=500)
