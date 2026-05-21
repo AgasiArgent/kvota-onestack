@@ -96,26 +96,40 @@ for file in $(ls -1 migrations/*.sql 2>/dev/null | sort); do
 
     echo "  Applying: $filename..."
 
-    # Apply migration (don't stop on error)
-    # Set search_path so old migrations without kvota. prefix work correctly
-    MIGRATION_OUTPUT=$(docker exec -i supabase-db psql -U postgres -d postgres 2>&1 << MIGRATION_EOF
+    # Apply migration with ON_ERROR_STOP=1 so any statement-level ERROR aborts
+    # the file instead of continuing silently to the next statement. This
+    # closes a silent-partial-success hole: previously, a file like
+    #   ALTER TABLE foo DROP COLUMN a;  -- ERROR
+    #   ALTER TABLE bar DROP COLUMN b;  -- SUCCESS
+    # would report "✅ Success" because the last statement passed and the
+    # grep-based filter below didn't recognise the first error. See
+    # m318 incident 2026-05-21 and feedback_apply_migrations_silent_partial.md.
+    #
+    # search_path is set so old migrations without an explicit `kvota.`
+    # prefix still resolve correctly.
+    MIGRATION_OUTPUT=$(docker exec -i supabase-db psql -U postgres -d postgres \
+        --set ON_ERROR_STOP=1 2>&1 << MIGRATION_EOF
 SET search_path TO kvota, public;
 $(cat "$file")
 MIGRATION_EOF
 )
     MIGRATION_STATUS=$?
 
-    # Check if migration had critical errors (not just NOTICEs or "already exists")
-    if echo "$MIGRATION_OUTPUT" | grep -q "ERROR.*relation.*does not exist" || \
-       echo "$MIGRATION_OUTPUT" | grep -q "ERROR.*syntax error" || \
-       echo "$MIGRATION_OUTPUT" | grep -q "ERROR.*violates.*constraint" && ! echo "$MIGRATION_OUTPUT" | grep -q "already exists"; then
-        echo "  ❌ Failed with critical error"
-        echo "$MIGRATION_OUTPUT" | grep "ERROR" | head -5
+    # psql exit codes (with ON_ERROR_STOP=1):
+    #   0 = clean run
+    #   3 = a statement-level ERROR aborted the file
+    #   1/2 = client error (bad args, connection failure)
+    # Any non-zero status means we must NOT mark the migration as applied —
+    # the prior implementation marked it applied as long as the curated grep
+    # didn't fire, which silently accepted half-applied migrations.
+    if [ $MIGRATION_STATUS -ne 0 ]; then
+        echo "  ❌ Failed (psql exit $MIGRATION_STATUS)"
+        echo "$MIGRATION_OUTPUT" | grep -E "ERROR|FATAL|psql:" | head -10 | sed 's/^/      /'
         FAILED_COUNT=$((FAILED_COUNT + 1))
         continue
     fi
 
-    # Record migration as applied (even if there were non-critical errors like "already exists")
+    # Record migration as applied
     docker exec supabase-db psql -U postgres -d postgres -c "
     INSERT INTO kvota.migrations (filename) VALUES ('$filename')
         ON CONFLICT (filename) DO NOTHING;
