@@ -3,6 +3,7 @@ import { escapePostgrestFilter } from "@/shared/lib/supabase/escape-filter";
 import { findCountryByName } from "@/shared/ui/geo";
 import { canEditQuoteCustomerFields, isSalesOnly } from "@/shared/lib/roles";
 import { getAssignedCustomerIds } from "@/shared/lib/access";
+import { extractErrorMessage } from "@/shared/lib/errors";
 
 // Sentinel UUID used to force a query to return zero rows when a sales-only
 // user has no customer assignments. Postgres .in() with an empty array is
@@ -37,7 +38,7 @@ async function callWorkflowTransition(
 
   const data = await res.json();
   if (!res.ok || !data.success) {
-    throw new Error(data.error || "Workflow transition failed");
+    throw new Error(extractErrorMessage(data) ?? "Workflow transition failed");
   }
   return data;
 }
@@ -1727,7 +1728,7 @@ export async function cancelQuote(quoteId: string, reason: string) {
 
   const data = await res.json();
   if (!res.ok || !data.success) {
-    throw new Error(data.error || "Не удалось отменить КП");
+    throw new Error(extractErrorMessage(data) ?? "Не удалось отменить КП");
   }
 }
 
@@ -1895,7 +1896,7 @@ export async function submitToProcurementWithChecklist(
 
   const data = await res.json();
   if (!res.ok || data.error) {
-    throw new Error(data.error || "Не удалось передать в закупки");
+    throw new Error(extractErrorMessage(data) ?? "Не удалось передать в закупки");
   }
 }
 

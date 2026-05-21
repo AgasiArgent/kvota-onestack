@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/card";
 import { Layers, UserPlus, CheckCircle2 } from "lucide-react";
 import { submitRegistration } from "../actions";
+import { extractErrorMessage } from "@/shared/lib/errors";
 
 interface FormData {
   first_name: string;
@@ -54,7 +55,7 @@ export function RegistrationForm() {
       const result = await submitRegistration(form);
 
       if (!result.success) {
-        setError(result.error ?? "Ошибка отправки");
+        setError(extractErrorMessage(result) ?? "Ошибка отправки");
         return;
       }
 

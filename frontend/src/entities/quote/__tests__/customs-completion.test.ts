@@ -92,12 +92,20 @@ describe("completeCustoms — workflow transition contract", () => {
 
   it("throws Error with server message on 422 «Customs already completed»", async () => {
     // Mirrors the real prod response observed on quote b4e56dac.
+    // Post-envelope-refactor (PR 1, 2026-05-21): the mutation routes the
+    // server payload through `extractErrorMessage`, which reads
+    // `error.message` from the structured envelope. The flat-string shape
+    // is no longer surfaced — backend will migrate to the structured shape
+    // in PRs 2-4 of the envelope refactor.
     globalThis.fetch = vi.fn(
       async () =>
         new Response(
           JSON.stringify({
             success: false,
-            error: "Customs already completed",
+            error: {
+              code: "ALREADY_COMPLETED",
+              message: "Customs already completed",
+            },
           }),
           { status: 422 },
         ),
@@ -115,7 +123,11 @@ describe("completeCustoms — workflow transition contract", () => {
         new Response(
           JSON.stringify({
             success: false,
-            error: "Cannot complete customs: 3 items missing HS code (ТН ВЭД)",
+            error: {
+              code: "MISSING_HS_CODE",
+              message:
+                "Cannot complete customs: 3 items missing HS code (ТН ВЭД)",
+            },
           }),
           { status: 422 },
         ),

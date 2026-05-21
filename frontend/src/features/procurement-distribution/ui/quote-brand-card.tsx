@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { UserSearchSelect } from "@/shared/ui/procurement/user-search-select";
 import { assignBrandGroup } from "@/entities/quote/server-actions";
 import { SUBSTATUS_LABELS_RU } from "@/shared/lib/workflow-substates";
+import { extractErrorMessage } from "@/shared/lib/errors";
 import type {
   QuoteWithBrandGroups,
   BrandGroup,
@@ -90,7 +91,7 @@ export function QuoteBrandCard({ data, users, orgId }: Props) {
       }
       router.refresh();
     } else {
-      toast.error(result.error ?? "Ошибка назначения");
+      toast.error(extractErrorMessage(result) ?? "Ошибка назначения");
     }
 
     setAssigningKey(null);

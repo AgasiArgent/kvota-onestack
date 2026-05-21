@@ -6,6 +6,7 @@ import { Calculator, FileDown, Loader2, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { downloadValidationExcel } from "@/features/quotes/lib/download-validation-excel";
+import { extractErrorMessage } from "@/shared/lib/errors";
 
 interface CalculationActionBarProps {
   quoteId: string;
@@ -41,7 +42,7 @@ export function CalculationActionBar({
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Calculation failed");
+      if (!res.ok) throw new Error(extractErrorMessage(data) ?? "Calculation failed");
 
       toast.success("Расчёт выполнен");
       router.refresh();
