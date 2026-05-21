@@ -84,14 +84,20 @@ class TestChatNotifyHandler:
         req = _make_request(api_user_id=None)
         resp = _run(notify(req))
         assert resp.status_code == 401
-        assert _body(resp) == {"success": False, "error": "Unauthorized"}
+        assert _body(resp) == {
+            "success": False,
+            "error": {"code": "UNAUTHORIZED", "message": "Unauthorized"},
+        }
 
     def test_invalid_json_returns_400(self):
         """Body that fails to parse as JSON → 400 Invalid JSON."""
         req = _make_request(raw_body_error=True)
         resp = _run(notify(req))
         assert resp.status_code == 400
-        assert _body(resp) == {"success": False, "error": "Invalid JSON"}
+        assert _body(resp) == {
+            "success": False,
+            "error": {"code": "BAD_REQUEST", "message": "Invalid JSON"},
+        }
 
     def test_missing_quote_id_returns_400(self):
         """JSON body without quote_id or body → 400 validation envelope."""
@@ -100,7 +106,10 @@ class TestChatNotifyHandler:
         assert resp.status_code == 400
         assert _body(resp) == {
             "success": False,
-            "error": "quote_id and body are required",
+            "error": {
+                "code": "VALIDATION_ERROR",
+                "message": "quote_id and body are required",
+            },
         }
 
     @patch("api.chat.send_chat_message_notification", new_callable=AsyncMock)
