@@ -79,9 +79,23 @@ describe("extractErrorMessage", () => {
       expect(extractErrorMessage(err)).toBeNull();
     });
 
-    it("returns null when nested error is not an object", () => {
+    it("returns the legacy flat-string error message", () => {
+      // Legacy backend shape `{error: "string"}` — emitted by api/quotes.py
+      // and 4 other files until PRs 2-4 of the envelope refactor migrate
+      // them to `{error: {code, message}}`. Helper accepts both during
+      // the migration window.
       const err = { success: false, error: "string error" };
-      expect(extractErrorMessage(err)).toBeNull();
+      expect(extractErrorMessage(err)).toBe("string error");
+    });
+
+    it("prefers structured error.message over a sibling flat-string", () => {
+      // If a payload ever carries both shapes (e.g. mid-deploy mixed
+      // responses), the structured shape wins — branch 2 runs before 2b.
+      const err = {
+        success: false,
+        error: { code: "X", message: "structured" },
+      };
+      expect(extractErrorMessage(err)).toBe("structured");
     });
   });
 

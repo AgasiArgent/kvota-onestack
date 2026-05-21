@@ -16,8 +16,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 
-import { extractErrorMessage } from "@/shared/lib/errors";
-
 import { classifyItems, selectClassification } from "../api/classify";
 import {
   type Candidate,
@@ -263,7 +261,7 @@ function ResultView({
   if (result.candidates.length === 0) {
     return (
       <div className="rounded-md border border-dashed border-border bg-muted/30 p-3 text-sm text-muted-foreground">
-        {extractErrorMessage(result) ?? "Alta не нашла подходящих кодов. Уточните описание."}
+        {result.error ?? "Alta не нашла подходящих кодов. Уточните описание."}
       </div>
     );
   }

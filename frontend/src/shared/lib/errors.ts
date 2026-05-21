@@ -7,7 +7,8 @@
  *      `details` / `hint`. These carry the root cause for RLS rejections
  *      and DB-constraint violations (e.g. "permission denied for table X").
  *   2. Fetch-response envelope — `{success: false, error: {code, message}}`,
- *      per the project's api-first.md rule.
+ *      per the project's api-first.md rule (legacy: `{error: "string"}`
+ *      also handled during PRs 2-4 migration window — see branch 2b below).
  *   3. Native `Error` — `err instanceof Error`, common for thrown strings
  *      wrapped via `new Error(...)`.
  *   4. Plain string — occasionally passed directly to `.catch(string)` flows.
@@ -66,6 +67,15 @@ export function extractErrorMessage(err: unknown): string | null {
     ) {
       return normalizeWhitespace(errorObj.message);
     }
+  }
+
+  // 2b. Legacy flat-string error: {error: "string"} — pre-envelope-refactor
+  // backend shape from api/quotes.py + 4 other files (PRs 2-4 will migrate
+  // them to the structured shape above). Delete this branch after the
+  // envelope refactor is complete.
+  if ("error" in obj && typeof obj.error === "string") {
+    const trimmed = obj.error.trim();
+    return trimmed.length > 0 ? trimmed : null;
   }
 
   return null;
