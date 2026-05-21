@@ -27,6 +27,7 @@ from typing import Any
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+from api.lib.errors import error_response, success_response
 from services.database import get_supabase
 from services.role_service import get_user_role_codes
 
@@ -97,20 +98,6 @@ def _resolve_dual_auth(request: Request) -> tuple[dict | None, list[str]]:
         return user, [impersonated_role]
 
     return user, user.get("roles", [])
-
-
-def _err(code: str, message: str, status: int) -> JSONResponse:
-    return JSONResponse(
-        {"success": False, "error": {"code": code, "message": message}},
-        status_code=status,
-    )
-
-
-def _ok(data: dict | list | None = None, status: int = 200) -> JSONResponse:
-    payload: dict = {"success": True}
-    if data is not None:
-        payload["data"] = data
-    return JSONResponse(payload, status_code=status)
 
 
 def _has_analytics_access(role_codes: list[str], domain: str) -> bool:
@@ -296,7 +283,7 @@ async def analytics(request: Request, domain: str) -> JSONResponse:
            (dual-hat per PR #105 — both head roles access both domains).
     """
     if domain not in _ALLOWED_DOMAINS:
-        return _err(
+        return error_response(
             "VALIDATION_ERROR",
             f"domain must be one of {list(_ALLOWED_DOMAINS)}",
             400,
@@ -304,12 +291,12 @@ async def analytics(request: Request, domain: str) -> JSONResponse:
 
     user, role_codes = _resolve_dual_auth(request)
     if not user:
-        return _err("UNAUTHORIZED", "Not authenticated", 401)
+        return error_response("UNAUTHORIZED", "Not authenticated", 401)
     org_id = user.get("org_id")
     if not org_id:
-        return _err("UNAUTHORIZED", "No organization context", 401)
+        return error_response("UNAUTHORIZED", "No organization context", 401)
     if not _has_analytics_access(role_codes, domain):
-        return _err(
+        return error_response(
             "FORBIDDEN",
             "Analytics access requires head_of_* or admin role",
             403,
@@ -337,7 +324,7 @@ async def analytics(request: Request, domain: str) -> JSONResponse:
         )
     except Exception as exc:  # noqa: BLE001
         logger.error("analytics: invoice query failed: %s", exc)
-        return _err("INTERNAL_ERROR", "Failed to load analytics", 500)
+        return error_response("INTERNAL_ERROR", "Failed to load analytics", 500)
 
     rows = res.data or []
     aggregated = _aggregate(rows, domain)
@@ -347,4 +334,4 @@ async def analytics(request: Request, domain: str) -> JSONResponse:
     for r in aggregated:
         r["user_name"] = name_map.get(r["user_id"], _UNKNOWN_USER_LABEL)
 
-    return _ok({"rows": aggregated})
+    return success_response({"rows": aggregated})

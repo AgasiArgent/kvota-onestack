@@ -20,6 +20,7 @@ from typing import Any
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+from api.lib.errors import error_response
 from services.database import get_supabase
 
 logger = logging.getLogger(__name__)
@@ -55,13 +56,6 @@ def _rows(response: Any) -> list[dict[str, Any]]:
     return data if isinstance(data, list) else []
 
 
-def _err(code: str, message: str, status: int) -> JSONResponse:
-    return JSONResponse(
-        {"success": False, "error": {"code": code, "message": message}},
-        status_code=status,
-    )
-
-
 def _resolve_user(
     request: Request,
 ) -> tuple[dict | None, JSONResponse | None]:
@@ -72,7 +66,7 @@ def _resolve_user(
     """
     api_user = getattr(request.state, "api_user", None)
     if not api_user:
-        return None, _err("UNAUTHORIZED", "Authentication required", 401)
+        return None, error_response("UNAUTHORIZED", "Authentication required", 401)
 
     user_id = str(api_user.id)
     sb = get_supabase()
@@ -87,7 +81,7 @@ def _resolve_user(
     )
     om_rows = _rows(om_result)
     if not om_rows:
-        return None, _err("FORBIDDEN", "User has no active organization", 403)
+        return None, error_response("FORBIDDEN", "User has no active organization", 403)
     org_id = str(om_rows[0].get("organization_id", ""))
 
     roles_result = (
@@ -104,7 +98,7 @@ def _resolve_user(
             role_slugs.add(str(role_data["slug"]))
 
     if not role_slugs & _ALLOWED_ROLES:
-        return None, _err(
+        return None, error_response(
             "FORBIDDEN",
             "Role not permitted for cost analysis",
             403,
@@ -295,11 +289,11 @@ async def get_cost_analysis(
     )
     quote_rows = _rows(quote_result)
     if not quote_rows:
-        return _err("NOT_FOUND", "Quote not found", 404)
+        return error_response("NOT_FOUND", "Quote not found", 404)
 
     quote = quote_rows[0]
     if str(quote.get("organization_id") or "") != user["org_id"]:
-        return _err("FORBIDDEN", "Quote belongs to a different organization", 403)
+        return error_response("FORBIDDEN", "Quote belongs to a different organization", 403)
 
     customers = quote.get("customers")
     customer_name = (

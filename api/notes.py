@@ -26,6 +26,7 @@ from typing import Any
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+from api.lib.errors import error_response, success_response
 from services.database import get_supabase
 from services.role_service import get_user_role_codes
 
@@ -200,22 +201,6 @@ def _resolve_dual_auth(request: Request) -> tuple[dict | None, list[str]]:
     return user, user.get("roles", [])
 
 
-def _err(code: str, message: str, status: int) -> JSONResponse:
-    """Structured error response envelope."""
-    return JSONResponse(
-        {"success": False, "error": {"code": code, "message": message}},
-        status_code=status,
-    )
-
-
-def _ok(data: dict | list | None = None, status: int = 200) -> JSONResponse:
-    """Success response envelope."""
-    payload: dict = {"success": True}
-    if data is not None:
-        payload["data"] = data
-    return JSONResponse(payload, status_code=status)
-
-
 def _pick_author_role(role_codes: list[str]) -> str:
     """Pick a role slug to freeze into author_role.
 
@@ -239,9 +224,9 @@ def _authenticate(request: Request) -> tuple[dict, list[str]] | JSONResponse:
     """Reject unauthenticated callers; return (user, roles) on success."""
     user, role_codes = _resolve_dual_auth(request)
     if not user:
-        return _err("UNAUTHORIZED", "Not authenticated", 401)
+        return error_response("UNAUTHORIZED", "Not authenticated", 401)
     if not user.get("org_id"):
-        return _err("UNAUTHORIZED", "No organization context", 401)
+        return error_response("UNAUTHORIZED", "No organization context", 401)
     return user, role_codes
 
 
@@ -271,9 +256,9 @@ async def list_notes(request: Request) -> JSONResponse:
     entity_type = request.query_params.get("entity_type")
     entity_id = request.query_params.get("entity_id")
     if not entity_type or not entity_id:
-        return _err("VALIDATION_ERROR", "entity_type and entity_id are required", 400)
+        return error_response("VALIDATION_ERROR", "entity_type and entity_id are required", 400)
     if entity_type not in _ALLOWED_ENTITY_TYPES:
-        return _err(
+        return error_response(
             "VALIDATION_ERROR",
             f"entity_type must be one of {sorted(_ALLOWED_ENTITY_TYPES)}",
             400,
@@ -291,7 +276,7 @@ async def list_notes(request: Request) -> JSONResponse:
         .execute()
     )
     rows = list(res.data or [])
-    return _ok(_enrich_notes_with_author(sb, rows))
+    return success_response(_enrich_notes_with_author(sb, rows))
 
 
 async def create_note(request: Request) -> JSONResponse:
@@ -319,25 +304,25 @@ async def create_note(request: Request) -> JSONResponse:
     try:
         body_json = await request.json()
     except Exception:
-        return _err("BAD_REQUEST", "Invalid JSON", 400)
+        return error_response("BAD_REQUEST", "Invalid JSON", 400)
 
     entity_type = body_json.get("entity_type")
     entity_id = body_json.get("entity_id")
     text = body_json.get("body")
     if not entity_type or not entity_id or not text:
-        return _err(
+        return error_response(
             "VALIDATION_ERROR",
             "entity_type, entity_id, body are required",
             400,
         )
     if entity_type not in _ALLOWED_ENTITY_TYPES:
-        return _err(
+        return error_response(
             "VALIDATION_ERROR",
             f"entity_type must be one of {sorted(_ALLOWED_ENTITY_TYPES)}",
             400,
         )
     if not isinstance(text, str) or not text.strip():
-        return _err("VALIDATION_ERROR", "body must be non-empty text", 400)
+        return error_response("VALIDATION_ERROR", "body must be non-empty text", 400)
 
     visible_to = body_json.get("visible_to")
     if visible_to is None:
@@ -345,7 +330,7 @@ async def create_note(request: Request) -> JSONResponse:
     if not isinstance(visible_to, list) or not all(
         isinstance(v, str) for v in visible_to
     ):
-        return _err(
+        return error_response(
             "VALIDATION_ERROR",
             "visible_to must be a list of role slugs (or ['*'])",
             400,
@@ -372,9 +357,9 @@ async def create_note(request: Request) -> JSONResponse:
         .execute()
     )
     if not res.data:
-        return _err("INTERNAL_ERROR", "Failed to create note", 500)
+        return error_response("INTERNAL_ERROR", "Failed to create note", 500)
     enriched = _enrich_notes_with_author(sb, [dict(res.data[0])])
-    return _ok(enriched[0], status=201)
+    return success_response(enriched[0], status_code=201)
 
 
 async def update_note(request: Request, note_id: str) -> JSONResponse:
@@ -404,28 +389,28 @@ async def update_note(request: Request, note_id: str) -> JSONResponse:
         .execute()
     )
     if not existing.data:
-        return _err("NOT_FOUND", "Note not found", 404)
+        return error_response("NOT_FOUND", "Note not found", 404)
     note = existing.data[0]
     if note["author_id"] != user["id"] and not _is_admin(role_codes):
-        return _err("FORBIDDEN", "Only author or admin can update this note", 403)
+        return error_response("FORBIDDEN", "Only author or admin can update this note", 403)
 
     try:
         body_json = await request.json()
     except Exception:
-        return _err("BAD_REQUEST", "Invalid JSON", 400)
+        return error_response("BAD_REQUEST", "Invalid JSON", 400)
 
     updates: dict = {}
     if "body" in body_json:
         text = body_json["body"]
         if not isinstance(text, str) or not text.strip():
-            return _err("VALIDATION_ERROR", "body must be non-empty text", 400)
+            return error_response("VALIDATION_ERROR", "body must be non-empty text", 400)
         updates["body"] = text
     if "visible_to" in body_json:
         visible_to = body_json["visible_to"]
         if not isinstance(visible_to, list) or not all(
             isinstance(v, str) for v in visible_to
         ):
-            return _err(
+            return error_response(
                 "VALIDATION_ERROR",
                 "visible_to must be a list of role slugs (or ['*'])",
                 400,
@@ -437,14 +422,14 @@ async def update_note(request: Request, note_id: str) -> JSONResponse:
         updates["pinned"] = bool(body_json["pinned"])
 
     if not updates:
-        return _err("VALIDATION_ERROR", "No updatable fields provided", 400)
+        return error_response("VALIDATION_ERROR", "No updatable fields provided", 400)
 
     res = (
         sb.table("entity_notes").update(updates).eq("id", note_id).execute()
     )
     if not res.data:
-        return _err("INTERNAL_ERROR", "Failed to update note", 500)
-    return _ok()
+        return error_response("INTERNAL_ERROR", "Failed to update note", 500)
+    return success_response()
 
 
 async def delete_note(request: Request, note_id: str) -> JSONResponse:
@@ -468,10 +453,10 @@ async def delete_note(request: Request, note_id: str) -> JSONResponse:
         .execute()
     )
     if not existing.data:
-        return _err("NOT_FOUND", "Note not found", 404)
+        return error_response("NOT_FOUND", "Note not found", 404)
     note = existing.data[0]
     if note["author_id"] != user["id"] and not _is_admin(role_codes):
-        return _err("FORBIDDEN", "Only author or admin can delete this note", 403)
+        return error_response("FORBIDDEN", "Only author or admin can delete this note", 403)
 
     sb.table("entity_notes").delete().eq("id", note_id).execute()
-    return _ok()
+    return success_response()
