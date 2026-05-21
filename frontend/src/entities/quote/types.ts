@@ -59,7 +59,7 @@ export interface QuoteListItem {
   idn_quote: string;
   created_at: string;
   workflow_status: string;
-  total_amount_quote: number | null;
+  total_quote_currency: number | null;
   total_profit_usd: number | null;
   currency: string | null;
   customer: { id: string; name: string } | null;
@@ -91,7 +91,7 @@ export interface QuotesFilterParams {
    */
   participants?: readonly string[];
   participants_logic?: "or" | "and";
-  /** Amount range filter (total_amount_quote gte/lte). */
+  /** Amount range filter (total_quote_currency gte/lte). */
   amount_min?: number;
   amount_max?: number;
   /** Sort field with optional leading minus for desc. Format: "amount" | "-amount" | "created_at". */

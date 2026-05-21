@@ -114,13 +114,10 @@ export function QuoteStickyHeader({
       })
     : null;
 
-  // `kvota.quotes` carries two duplicate columns for the same idea — the
-  // legacy `total_amount_quote` (never written) and `total_quote_currency`
-  // (written by calculate_quote). Fall back so the header doesn't show «—»
-  // while the calc-engine row has a valid total. Schema cleanup is a
-  // separate concern.
-  const totalAmount =
-    quote.total_amount_quote ?? quote.total_quote_currency ?? null;
+  // `total_quote_currency` is the canonical column populated by
+  // calculate_quote. The legacy duplicate `total_amount_quote` was dropped
+  // in migration 318.
+  const totalAmount = quote.total_quote_currency ?? null;
   const formattedAmount =
     totalAmount != null
       ? new Intl.NumberFormat("ru-RU", {
