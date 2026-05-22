@@ -201,7 +201,11 @@ describe("fetchKanbanInvoices — assignee ФИО (Bug 3)", () => {
     expect(card.assignedUser?.name).toBe("Алейна Логистик");
   });
 
-  it("falls back to email when no ФИО exists in user_profiles", async () => {
+  it("falls back to email local-part (no @domain) when no ФИО exists", async () => {
+    // Testing 2 rows 40-41: tester saw full emails in the Исполнитель
+    // surface for users with no kvota.user_profiles.full_name. The fallback
+    // now strips the domain so an unenriched user still gets a short label
+    // ("aleynasevimd") rather than the raw "name@domain" string.
     fakeAdmin.invoiceRows = [makeInvoiceRow()];
     fakeAdmin.profiles = []; // no profile row
     fakeAdmin.emailsById = { "user-aleyna": "aleynasevimd@gmail.com" };
@@ -209,7 +213,10 @@ describe("fetchKanbanInvoices — assignee ФИО (Bug 3)", () => {
     const { fetchKanbanInvoices } = await import("../queries");
     const board = await fetchKanbanInvoices("logistics", "user-x", "org-1", true);
 
-    expect(board.in_progress[0]?.assignedUser?.name).toBe(
+    expect(board.in_progress[0]?.assignedUser?.name).toBe("aleynasevimd");
+    // The full email is still attached so the picker can show it on hover/tooltip
+    // (UserAvatarChip's `showEmail` consumers keep working).
+    expect(board.in_progress[0]?.assignedUser?.email).toBe(
       "aleynasevimd@gmail.com"
     );
   });
