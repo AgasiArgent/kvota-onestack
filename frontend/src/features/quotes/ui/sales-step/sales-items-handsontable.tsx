@@ -328,6 +328,13 @@ export function SalesItemsHandsontable({
           ref={hotRef}
           data={initialData}
           licenseKey="non-commercial-and-evaluation"
+          // In Handsontable v17 the autocomplete/dropdown editor reads its
+          // row height from `stylesHandler.getDefaultRowHeight()`, which
+          // returns 0 unless the instance knows its theme name. Without
+          // this prop the inner editor renders as a 62×2 px sliver even
+          // though `visibleRows`/`trimDropdown` are set — Testing 2 row 31
+          // came back from PR #179 because of exactly this gap.
+          themeName="ht-theme-main"
           colHeaders={[
             "Бренд *",
             "Артикул *",
