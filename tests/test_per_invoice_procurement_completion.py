@@ -263,6 +263,77 @@ class TestCompleteProcurementAuth:
         assert "procurement" in call_kwargs["actor_roles"]
 
     @pytest.mark.asyncio
+    async def test_200_when_actor_is_procurement_senior(self):
+        """Regression for Testing 2 row 57.
+
+        СтМОЗ (`procurement_senior`) was excluded from the API role gate even
+        though the frontend (`invoice-card.tsx`) shows them the
+        «Завершить закупку» button. The result: clicking returned 403 with
+        «Procurement role required», the toast surfaced the error, and the
+        quote workflow_status never advanced. This test exercises the gate
+        with `procurement_senior` and asserts a 200 — and that the actor's
+        role is forwarded to the workflow service.
+        """
+        user_id = make_uuid()
+        org_id = "org-x"
+        invoice_id = make_uuid()
+        quote_id = make_uuid()
+        api_user = _mock_api_user(user_id)
+
+        from services.workflow_service import InvoiceProcurementCompletionResult
+
+        helper_result = InvoiceProcurementCompletionResult(
+            success=True,
+            invoice_id=invoice_id,
+            quote_id=quote_id,
+            workflow_advanced=True,
+        )
+
+        with patch("api.invoices.get_supabase") as mock_sb:
+            sb = MagicMock()
+            mock_sb.return_value = sb
+
+            tables = _make_org_roles_mocks(
+                sb, user_id, org_id, ["procurement_senior"]
+            )
+            inv_mock = _chain_mock()
+            inv_mock.execute.return_value = MagicMock(data=[{
+                "id": invoice_id,
+                "quote_id": quote_id,
+                "invoice_number": "INV-01",
+                "sent_at": None,
+                "quotes": {"organization_id": org_id},
+            }])
+            tables["invoices"] = inv_mock
+            sb.table.side_effect = lambda name: tables.get(name, _chain_mock())
+
+            with patch(
+                "services.workflow_service.complete_procurement_for_invoice",
+                return_value=helper_result,
+            ) as mock_helper:
+                from api.invoices import complete_invoice_procurement
+
+                request = _mock_request(body={}, api_user=api_user)
+                response = await complete_invoice_procurement(
+                    request, invoice_id
+                )
+
+        # Without the fix this asserted 403, not 200 — the gate rejected the
+        # role before the helper was ever called.
+        assert response.status_code == 200, (
+            f"procurement_senior must pass the role gate. Got: {response.body!r}"
+        )
+        import json
+        body = json.loads(response.body)
+        assert body["success"] is True
+        assert body["data"]["workflow_advanced"] is True
+        # Actor role was forwarded so the workflow service can audit-log the
+        # correct procurement role (not the "admin" fallback).
+        mock_helper.assert_called_once()
+        call_kwargs = mock_helper.call_args.kwargs
+        assert "procurement_senior" in call_kwargs["actor_roles"]
+
+    @pytest.mark.asyncio
     async def test_409_when_already_completed(self):
         user_id = make_uuid()
         org_id = "org-x"

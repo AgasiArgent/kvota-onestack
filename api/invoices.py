@@ -14,7 +14,7 @@ POST   /api/invoices/{id}/complete-procurement        — Per-invoice procuremen
                                                          workflow_status when last)
 
 Auth: JWT via ApiAuthMiddleware (request.state.api_user).
-Roles: procurement, admin, head_of_procurement
+Roles: procurement, procurement_senior, admin, head_of_procurement
 """
 
 import logging
@@ -27,7 +27,17 @@ from services.database import get_supabase
 
 logger = logging.getLogger(__name__)
 
-_PROCUREMENT_ROLES = {"procurement", "admin", "head_of_procurement"}
+# Testing 2 row 57: include `procurement_senior` (СтМОЗ). The role exists on
+# the frontend (canSend in invoice-card.tsx + procurement page guards) and in
+# `api/procurement.py`'s gate, but was missing here — so СтМОЗ users saw the
+# «Завершить закупку» button, clicked it, hit 403, and the quote workflow
+# never advanced to pending_logistics_and_customs.
+_PROCUREMENT_ROLES = {
+    "procurement",
+    "procurement_senior",
+    "admin",
+    "head_of_procurement",
+}
 
 
 def _rows(response: Any) -> list[dict[str, Any]]:

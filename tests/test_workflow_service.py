@@ -1484,6 +1484,96 @@ class TestCompleteProcurementForInvoice:
         assert "logistics_assigned_at" not in stamp
         assert "customs_assigned_at" not in stamp
 
+    @patch('services.workflow_service.get_supabase')
+    def test_procurement_senior_can_complete_and_advance(self, mock_supabase):
+        """Regression for Testing 2 row 57.
+
+        СтМОЗ (`procurement_senior`) was excluded from the role gate even
+        though the frontend shows them the «Завершить закупку» button. The
+        result: clicking it returned 403, the toast said
+        «Procurement role required», and the quote workflow_status stayed in
+        `pending_procurement` — no transition to `pending_logistics_and_customs`.
+
+        This test exercises the full happy-path with `procurement_senior`:
+        the helper must succeed AND atomically advance the quote when this is
+        the last incomplete invoice. The audit-log role recorded on the
+        workflow_transitions row must be `procurement_senior` (not falling
+        back to "admin").
+        """
+        from services.workflow_service import (
+            complete_procurement_for_invoice,
+            WorkflowStatus,
+        )
+
+        client = MagicMock()
+        mock_supabase.return_value = client
+
+        update_quote_calls: list[dict] = []
+        transition_payloads: list[dict] = []
+
+        def table_side_effect(name):
+            chain = MagicMock()
+            if name == "invoices":
+                chain.select.return_value.eq.return_value.single.return_value \
+                    .execute.return_value = MagicMock(data={
+                        "id": "inv-1",
+                        "quote_id": "quote-1",
+                        "procurement_completed_at": None,
+                    })
+                chain.update.return_value.eq.return_value.execute.return_value = \
+                    MagicMock(data=[{"id": "inv-1"}])
+                # 0 incomplete invoices remaining → this is the last one.
+                count_resp = MagicMock(count=0, data=[])
+                chain.select.return_value.eq.return_value.is_.return_value \
+                    .execute.return_value = count_resp
+                return chain
+            if name == "quotes":
+                def update(payload):
+                    update_quote_calls.append(payload)
+                    sub = MagicMock()
+                    # Race-guarded UPDATE matches one row → advance succeeds.
+                    sub.eq.return_value.eq.return_value.execute.return_value = \
+                        MagicMock(data=[{"id": "quote-1"}])
+                    return sub
+                chain.update.side_effect = update
+                return chain
+            if name == "workflow_transitions":
+                def insert(payload):
+                    transition_payloads.append(payload)
+                    sub = MagicMock()
+                    sub.execute.return_value = MagicMock(
+                        data=[{"id": "trans-1"}]
+                    )
+                    return sub
+                chain.insert.side_effect = insert
+                return chain
+            return chain
+
+        client.table.side_effect = table_side_effect
+
+        result = complete_procurement_for_invoice(
+            invoice_id="inv-1",
+            actor_id="user-1",
+            actor_roles=["procurement_senior"],
+        )
+
+        # Without the fix this would be False (role gate rejected СтМОЗ).
+        assert result.success is True, (
+            f"procurement_senior should be allowed to complete procurement. "
+            f"Error: {result.error_message}"
+        )
+        # Quote must atomically transition to the parallel logistics+customs
+        # stage when this was the last incomplete invoice.
+        assert result.workflow_advanced is True
+        assert len(update_quote_calls) == 1
+        payload = update_quote_calls[0]
+        assert payload["workflow_status"] == \
+            WorkflowStatus.PENDING_LOGISTICS_AND_CUSTOMS.value
+        # Audit-log role must record the actual procurement role, not the
+        # "admin" fallback used before the fix.
+        assert len(transition_payloads) == 1
+        assert transition_payloads[0]["actor_role"] == "procurement_senior"
+
 
 # =============================================================================
 # WF-003: AUTO-TRANSITION LOGISTICS+CUSTOMS COMPLETE TESTS
