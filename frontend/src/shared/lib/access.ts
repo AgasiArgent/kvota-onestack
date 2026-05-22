@@ -97,10 +97,18 @@ export async function getAssignedCustomerIds(
  * Used by ASSIGNED_ITEMS tier (procurement, logistics).
  *
  * - procurement: via quote_items.assigned_procurement_user
- * - logistics: via quotes.assigned_logistics_user
+ * - logistics: via invoices.assigned_logistics_user (canonical, per-invoice)
+ *   AND quotes.assigned_logistics_user (legacy quote-level column, kept
+ *   for backward compatibility with rows where the legacy field was set).
  *
  * Customs is handled separately via isCustomsOnly + workflow-stage filter —
- * no customs assignment mechanism exists yet.
+ * no customs assignment mechanism exists yet at the quote-list tier.
+ *
+ * Testing 2 rows 76+78 (МОЛ): logistics is assigned per-invoice on the
+ * distribution page (kvota.invoices.assigned_logistics_user), not per-quote.
+ * The legacy quotes.assigned_logistics_user is rarely populated, so without
+ * the invoice union МОЛ sees «Всего: 0» on /quotes and 404 on the detail
+ * page even though /workspace/logistics shows their cards correctly.
  *
  * Runs applicable queries in parallel and deduplicates results.
  */
@@ -129,6 +137,7 @@ export async function getAssignedQuoteIds(
   }
 
   if (user.roles.includes("logistics")) {
+    // Legacy quote-level assignment (rarely populated post-distribution UI).
     promises.push(
       (async () => {
         const { data } = await supabase
@@ -138,6 +147,22 @@ export async function getAssignedQuoteIds(
           .eq("assigned_logistics_user", user.id)
           .is("deleted_at", null);
         return (data ?? []).map((r) => r.id);
+      })()
+    );
+    // Canonical per-invoice assignment (the distribution UI writes here).
+    promises.push(
+      (async () => {
+        const { data } = await supabase
+          .from("invoices")
+          .select("quote_id")
+          .eq("assigned_logistics_user", user.id);
+        return [
+          ...new Set(
+            (data ?? [])
+              .map((r) => r.quote_id)
+              .filter((id): id is string => id !== null)
+          ),
+        ];
       })()
     );
   }
