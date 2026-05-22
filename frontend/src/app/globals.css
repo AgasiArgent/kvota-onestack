@@ -236,9 +236,25 @@ html[data-chat-open="true"] [data-feedback-fab] {
    editor renders as a 62×2 px sliver. Forcing min-height and min-width on the
    editor's outer wrapper guarantees the list is at least readable. */
 .handsontableEditor.autocompleteEditor {
-  min-height: 28px;
+  min-height: 320px !important;
+  max-height: 60vh;
   min-width: 120px;
+  height: auto !important;
+}
+.handsontableEditor.autocompleteEditor .ht_master,
+.handsontableEditor.autocompleteEditor .wtHolder,
+.handsontableEditor.autocompleteEditor .wtHider {
+  height: auto !important;
+  min-height: 320px;
+  max-height: 60vh;
 }
 .handsontableEditor.autocompleteEditor .wtHolder {
-  min-height: 26px;
+  overflow-y: auto !important;
+}
+.handsontableEditor.autocompleteEditor tr {
+  min-height: 24px;
+}
+.handsontableEditor.autocompleteEditor td {
+  padding: 4px 10px;
+  line-height: 1.5;
 }
