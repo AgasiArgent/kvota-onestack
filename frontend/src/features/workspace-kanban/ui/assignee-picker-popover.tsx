@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Loader2, Search, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -53,6 +53,16 @@ export function AssigneePickerPopover({
 }: AssigneePickerPopoverProps) {
   const [query, setQuery] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // Focus the search input WITHOUT scrolling the kanban page (Testing 2 rows
+  // 62/63). The HTML `autoFocus` attribute, and Base UI's default
+  // `initialFocus={true}` path, both call `el.focus()` without `preventScroll`.
+  // The popover content is portaled to <body>, so before Floating UI positions
+  // it, the input lives at the document root — `.focus()` then scrolls the
+  // viewport to the top to bring it into view. Routing focus through an
+  // `initialFocus` callback that calls `.focus({ preventScroll: true })` and
+  // returns `false` (so Base UI does not double-focus) keeps the viewport put.
+  // Mirrors the fix in `shared/ui/searchable-combobox.tsx` (row 39).
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const filtered = teamUsers.filter((u) => {
     const q = query.trim().toLowerCase();
@@ -114,6 +124,13 @@ export function AssigneePickerPopover({
         align="start"
         side="bottom"
         className="w-72 p-0"
+        // Focus the search input via { preventScroll: true } (see comment on
+        // `searchInputRef`); returning false stops Base UI from also focusing
+        // the first tabbable child with its default (scroll-causing) call.
+        initialFocus={() => {
+          searchInputRef.current?.focus({ preventScroll: true });
+          return false;
+        }}
         onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >
@@ -129,11 +146,11 @@ export function AssigneePickerPopover({
               aria-hidden
             />
             <Input
+              ref={searchInputRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Поиск..."
               className="h-8 pl-7 text-sm"
-              autoFocus
               disabled={submitting}
             />
           </div>
