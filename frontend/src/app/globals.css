@@ -238,10 +238,15 @@ html[data-chat-open="true"] [data-feedback-fab] {
 /* Handsontable v17 wraps the table in `.ht-wrapper` with `overflow: clip` and
    sizes it to the column-header strip (≈59 px). Absolutely-positioned
    descendants — including the autocomplete editor popover — get clipped by
-   that container even though they're outside normal flow. Open the clip ONLY
-   while an editor is visible so the popover paints over surrounding content
-   without otherwise loosening the main table's column-header layout. */
-.ht-wrapper:has(.handsontableInputHolder.ht_editor_visible) {
+   that container even though they're outside normal flow.
+
+   We have to drop the `:has(.ht_editor_visible)` scoping the previous attempt
+   relied on — the Tailwind 4 / lightningcss bundler did not preserve the
+   `:has()` selector in the prod build (manually toggling `overflow: visible`
+   in DevTools fixed the popover instantly). Apply it unconditionally instead.
+   Main table scrolling happens through the inner wtHolder, not through this
+   wrapper, so opening the clip does not regress the table layout. */
+.ht-wrapper {
   overflow: visible !important;
 }
 
