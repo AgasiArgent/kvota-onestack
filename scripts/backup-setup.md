@@ -58,8 +58,8 @@ chmod 600 /root/.config/rclone/rclone.conf
 rclone lsd yandex:
 # Should list your bucket
 
-# Update S3_REMOTE in scripts/backup-daily.sh if bucket name differs:
-# Default: yandex:onestack-backups
+# Update S3_REMOTE in /etc/profile.d/backup.sh if bucket name differs:
+# Default: yandex:kvota-backups
 # If your bucket is different: yandex:<your-bucket-name>
 ```
 
@@ -76,22 +76,40 @@ cat /root/.backup-passphrase
 # Save to: 1Password / Bitwarden / your password manager
 ```
 
-## 4. (Optional) Healthchecks.io alert
+## 4. Telegram bot notifications
 
-1. Sign up free at https://healthchecks.io
-2. Create new check: name "OneStack daily backup", schedule "0 2 * * *", grace 1h
-3. Copy the ping URL (looks like `https://hc-ping.com/abc-def-123`)
-4. Configure on VPS:
+> ⚠️ **Why not Healthchecks.io:** their service blocks Russian IPs since Dec 2022
+> ([blog.healthchecks.io/2022/12/ru-ip-block](https://blog.healthchecks.io/2022/12/ru-ip-block/)).
+> First production backup run from beget-kvota returned HTTP 403 on the success
+> ping despite successful data upload. Switched to direct Telegram Bot API.
+
+OneStack already runs a Telegram bot for app errors (`@kvota_error_bot`).
+We reuse the same bot for backup alerts.
+
+Get the token and chat ID from the running container:
 
 ```bash
-cat > /etc/profile.d/backup.sh <<EOF
-export HEALTHCHECK_URL=https://hc-ping.com/YOUR-UUID-HERE
-EOF
-chmod 644 /etc/profile.d/backup.sh
+ssh beget-kvota "docker exec kvota-onestack env | grep -E 'TELEGRAM_BOT_TOKEN|ADMIN_TELEGRAM_CHAT_ID'"
+# Outputs: TELEGRAM_BOT_TOKEN=...  ADMIN_TELEGRAM_CHAT_ID=...
 ```
 
-5. Connect to Telegram (or email) in Healthchecks.io UI:
-   - Integrations → Telegram → add bot, get chat ID, save
+Set the env file (chmod 600 because it contains the bot token):
+
+```bash
+cat > /etc/profile.d/backup.sh <<'EOF'
+export S3_REMOTE=yandex:kvota-backups
+export TELEGRAM_BOT_TOKEN=<bot-token-from-container>
+export TELEGRAM_CHAT_ID=<your-admin-chat-id>
+EOF
+chmod 600 /etc/profile.d/backup.sh
+```
+
+**Trade-off:** No dead-man-switch monitoring — if cron never fires at all,
+you won't be notified. Mitigations:
+- Beget tier-3 auto-backups (every 2-5 days, ~10d retention) as last-resort fallback
+- Weekly visual check on `@kvota_error_bot` chat history
+- Future enhancement: add cron-job.org as external HTTP monitor pointing at
+  `/api/health` if dead-man becomes a priority
 
 ## 5. Deploy backup script + cron
 
