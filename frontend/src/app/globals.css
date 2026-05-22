@@ -228,3 +228,17 @@ html[data-chat-open="true"] .sidebar-margin {
 html[data-chat-open="true"] [data-feedback-fab] {
   transform: translateX(-356px);
 }
+
+/* Handsontable v17 autocomplete/dropdown editor safety net — Testing 2 row 31.
+   The themeName prop on HotTable normally feeds the editor's inner styles
+   handler so getDefaultRowHeight returns a usable number. When for any reason
+   that path returns 0 (e.g. inner instance theme detection lags one tick), the
+   editor renders as a 62×2 px sliver. Forcing min-height and min-width on the
+   editor's outer wrapper guarantees the list is at least readable. */
+.handsontableEditor.autocompleteEditor {
+  min-height: 28px;
+  min-width: 120px;
+}
+.handsontableEditor.autocompleteEditor .wtHolder {
+  min-height: 26px;
+}
