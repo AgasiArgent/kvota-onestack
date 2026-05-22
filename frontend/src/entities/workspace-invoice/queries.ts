@@ -217,7 +217,13 @@ async function fetchUserMetaMap(
             nameById.get(uid) ||
             meta.full_name ||
             meta.name ||
-            u.email ||
+            // Last-ditch fallback: derive a short label from the email's
+            // local part (e.g. "ekaterina.kravtsova@…" → "ekaterina.kravtsova")
+            // so the chip never leaks the raw "name@domain" to assignee
+            // surfaces. Testing 2 rows 40-41: tester saw full emails in
+            // Исполнитель column for users whose user_profiles.full_name
+            // was empty.
+            (u.email ? u.email.split("@")[0] : "") ||
             "—",
           email: u.email ?? undefined,
           avatarUrl: meta.avatar_url ?? undefined,
