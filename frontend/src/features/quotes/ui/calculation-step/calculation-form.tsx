@@ -111,17 +111,22 @@ export function CalculationForm({
         </CardHeader>
         <CardContent className="space-y-3 pt-3">
           <FormRow label="Наценка %">
-            <div className="flex items-center gap-1">
-              <Input
-                type="number"
-                min={0}
-                max={100}
-                step={0.1}
-                value={formValues.markup}
-                onChange={(e) => onFieldChange("markup", e.target.value)}
-                className="w-20 text-right"
-              />
-              <span className="text-xs text-muted-foreground">%</span>
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-1">
+                <Input
+                  type="number"
+                  min={5}
+                  max={100}
+                  step={0.1}
+                  value={formValues.markup}
+                  onChange={(e) => onFieldChange("markup", e.target.value)}
+                  className="w-20 text-right"
+                />
+                <span className="text-xs text-muted-foreground">%</span>
+              </div>
+              <span className="text-[10px] text-muted-foreground">
+                Минимальная наценка — 5%
+              </span>
             </div>
           </FormRow>
         </CardContent>
