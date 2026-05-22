@@ -235,6 +235,16 @@ html[data-chat-open="true"] [data-feedback-fab] {
    that path returns 0 (e.g. inner instance theme detection lags one tick), the
    editor renders as a 62×2 px sliver. Forcing min-height and min-width on the
    editor's outer wrapper guarantees the list is at least readable. */
+/* Handsontable v17 wraps the table in `.ht-wrapper` with `overflow: clip` and
+   sizes it to the column-header strip (≈59 px). Absolutely-positioned
+   descendants — including the autocomplete editor popover — get clipped by
+   that container even though they're outside normal flow. Open the clip ONLY
+   while an editor is visible so the popover paints over surrounding content
+   without otherwise loosening the main table's column-header layout. */
+.ht-wrapper:has(.handsontableInputHolder.ht_editor_visible) {
+  overflow: visible !important;
+}
+
 .handsontableEditor.autocompleteEditor {
   min-height: 320px !important;
   max-height: 60vh;
