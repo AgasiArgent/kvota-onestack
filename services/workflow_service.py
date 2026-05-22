@@ -3122,8 +3122,14 @@ def complete_procurement(
     """
     supabase = get_supabase()
 
-    # Validate role
-    if not any(role in ["procurement", "head_of_procurement", "admin"] for role in actor_roles):
+    # Validate role. Testing 2 row 57: `procurement_senior` (СтМОЗ) is a
+    # legitimate procurement role used by `api/procurement.py` and the
+    # frontend invoice-card; omitting it here blocks the per-quote button for
+    # СтМОЗ users with a 403.
+    if not any(
+        role in ["procurement", "procurement_senior", "head_of_procurement", "admin"]
+        for role in actor_roles
+    ):
         return TransitionResult(
             success=False,
             error_message="Only procurement, head of procurement or admin can complete procurement",
@@ -3207,7 +3213,14 @@ def complete_procurement(
 
     # Log the transition in workflow_transitions
     try:
-        actor_role = next((r for r in actor_roles if r in ("procurement", "head_of_procurement")), "admin")
+        actor_role = next(
+            (
+                r
+                for r in actor_roles
+                if r in ("procurement", "procurement_senior", "head_of_procurement")
+            ),
+            "admin",
+        )
         transition_data = {
             "quote_id": quote_id,
             "from_status": current_status,
@@ -3412,8 +3425,14 @@ def complete_procurement_for_invoice(
     Returns:
         InvoiceProcurementCompletionResult — success/error + side-effect flags.
     """
-    # Validate role
-    if not any(role in ("procurement", "head_of_procurement", "admin") for role in actor_roles):
+    # Validate role. Testing 2 row 57: `procurement_senior` (СтМОЗ) is a
+    # legitimate procurement role — see analogous fix in `complete_procurement`
+    # above and the role's presence in `api/procurement.py` /
+    # `frontend/src/features/quotes/ui/procurement-step/invoice-card.tsx`.
+    if not any(
+        role in ("procurement", "procurement_senior", "head_of_procurement", "admin")
+        for role in actor_roles
+    ):
         return InvoiceProcurementCompletionResult(
             success=False,
             error_message="Only procurement, head of procurement or admin can complete procurement",
@@ -3506,8 +3525,15 @@ def complete_procurement_for_invoice(
         remaining_count = 1  # treat as "not last"
 
     if remaining_count == 0:
+        # Audit-log the most specific procurement role the actor holds. Without
+        # `procurement_senior` here, the audit row falsely attributed
+        # СтМОЗ-initiated transitions to "admin".
         actor_role = next(
-            (r for r in actor_roles if r in ("procurement", "head_of_procurement")),
+            (
+                r
+                for r in actor_roles
+                if r in ("procurement", "procurement_senior", "head_of_procurement")
+            ),
             "admin",
         )
         workflow_advanced, _ = _atomic_advance_to_logistics_and_customs(
