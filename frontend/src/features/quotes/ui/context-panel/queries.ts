@@ -58,9 +58,15 @@ export interface QuoteContextData {
    * missing the procurement responsible — only МОЛ + МОТ surfaced. МОЗ is the
    * single source of truth on `quote_items.assigned_procurement_user`
    * (per `.kiro/specs/procurement-users-single-source/`); we deduplicate by
-   * user_id and approximate «когда привязали» via the earliest workflow
-   * transition that user is recorded on, since `quote_items` carries no
-   * dedicated assignment timestamp.
+   * user_id.
+   *
+   * Testing 2 row 79 (FB-260522): «когда привязали» is now sourced from the
+   * `status_history` row that records the brand-slice routing moment
+   * (reason = 'auto: all items routed'). We map each МОЗ user to the brands
+   * they cover on the quote and take the earliest routed timestamp across
+   * those brands. Falls back to the user's own earliest workflow_transitions
+   * row when no routing event exists for any of their brands (legacy quotes /
+   * partially routed slices).
    */
   procurementAssignees: ContextPanelDomainAssignee[];
   /** Distinct МОЛ assignees on this quote's invoices (РОЛ Тест 07 / 3.1). */
@@ -106,39 +112,58 @@ export async function fetchQuoteContextData(
   const createdBy = quoteRow.created_by ?? null;
 
   // 2. Parallel: contact person, sales manager profile, workflow transitions,
-  //    invoice-level МОЛ/МОТ assignments, item-level МОЗ assignment
-  const [contactRes, managerRes, transitionsRes, invoicesRes, itemsRes] =
-    await Promise.all([
-      contactPersonId
-        ? supabase
-            .from("customer_contacts")
-            .select("name, last_name, patronymic, phone, email")
-            .eq("id", contactPersonId)
-            .maybeSingle()
-        : Promise.resolve({ data: null }),
-      createdBy
-        ? supabase
-            .from("user_profiles")
-            .select("user_id, full_name, phone")
-            .eq("user_id", createdBy)
-            .maybeSingle()
-        : Promise.resolve({ data: null }),
-      supabase
-        .from("workflow_transitions")
-        .select("id, from_status, to_status, actor_id, actor_role, created_at")
-        .eq("quote_id", quoteId)
-        .order("created_at", { ascending: true }),
-      supabase
-        .from("invoices")
-        .select(
-          "assigned_logistics_user, logistics_assigned_at, assigned_customs_user, customs_assigned_at"
-        )
-        .eq("quote_id", quoteId),
-      supabase
-        .from("quote_items")
-        .select("assigned_procurement_user")
-        .eq("quote_id", quoteId),
-    ]);
+  //    invoice-level МОЛ/МОТ assignments, item-level МОЗ assignment +
+  //    status_history rows that record the brand-slice routing moment (used
+  //    as the canonical МОЗ "когда привязали" timestamp — Testing 2 row 79).
+  const [
+    contactRes,
+    managerRes,
+    transitionsRes,
+    invoicesRes,
+    itemsRes,
+    statusHistoryRes,
+  ] = await Promise.all([
+    contactPersonId
+      ? supabase
+          .from("customer_contacts")
+          .select("name, last_name, patronymic, phone, email")
+          .eq("id", contactPersonId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    createdBy
+      ? supabase
+          .from("user_profiles")
+          .select("user_id, full_name, phone")
+          .eq("user_id", createdBy)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    supabase
+      .from("workflow_transitions")
+      .select("id, from_status, to_status, actor_id, actor_role, created_at")
+      .eq("quote_id", quoteId)
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("invoices")
+      .select(
+        "assigned_logistics_user, logistics_assigned_at, assigned_customs_user, customs_assigned_at"
+      )
+      .eq("quote_id", quoteId),
+    supabase
+      .from("quote_items")
+      .select("assigned_procurement_user, brand")
+      .eq("quote_id", quoteId),
+    // status_history rows with reason='auto: all items routed' are inserted
+    // by `maybeAdvanceBrandSlices` the moment every item of a (quote, brand)
+    // slice has an `assigned_procurement_user` set — i.e. the exact moment a
+    // МОЗ was attached to that brand. Joining via brand lets us surface the
+    // real assignment timestamp even when the МОЗ hasn't yet acted on the
+    // workflow themselves (Testing 2 row 79 / FB-260522).
+    supabase
+      .from("status_history")
+      .select("brand, transitioned_at")
+      .eq("quote_id", quoteId)
+      .eq("reason", "auto: all items routed"),
+  ]);
 
   const contactPerson: ContextPanelContact | null = contactRes.data
     ? {
@@ -199,16 +224,64 @@ export async function fetchQuoteContextData(
   }
 
   // 4b. Aggregate distinct МОЗ assignees from per-item column. There is no
-  //     dedicated assignment timestamp on `quote_items`; we leave the entry
-  //     null here and back-fill the «когда привязали» moment from the user's
-  //     earliest workflow_transitions row below (step 5). Testing 2 row 2.
+  //     dedicated assignment timestamp on `quote_items`, so we derive it
+  //     from the brand-slice routing moment captured in `status_history`
+  //     (reason = 'auto: all items routed'). When the slice has been
+  //     auto-advanced we get the exact "когда привязали"; otherwise we
+  //     leave the entry null and fall back to workflow_transitions below
+  //     (legacy approximation for the user's own first transition).
+  //
+  //     Testing 2 row 79 (FB-260522): the old workflow_transitions-only
+  //     back-fill returned null for МОЗ users who had been freshly
+  //     attached but had not yet driven the workflow forward themselves,
+  //     so the panel rendered ФИО without a date for every freshly
+  //     distributed quote (РОЗ/СтМОЗ/МОЗ all complained).
   const items = itemsRes.data ?? [];
   const procurementAt = new Map<string, string | null>();
+  // user_id → distinct brands assigned to that user on this quote.
+  // Empty string for items without a brand — matches status_history.brand
+  // convention used by the kanban auto-advance helper.
+  const procurementUserBrands = new Map<string, Set<string>>();
   for (const it of items) {
     const pUser = it.assigned_procurement_user ?? null;
-    if (pUser && !procurementAt.has(pUser)) {
-      procurementAt.set(pUser, null);
+    if (!pUser) continue;
+    if (!procurementAt.has(pUser)) procurementAt.set(pUser, null);
+    const brandKey = it.brand ?? "";
+    let brands = procurementUserBrands.get(pUser);
+    if (!brands) {
+      brands = new Set<string>();
+      procurementUserBrands.set(pUser, brands);
     }
+    brands.add(brandKey);
+  }
+
+  // brand → earliest "auto: all items routed" timestamp. Multiple slices
+  // of the same brand can exist if a quote was re-distributed; we keep
+  // the earliest to mirror the МОЛ/МОТ "first attach wins" semantic.
+  const brandRoutedAt = new Map<string, string>();
+  const statusHistoryRows = (statusHistoryRes.data ?? []) as Array<{
+    brand: string | null;
+    transitioned_at: string;
+  }>;
+  for (const row of statusHistoryRows) {
+    if (!row.transitioned_at) continue;
+    const brandKey = row.brand ?? "";
+    const prev = brandRoutedAt.get(brandKey);
+    if (!prev || row.transitioned_at < prev) {
+      brandRoutedAt.set(brandKey, row.transitioned_at);
+    }
+  }
+
+  // Fill МОЗ assigned_at from the earliest brand-routed timestamp across
+  // all brands that user covers on this quote.
+  for (const [userId, brands] of procurementUserBrands) {
+    let earliest: string | null = null;
+    for (const brand of brands) {
+      const at = brandRoutedAt.get(brand);
+      if (!at) continue;
+      if (!earliest || at < earliest) earliest = at;
+    }
+    if (earliest) procurementAt.set(userId, earliest);
   }
 
   // 5. Batch-resolve all user names in one round-trip: transition actors +
@@ -221,12 +294,12 @@ export async function fetchQuoteContextData(
   for (const id of logisticsAt.keys()) allUserIds.add(id);
   for (const id of customsAt.keys()) allUserIds.add(id);
 
-  // Backfill МОЗ `assigned_at` with the earliest workflow_transitions row
-  // recorded for that user on this quote, as a best-effort «когда привязали»
-  // approximation. If the user has no transition (e.g., they only set the
-  // per-item assignment without advancing the workflow), the timestamp stays
-  // null and the panel renders the ФИО without a date — same as МОЛ/МОТ when
-  // `*_assigned_at` is null.
+  // Tertiary fallback: if `status_history` had no "auto: all items routed"
+  // row for any of this user's brands (e.g. legacy quote that pre-dates the
+  // kanban-auto-advance migration, or a brand-slice that was partially
+  // routed and never crossed the gate), use the earliest workflow_transitions
+  // row of the МОЗ themselves as a last-resort approximation. Skip when
+  // status_history already supplied a timestamp.
   for (const t of transitions) {
     const uid = t.actor_id ?? null;
     if (!uid || !t.created_at) continue;

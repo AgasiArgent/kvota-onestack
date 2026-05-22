@@ -307,8 +307,9 @@ function QuoteInfoBlock({
         )}
         {/* МОЗ — sourced from quote_items.assigned_procurement_user. Testing 2
             row 2 — tester reported МОЗ missing from the active responsibles
-            block. `assigned_at` is best-effort (earliest workflow_transitions
-            row for that user — see fetchQuoteContextData step 4b). */}
+            block. `assigned_at` is derived from the brand-slice routing
+            moment in status_history (reason='auto: all items routed') —
+            see fetchQuoteContextData step 4b. Testing 2 row 79 fix. */}
         {procurementAssignees.map((a) => (
           <DomainAssigneeRow
             key={`moz-${a.user_id}`}
