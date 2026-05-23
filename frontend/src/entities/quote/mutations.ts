@@ -411,10 +411,19 @@ export async function assignItemsToInvoice(
   //    Include every field build_calculation_inputs sees on the supplier
   //    side: name, SKU, brand, qty, idn_sku, vat_rate. Purchase price is
   //    left null here and filled by procurement in the invoice-card editor.
+  //
+  //    `.order("position")` is load-bearing — Testing 2 row 68 ("позиции
+  //    перемешиваются"): without explicit ORDER BY, PostgREST returns IN
+  //    matches in planner order (often the physical row order), so the
+  //    invoice_items inserted below land in scrambled positions and the
+  //    КПП UI shows items out of the customer's original sequence. Sorting
+  //    here mirrors how AddPositionsModal lists candidates (also by
+  //    `position` asc), keeping the supplier КПП in source-quote order.
   const { data: items, error: itemsErr } = await supabase
     .from("quote_items")
     .select("id, quote_id, product_name, supplier_sku, brand, quantity, idn_sku, vat_rate")
-    .in("id", itemIds);
+    .in("id", itemIds)
+    .order("position", { ascending: true });
   if (itemsErr) throw itemsErr;
   if (!items || items.length === 0) return;
 
