@@ -54,6 +54,10 @@ interface FakeSupabase {
     quantity: number;
     idn_sku: string | null;
     vat_rate: number | null;
+    // `position` mirrors `kvota.quote_items.position` so the mock can return
+    // rows in a controlled order via .order("position"). Defaults to fixture
+    // index when omitted by older tests that don't care about ordering.
+    position?: number;
   }>;
   invoice: { id: string; quote_id: string } | null;
   quote: { id: string; organization_id: string } | null;
@@ -108,10 +112,50 @@ function makeFakeSupabase(): FakeSupabase {
       if (table === "quote_items") {
         return {
           select: (_cols: string) => ({
-            in: async (_col: string, ids: string[]) => ({
-              data: state.quoteItems.filter((qi) => ids.includes(qi.id)),
-              error: null,
-            }),
+            // Builder pattern: supports both `.in(...)` (legacy direct await)
+            // and `.in(...).order("position", { ascending: true })` (current
+            // assignItemsToInvoice — fixes Testing 2 row 68 where КПП rows
+            // appeared shuffled because Supabase IN returns no guaranteed
+            // order). The `then` keeps the builder thenable for tests that
+            // don't chain `.order`.
+            in: (_col: string, ids: string[]) => {
+              const filtered = state.quoteItems.filter((qi) =>
+                ids.includes(qi.id)
+              );
+              const positionOf = (qi: { id: string; position?: number }) => {
+                if (typeof qi.position === "number") return qi.position;
+                return state.quoteItems.findIndex((q) => q.id === qi.id);
+              };
+              return {
+                order: async (
+                  col: string,
+                  opts?: { ascending?: boolean }
+                ) => {
+                  if (col !== "position") {
+                    throw new Error(
+                      `Unexpected order column on quote_items: ${col}`
+                    );
+                  }
+                  const asc = opts?.ascending ?? true;
+                  const sorted = [...filtered].sort((a, b) => {
+                    const d = positionOf(a) - positionOf(b);
+                    return asc ? d : -d;
+                  });
+                  return { data: sorted, error: null };
+                },
+                then(
+                  resolve: (r: {
+                    data: typeof filtered;
+                    error: null;
+                  }) => unknown
+                ) {
+                  return Promise.resolve({
+                    data: filtered,
+                    error: null,
+                  }).then(resolve);
+                },
+              };
+            },
           }),
           update: (updates: Record<string, unknown>) => {
             if ("invoice_id" in updates) {
@@ -418,6 +462,75 @@ describe("assignItemsToInvoice (Phase 5c) — new schema writes", () => {
     await assignItemsToInvoice(["qi-1"], "inv-A");
 
     expect(fakeSupabase.wroteToInvoiceItemPrices).toBe(false);
+  });
+
+  it("inserts invoice_items in source quote_items.position order, regardless of Supabase fetch order (Testing 2 row 68)", async () => {
+    // Regression for МОЗ "Позиции перемешиваются" — Testing 2 row 68.
+    // Setup: fixtures intentionally out of position order. The fixture array
+    // order mimics what Supabase IN returns when planner picks an index
+    // scan — implementation-defined, NEVER the input list order.
+    // After fix: assignItemsToInvoice must explicitly sort by source
+    // quote_items.position so the КПП reflects the customer's original
+    // numbering.
+    fakeSupabase.quoteItems = [
+      {
+        id: "qi-third",
+        quote_id: "q-1",
+        product_name: "Третий",
+        supplier_sku: null,
+        brand: null,
+        quantity: 1,
+        idn_sku: null,
+        vat_rate: null,
+        position: 3,
+      },
+      {
+        id: "qi-first",
+        quote_id: "q-1",
+        product_name: "Первый",
+        supplier_sku: null,
+        brand: null,
+        quantity: 1,
+        idn_sku: null,
+        vat_rate: null,
+        position: 1,
+      },
+      {
+        id: "qi-second",
+        quote_id: "q-1",
+        product_name: "Второй",
+        supplier_sku: null,
+        brand: null,
+        quantity: 1,
+        idn_sku: null,
+        vat_rate: null,
+        position: 2,
+      },
+    ];
+
+    const { assignItemsToInvoice } = await import("../mutations");
+    // Caller passes IDs in arbitrary order — the contract is that source
+    // position drives the КПП ordering, not selection order.
+    await assignItemsToInvoice(
+      ["qi-third", "qi-first", "qi-second"],
+      "inv-A"
+    );
+
+    expect(fakeSupabase.insertedInvoiceItems).toHaveLength(3);
+    const productNames = fakeSupabase.insertedInvoiceItems.map(
+      (r) => r.product_name
+    );
+    expect(productNames).toEqual(["Первый", "Второй", "Третий"]);
+    // Positions counted from MAX+1 (= 1, since fixture has no existing rows)
+    const positions = fakeSupabase.insertedInvoiceItems.map((r) => r.position);
+    expect(positions).toEqual([1, 2, 3]);
+
+    // Coverage rows must pair invoice_items 1-2-3 with the source
+    // quote_items in the SAME order — invoice_item ii-1 covers qi-first
+    // (position 1), not qi-third (which was first in fixture).
+    expect(fakeSupabase.upsertedCoverage[0].quote_item_id).toBe("qi-first");
+    expect(fakeSupabase.upsertedCoverage[1].quote_item_id).toBe("qi-second");
+    expect(fakeSupabase.upsertedCoverage[2].quote_item_id).toBe("qi-third");
   });
 
   it("is a no-op (returns early) when itemIds is empty", async () => {
