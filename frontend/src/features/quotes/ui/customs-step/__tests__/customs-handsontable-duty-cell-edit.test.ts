@@ -36,6 +36,29 @@ describe("buildDutyCompositeUpdates — Auto-mode rows", () => {
     expect(updates.customs_duty_per_kg).toBeNull();
   });
 
+  it("accepts comma decimal separator from Russian locale paste (Testing 2 row 72)", () => {
+    // Testing 2 row 72 — «Десятичные округляются при копировании % пошлины».
+    // Repro: МВЭД copies 12,5% (Handsontable copies the displayed value in
+    // ru-RU locale → "12,5") and pastes into another cell. `parseFloat("12,5")`
+    // stops at the comma and returns 12, dropping the fractional part.
+    // Fix normalizes comma → dot before parsing so RU-locale paste and
+    // Russian-keyboard typing both round-trip cleanly.
+    const updates = buildDutyCompositeUpdates("12,5", {
+      customs_duty_per_kg: null,
+      customs_manual_override: false,
+    });
+    expect(updates.customs_duty).toBe(12.5);
+  });
+
+  it("accepts comma decimal separator for ₽/кг slot as well", () => {
+    const updates = buildDutyCompositeUpdates("0,25", {
+      customs_duty_per_kg: 0.5,
+      customs_manual_override: false,
+    });
+    expect(updates.customs_duty_per_kg).toBe(0.25);
+    expect(updates.customs_duty).toBeNull();
+  });
+
   it("writes customs_duty_per_kg when current mode is perKg", () => {
     const updates = buildDutyCompositeUpdates("0.5", {
       customs_duty_per_kg: 0.25,
