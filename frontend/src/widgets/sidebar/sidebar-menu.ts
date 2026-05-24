@@ -24,6 +24,7 @@ import {
   Truck,
   Anchor,
 } from "lucide-react";
+import { isNewbieOnly } from "@/entities/user/types";
 
 export interface MenuItem {
   icon: LucideIcon;
@@ -53,6 +54,14 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
     changelogUnreadCount = 0,
     unassignedDistributionCount = 0,
   } = config;
+
+  // Newbie parking role: user has been deactivated/not-yet-assigned. Hide
+  // the entire nav — only profile + logout in the footer remain visible.
+  // Any non-newbie role on the same user behaves normally.
+  if (isNewbieOnly(roles)) {
+    return [];
+  }
+
   const hasRole = (...r: string[]) =>
     isAdmin || r.some((role) => roles.includes(role));
   const sections: MenuSection[] = [];

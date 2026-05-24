@@ -36,6 +36,12 @@ interface UsersPageProps {
   salesGroups: SalesGroupOption[];
   departments: DepartmentOption[];
   orgId: string;
+  /**
+   * Roles of the currently signed-in caller. Used to gate role-picker
+   * options that only specific role tiers may assign (e.g., the `newbie`
+   * parking role from Testing 2 row 38p2 — admin + head_of_* only).
+   */
+  callerRoles: string[];
 }
 
 function formatDate(dateStr: string): string {
@@ -54,6 +60,7 @@ export function UsersPageClient({
   salesGroups,
   departments,
   orgId,
+  callerRoles,
 }: UsersPageProps) {
   const [search, setSearch] = useState("");
   const [selectedMember, setSelectedMember] = useState<OrgMember | null>(null);
@@ -226,6 +233,7 @@ export function UsersPageClient({
         allRoles={allRoles}
         salesGroups={salesGroups}
         departments={departments}
+        callerRoles={callerRoles}
         open={isCreateDialogOpen}
         onOpenChange={setIsCreateDialogOpen}
       />
@@ -238,6 +246,7 @@ export function UsersPageClient({
           salesGroups={salesGroups}
           departments={departments}
           orgId={orgId}
+          callerRoles={callerRoles}
           isOpen={isEditSheetOpen}
           onClose={handleEditSheetClose}
         />
