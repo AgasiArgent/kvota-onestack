@@ -1160,7 +1160,8 @@ export function ProcurementHandsontable({
             data: "advance_to_supplier_percent",
             type: "numeric",
             numericFormat: { pattern: "0.[00]" },
-            width: 60,
+            // Testing 2 row 69: 60 was too narrow for 3-digit values (100) + header «% аванса».
+            width: 90,
             readOnly: procurementCompleted,
             validator: (
               value: unknown,
