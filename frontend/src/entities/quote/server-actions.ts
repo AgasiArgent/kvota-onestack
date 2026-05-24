@@ -112,6 +112,53 @@ export async function assignBrandGroup(
 }
 
 /**
+ * Reassigns a brand-slice that's already been distributed to a different
+ * procurement user (МОЗ). Differs from `assignBrandGroup` in three ways:
+ *   - Touches `assigned_procurement_user` only — never resets
+ *     `procurement_status`, so an in-progress slice keeps its status when
+ *     the head_of_procurement swaps the owner.
+ *   - Does NOT trigger `maybeAdvanceBrandSlices` — the slice is already
+ *     past «Распределение», so auto-advance can only mis-fire.
+ *   - Does NOT pin the brand — the head is overriding a single slice, not
+ *     setting a default rule.
+ *
+ * Testing 2 row 75: «Кнопка переназначения в канбане закупок» — the head
+ * needs to swap МОЗ on already-routed slices when someone is sick / on
+ * vacation / overloaded without resetting the workflow.
+ */
+export async function reassignBrandGroup(
+  itemIds: string[],
+  userId: string
+): Promise<{ success: boolean; error?: string }> {
+  const user = await getSessionUser();
+  if (!user?.orgId) return { success: false, error: "Not authenticated" };
+
+  const isAllowed =
+    user.roles.includes("admin") ||
+    user.roles.includes("head_of_procurement") ||
+    user.roles.includes("procurement_senior");
+  if (!isAllowed) return { success: false, error: "Not authorized" };
+
+  if (itemIds.length === 0) {
+    return { success: false, error: "Нет позиций для переназначения" };
+  }
+
+  const supabase = createAdminClient();
+
+  const { error: updateError } = await supabase
+    .from("quote_items")
+    .update({ assigned_procurement_user: userId })
+    .in("id", itemIds);
+
+  if (updateError) {
+    return { success: false, error: updateError.message };
+  }
+
+  revalidatePath("/procurement/kanban");
+  return { success: true };
+}
+
+/**
  * Phase B trigger: called from the letter-draft-composer right after the
  * Python `/api/invoices/{id}/letter-draft/send` succeeds. Promotes every
  * brand-slice represented in the invoice's items from

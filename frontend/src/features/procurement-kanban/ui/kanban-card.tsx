@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Clock } from "lucide-react";
 import type { ProcurementUserWorkload } from "@/shared/types/procurement-user";
 import { AssignPopover } from "./assign-popover";
+import { ReassignPopover } from "./reassign-popover";
 import {
   brandCardKey,
   type KanbanBrandCard,
@@ -31,6 +32,18 @@ export interface KanbanCardProps {
   assignNotice?: string;
   /** Called after a successful assignment. */
   onAssigned?: () => void;
+  /**
+   * Whether the current user can reassign (head_of_procurement / admin /
+   * procurement_senior). Testing 2 row 75. Drives the «Переназначить»
+   * button on non-distributing cards.
+   */
+  canReassign?: boolean;
+  /** Controlled open state of the reassign popover. */
+  reassignOpen?: boolean;
+  /** Called when the reassign popover requests to open/close. */
+  onReassignOpenChange?: (open: boolean) => void;
+  /** Called after a successful reassignment. */
+  onReassigned?: () => void;
 }
 
 const EM_DASH = "—";
@@ -62,10 +75,19 @@ export function KanbanCard({
   onAssignOpenChange,
   assignNotice,
   onAssigned,
+  canReassign = false,
+  reassignOpen = false,
+  onReassignOpenChange,
+  onReassigned,
 }: KanbanCardProps) {
   const isDistributing = card.procurement_substatus === "distributing";
   const canAssign =
     isDistributing && workload !== undefined && orgId !== undefined;
+  // Reassign is only meaningful past the «Распределение» column AND when the
+  // card actually has someone assigned. Head can reassign even an empty
+  // slice, but the picker shows «Текущий исполнитель: —», which is fine.
+  const showReassign =
+    canReassign && !isDistributing && workload !== undefined;
   const key = brandCardKey(card);
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({
@@ -178,6 +200,18 @@ export function KanbanCard({
           onAssigned={() => {
             onAssignOpenChange?.(false);
             onAssigned?.();
+          }}
+        />
+      )}
+      {showReassign && workload && (
+        <ReassignPopover
+          card={card}
+          users={workload}
+          open={reassignOpen}
+          onOpenChange={(next) => onReassignOpenChange?.(next)}
+          onReassigned={() => {
+            onReassignOpenChange?.(false);
+            onReassigned?.();
           }}
         />
       )}
