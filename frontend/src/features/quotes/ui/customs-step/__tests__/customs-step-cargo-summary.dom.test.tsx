@@ -22,6 +22,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 
 import { InvoiceCargoSummary } from "../../logistics-step/invoice-cargo-summary";
 import type {
+  InvoiceItemsAggregateExport,
   QuoteInvoiceRow,
   QuoteItemRow,
 } from "@/entities/quote/queries";
@@ -109,6 +110,91 @@ describe("Customs step — cargo info panel (Testing 2 row 14 МВЭД)", () => 
     expect(panel).toHaveTextContent("Груз");
     expect(panel).toHaveTextContent("3 позиции");
     expect(panel).toHaveTextContent("Кабель силовой");
+  });
+
+  it("surfaces Валюта КПП / Стоимость / Кол-во / Ед.изм. from items_aggregate (Testing 2 row 71)", () => {
+    // Tester repro: customs reviewer opens КП → cargo info panel shows the
+    // shipment digest but four key КП totals are «Данных нет». Aggregate
+    // comes from fetchQuoteInvoices joining invoice_items + coverage; the
+    // panel now renders all four when the aggregate is present.
+    const invoice = makeInvoice({
+      currency: "EUR",
+      items_aggregate: {
+        total_quantity: 120,
+        total_amount_original: 4567.5,
+        currency: "EUR",
+        units: ["шт"],
+      } satisfies InvoiceItemsAggregateExport,
+    });
+
+    render(
+      <InvoiceCargoSummary
+        invoice={invoice}
+        destination={{ country: "Россия", city: null, address: null }}
+        items={[makeItem(invoice.id, "Подшипник 6204")]}
+      />,
+    );
+
+    const panel = screen.getByTestId("invoice-cargo-summary");
+    expect(panel).toHaveTextContent("Валюта КПП");
+    expect(panel).toHaveTextContent("EUR");
+    expect(panel).toHaveTextContent("Стоимость");
+    expect(panel).toHaveTextContent("4 567,5 EUR");
+    expect(panel).toHaveTextContent("Кол-во");
+    expect(panel).toHaveTextContent("120");
+    expect(panel).toHaveTextContent("Ед.изм.");
+    expect(panel).toHaveTextContent("шт");
+  });
+
+  it("shows «разные» for Ед.изм. when КП contains mixed units", () => {
+    const invoice = makeInvoice({
+      items_aggregate: {
+        total_quantity: 50,
+        total_amount_original: null,
+        currency: "USD",
+        units: ["кг", "шт"],
+      } satisfies InvoiceItemsAggregateExport,
+    });
+
+    render(
+      <InvoiceCargoSummary
+        invoice={invoice}
+        destination={{ country: null, city: null, address: null }}
+        items={[makeItem(invoice.id, "Микс")]}
+      />,
+    );
+
+    const panel = screen.getByTestId("invoice-cargo-summary");
+    expect(panel).toHaveTextContent("Ед.изм.");
+    expect(panel).toHaveTextContent("разные");
+  });
+
+  it("keeps the empty-state when invoice has no items_aggregate (KP just created)", () => {
+    const invoice = makeInvoice({
+      pickup_country: null,
+      pickup_city: null,
+      total_weight_kg: null,
+      total_volume_m3: null,
+      package_count: null,
+      length_m: null,
+      width_m: null,
+      height_m: null,
+      supplier_incoterms: null,
+      buyer_company: null,
+      // No items_aggregate set — fetchQuoteInvoices returns null for empty КП
+    });
+
+    render(
+      <InvoiceCargoSummary
+        invoice={invoice}
+        destination={{ country: null, city: null, address: null }}
+        items={[]}
+      />,
+    );
+
+    expect(
+      screen.getByTestId("invoice-cargo-summary-empty"),
+    ).toBeInTheDocument();
   });
 
   it("renders empty-state hint when procurement has not filled cargo yet", () => {

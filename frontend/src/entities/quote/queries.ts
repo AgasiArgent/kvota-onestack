@@ -519,6 +519,38 @@ export async function fetchQuoteInvoices(quoteId: string) {
   // can render «Мест: N» + per-box dimensions in InvoiceCargoSummary.
   const invoiceIds = invoices.map((i) => i.id);
 
+  // Testing 2 row 71: customs cargo info needs 4 totals from the supplier
+  // КП — Валюта КПП / Стоимость / Кол-во / Ед.изм. Currency is invoice-level
+  // already. The other three are aggregates over invoice_items joined with
+  // quote_items (for `unit`). We batch one extra round-trip here and roll
+  // it up per-invoice in JS — Supabase REST has no SUM/GROUP BY syntax
+  // exposed to the client.
+  //
+  // The cast is the same `any`-hop pattern used in mutations.ts for
+  // invoice_items + invoice_item_coverage — migrations 281/282 added them
+  // but database.types.ts has not been regenerated yet (verified 2026-05-23).
+  const invoiceItemsRes = invoiceIds.length
+    ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ((await (supabase as any)
+        .from("invoice_items")
+        .select(
+          "invoice_id, quantity, purchase_price_original, purchase_currency, invoice_item_coverage!inner(quote_items!inner(unit))"
+        )
+        .in("invoice_id", invoiceIds)) as {
+        data:
+          | Array<{
+              invoice_id: string;
+              quantity: number | null;
+              purchase_price_original: number | null;
+              purchase_currency: string | null;
+              invoice_item_coverage: Array<{
+                quote_items: { unit: string | null } | null;
+              }>;
+            }>
+          | null;
+      })
+    : { data: [] };
+
   const [suppliersRes, buyersRes, supplierContactsRes, cargoPlacesRes] =
     await Promise.all([
       supplierIds.length
@@ -559,16 +591,92 @@ export async function fetchQuoteInvoices(quoteId: string) {
     cargoPlacesByInvoice.set(place.invoice_id, list);
   }
 
-  return invoices.map((inv) => ({
-    ...inv,
-    supplier:
-      (inv.supplier_id && supplierMap.get(inv.supplier_id)) || null,
-    buyer_company:
-      (inv.buyer_company_id && buyerMap.get(inv.buyer_company_id)) || null,
-    supplier_contact:
-      (inv.supplier_contact_id && supplierContactMap.get(inv.supplier_contact_id)) || null,
-    cargo_places: cargoPlacesByInvoice.get(inv.id) ?? [],
-  }));
+  // Roll up invoice_items into a per-invoice aggregate that the cargo
+  // summary panel reads as a single struct. We keep nulls when no row
+  // contributes a value so the UI can show "—" instead of "0" and the
+  // user can tell "no data" apart from "explicitly zero".
+  const aggregatesByInvoice = new Map<string, InvoiceItemsAggregate>();
+  for (const row of invoiceItemsRes.data ?? []) {
+    const prev = aggregatesByInvoice.get(row.invoice_id) ?? {
+      total_quantity: null,
+      total_amount_original: null,
+      currency: null,
+      units: new Set<string>(),
+    };
+    if (row.quantity != null) {
+      prev.total_quantity = (prev.total_quantity ?? 0) + row.quantity;
+    }
+    if (row.purchase_price_original != null && row.quantity != null) {
+      prev.total_amount_original =
+        (prev.total_amount_original ?? 0) +
+        row.purchase_price_original * row.quantity;
+    }
+    // Use the first non-null purchase_currency we see; mixed-currency КПП
+    // are rare and the supplier's amount in their own currency is what
+    // matters for the cargo panel.
+    if (!prev.currency && row.purchase_currency) {
+      prev.currency = row.purchase_currency;
+    }
+    for (const cov of row.invoice_item_coverage ?? []) {
+      const unit = cov.quote_items?.unit?.trim();
+      if (unit) prev.units.add(unit);
+    }
+    aggregatesByInvoice.set(row.invoice_id, prev);
+  }
+
+  return invoices.map((inv) => {
+    const agg = aggregatesByInvoice.get(inv.id);
+    return {
+      ...inv,
+      supplier:
+        (inv.supplier_id && supplierMap.get(inv.supplier_id)) || null,
+      buyer_company:
+        (inv.buyer_company_id && buyerMap.get(inv.buyer_company_id)) || null,
+      supplier_contact:
+        (inv.supplier_contact_id && supplierContactMap.get(inv.supplier_contact_id)) || null,
+      cargo_places: cargoPlacesByInvoice.get(inv.id) ?? [],
+      items_aggregate: agg
+        ? ({
+            total_quantity: agg.total_quantity,
+            total_amount_original: agg.total_amount_original,
+            // Prefer the invoice's own currency (set at КПП creation) over
+            // the per-item purchase_currency when both are present. The
+            // per-item value is the fallback for legacy КП whose top-level
+            // currency was left null.
+            currency: inv.currency ?? agg.currency ?? null,
+            units: Array.from(agg.units).sort(),
+          } satisfies InvoiceItemsAggregateExport)
+        : null,
+    };
+  });
+}
+
+/**
+ * Per-invoice rollup of `kvota.invoice_items` used by the cargo info panel
+ * on the logistics + customs steps (Testing 2 row 71). Surfaces the four
+ * fields the tester flagged as «Данных нет»:
+ *   - currency (Валюта КПП)
+ *   - total_amount_original (Стоимость, in `currency`)
+ *   - total_quantity (Кол-во)
+ *   - units (Ед.изм., aggregated across covered quote_items)
+ *
+ * `total_quantity` / `total_amount_original` are nullable so the UI can
+ * distinguish "no data yet" from "explicit zero". `units` is empty when
+ * none of the covered quote_items have a unit string set.
+ */
+export interface InvoiceItemsAggregateExport {
+  total_quantity: number | null;
+  total_amount_original: number | null;
+  currency: string | null;
+  units: string[];
+}
+
+// Internal staging shape — mutates a Set while rolling up.
+interface InvoiceItemsAggregate {
+  total_quantity: number | null;
+  total_amount_original: number | null;
+  currency: string | null;
+  units: Set<string>;
 }
 
 /**

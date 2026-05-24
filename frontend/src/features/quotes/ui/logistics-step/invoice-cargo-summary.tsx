@@ -1,6 +1,6 @@
 "use client";
 
-import { Boxes, MapPin, Package, Ruler, Truck } from "lucide-react";
+import { Boxes, Coins, Hash, MapPin, Package, Ruler, Scale, Truck } from "lucide-react";
 import type {
   QuoteInvoiceRow,
   QuoteItemRow,
@@ -273,6 +273,59 @@ function buildFields(
       label: "Incoterms",
       value: invoice.supplier_incoterms,
     });
+  }
+
+  // Testing 2 row 71 — 4 КПП totals (Валюта / Стоимость / Кол-во / Ед.изм.).
+  // All four fields hang off the per-invoice items_aggregate computed in
+  // fetchQuoteInvoices. They appear together so the customs/logistics
+  // reviewer can sanity-check «что и сколько везём» without opening the
+  // procurement step.
+  //
+  // Gating on `aggregate != null` keeps the empty КП state quiet: an
+  // invoice that was created but has no invoice_items yet would otherwise
+  // surface its default `currency: "USD"` even though procurement hasn't
+  // filled anything (preserves «Закупка ещё не заполнила груз» fallback).
+  const aggregate = invoice.items_aggregate ?? null;
+
+  if (aggregate) {
+    const aggregateCurrency = aggregate.currency ?? invoice.currency ?? null;
+
+    if (aggregateCurrency) {
+      out.push({
+        icon: Coins,
+        label: "Валюта КПП",
+        value: aggregateCurrency,
+      });
+    }
+
+    if (aggregate.total_amount_original != null) {
+      // Show the procurement-side cost in КПП currency. Two-decimal format —
+      // money cells follow the same convention as the calc engine output.
+      out.push({
+        icon: Coins,
+        label: "Стоимость",
+        value: `${M3_FMT.format(aggregate.total_amount_original)}${aggregateCurrency ? ` ${aggregateCurrency}` : ""}`,
+      });
+    }
+
+    if (aggregate.total_quantity != null) {
+      out.push({
+        icon: Hash,
+        label: "Кол-во",
+        value: KG_FMT.format(aggregate.total_quantity),
+      });
+    }
+
+    if (aggregate.units?.length) {
+      // КПП usually contains a single unit kind; show the literal value.
+      // Mixed-unit КП (heterogeneous «шт + кг») drop to «разные» so the
+      // reviewer realises the aggregate quantity is unit-less.
+      out.push({
+        icon: Scale,
+        label: "Ед.изм.",
+        value: aggregate.units.length === 1 ? aggregate.units[0] : "разные",
+      });
+    }
   }
 
   const digest = renderCargoDigest(invoiceItems);
