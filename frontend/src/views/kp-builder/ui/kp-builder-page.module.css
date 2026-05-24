@@ -1,0 +1,45 @@
+/* Split-screen layout for the КП builder page.
+   - Side-by-side at ≥1024px
+   - Stacked at narrow widths */
+
+.root {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0;
+  height: calc(100vh - 48px);
+  min-height: 600px;
+  margin: -24px;
+}
+
+@media (max-width: 1023px) {
+  .root {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+}
+
+.formPane {
+  min-width: 0;
+  min-height: 0;
+  border-right: 1px solid #e4dccd;
+  display: flex;
+  flex-direction: column;
+}
+
+.previewPane {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (max-width: 1023px) {
+  .formPane {
+    border-right: none;
+    border-bottom: 1px solid #e4dccd;
+    min-height: 600px;
+  }
+  .previewPane {
+    min-height: 800px;
+  }
+}

@@ -1,0 +1,281 @@
+/* ============================================================
+   КП form module — kvotaflow-styled inputs in the left pane.
+
+   This module is intentionally self-contained: no shadcn or
+   global tokens, so the preview pane on the right cannot leak
+   its layout into the form area. Visual language: cream background,
+   Inter typography, copper accents to read as "the brand's own"
+   composer UI.
+   ============================================================ */
+
+.formRoot {
+  display: flex;
+  flex-direction: column;
+  background: #fbf6ec;
+  height: 100%;
+  min-height: 0;
+  font-family: "Inter", -apple-system, "Segoe UI", Arial, sans-serif;
+  color: #2a2f3a;
+}
+
+.formHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px;
+  background: #ffffff;
+  border-bottom: 1px solid #e4dccd;
+  flex-shrink: 0;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.wordmark {
+  font-size: 17px;
+  font-weight: 700;
+  color: #b85b2a;
+  letter-spacing: 0.01em;
+}
+.crumbs {
+  font-size: 11px;
+  color: #6f7a85;
+  margin-top: 2px;
+}
+.headerActions {
+  display: inline-flex;
+  gap: 6px;
+}
+.btnOutline {
+  background: #ffffff;
+  color: #2a2f3a;
+  border: 1px solid #d9c9b0;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+}
+.btnOutline:hover {
+  background: #fbf6ec;
+  border-color: #b85b2a;
+}
+
+.formBody {
+  flex: 1;
+  overflow: auto;
+  padding: 18px 24px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #b85b2a;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 16px 0 4px;
+}
+.sectionTitleDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #b85b2a;
+}
+
+.row2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 14px;
+}
+@media (max-width: 700px) {
+  .row2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.fieldLabel {
+  font-size: 11px;
+  color: #6f7a85;
+  font-weight: 500;
+}
+.input,
+.textarea {
+  background: #ffffff;
+  border: 1px solid #d9c9b0;
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 13px;
+  color: #2a2f3a;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s ease;
+  width: 100%;
+}
+.input:focus,
+.textarea:focus {
+  border-color: #b85b2a;
+}
+.textarea {
+  resize: vertical;
+  min-height: 56px;
+  line-height: 1.4;
+}
+
+.items {
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border: 1px solid #d9c9b0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.itemsRow {
+  display: grid;
+  grid-template-columns: 32px 1.6fr 1.6fr 0.7fr 1fr 1fr 28px;
+  gap: 4px;
+  padding: 4px 6px;
+  border-bottom: 1px solid #f0e6d4;
+}
+.itemsRow:last-child {
+  border-bottom: none;
+}
+.itemsHead {
+  background: #f7eedd;
+  font-size: 11px;
+  font-weight: 600;
+  color: #6f7a85;
+  padding: 7px 6px;
+}
+.itemsHead > div {
+  padding: 0 4px;
+}
+.cell {
+  display: flex;
+  align-items: center;
+}
+.cellInput {
+  width: 100%;
+  border: 1px solid transparent;
+  background: transparent;
+  font-size: 12px;
+  padding: 6px 6px;
+  border-radius: 4px;
+  color: #2a2f3a;
+  font-family: inherit;
+  outline: none;
+}
+.cellInput:focus {
+  border-color: #b85b2a;
+  background: #ffffff;
+}
+.cellNum .cellInput {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.cellNum {
+  justify-content: flex-end;
+}
+.removeBtn {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  color: #6f7a85;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+.removeBtn:hover {
+  color: #d6202a;
+  border-color: #f0d4d4;
+  background: #fff5f5;
+}
+.addBtn {
+  background: transparent;
+  border: 1px dashed #d9c9b0;
+  color: #b85b2a;
+  border-radius: 6px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  align-self: flex-start;
+  font-family: inherit;
+  margin-top: 4px;
+}
+.addBtn:hover {
+  background: #fbf6ec;
+  border-color: #b85b2a;
+}
+
+.editableList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.editableListRow {
+  display: grid;
+  grid-template-columns: 14px 1fr 28px;
+  gap: 8px;
+  align-items: center;
+}
+.editableListRowCheck {
+  display: grid;
+  grid-template-columns: 18px 1fr 28px;
+  gap: 8px;
+  align-items: center;
+}
+.editableListBullet {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #b85b2a;
+  margin-left: 4px;
+}
+.editableListCheck {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: #b85b2a;
+}
+
+.checkSet {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 14px;
+}
+.checkSetLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #2a2f3a;
+  cursor: pointer;
+}
+.checkSetLabel input {
+  width: 16px;
+  height: 16px;
+  accent-color: #b85b2a;
+  cursor: pointer;
+}
+
+.helper {
+  font-size: 11px;
+  color: #8a949f;
+  font-style: italic;
+}
