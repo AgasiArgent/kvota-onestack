@@ -58,6 +58,25 @@ function formatInvoiceAmount(sum: KanbanInvoiceSum): string {
   return `${numberFormatter.format(sum.total)}${NBSP}${sum.currency}`;
 }
 
+const dateFormatter = new Intl.DateTimeFormat("ru-RU", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "2-digit",
+  timeZone: "Europe/Moscow",
+});
+
+/**
+ * Testing 2 row 67 — substate-transition timestamp on the kanban card.
+ * Driven by `quote_brand_substates.updated_at` (latest transition for this
+ * slice), formatted in MSK to keep server (UTC) and client (any TZ) in
+ * agreement.
+ */
+function formatDistributionTimestamp(iso: string): string | null {
+  const parsed = Date.parse(iso);
+  if (Number.isNaN(parsed)) return null;
+  return dateFormatter.format(new Date(parsed));
+}
+
 /**
  * Draggable per-(quote, brand) card. Clicking the card body (without dragging)
  * opens the status history panel. The Quote IDN is a link that navigates to
@@ -113,6 +132,13 @@ export function KanbanCard({
   const hasInvoices = card.invoice_sums.length > 0;
   const isUnbranded = card.brand === "";
   const brandLabel = isUnbranded ? "Без бренда" : card.brand;
+  // Testing 2 row 67 — surface tender flag + last-transition timestamp as
+  // visible card fields, plus the distribution comment promoted from
+  // tooltip-only to a dedicated row so МОЗ doesn't have to hover.
+  const isTender = Boolean(card.tender_type);
+  const distributionTimestamp = card.updated_at
+    ? formatDistributionTimestamp(card.updated_at)
+    : null;
 
   return (
     <div
@@ -158,6 +184,14 @@ export function KanbanCard({
           >
             {brandLabel}
           </span>
+          {isTender && (
+            <span
+              className="inline-flex items-center rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800"
+              title={`Тендер${card.tender_type && card.tender_type !== "tender" ? ` (${card.tender_type})` : ""}`}
+            >
+              Тендер
+            </span>
+          )}
         </div>
         <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
           <Clock className="size-3" />
@@ -186,6 +220,19 @@ export function KanbanCard({
         ) : (
           <p className="truncate">
             <span className="font-medium">Сумма:</span> {EM_DASH}
+          </p>
+        )}
+        {distributionTimestamp && (
+          <p className="truncate">
+            <span className="font-medium">Этап с:</span> {distributionTimestamp}
+          </p>
+        )}
+        {reason && (
+          <p
+            className="line-clamp-2 italic text-muted-foreground"
+            title={reason}
+          >
+            <span className="font-medium not-italic">Коммент:</span> {reason}
           </p>
         )}
       </div>

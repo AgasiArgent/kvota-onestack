@@ -164,11 +164,13 @@ async def get_kanban(request) -> JSONResponse:
     sb = get_supabase()
 
     # Pull (quote, brand) rows joined with their parent quote + customer.
+    # `tender_type` (Testing 2 row 67) lets the kanban card flag tender quotes
+    # — head_of_procurement triages them differently from regular КП.
     qbs_result = (
         sb.table("quote_brand_substates")
         .select(
             "quote_id, brand, substatus, updated_at, "
-            "quotes!inner(id, idn_quote, workflow_status, organization_id, created_by, "
+            "quotes!inner(id, idn_quote, workflow_status, organization_id, created_by, tender_type, "
             "customers!customer_id(name))"
         )
         .eq("quotes.workflow_status", "pending_procurement")
@@ -379,6 +381,11 @@ async def get_kanban(request) -> JSONResponse:
 
         invoice_sums = invoice_sums_by_key.get((qid, brand), [])
 
+        # tender_type lives on the parent quote — empty string for regular
+        # КП, populated for tender-flow quotes. Mirrored to the card model so
+        # the frontend can render the «Тендер» badge (Testing 2 row 67).
+        tender_type = parent.get("tender_type") or None
+
         columns[substatus].append({
             "quote_id": qid,
             "brand": brand,
@@ -391,6 +398,7 @@ async def get_kanban(request) -> JSONResponse:
             "procurement_user_names": procurement_user_names,
             "invoice_sums": invoice_sums,
             "latest_reason": latest_reason,
+            "tender_type": tender_type,
         })
 
     return JSONResponse(

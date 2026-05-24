@@ -33,6 +33,13 @@ export interface KanbanBrandCard {
   manager_name: string | null;
   procurement_user_names: string[];
   invoice_sums: KanbanInvoiceSum[];
+  /**
+   * Tender flag from the parent quote (kvota.quotes.tender_type). Non-null
+   * for КП distributed via the tender flow — surfaces as a «Тендер» badge
+   * on the card so head_of_procurement can triage them differently
+   * (Testing 2 row 67).
+   */
+  tender_type?: string | null;
 }
 
 /**
