@@ -269,3 +269,44 @@ When you're ready:
 - [ ] If anything weird at step 5 (restart) — execute rollback immediately
 - [ ] Update concept page in wiki with activation date
 - [ ] Schedule first PITR drill (Layer 3 monthly drill can include PITR steps after Phase 2)
+
+---
+
+## ✅ Activation log — 2026-05-24
+
+Activated successfully on `beget-kvota`. Lessons learned vs original plan:
+
+### Gotchas encountered
+
+1. **`ALTER SYSTEM` permission denied for `postgres` user.** In Supabase, `postgres` is not a true superuser — `supabase_admin` is. Worked around by writing directly to `postgresql.auto.conf`. Three settings added: `archive_mode = on`, `archive_command = '/var/lib/postgresql/data/.walg-push.sh %p'`, `archive_timeout = '60s'`.
+
+2. **`pg_backup_start` (formerly `pg_start_backup`) permission denied for `postgres`.** Same root cause. Set `PGUSER=supabase_admin` in `.walg-env.sh` for `backup-push` to work.
+
+3. **WAL-G needs `PGUSER`/`PGHOST`/`PGDATABASE` env vars** for `backup-push` (to coordinate `pg_backup_start` / `pg_backup_stop`). For `wal-push` from archive_command — not needed (doesn't connect to PG). Added all to env file:
+   ```
+   export PGUSER=supabase_admin
+   export PGHOST=/var/run/postgresql
+   export PGDATABASE=postgres
+   ```
+
+4. **PG postgres user UID in Supabase image is 105, not 999.** Adjusted chown.
+
+5. **Multiple ALTER SYSTEM statements in single `psql -c`** wrapped in implicit transaction → "ALTER SYSTEM cannot run inside transaction block". Use separate `-c` flags OR (cleaner) write directly to `postgresql.auto.conf`.
+
+### Final activated state
+
+- Base backup: `base_000000010000001C0000004B` (2.68 GB compressed lz4, 24 objects)
+- WAL archive: working, `archive_timeout = 60s`
+- `pg_stat_archiver`: 5 archived, 0 failed
+- Daily base backup cron: `0 3 * * *` retain last 7
+- Telegram alerts on base backup success/failure
+- Total Phase 2 downtime: 3 PG restarts × ~3 sec each = ~10 sec (first two restarts were due to debugging missteps; clean activation would be 1 restart × 3 sec)
+
+### Files on VPS
+
+| Path | Purpose |
+|------|---------|
+| `/root/lisa/supabase/docker/volumes/db/data/.walg-env.sh` | WAL-G env (chmod 600, postgres:postgres) |
+| `/root/lisa/supabase/docker/volumes/db/data/.walg-push.sh` | archive_command wrapper (chmod 700) |
+| `/root/lisa/supabase/docker/volumes/db/data/postgresql.auto.conf` | archive_mode + archive_command + archive_timeout |
+| `/root/onestack/scripts/wal-g-base-backup.sh` | Daily base backup script (in repo) |
