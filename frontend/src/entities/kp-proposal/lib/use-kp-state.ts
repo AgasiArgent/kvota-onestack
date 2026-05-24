@@ -14,17 +14,21 @@
  *   state).
  * - Persist and restore zoom level (range 0.3–1.2, default 0.7).
  *
- * Hydration strategy: lazy initializer in `useState`. We read from
- * `localStorage` inside the initializer (which runs once on mount) so the
- * client-side initial render already shows persisted data — no flash of
- * default content, and no `useEffect` + `setState` cascade. On the server
- * `window` is undefined so we fall back to the default; the first client
- * render then reads the real value and React re-renders.
+ * Hydration strategy: `useEffect`-driven, NOT lazy-initializer.
  *
- * The hook lives in a "use client" file, so the component using it is
- * always rendered on the client — there's no SSR/CSR hydration mismatch
- * because both passes inside the same client run share the initializer
- * output.
+ * Next.js App Router renders "use client" components on the SERVER first
+ * to produce the initial HTML, then re-runs them on the CLIENT to hydrate.
+ * A lazy initializer would return DEFAULT_PROPOSAL on the server (window
+ * absent) and the localStorage payload on the client — React would see
+ * the two passes disagree and throw hydration error #418, then re-render
+ * from scratch. That happened on production smoke 2026-05-24.
+ *
+ * Fix: both render passes start from DEFAULT_PROPOSAL, then a mount-only
+ * `useEffect` reads localStorage and calls `setData`. Trade-off is a
+ * single-frame flash of default content before the saved data lands —
+ * acceptable since the form is interactive and the user expects re-render
+ * cycles. The `hydrated` ref gates the write-back effects so we don't
+ * clobber the persisted value with DEFAULT_PROPOSAL on first paint.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -107,29 +111,28 @@ export interface UseKpStateReturn {
 }
 
 export function useKpState(): UseKpStateReturn {
-  // Lazy initializers run once on mount. On the client `window` is defined
-  // so we read directly from localStorage; the first render shows persisted
-  // data without an effect-driven re-render cascade.
-  const [data, setData] = useState<KpProposal>(safeReadProposal);
-  const [zoom, setZoom] = useState<number>(safeReadZoom);
+  // Both render passes (SSR + client hydration) must produce identical
+  // HTML, so we start from DEFAULT_PROPOSAL / DEFAULT_ZOOM and read from
+  // localStorage only after mount. The `hydratedRef` gates write-back
+  // effects so the post-mount setData doesn't clobber the persisted
+  // value with the default we initialized with.
+  const [data, setData] = useState<KpProposal>(DEFAULT_PROPOSAL);
+  const [zoom, setZoom] = useState<number>(DEFAULT_ZOOM);
+  const hydratedRef = useRef(false);
 
-  // Skip persistence on the very first render — the value we'd write back
-  // is exactly what we just read.
-  const firstRunRef = useRef(true);
   useEffect(() => {
-    if (firstRunRef.current) {
-      firstRunRef.current = false;
-      return;
-    }
+    setData(safeReadProposal());
+    setZoom(safeReadZoom());
+    hydratedRef.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (!hydratedRef.current) return;
     safeWrite(KP_STORAGE_KEY, JSON.stringify(data));
   }, [data]);
 
-  const firstZoomRef = useRef(true);
   useEffect(() => {
-    if (firstZoomRef.current) {
-      firstZoomRef.current = false;
-      return;
-    }
+    if (!hydratedRef.current) return;
     safeWrite(KP_ZOOM_STORAGE_KEY, String(zoom));
   }, [zoom]);
 
