@@ -3913,7 +3913,8 @@ export type Database = {
           legal_doc: string | null
           issued_at: string | null
           valid_until: string | null
-          cost_rub: number
+          cost_original: number
+          cost_currency: string
           notes: string | null
           display_name: string | null
           is_custom_expense: boolean
@@ -3930,7 +3931,8 @@ export type Database = {
           legal_doc?: string | null
           issued_at?: string | null
           valid_until?: string | null
-          cost_rub?: number
+          cost_original?: number
+          cost_currency?: string
           notes?: string | null
           display_name?: string | null
           is_custom_expense?: boolean
@@ -3947,7 +3949,8 @@ export type Database = {
           legal_doc?: string | null
           issued_at?: string | null
           valid_until?: string | null
-          cost_rub?: number
+          cost_original?: number
+          cost_currency?: string
           notes?: string | null
           display_name?: string | null
           is_custom_expense?: boolean
