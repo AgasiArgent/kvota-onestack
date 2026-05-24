@@ -351,7 +351,13 @@ export function buildDutyCompositeUpdates(
   rawValue: unknown,
   rowState: DutyCompositeRowState,
 ): DutyCompositeUpdates {
-  const parsed = parseFloat(String(rawValue));
+  // Normalize comma → dot before parseFloat. Handsontable copies the
+  // displayed value in ru-RU locale (a 12.5 cell renders as "12,5"), and
+  // `parseFloat("12,5")` stops at the comma → 12, silently dropping the
+  // fractional part. Same hazard when МВЭД types the value directly with
+  // the Russian comma decimal. Testing 2 row 72: «Десятичные округляются
+  // при копировании % пошлины».
+  const parsed = parseFloat(String(rawValue).trim().replace(",", "."));
   const num = Number.isNaN(parsed) ? null : parsed;
   const mode: DutyMode = rowState.customs_duty_per_kg != null ? "perKg" : "pct";
   const updates: DutyCompositeUpdates =
@@ -1141,7 +1147,10 @@ export function CustomsHandsontable({
             continue;
           }
           if (NUMERIC_FIELDS.has(field)) {
-            const parsed = parseFloat(String(val));
+            // Same comma-decimal normalization as buildDutyCompositeUpdates
+            // (Testing 2 row 72). Applies to Утильсбор / Акциз / Экосбор —
+            // all reach this branch via the same paste path.
+            const parsed = parseFloat(String(val).trim().replace(",", "."));
             updates[field] = isNaN(parsed) ? null : parsed;
           } else if (BOOLEAN_FIELDS.has(field)) {
             updates[field] = Boolean(val);
