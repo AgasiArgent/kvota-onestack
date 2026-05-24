@@ -76,19 +76,20 @@ class TestFontWiring:
         assert "font-family: 'Inter'" in html_doc
 
     def test_all_four_weights_referenced(self, html_doc: str) -> None:
-        """All four font URLs (regular/500/600/700) must be present so
-        WeasyPrint embeds the full family — otherwise it falls back to
-        DejaVu Sans for the missing weight and breaks Cyrillic rendering.
+        """All four `@font-face` blocks (400/500/600/700) must be present so
+        Chromium embeds the full family — otherwise it falls back to a
+        system font for the missing weight and breaks Cyrillic rendering.
         """
-        assert "Inter-regular.ttf" in html_doc
-        assert "Inter-500.ttf" in html_doc
-        assert "Inter-600.ttf" in html_doc
-        assert "Inter-700.ttf" in html_doc
+        for weight in (400, 500, 600, 700):
+            assert f"font-weight: {weight};" in html_doc
 
-    def test_font_urls_are_absolute_file_urls(self, html_doc: str) -> None:
-        # WeasyPrint needs absolute file:// URLs (not relative paths).
-        assert "file://" in html_doc
-        assert "file:///" in html_doc
+    def test_fonts_are_inlined_as_data_uris(self, html_doc: str) -> None:
+        # Playwright's chromium-headless-shell silently ignores file:// font
+        # URLs, so the renderer embeds each weight as a base64 data: URI.
+        assert html_doc.count("data:font/ttf;base64,") == 4
+        # Each block must come paired with `format('truetype')` so Chromium
+        # picks the correct font parser path.
+        assert html_doc.count("format('truetype')") == 4
 
 
 # ---------------------------------------------------------------------------

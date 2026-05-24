@@ -20,8 +20,11 @@ values come from a ``KpBranding`` instance (default Master Bearing).
 
 Design notes:
 - Inter font is bundled at ``services/fonts/Inter/`` and embedded via
-  ``@font-face`` with absolute ``file://`` URLs. Required for Cyrillic
-  rendering — DejaVu fallback would silently break Russian glyphs (ADR-8).
+  ``@font-face`` blocks whose ``src`` is a base64 ``data:`` URI. Inlined
+  rather than referenced via ``file://`` because Playwright's
+  chromium-headless-shell silently drops ``file://`` font URLs and falls
+  back to DejaVu — which renders Cyrillic but loses the Inter typography
+  (ADR-8). The inlined fonts add ~380 KB to the in-memory HTML payload.
 - Chromium renders the layout instead of WeasyPrint (ADR-9). The HTML/CSS
   port is unchanged; only the rendering engine swapped after WeasyPrint
   output was found visually unacceptable (ghost headline text, mis-sized
@@ -256,9 +259,10 @@ def _kp_styles(branding: KpBranding) -> str:
 
     Brand colors are interpolated from the ``KpBranding`` instance; the rest
     is a near-verbatim port of ``kp.css`` from the design prototype with:
-    - ``@font-face`` blocks pointing at the bundled Inter TTFs via absolute
-      ``file://`` URLs (WeasyPrint requires this — relative paths or HTTP
-      URLs fail silently and fall back to DejaVu).
+    - ``@font-face`` blocks embedding the bundled Inter TTFs as base64
+      ``data:`` URIs (Playwright's chromium-headless-shell ignores
+      ``file://`` src URLs as a security default, leaving the renderer to
+      fall back to DejaVu and quietly break Cyrillic glyphs).
     - ``font-family: 'Inter'`` everywhere the design said Plus Jakarta Sans
       (Cyrillic coverage, see ADR-8).
 
@@ -268,28 +272,38 @@ def _kp_styles(branding: KpBranding) -> str:
     single brand so the cache holds one entry; ``maxsize=4`` leaves
     headroom for the multi-brand future without unbounded growth.
     """
+    import base64
+
     blue = branding.primary_blue
     red = branding.primary_red
     cream = branding.accent_cream
-    font_dir = branding.font_dir.resolve().as_uri()  # → file:///...
 
     # Map weight → bundled filename. The font files were dropped in by
     # Wave 1 with the names below; if a future weight is added, extend the
     # tuple and the @font-face block.
-    font_face = "\n".join(
-        f"""@font-face {{
+    #
+    # We base64-inline the font bytes directly into the @font-face src so
+    # the rendering Chromium never has to touch the file system. This adds
+    # ~380 KB to the HTML payload (4 weights × ~94 KB each), traded for
+    # guaranteed font embedding regardless of how the browser was launched.
+    font_face_blocks = []
+    for weight, fname in (
+        (400, "Inter-regular.ttf"),
+        (500, "Inter-500.ttf"),
+        (600, "Inter-600.ttf"),
+        (700, "Inter-700.ttf"),
+    ):
+        ttf_path = branding.font_dir / fname
+        b64 = base64.b64encode(ttf_path.read_bytes()).decode("ascii")
+        font_face_blocks.append(
+            f"""@font-face {{
             font-family: 'Inter';
             font-style: normal;
             font-weight: {weight};
-            src: url('{font_dir}/{fname}') format('truetype');
+            src: url('data:font/ttf;base64,{b64}') format('truetype');
         }}"""
-        for weight, fname in (
-            (400, "Inter-regular.ttf"),
-            (500, "Inter-500.ttf"),
-            (600, "Inter-600.ttf"),
-            (700, "Inter-700.ttf"),
         )
-    )
+    font_face = "\n".join(font_face_blocks)
 
     return f"""
 {font_face}
