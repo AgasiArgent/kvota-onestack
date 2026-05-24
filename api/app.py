@@ -42,6 +42,7 @@ from api.routers import (
     geo,
     integrations,
     invoices,
+    kp,
     logistics,
     notes,
     plan_fact,
@@ -108,6 +109,7 @@ api_sub_app.include_router(
     cost_analysis.router, prefix="/quotes"
 )  # → /api/quotes/{id}/cost-analysis
 api_sub_app.include_router(invoices.router, prefix="/invoices")  # → /api/invoices/*
+api_sub_app.include_router(kp.router, prefix="/kp")  # → /api/kp/render-pdf
 api_sub_app.include_router(cron.router, prefix="/cron")  # → /api/cron/*
 api_sub_app.include_router(geo.router, prefix="/geo")  # → /api/geo/*
 api_sub_app.include_router(chat.router, prefix="/chat")  # → /api/chat/*

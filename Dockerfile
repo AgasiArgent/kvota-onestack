@@ -6,7 +6,10 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 
-# Install system dependencies for WeasyPrint (PDF generation)
+# System dependencies:
+# - WeasyPrint (for specs / invoices / contracts PDF exports)
+# - Playwright Chromium dependencies for the KP Builder PDF — the full
+#   browser comes via `playwright install --with-deps chromium` below.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     # WeasyPrint dependencies
     libpango-1.0-0 \
@@ -27,8 +30,12 @@ WORKDIR /app
 # Copy requirements first (for Docker cache optimization)
 COPY requirements.txt .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies, then install the Chromium browser Playwright
+# drives for the KP Builder. `--with-deps` pulls the apt packages chromium
+# itself needs; chromium-only keeps the image roughly 300 MB smaller than
+# installing all three browser families.
+RUN pip install --no-cache-dir -r requirements.txt \
+    && playwright install --with-deps chromium
 
 # Copy application code
 COPY . .

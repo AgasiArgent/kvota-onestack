@@ -19,3 +19,13 @@ python-docx>=1.1.0
 markdown>=3.5.0
 python-frontmatter>=1.1.0
 pycountry>=24.6.1
+# Playwright renders the KP Builder PDF through headless Chromium so the
+# brand layout (clip-path bars, SVG icons, Cyrillic typography) matches
+# what the user sees in the Next.js preview. WeasyPrint stays in the image
+# for the three older exports (specs/invoices/contracts) — they are
+# table-only documents where the engine difference does not matter.
+playwright>=1.50.0
+# pikepdf is used by tests/services/test_kp_export_render.py to assert the
+# rendered PDF has exactly two pages and embeds the Inter font (catches a
+# DejaVu fallback regression that would silently break Cyrillic).
+pikepdf>=9.0.0

@@ -1,0 +1,1047 @@
+/* ============================================================
+   Master Bearing — КП preview module.
+   Port of the design-handoff `kp.css` under a single scope root
+   (`.kpPage`). Every brand color is read from CSS custom
+   properties set inline on the root element, so the same module
+   serves any future brand swap without rebuilding.
+
+   Plus Jakarta Sans → Inter substitution per ADR-8 (Cyrillic
+   coverage on the bundled WeasyPrint font). The same `Inter`
+   files live at services/fonts/ and frontend/public/fonts/.
+   ============================================================ */
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/Inter/Inter-regular.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/Inter/Inter-500.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/Inter/Inter-600.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/Inter/Inter-700.ttf") format("truetype");
+}
+
+.kpPage {
+  /* Fixed CSS-pixel A4 footprint at ~96dpi — matches what the design
+     prototype expects so absolute positioning lines up. */
+  width: 794px;
+  height: 1123px;
+  background: #ffffff;
+  color: #0c1730;
+  font-family: "Inter", -apple-system, "Segoe UI", Arial, sans-serif;
+  position: relative;
+  overflow: hidden;
+  box-shadow:
+    0 12px 40px rgba(15, 28, 60, 0.12),
+    0 2px 8px rgba(15, 28, 60, 0.05);
+  -webkit-font-smoothing: antialiased;
+}
+
+.kpPage * {
+  box-sizing: border-box;
+}
+
+/* ============================================================
+   Logo (MASTER BEARING wordmark)
+   ============================================================ */
+.kpLogo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #ffffff;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.kpLogo svg {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+}
+.kpLogoText {
+  display: flex;
+  flex-direction: column;
+  line-height: 0.95;
+  font-size: 17px;
+  letter-spacing: 0.04em;
+}
+.kpLogoText span {
+  font-weight: 700;
+}
+
+/* ============================================================
+   PAGE 1 — Header
+   ============================================================ */
+.kp1Head {
+  height: 290px;
+  position: relative;
+  overflow: hidden;
+}
+.kp1HeadBluebar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 410px;
+  height: 110px;
+  background: var(--kp-primary-blue);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 56px) 100%, 0 100%);
+}
+.kp1HeadRedbar {
+  position: absolute;
+  top: 0;
+  left: 408px;
+  width: 70px;
+  height: 110px;
+  background: var(--kp-primary-red);
+  clip-path: polygon(56px 0, 100% 0, calc(100% - 56px) 100%, 0 100%);
+}
+.kp1HeadLogo {
+  position: absolute;
+  top: 30px;
+  left: 38px;
+  z-index: 2;
+}
+.kp1HeadIllu {
+  position: absolute;
+  top: 78px;
+  right: 24px;
+  width: 380px;
+  height: 220px;
+  pointer-events: none;
+}
+.kp1HeadIllu img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: right center;
+  display: block;
+}
+
+.kp1Title {
+  position: absolute;
+  left: 38px;
+  top: 130px;
+  z-index: 3;
+}
+.kp1Title h1 {
+  margin: 0;
+  font-size: 44px;
+  font-weight: 700;
+  color: var(--kp-primary-blue);
+  letter-spacing: -0.01em;
+  line-height: 0.98;
+  text-transform: uppercase;
+}
+.kp1TitleSub {
+  margin-top: 14px;
+  font-size: 15px;
+  color: #0c1730;
+  font-weight: 500;
+}
+.kp1TitleUnderline {
+  width: 56px;
+  height: 3px;
+  background: var(--kp-primary-red);
+  margin-top: 12px;
+  border-radius: 2px;
+}
+
+/* ============================================================
+   Section header (small blue square icon + label)
+   ============================================================ */
+.kpSectionH {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 14px;
+}
+.iconSq {
+  width: 22px;
+  height: 22px;
+  background: var(--kp-primary-blue);
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+.iconSq svg {
+  width: 14px;
+  height: 14px;
+  stroke: #ffffff;
+}
+.label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--kp-primary-blue);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* ============================================================
+   PAGE 1 — Body & info grid
+   ============================================================ */
+.kp1Body {
+  position: absolute;
+  inset: 290px 38px 100px 38px;
+  display: flex;
+  flex-direction: column;
+}
+.kpInfoGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 26px;
+  margin-bottom: 14px;
+}
+.kpField {
+  display: grid;
+  grid-template-columns: 22px 110px 1fr;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+}
+.kpFieldIco {
+  width: 22px;
+  height: 22px;
+  background: var(--kp-primary-blue);
+  border-radius: 4px;
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.kpFieldIco svg {
+  width: 13px;
+  height: 13px;
+  stroke: #ffffff;
+}
+.kpFieldLabel {
+  font-size: 11.5px;
+  color: #0c1730;
+  font-weight: 500;
+}
+.kpFieldValue {
+  border: 1px solid #c5cee4;
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 11.5px;
+  color: #0c1730;
+  background: #ffffff;
+  min-height: 26px;
+  display: flex;
+  align-items: center;
+  white-space: pre-wrap;
+  word-break: break-word;
+  position: relative;
+}
+.kpFieldValueTall {
+  min-height: 56px;
+  align-items: flex-start;
+  line-height: 1.4;
+}
+.kpFieldValueWithSuffix {
+  padding-right: 22px;
+}
+.kpFieldSuffix {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #5b6378;
+  font-size: 12px;
+}
+
+/* ============================================================
+   PAGE 1 — Items table
+   ============================================================ */
+.kpTable {
+  margin-top: 8px;
+  border: 1px solid var(--kp-primary-blue);
+  border-radius: 4px;
+  overflow: hidden;
+  font-size: 11px;
+}
+.kpTableHead,
+.kpTableRow {
+  display: grid;
+  grid-template-columns: 36px 1.8fr 1.8fr 0.7fr 1fr 1fr;
+}
+.kpTableHead {
+  background: var(--kp-primary-blue);
+  color: #ffffff;
+}
+.kpTableHead > div {
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border-right: 1px solid rgba(255, 255, 255, 0.25);
+  text-align: left;
+}
+.kpTableHead > div:last-child {
+  border-right: none;
+}
+.kpTableHeadRight {
+  text-align: center !important;
+}
+.kpTableRow {
+  background: #ffffff;
+  border-top: 1px solid #c5cee4;
+}
+.kpTableRow > div {
+  padding: 8px 10px;
+  border-right: 1px solid #c5cee4;
+  min-height: 32px;
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+}
+.kpTableRow > div:last-child {
+  border-right: none;
+}
+.kpTableCellNum {
+  text-align: right;
+}
+.kpTableCellCenter {
+  text-align: center;
+  color: #5b6378;
+}
+.kpTableTotal {
+  display: grid;
+  grid-template-columns: 36px 1.8fr 1.8fr 0.7fr 1fr 1fr;
+  border-top: 1px solid var(--kp-primary-blue);
+}
+.kpTableTotalLabel {
+  grid-column: 5;
+  background: var(--kp-primary-blue);
+  color: #ffffff;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: right;
+  letter-spacing: 0.02em;
+}
+.kpTableTotalValue {
+  background: #ffffff;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: right;
+  color: #0c1730;
+  font-variant-numeric: tabular-nums;
+  border-left: 1px solid var(--kp-primary-blue);
+}
+
+/* ============================================================
+   PAGE 1 — Notes + signatures
+   ============================================================ */
+.kp1Notes {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 30px;
+  align-items: end;
+}
+.kp1NotesNotes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.kp1NotesL {
+  font-size: 11.5px;
+  color: #0c1730;
+}
+.kp1NotesBox {
+  min-height: 64px;
+  border: 1px solid #c5cee4;
+  border-radius: 4px;
+  padding: 8px 10px;
+  font-size: 11px;
+  color: #0c1730;
+  white-space: pre-wrap;
+}
+.kp1Sigs {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 24px;
+  align-items: end;
+  padding-bottom: 6px;
+}
+.kp1Sig {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.kp1SigLine {
+  width: 100%;
+  border-bottom: 1px solid #0c1730;
+  height: 26px;
+}
+.kp1SigCap {
+  font-size: 11px;
+  color: #0c1730;
+  letter-spacing: 0.02em;
+}
+
+/* ============================================================
+   PAGE 1 — Footer feature strip
+   ============================================================ */
+.kp1Foot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 90px;
+  background: var(--kp-primary-blue);
+  display: flex;
+  align-items: center;
+  color: #ffffff;
+  overflow: hidden;
+}
+.kp1FootRed {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 60px;
+  background: var(--kp-primary-red);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 40px) 100%, 0 100%);
+}
+.kp1FootItems {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  flex: 1;
+  padding: 0 40px 0 80px;
+  gap: 16px;
+}
+.kp1FootItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.kp1FootItemIco {
+  width: 30px;
+  height: 30px;
+  border: 1.5px solid #ffffff;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.kp1FootItemIco svg {
+  width: 16px;
+  height: 16px;
+  stroke: #ffffff;
+}
+.kp1FootItemTxt {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.15;
+}
+
+/* ============================================================
+   PAGE 2 — Header
+   ============================================================ */
+.kp2Head {
+  height: 110px;
+  position: relative;
+}
+.kp2HeadBluebar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 280px;
+  height: 100%;
+  background: var(--kp-primary-blue);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 38px) 100%, 0 100%);
+}
+.kp2HeadLogo {
+  position: absolute;
+  top: 50%;
+  left: 38px;
+  transform: translateY(-50%);
+  z-index: 2;
+}
+.kp2HeadTitle {
+  position: absolute;
+  left: 290px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
+}
+.kp2HeadTitle h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--kp-primary-blue);
+  text-transform: uppercase;
+  letter-spacing: -0.005em;
+  line-height: 1.05;
+  white-space: nowrap;
+}
+.kp2HeadTitleSub {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #0c1730;
+}
+.kp2HeadPageno {
+  position: absolute;
+  right: 0;
+  top: 24px;
+  background: var(--kp-primary-red);
+  color: #ffffff;
+  padding: 8px 18px;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/* ============================================================
+   PAGE 2 — Body
+   ============================================================ */
+.kp2Body {
+  padding: 24px 38px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: absolute;
+  inset: 110px 0 60px 0;
+}
+.kp2Twocol {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.kpBlock {
+  border: 1px solid #c5cee4;
+  border-radius: 4px;
+  background: #ffffff;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.kpBlockHead {
+  background: var(--kp-primary-blue);
+  color: #ffffff;
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kpBlockHead svg {
+  width: 14px;
+  height: 14px;
+  stroke: #ffffff;
+}
+.kpBlockBody {
+  padding: 10px 14px;
+  flex: 1;
+}
+
+.kpBulletList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 6px 0 0;
+}
+.kpBulletList .item {
+  display: grid;
+  grid-template-columns: 12px 1fr;
+  gap: 8px;
+  align-items: end;
+  min-height: 26px;
+}
+.kpBulletList .item .b {
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: #0c1730;
+  margin-bottom: 8px;
+}
+.kpBulletList .item .v {
+  border-bottom: 1px solid #c5cee4;
+  font-size: 11.5px;
+  min-height: 18px;
+  padding-bottom: 2px;
+}
+
+.kpCheckList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 6px 0 0;
+}
+.kpCheckList .item {
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  gap: 10px;
+  align-items: end;
+  min-height: 26px;
+}
+.kpCheckList .item .c {
+  width: 12px;
+  height: 12px;
+  border: 1.2px solid var(--kp-primary-blue);
+  border-radius: 2px;
+  margin-bottom: 5px;
+  position: relative;
+}
+.kpCheckList .item .c.checked::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: -1px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--kp-primary-blue);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.kpCheckList .item .v {
+  border-bottom: 1px solid #c5cee4;
+  font-size: 11.5px;
+  min-height: 18px;
+  padding-bottom: 2px;
+}
+
+/* Flattened class aliases used by React JSX with `styles.item` etc.
+   These map to the same compiled name the descendant selectors reference. */
+.item {
+  display: grid;
+  align-items: end;
+  min-height: 26px;
+}
+.b {
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: #0c1730;
+}
+.v {
+  font-size: 11.5px;
+  min-height: 18px;
+  padding-bottom: 2px;
+}
+.c {
+  width: 12px;
+  height: 12px;
+  border: 1.2px solid var(--kp-primary-blue);
+  border-radius: 2px;
+  position: relative;
+}
+.c.checked::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: -1px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--kp-primary-blue);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.checked {
+  /* Marker class; behavior comes from `.c.checked` and per-list rules */
+}
+
+.kpConditions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.kpConditions .row {
+  display: grid;
+  grid-template-columns: 12px 1fr;
+  gap: 10px;
+  align-items: end;
+  min-height: 22px;
+}
+.kpConditions .row .b {
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: #0c1730;
+  margin-bottom: 7px;
+}
+.kpConditions .row .v {
+  font-size: 12px;
+  border-bottom: 1px solid #c5cee4;
+  padding-bottom: 2px;
+  min-height: 18px;
+}
+.row {
+  display: grid;
+}
+
+.kp2Services {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 14px;
+}
+.kpServices {
+  border: 1px solid #c5cee4;
+  border-radius: 4px;
+  padding: 12px 16px;
+}
+.kpServicesHead {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--kp-primary-blue);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 10px;
+  white-space: nowrap;
+}
+.kpServicesHead .ico {
+  width: 18px;
+  height: 18px;
+  background: var(--kp-primary-blue);
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+}
+.kpServicesHead .ico svg {
+  width: 11px;
+  height: 11px;
+  stroke: #ffffff;
+}
+.kpServicesHead .req {
+  text-transform: none;
+  font-weight: 500;
+  font-size: 11px;
+  color: #5b6378;
+  letter-spacing: 0;
+}
+.req {
+  text-transform: none;
+  font-weight: 500;
+  font-size: 11px;
+  color: #5b6378;
+}
+.kpServicesGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+}
+.kpServicesItem {
+  display: grid;
+  grid-template-columns: 18px 1fr 14px;
+  gap: 8px;
+  align-items: center;
+  font-size: 11.5px;
+}
+.kpServicesItem .ico {
+  width: 18px;
+  height: 18px;
+  background: var(--kp-primary-blue);
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.kpServicesItem .ico svg {
+  width: 11px;
+  height: 11px;
+  stroke: #ffffff;
+}
+.kpServicesItem .c {
+  width: 12px;
+  height: 12px;
+  border: 1.2px solid var(--kp-primary-blue);
+  border-radius: 2px;
+  position: relative;
+}
+.kpServicesItem .c.checked::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: -1px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--kp-primary-blue);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.ico svg {
+  stroke: #ffffff;
+}
+
+.kpNotesBox {
+  border: 1px dashed #c5cee4;
+  border-radius: 4px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+}
+.kpNotesBoxHead {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--kp-primary-blue);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 10px;
+}
+.kpNotesBoxBody {
+  flex: 1;
+  font-size: 11.5px;
+  color: #0c1730;
+  white-space: pre-wrap;
+}
+
+.kp2Contacts {
+  display: grid;
+  grid-template-columns: 1.1fr 1.2fr;
+  gap: 24px;
+  position: relative;
+  margin-top: 4px;
+  padding-bottom: 8px;
+}
+.kpContacts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.kpContactsHead {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--kp-primary-blue);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+.kpContactsRow {
+  display: grid;
+  grid-template-columns: 22px 60px 1fr;
+  align-items: end;
+  gap: 8px;
+  min-height: 26px;
+}
+.kpContactsRow .ico {
+  width: 22px;
+  height: 22px;
+  background: var(--kp-primary-blue);
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.kpContactsRow .ico svg {
+  width: 13px;
+  height: 13px;
+  stroke: #ffffff;
+}
+.kpContactsRow .l {
+  font-size: 11.5px;
+  color: #0c1730;
+  padding-bottom: 2px;
+}
+.kpContactsRow .v {
+  font-size: 11.5px;
+  color: #0c1730;
+  border-bottom: 1px solid #c5cee4;
+  padding: 2px 4px;
+  min-height: 20px;
+}
+.l {
+  font-size: 11.5px;
+  color: #0c1730;
+  padding-bottom: 2px;
+}
+
+.kpThanks {
+  position: relative;
+  padding-right: 20px;
+}
+.kpThanksText {
+  font-size: 15px;
+  color: #0c1730;
+  line-height: 1.4;
+}
+.kpThanksMtn {
+  position: absolute;
+  right: -20px;
+  bottom: -8px;
+  width: 300px;
+  height: 130px;
+  opacity: 0.95;
+  pointer-events: none;
+}
+.kpThanksMtn img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: right bottom;
+  display: block;
+}
+
+.kp2Foot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 60px;
+  background: var(--kp-primary-blue);
+  display: flex;
+  align-items: center;
+  color: #ffffff;
+  overflow: hidden;
+}
+.kp2FootRed {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 60px;
+  background: var(--kp-primary-red);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 40px) 100%, 0 100%);
+}
+.kp2FootItems {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 1.4fr;
+  flex: 1;
+  padding: 0 32px 0 78px;
+  gap: 16px;
+  align-items: center;
+}
+.kp2FootItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+.kp2FootItemIco {
+  width: 26px;
+  height: 26px;
+  border: 1.5px solid #ffffff;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.kp2FootItemIco svg {
+  width: 13px;
+  height: 13px;
+  stroke: #ffffff;
+}
+
+/* ============================================================
+   Preview toolbar & root wrapper
+   ============================================================ */
+.previewRoot {
+  display: flex;
+  flex-direction: column;
+  background: var(--kp-accent-cream);
+  height: 100%;
+  min-height: 0;
+}
+.previewToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #ffffff;
+  flex-shrink: 0;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.previewToolbarTitle {
+  font-size: 13px;
+  color: #5b6378;
+  font-weight: 500;
+}
+.previewToolbarRight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.previewZoom {
+  display: inline-flex;
+  align-items: center;
+  background: #f1f5f9;
+  border-radius: 6px;
+  padding: 2px;
+  gap: 2px;
+}
+.previewZoom button {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: transparent;
+  border: none;
+  color: #0c1730;
+  font-size: 14px;
+  cursor: pointer;
+}
+.previewZoom button:hover:not(:disabled) {
+  background: #ffffff;
+}
+.previewZoom button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.previewZoomVal {
+  min-width: 38px;
+  text-align: center;
+  font-size: 11px;
+  color: #0c1730;
+  font-weight: 600;
+}
+.previewStage {
+  flex: 1;
+  overflow: auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  background: var(--kp-accent-cream);
+}
+.previewWrap {
+  transform-origin: top left;
+  flex-shrink: 0;
+}

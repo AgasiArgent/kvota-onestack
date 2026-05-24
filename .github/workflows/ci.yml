@@ -30,6 +30,14 @@ jobs:
           pip install -r requirements.txt
           pip install pytest pytest-asyncio
 
+      - name: Install Playwright Chromium
+        # KP Builder PDF tests (tests/services/test_kp_export_render.py) launch
+        # headless Chromium via Playwright. The pip package alone is not enough
+        # — the browser binary is a separate download. Without this step those
+        # tests skip via the file-level skipif guard, which would silently hide
+        # render regressions in CI.
+        run: python -m playwright install chromium
+
       - name: Schema-drift lint
         # Verifies every supabase.table('X').select('a, b') in services/ + api/ matches
         # the committed frontend/src/shared/types/database.types.ts snapshot.

@@ -75,6 +75,11 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
       label: "Новый КП",
       href: "/quotes?create=true",
     });
+    mainItems.push({
+      icon: FileText,
+      label: "КП на технику",
+      href: "/kp-builder",
+    });
   }
   if (
     hasRole(
