@@ -27,6 +27,34 @@ from services.kp_export import (
     render_proposal_pdf,
 )
 
+
+def _chromium_installed() -> bool:
+    """Detect whether Playwright's Chromium binary is on disk.
+
+    Playwright ships as a Python package, but the browser itself is a
+    separate download (``playwright install chromium``). Production
+    image installs it in the Dockerfile; CI runners and local dev
+    machines may not. Skip the render integration tests rather than
+    blow up the whole suite.
+    """
+    cache = Path.home() / ".cache" / "ms-playwright"
+    if not cache.is_dir():
+        return False
+    return any(
+        p.is_dir() and "chromium" in p.name.lower()
+        for p in cache.iterdir()
+    )
+
+
+pytestmark = pytest.mark.skipif(
+    not _chromium_installed(),
+    reason=(
+        "Playwright Chromium binary missing — run "
+        "`python -m playwright install chromium` to enable render tests."
+    ),
+)
+
+
 _FIXTURE_DIR = Path(__file__).parent / "__fixtures__"
 _DEFAULT_FIXTURE = _FIXTURE_DIR / "default_proposal.json"
 
