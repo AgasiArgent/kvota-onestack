@@ -56,6 +56,10 @@ export default async function LocationsRoute({ searchParams }: Props) {
       r === "admin" || r === "head_of_logistics" || r === "head_of_customs",
   );
   const canCreate = canCreateLocation(user.roles);
+  // Testing 2 row 77 — delete is gated to the same role tier as edit.
+  // The server action does its own FK check before allowing the delete
+  // through, so a stale UI cannot soft-bypass the guard.
+  const canDelete = canEditType;
 
   return (
     <div>
@@ -70,6 +74,7 @@ export default async function LocationsRoute({ searchParams }: Props) {
         initialType={type}
         canEditType={canEditType}
         canCreate={canCreate}
+        canDelete={canDelete}
       />
     </div>
   );

@@ -25,6 +25,12 @@ interface Props {
   initialType?: string;
   canEditType?: boolean;
   canCreate?: boolean;
+  /**
+   * Whether the viewer can delete locations (Testing 2 row 77). Same role
+   * gate as `canEditType` — admin / head_of_logistics / head_of_customs —
+   * but kept separately so a future migration can split the privilege.
+   */
+  canDelete?: boolean;
 }
 
 const STATUS_OPTIONS = [
@@ -52,6 +58,7 @@ export function LocationsPage({
   initialType = "",
   canEditType = false,
   canCreate = false,
+  canDelete = false,
 }: Props) {
   const getStatusLabel = (v: string) =>
     STATUS_OPTIONS.find((o) => o.value === v)?.label ?? "Все статусы";
@@ -182,7 +189,11 @@ export function LocationsPage({
         <span>Активные: {stats.active}</span>
       </div>
 
-      <LocationsTable locations={locations} canEditType={canEditType} />
+      <LocationsTable
+        locations={locations}
+        canEditType={canEditType}
+        canDelete={canDelete}
+      />
 
       {canCreate && (
         <CreateLocationDialog
