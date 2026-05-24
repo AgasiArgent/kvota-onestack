@@ -49,6 +49,11 @@ interface RouteConstructorProps {
   /** Pickup hint forwarded from the parent invoice (РОЛ Тест 07 #3.4). */
   pickupHint?: { country: string | null; city: string | null } | null;
   /**
+   * Parent invoice's `supplier_incoterms` — drives the «Поставщик
+   * доставляет» lock on the first segment's cost field (Testing 2 row 44).
+   */
+  supplierIncoterms?: string | null;
+  /**
    * Quote currency for the route totals row (РОЛ Тест 07 #3.7). Defaults
    * to RUB if not supplied so the constructor remains usable in admin
    * previews where there is no quote context.
@@ -74,6 +79,7 @@ export function RouteConstructor({
   revalidatePath,
   disabled,
   pickupHint,
+  supplierIncoterms,
   displayCurrency,
   ratesToRub,
   onMutation,
@@ -251,6 +257,7 @@ export function RouteConstructor({
           onLocalUpdate={handleLocalUpdate}
           onMutation={onMutation}
           disabled={disabled || isPending}
+          supplierIncoterms={supplierIncoterms}
         />
       </div>
 

@@ -556,6 +556,10 @@ export function LogisticsStep({
               country: activeInvoice.pickup_country ?? null,
               city: activeInvoice.pickup_city ?? null,
             }}
+            // Testing 2 row 44 — forwards supplier_incoterms so the route
+            // constructor can lock the first segment's cost when the
+            // supplier covers that leg (D-terms / C-terms).
+            supplierIncoterms={activeInvoice.supplier_incoterms ?? null}
             displayCurrency={quote.currency ?? "RUB"}
             ratesToRub={ratesToRub}
             onMutation={() => setRefreshTick((t) => t + 1)}
