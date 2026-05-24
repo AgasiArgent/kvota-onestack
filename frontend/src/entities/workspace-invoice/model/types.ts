@@ -40,6 +40,17 @@ export interface WorkspaceKanbanCard {
   idn: string;
   quoteIdn: string;
   customerName: string;
+  /**
+   * Customer id (parent quote's customer). Null when the parent quote has no
+   * customer set (legacy / deleted customers). Carried on the card so the
+   * filter bar can group by customer without an extra round-trip — the same
+   * fetch that builds `customerName` already has the id in hand.
+   *
+   * Marked optional so older test fixtures (built before the Testing 2 filter
+   * rollout) continue to type-check; runtime callers receive `null` from
+   * `fetchKanbanInvoices` when the field is absent.
+   */
+  customerId?: string | null;
   pickupLocation: LocationChipLocation;
   deliveryLocation: LocationChipLocation;
   /** Stage entry — drives the running timer (= procurement_completed_at). */

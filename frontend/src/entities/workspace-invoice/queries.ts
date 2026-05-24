@@ -419,6 +419,7 @@ export async function fetchKanbanInvoices(
       idn: buildInvoiceIdn(inv),
       quoteIdn: inv.quote?.idn_quote ?? "",
       customerName: inv.quote?.customer?.name ?? "—",
+      customerId: inv.quote?.customer?.id ?? null,
       pickupLocation: buildPickupLocation(inv),
       deliveryLocation: buildDeliveryLocation(inv),
       stageEnteredAt: fields.stageEnteredAt,
