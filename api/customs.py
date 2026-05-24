@@ -30,6 +30,7 @@ import logging
 import re
 import time
 from datetime import date, datetime, timezone
+from decimal import Decimal
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -1687,7 +1688,8 @@ _CERT_FIELDS_PUBLIC = (
     "legal_doc",
     "issued_at",
     "valid_until",
-    "cost_rub",
+    "cost_original",
+    "cost_currency",
     "notes",
     "display_name",
     "is_custom_expense",
@@ -1695,6 +1697,14 @@ _CERT_FIELDS_PUBLIC = (
     "updated_at",
     "created_by",
 )
+
+# Currencies accepted in cost_currency — mirrors
+# services.currency_service.SUPPORTED_CURRENCIES + the frontend
+# shared/lib/currencies.ts list. Kept inline here to avoid an import cycle
+# (api.customs already imports currency_service lazily inside the helper).
+_SUPPORTED_COST_CURRENCIES = frozenset({
+    "RUB", "USD", "EUR", "CNY", "TRY", "AED", "KZT", "JPY", "GBP", "CHF",
+})
 
 
 def _require_cert_write_auth(
@@ -1733,22 +1743,69 @@ def _require_cert_read_auth(
 
 
 def _parse_cost_rub(value) -> tuple[float | None, JSONResponse | None]:
-    """Parse non-negative RUB amount. Returns (value, error)."""
+    """Parse non-negative cost amount. Returns (value, error).
+
+    Despite the historical name (kept for backward compatibility with the
+    legacy ``cost_rub`` body key), this validates the bare numeric amount —
+    currency selection is now a separate ``cost_currency`` field. The DB
+    column is ``cost_original`` since migration 322.
+    """
     if value is None:
         return None, error_response(
-            "VALIDATION_ERROR", "cost_rub is required", 400,
+            "VALIDATION_ERROR", "cost is required", 400,
         )
     try:
         parsed = float(value)
     except (TypeError, ValueError):
         return None, error_response(
-            "VALIDATION_ERROR", "cost_rub must be a non-negative number", 400,
+            "VALIDATION_ERROR", "cost must be a non-negative number", 400,
         )
     if parsed < 0:
         return None, error_response(
-            "VALIDATION_ERROR", "cost_rub must be a non-negative number", 400,
+            "VALIDATION_ERROR", "cost must be a non-negative number", 400,
         )
     return parsed, None
+
+
+def _parse_cost_currency(value) -> tuple[str | None, JSONResponse | None]:
+    """Parse cost_currency. Returns (value, error). None → default 'RUB'."""
+    if value is None or value == "":
+        return "RUB", None
+    if not isinstance(value, str):
+        return None, error_response(
+            "VALIDATION_ERROR",
+            "cost_currency must be a string",
+            400,
+        )
+    code = value.strip().upper()
+    if code not in _SUPPORTED_COST_CURRENCIES:
+        return None, error_response(
+            "VALIDATION_ERROR",
+            f"cost_currency must be one of: "
+            f"{', '.join(sorted(_SUPPORTED_COST_CURRENCIES))}",
+            400,
+        )
+    return code, None
+
+
+def _read_cert_cost_original(cert_row: dict) -> Decimal:
+    """Read the original cost from a cert row, tolerating legacy ``cost_rub``.
+
+    Pre-migration-322 rows / test fixtures may still use ``cost_rub``. After
+    migration 322 the canonical column is ``cost_original``. We accept both
+    so tests stubbing PostgREST responses with the old key continue to work.
+    """
+    if cert_row.get("cost_original") is not None:
+        return Decimal(str(cert_row["cost_original"]))
+    return Decimal(str(cert_row.get("cost_rub") or 0))
+
+
+def _read_cert_cost_currency(cert_row: dict) -> str:
+    """Read cost_currency from a cert row, defaulting to RUB."""
+    raw = cert_row.get("cost_currency")
+    if not raw or not isinstance(raw, str):
+        return "RUB"
+    return raw.strip().upper() or "RUB"
 
 
 def _verify_quote_in_org(supabase, quote_id: str, org_id: str) -> dict | None:
@@ -1835,12 +1892,24 @@ def _compute_attached_items_payload(
     if not attached_item_ids:
         return []
 
-    from decimal import Decimal
-
     from services.cost_split import split_cost_batch
     from services.currency_service import convert_amount
 
-    cert_cost = Decimal(str(cert_row.get("cost_rub") or 0))
+    # Read cert cost in its original currency, then convert to RUB so the
+    # downstream split_cost_batch (which expects RUB basis) stays correct.
+    # cost_currency was added in migration 322 (defaults to 'RUB' for
+    # pre-existing rows). cost_original was renamed from cost_rub in the same
+    # migration — _read_cert_cost_original tolerates both names.
+    cert_cost_original = _read_cert_cost_original(cert_row)
+    cert_cost_currency = _read_cert_cost_currency(cert_row)
+    if cert_cost_currency == "RUB":
+        cert_cost = cert_cost_original
+    elif cert_cost_original <= 0:
+        cert_cost = Decimal("0")
+    else:
+        cert_cost = Decimal(
+            str(convert_amount(cert_cost_original, cert_cost_currency, "RUB"))
+        )
 
     # Query 1 — quote_items: validates the IDs resolve and is the public
     # entry-point for the JOIN. ``_verify_items_in_quote`` upstream already
@@ -1938,12 +2007,31 @@ def _serialize_cert(cert_row: dict, attached_items: list[dict]) -> dict:
     """Project a quote_certificates row + attached_items into the API envelope.
 
     Filters columns to ``_CERT_FIELDS_PUBLIC`` and appends the computed
-    ``attached_items: [{item_id, share_rub, share_percent}]`` array.
+    ``attached_items: [{item_id, share_rub, share_percent}]`` array. Also
+    emits a derived ``cost_rub`` (the original cost converted to RUB) so
+    existing clients that still display the RUB-equivalent keep working —
+    Postel's Law for the cost-currency rollout (migration 322 / Testing 2
+    row 73).
     """
-    out = {k: cert_row.get(k) for k in _CERT_FIELDS_PUBLIC}
-    out["cost_rub"] = (
-        float(out["cost_rub"]) if out.get("cost_rub") is not None else 0.0
-    )
+    out: dict = {}
+    for k in _CERT_FIELDS_PUBLIC:
+        if k == "cost_original":
+            # Tolerate legacy ``cost_rub``-only rows (test stubs, pre-322 DB).
+            out["cost_original"] = float(_read_cert_cost_original(cert_row))
+        elif k == "cost_currency":
+            out["cost_currency"] = _read_cert_cost_currency(cert_row)
+        else:
+            out[k] = cert_row.get(k)
+    # Derived cost_rub (RUB-equivalent) for backward-compatible clients.
+    cost_original_dec = _read_cert_cost_original(cert_row)
+    cost_currency = _read_cert_cost_currency(cert_row)
+    if cost_currency == "RUB" or cost_original_dec == 0:
+        out["cost_rub"] = float(cost_original_dec)
+    else:
+        from services.currency_service import convert_amount
+        out["cost_rub"] = float(
+            convert_amount(cost_original_dec, cost_currency, "RUB")
+        )
     out["attached_items"] = attached_items
     return out
 
@@ -1973,7 +2061,10 @@ async def create_certificate_handler(request: Request) -> JSONResponse:
         legal_doc: str (optional)
         issued_at: str (ISO date, optional)
         valid_until: str (ISO date, optional)
-        cost_rub: number (required, >= 0)
+        cost_original: number (required if cost_rub absent, >= 0) —
+            new field since migration 322; legacy ``cost_rub`` still accepted.
+        cost_currency: str (optional, default 'RUB') — ISO 4217 code.
+        cost_rub: number (legacy, accepted as cost_original when currency='RUB')
         notes: str (optional)
         display_name: str (optional, only for is_custom_expense=true)
         is_custom_expense: bool (optional, default false)
@@ -1981,7 +2072,7 @@ async def create_certificate_handler(request: Request) -> JSONResponse:
     Returns:
         Success (200): {success: true, data: {...cert, attached_items}}
         Errors:
-            - 400 VALIDATION_ERROR — bad body / cost_rub negative
+            - 400 VALIDATION_ERROR — bad body / cost negative
             - 401 UNAUTHORIZED / 403 FORBIDDEN
             - 404 NOT_FOUND — quote or item missing
             - 422 NOT_IN_QUOTE — item_id from a different quote
@@ -2012,9 +2103,19 @@ async def create_certificate_handler(request: Request) -> JSONResponse:
     if not cert_type:
         return error_response("VALIDATION_ERROR", "type is required", 400)
 
-    cost_rub, cost_err = _parse_cost_rub(body.get("cost_rub"))
+    # Accept both the new cost_original/cost_currency pair and the legacy
+    # cost_rub key (which implicitly means RUB). Postel's Law for the
+    # cost-currency rollout (migration 322 / Testing 2 row 73).
+    cost_raw = body.get("cost_original")
+    if cost_raw is None:
+        cost_raw = body.get("cost_rub")
+    cost_original, cost_err = _parse_cost_rub(cost_raw)
     if cost_err:
         return cost_err
+
+    cost_currency, currency_err = _parse_cost_currency(body.get("cost_currency"))
+    if currency_err:
+        return currency_err
 
     item_ids_raw = body.get("item_ids")
     if not isinstance(item_ids_raw, list):
@@ -2047,7 +2148,8 @@ async def create_certificate_handler(request: Request) -> JSONResponse:
     cert_payload = {
         "quote_id": quote_id,
         "type": cert_type,
-        "cost_rub": cost_rub,
+        "cost_original": cost_original,
+        "cost_currency": cost_currency,
         "is_custom_expense": is_custom_expense,
         "created_by": user["id"],
     }

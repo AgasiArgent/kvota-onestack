@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { CurrencySelect } from "@/shared/ui/currency-select";
 
 import type {
   Certificate,
@@ -66,18 +67,20 @@ import { PositionsMultiSelect } from "./positions-multi-select";
  * Initial options for the `type` Combobox. The Combobox is `creatable` —
  * if the user types a value not in this list the form accepts it and the
  * server stores it as-is.
+ *
+ * Testing 2 row 73 (2026-05-24): consolidated from 10 → 5 entries per the
+ * tester decision in `docs/plans/2026-05-24-product-decisions.md`. The
+ * 5-entry list collapses EUR.1 / Form A / CT-1/2/3 / A.TR under a single
+ * «Сертификат происхождения» label; pre-existing rows with those legacy
+ * type strings stay valid (Combobox remains `creatable`) and continue to
+ * render in lists as free-text values.
  */
 export const SEEDED_TYPES: readonly string[] = [
-  "ДС ТР ТС",
+  "Сертификат происхождения",
   "СС",
+  "ДС ТР ТС",
   "СГР",
   "ОТТС",
-  "EUR.1",
-  "Form A",
-  "CT-1",
-  "CT-2",
-  "CT-3",
-  "A.TR",
 ];
 
 // ---------------------------------------------------------------------------
@@ -330,6 +333,13 @@ export interface CertificateModalProps {
   /** Selectable positions in the current quote (passed to multi-select). */
   items: QuoteItemForSelect[];
   /**
+   * ISO 4217 code of the parent quote's currency. Used as the default
+   * cost currency for new certificates (Testing 2 row 73). Falls back to
+   * 'RUB' when not provided so calling sites that haven't been wired yet
+   * keep the prior behaviour.
+   */
+  quoteCurrency?: string;
+  /**
    * Optional callback fired with the freshly-created certificate after a
    * successful POST. Parents typically use this to optimistically append
    * the cert to a local list or trigger a re-fetch.
@@ -343,7 +353,8 @@ export interface CertificateModalProps {
    * pre-filled with the prior `type` and `cost_rub` so the customs
    * specialist can re-issue the document without re-typing identical
    * fields. The user still enters fresh `number` / `issued_at` /
-   * `valid_until`. Both fields are independently optional.
+   * `valid_until`. Both fields are independently optional. (The history
+   * banner still surfaces RUB values; new certs get the quote currency.)
    */
   preset?: { type?: string; cost_rub?: number };
   /**
@@ -356,17 +367,23 @@ export interface CertificateModalProps {
 }
 
 const TYPE_FIELD_NAME = "type";
-const COST_FIELD_NAME = "cost_rub";
+const COST_FIELD_NAME = "cost_original";
 
 export function CertificateModal({
   open,
   onOpenChange,
   quoteId,
   items,
+  quoteCurrency,
   onCreated,
   preset,
   preSelectedItemIds,
 }: CertificateModalProps) {
+  // Default to RUB so historical preset values (always RUB) line up with
+  // the displayed currency; otherwise default to the quote currency.
+  const defaultCurrency = preset?.cost_rub != null
+    ? "RUB"
+    : (quoteCurrency ?? "RUB").toUpperCase();
   const [type, setType] = useState("");
   const [number, setNumber] = useState("");
   const [issuer, setIssuer] = useState("");
@@ -374,6 +391,7 @@ export function CertificateModal({
   const [issuedAt, setIssuedAt] = useState("");
   const [validUntil, setValidUntil] = useState("");
   const [costRub, setCostRub] = useState("");
+  const [costCurrency, setCostCurrency] = useState(defaultCurrency);
   const [notes, setNotes] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -406,13 +424,16 @@ export function CertificateModal({
           ? String(preset.cost_rub)
           : "",
       );
+      // Preset values are historical RUB amounts; otherwise default to the
+      // parent quote's currency (Testing 2 row 73).
+      setCostCurrency(defaultCurrency);
       setNotes("");
       setSelectedIds(preSelectedItemIds ?? []);
       setSubmitting(false);
       setErrorField(null);
     }
     wasOpenRef.current = open;
-  }, [open, preset, preSelectedItemIds]);
+  }, [open, preset, preSelectedItemIds, defaultCurrency]);
 
   const selectedItems = useMemo(
     () => items.filter((it) => selectedIds.includes(it.id)),
@@ -432,7 +453,8 @@ export function CertificateModal({
     const input: CreateCertificateInput = {
       quote_id: quoteId,
       type: type.trim(),
-      cost_rub: Number(costRub),
+      cost_original: Number(costRub),
+      cost_currency: costCurrency,
       item_ids: selectedIds,
     };
     if (number.trim()) input.number = number.trim();
@@ -596,17 +618,17 @@ export function CertificateModal({
                 </p>
               </fieldset>
 
-              {/* cost_rub */}
+              {/* cost_original + cost_currency — Testing 2 row 73 */}
               <fieldset className="flex flex-col gap-1.5">
                 <Label
-                  htmlFor="cert-cost-rub"
+                  htmlFor="cert-cost-original"
                   className="text-xs font-semibold uppercase tracking-wide text-text-muted"
                 >
                   Стоимость <span className="text-error">*</span>
                 </Label>
-                <div className="relative">
+                <div className="flex gap-2">
                   <Input
-                    id="cert-cost-rub"
+                    id="cert-cost-original"
                     type="number"
                     inputMode="decimal"
                     min={0}
@@ -618,14 +640,17 @@ export function CertificateModal({
                     }}
                     aria-invalid={errorField === COST_FIELD_NAME || undefined}
                     className={cn(
-                      "pr-7",
+                      "flex-1",
                       errorField === COST_FIELD_NAME && "border-destructive",
                     )}
                     placeholder="0"
                   />
-                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-text-muted">
-                    ₽
-                  </span>
+                  <CurrencySelect
+                    ariaLabel="Валюта стоимости"
+                    value={costCurrency}
+                    onChange={setCostCurrency}
+                    className="w-24 shrink-0"
+                  />
                 </div>
               </fieldset>
 

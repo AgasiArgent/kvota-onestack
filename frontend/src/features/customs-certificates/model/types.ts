@@ -79,8 +79,24 @@ export interface Certificate {
    */
   valid_until: string | null;
   /**
-   * Certificate cost in RUB. CHECK constraint `cost_rub >= 0` on DB.
-   * Always present (defaults to 0).
+   * Certificate cost in its original currency. CHECK constraint
+   * ``cost_original >= 0`` on DB (renamed from ``cost_rub`` in migration 322).
+   * Optional on the type so legacy test fixtures + pre-migration response
+   * shapes (which only had ``cost_rub``) still satisfy the structural check.
+   * The server always emits this since migration 322.
+   */
+  cost_original?: number;
+  /**
+   * ISO 4217 currency code for ``cost_original`` (RUB / USD / EUR / CNY / …).
+   * Added in migration 322. Defaults to ``'RUB'`` for pre-migration rows.
+   * Optional on the type for the same reason as ``cost_original``.
+   */
+  cost_currency?: string;
+  /**
+   * RUB-equivalent of ``cost_original`` derived server-side via the live FX
+   * table. Kept on the envelope so the existing display layer (cards, totals,
+   * history banner) can keep rendering in RUB without re-running FX
+   * conversions in the browser. Always present (defaults to 0).
    */
   cost_rub: number;
   /** Free-form notes — optional. */
@@ -238,8 +254,25 @@ export interface CreateCertificateInput {
   issued_at?: string;
   /** ISO date `YYYY-MM-DD`. */
   valid_until?: string;
-  /** RUB cost; must be `>= 0`. */
-  cost_rub: number;
+  /**
+   * Cost in the original currency; must be `>= 0`. New canonical field
+   * since migration 322. The server still accepts the legacy ``cost_rub``
+   * key (implicit RUB) — both are optional on the type so existing test
+   * fixtures keep type-checking. The modal UI always sends the new pair.
+   */
+  cost_original?: number;
+  /**
+   * ISO 4217 currency code (RUB / USD / EUR / CNY / …). Server defaults to
+   * 'RUB' when omitted. Optional on the type so legacy callers stay valid.
+   */
+  cost_currency?: string;
+  /**
+   * Legacy field — accepted by the server as a synonym for
+   * ``{cost_original=value, cost_currency='RUB'}``. Kept on the type so
+   * existing call sites and test fixtures don't break; new code should
+   * always use the ``cost_original`` + ``cost_currency`` pair.
+   */
+  cost_rub?: number;
   notes?: string;
   /** Required when `is_custom_expense=true` (REQ-10). */
   display_name?: string;
