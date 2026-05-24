@@ -42,6 +42,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { CurrencySelect } from "@/shared/ui/currency-select";
 
 import type {
   Certificate,
@@ -89,23 +90,31 @@ export interface ExpenseModalProps {
   quoteId: string;
   /** Selectable positions in the current quote. */
   items: QuoteItemForSelect[];
+  /**
+   * ISO 4217 code of the parent quote's currency. Used as the default
+   * cost currency for new expenses (Testing 2 row 73). Falls back to 'RUB'.
+   */
+  quoteCurrency?: string;
   /** Optional callback fired with the freshly-created custom-expense row. */
   onCreated?: (cert: Certificate) => void;
 }
 
 const DISPLAY_NAME_FIELD = "display_name";
-const COST_FIELD = "cost_rub";
+const COST_FIELD = "cost_original";
 
 export function ExpenseModal({
   open,
   onOpenChange,
   quoteId,
   items,
+  quoteCurrency,
   onCreated,
 }: ExpenseModalProps) {
+  const defaultCurrency = (quoteCurrency ?? "RUB").toUpperCase();
   const [displayName, setDisplayName] = useState("");
   const [notes, setNotes] = useState("");
   const [costRub, setCostRub] = useState("");
+  const [costCurrency, setCostCurrency] = useState(defaultCurrency);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [errorField, setErrorField] = useState<string | null>(null);
@@ -116,12 +125,13 @@ export function ExpenseModal({
       setDisplayName("");
       setNotes("");
       setCostRub("");
+      setCostCurrency(defaultCurrency);
       setSelectedIds([]);
       setSubmitting(false);
       setErrorField(null);
     }
     wasOpenRef.current = open;
-  }, [open]);
+  }, [open, defaultCurrency]);
 
   const selectedItems = useMemo(
     () => items.filter((it) => selectedIds.includes(it.id)),
@@ -144,7 +154,8 @@ export function ExpenseModal({
       type: "custom_expense",
       is_custom_expense: true,
       display_name: displayName.trim(),
-      cost_rub: Number(costRub),
+      cost_original: Number(costRub),
+      cost_currency: costCurrency,
       item_ids: selectedIds,
     };
     if (notes.trim()) input.notes = notes.trim();
@@ -241,17 +252,17 @@ export function ExpenseModal({
                 />
               </fieldset>
 
-              {/* cost_rub */}
+              {/* cost_original + cost_currency — Testing 2 row 73 */}
               <fieldset className="flex flex-col gap-1.5">
                 <Label
-                  htmlFor="expense-cost-rub"
+                  htmlFor="expense-cost-original"
                   className="text-xs font-semibold uppercase tracking-wide text-text-muted"
                 >
                   Стоимость <span className="text-error">*</span>
                 </Label>
-                <div className="relative">
+                <div className="flex gap-2">
                   <Input
-                    id="expense-cost-rub"
+                    id="expense-cost-original"
                     type="number"
                     inputMode="decimal"
                     min={0}
@@ -263,14 +274,17 @@ export function ExpenseModal({
                     }}
                     aria-invalid={errorField === COST_FIELD || undefined}
                     className={cn(
-                      "pr-7",
+                      "flex-1",
                       errorField === COST_FIELD && "border-destructive",
                     )}
                     placeholder="0"
                   />
-                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-text-muted">
-                    ₽
-                  </span>
+                  <CurrencySelect
+                    ariaLabel="Валюта стоимости"
+                    value={costCurrency}
+                    onChange={setCostCurrency}
+                    className="w-24 shrink-0"
+                  />
                 </div>
               </fieldset>
             </div>

@@ -63,6 +63,13 @@ export interface CertificatesSectionProps {
    */
   items: QuoteItemForSelect[];
   /**
+   * ISO 4217 code of the parent quote's currency. Passed down to the
+   * create-cert / create-expense modals so their currency selector
+   * defaults to the КП's currency (Testing 2 row 73). Optional — falls
+   * back to RUB inside the modals.
+   */
+  quoteCurrency?: string;
+  /**
    * Role gate for write operations — when `false` the add buttons and
    * card edit handlers are suppressed, but the list remains visible
    * (REQ-1 AC#6 — read roles include sales/finance/etc.).
@@ -92,6 +99,7 @@ function sortByCreatedAtDesc(certs: Certificate[]): Certificate[] {
 export function CertificatesSection({
   quoteId,
   items,
+  quoteCurrency,
   canEdit,
   initialCertificates,
 }: CertificatesSectionProps) {
@@ -334,6 +342,7 @@ export function CertificatesSection({
         onOpenChange={setCreateCertOpen}
         quoteId={quoteId}
         items={items}
+        quoteCurrency={quoteCurrency}
         onCreated={handleCreated}
       />
 
@@ -342,6 +351,7 @@ export function CertificatesSection({
         onOpenChange={setCreateExpenseOpen}
         quoteId={quoteId}
         items={items}
+        quoteCurrency={quoteCurrency}
         onCreated={handleCreated}
       />
 

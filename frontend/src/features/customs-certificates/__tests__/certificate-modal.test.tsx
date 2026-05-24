@@ -80,33 +80,29 @@ const ITEMS: QuoteItemForSelect[] = [ITEM_A, ITEM_B];
 // ---------------------------------------------------------------------------
 
 describe("SEEDED_TYPES — initial Combobox options", () => {
-  it("exports exactly the 10 standard certificate types from REQ-7 AC#3", () => {
+  it("exports the 5 consolidated certificate types (Testing 2 row 73)", () => {
+    // Tester decision 2026-05-24: collapse the 10-entry list down to 5 —
+    // «Сертификат происхождения» now covers EUR.1 / Form A / CT-1/2/3 /
+    // A.TR; existing rows with those legacy values remain valid via the
+    // creatable Combobox. See docs/plans/2026-05-24-product-decisions.md.
     expect(SEEDED_TYPES).toEqual([
-      "ДС ТР ТС",
+      "Сертификат происхождения",
       "СС",
+      "ДС ТР ТС",
       "СГР",
       "ОТТС",
-      "EUR.1",
-      "Form A",
-      "CT-1",
-      "CT-2",
-      "CT-3",
-      "A.TR",
     ]);
   });
 
-  it("has length 10 — sentinel for accidental list edits", () => {
-    expect(SEEDED_TYPES.length).toBe(10);
+  it("has length 5 — sentinel for accidental list edits", () => {
+    expect(SEEDED_TYPES.length).toBe(5);
   });
 
-  it("includes Cyrillic types (4 entries)", () => {
+  it("contains only Cyrillic entries post-consolidation", () => {
+    // After Testing 2 row 73 every seeded value is Cyrillic; legacy Latin
+    // codes (EUR.1 / Form A / CT-X / A.TR) live as free-text values only.
     const cyrillic = SEEDED_TYPES.filter((t) => /[А-Я]/.test(t));
-    expect(cyrillic.length).toBeGreaterThanOrEqual(4);
-  });
-
-  it("includes Latin types (5 entries: EUR.1, Form A, CT-1/2/3, A.TR)", () => {
-    const latin = SEEDED_TYPES.filter((t) => /^[A-Za-z]/.test(t));
-    expect(latin.length).toBeGreaterThanOrEqual(5);
+    expect(cyrillic.length).toBe(SEEDED_TYPES.length);
   });
 });
 
@@ -123,19 +119,21 @@ describe("filterTypeOptions — pure search logic", () => {
     expect(filterTypeOptions(SEEDED_TYPES, "   ")).toEqual(SEEDED_TYPES);
   });
 
-  it("filters by case-insensitive substring (Latin)", () => {
-    const result = filterTypeOptions(SEEDED_TYPES, "form");
-    expect(result).toContain("Form A");
+  it("filters by case-insensitive substring (Cyrillic)", () => {
+    // Replaced the Latin «form» / «EUR» queries with Cyrillic ones —
+    // the seeded list is fully Cyrillic post-Testing 2 row 73.
+    const result = filterTypeOptions(SEEDED_TYPES, "проис");
+    expect(result).toContain("Сертификат происхождения");
   });
 
-  it("filters by uppercase Latin substring", () => {
-    const result = filterTypeOptions(SEEDED_TYPES, "EUR");
-    expect(result).toContain("EUR.1");
+  it("filters by uppercase Cyrillic substring", () => {
+    const result = filterTypeOptions(SEEDED_TYPES, "ТР");
+    expect(result).toContain("ДС ТР ТС");
   });
 
   it("matches Cyrillic substrings exactly (no normalization needed)", () => {
-    const result = filterTypeOptions(SEEDED_TYPES, "ТР");
-    expect(result).toContain("ДС ТР ТС");
+    const result = filterTypeOptions(SEEDED_TYPES, "ОТТС");
+    expect(result).toContain("ОТТС");
   });
 
   it("returns an empty list for a non-matching query", () => {
@@ -143,13 +141,13 @@ describe("filterTypeOptions — pure search logic", () => {
   });
 
   it("trims whitespace around the query before matching", () => {
-    const padded = filterTypeOptions(SEEDED_TYPES, "  EUR  ");
-    expect(padded).toContain("EUR.1");
+    const padded = filterTypeOptions(SEEDED_TYPES, "  ОТТС  ");
+    expect(padded).toContain("ОТТС");
   });
 
   it("preserves the original list (does not mutate input)", () => {
     const before = [...SEEDED_TYPES];
-    filterTypeOptions(SEEDED_TYPES, "form");
+    filterTypeOptions(SEEDED_TYPES, "ОТТС");
     expect([...SEEDED_TYPES]).toEqual(before);
   });
 });

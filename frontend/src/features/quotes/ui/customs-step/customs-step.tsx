@@ -607,6 +607,7 @@ export function CustomsStep({
         <CertificatesSection
           quoteId={quote.id}
           items={quoteItemsForCerts}
+          quoteCurrency={quote.currency ?? "RUB"}
           canEdit={canEditCustoms}
         />
 

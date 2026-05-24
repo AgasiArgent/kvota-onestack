@@ -120,7 +120,8 @@ def find_match(
             sb.table("quote_certificates")
             .select(
                 "id, type, number, issuer, legal_doc, issued_at, "
-                "valid_until, cost_rub, created_at, quote_id, "
+                "valid_until, cost_original, cost_currency, "
+                "created_at, quote_id, "
                 "quotes!inner(organization_id), "
                 "quote_certificate_items!inner("
                 "item_id, "
@@ -186,10 +187,34 @@ def _to_history_cert_match(
 ) -> HistoryCertMatch:
     """Convert raw PostgREST payload into typed dataclass.
 
-    ``cost_rub`` is parsed via ``Decimal`` to preserve kopek precision.
+    ``cost_rub`` is parsed via ``Decimal`` to preserve kopek precision. After
+    migration 322 the canonical DB column is ``cost_original`` + a separate
+    ``cost_currency`` field; we read both and convert to RUB so the
+    dataclass stays a RUB-only view (downstream consumers — the
+    HistoryBanner — still display in RUB). Legacy rows that lack
+    ``cost_original`` fall back to ``cost_rub`` so test fixtures stubbing
+    the old shape keep working.
     Date/timestamp fields tolerate both ISO strings and pre-parsed values
     (Supabase Python client returns strings).
     """
+    cost_original = _parse_decimal(
+        cert_row.get("cost_original")
+        if cert_row.get("cost_original") is not None
+        else cert_row.get("cost_rub")
+    )
+    cost_currency_raw = cert_row.get("cost_currency")
+    cost_currency = (
+        cost_currency_raw.strip().upper()
+        if isinstance(cost_currency_raw, str) and cost_currency_raw.strip()
+        else "RUB"
+    )
+    if cost_currency == "RUB" or cost_original == 0:
+        cost_rub = cost_original
+    else:
+        from services.currency_service import convert_amount
+        cost_rub = _parse_decimal(
+            convert_amount(cost_original, cost_currency, "RUB")
+        )
     return HistoryCertMatch(
         cert_id=cert_row["id"],
         type=cert_row["type"],
@@ -198,7 +223,7 @@ def _to_history_cert_match(
         legal_doc=cert_row.get("legal_doc"),
         issued_at=_parse_date(cert_row.get("issued_at")),
         valid_until=_parse_date(cert_row.get("valid_until")),
-        cost_rub=_parse_decimal(cert_row.get("cost_rub")),
+        cost_rub=cost_rub,
         created_at=_parse_iso_timestamp(cert_row["created_at"]),
         source_quote_id=cert_row["quote_id"],
         source_item_id=qi.get("id") or attachment["item_id"],
