@@ -34,7 +34,11 @@ import {
 } from "@/components/ui/select";
 import type { OrgMember, RoleOption } from "@/entities/admin/types";
 import { ROLE_COLORS } from "@/entities/admin/types";
-import { ROLE_LABELS_RU } from "@/entities/user/types";
+import {
+  ROLE_LABELS_RU,
+  canAssignNewbie,
+  filterAssignableRoles,
+} from "@/entities/user/types";
 import { updateUserProfile } from "@/entities/admin/mutations";
 import {
   updateUserRolesAction,
@@ -59,6 +63,11 @@ interface UserEditSheetProps {
   salesGroups: SalesGroupOption[];
   departments: DepartmentOption[];
   orgId: string;
+  /**
+   * Roles of the caller. Restricts which roles can be assigned — currently
+   * only the `newbie` parking role is gated (admin + head_of_* only).
+   */
+  callerRoles: string[];
   isOpen: boolean;
   onClose: () => void;
 }
@@ -69,6 +78,7 @@ export function UserEditSheet({
   salesGroups,
   departments,
   orgId,
+  callerRoles,
   isOpen,
   onClose,
 }: UserEditSheetProps) {
@@ -101,6 +111,17 @@ export function UserEditSheet({
   const hasSalesRole = Array.from(selectedSlugs).some((s) =>
     SALES_ROLE_SLUGS.has(s)
   );
+
+  // Testing 2 row 38p2 — only admins + functional heads may assign the
+  // `newbie` parking role. For everyone else (top_manager, sales, etc.)
+  // hide the option from the picker entirely. We still show `newbie` to
+  // an unauthorized caller if the target member ALREADY has it (so they
+  // can see the state of the row), just disabled.
+  const callerCanAssignNewbie = canAssignNewbie(callerRoles);
+  const memberHasNewbie = member.roles.some((r) => r.slug === "newbie");
+  const visibleRoles = filterAssignableRoles(allRoles, callerRoles, {
+    memberHasNewbie,
+  });
 
   // Reset state when member changes
   useEffect(() => {
@@ -323,11 +344,15 @@ export function UserEditSheet({
               </h3>
 
               <div className="space-y-2">
-                {allRoles.map((role) => {
+                {visibleRoles.map((role) => {
                   const colorClass =
                     ROLE_COLORS[role.slug] ?? "bg-slate-100 text-slate-700";
                   const isAdminLastGuard =
                     isLastAdmin && role.slug === "admin";
+                  // Newbie role is disabled for callers who lack the
+                  // assigner permission (currently admin + head_of_*).
+                  const isNewbieLocked =
+                    role.slug === "newbie" && !callerCanAssignNewbie;
 
                   return (
                     <div key={role.id} className="flex items-center gap-3">
@@ -337,7 +362,7 @@ export function UserEditSheet({
                         onCheckedChange={(checked) =>
                           handleToggleRole(role.slug, checked === true)
                         }
-                        disabled={isAdminLastGuard}
+                        disabled={isAdminLastGuard || isNewbieLocked}
                       />
                       <Label
                         htmlFor={`edit-role-${role.id}`}

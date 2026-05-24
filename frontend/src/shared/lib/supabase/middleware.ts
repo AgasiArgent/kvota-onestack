@@ -5,8 +5,15 @@ import { NextResponse, type NextRequest } from "next/server";
 const COOKIE_DOMAIN = process.env.NODE_ENV === "production" ? ".kvotaflow.ru" : undefined;
 
 export async function updateSession(request: NextRequest) {
+  // Forward the pathname to Server Components via a request header so the
+  // (app) layout can detect the current route (used by the newbie-only
+  // redirect to /awaiting-role — without this, the layout cannot tell
+  // when it's already on the awaiting page and would infinite-loop).
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-pathname", request.nextUrl.pathname);
+
   let supabaseResponse = NextResponse.next({
-    request,
+    request: { headers: requestHeaders },
   });
 
   const supabase = createServerClient(
@@ -23,7 +30,7 @@ export async function updateSession(request: NextRequest) {
             request.cookies.set(name, value)
           );
           supabaseResponse = NextResponse.next({
-            request,
+            request: { headers: requestHeaders },
           });
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, {

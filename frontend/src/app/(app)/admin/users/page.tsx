@@ -24,6 +24,7 @@ export default async function AdminUsersPage() {
         salesGroups={salesGroups}
         departments={departments}
         orgId={user.orgId}
+        callerRoles={user.roles}
       />
     </div>
   );

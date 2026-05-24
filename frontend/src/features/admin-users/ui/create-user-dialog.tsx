@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/select";
 import type { RoleOption } from "@/entities/admin/types";
 import { ROLE_COLORS } from "@/entities/admin/types";
-import { ROLE_LABELS_RU } from "@/entities/user/types";
+import { ROLE_LABELS_RU, filterAssignableRoles } from "@/entities/user/types";
 import { createUserAction } from "@/features/admin-users/actions";
 
 const SALES_ROLE_SLUGS = new Set(["sales", "head_of_sales"]);
@@ -44,6 +44,11 @@ interface CreateUserDialogProps {
   allRoles: RoleOption[];
   salesGroups: SalesGroupOption[];
   departments: DepartmentOption[];
+  /**
+   * Roles of the caller. Used to gate role-picker options that only
+   * specific tiers can assign (newbie — admin + head_of_*).
+   */
+  callerRoles: string[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -71,6 +76,7 @@ export function CreateUserDialog({
   allRoles,
   salesGroups,
   departments,
+  callerRoles,
   open,
   onOpenChange,
 }: CreateUserDialogProps) {
@@ -90,6 +96,14 @@ export function CreateUserDialog({
   const hasSalesRole = Array.from(selectedSlugs).some((s) =>
     SALES_ROLE_SLUGS.has(s)
   );
+
+  // Testing 2 row 38p2 — hide the `newbie` parking role from the
+  // create-user picker unless the caller (admin + head_of_*) is allowed
+  // to assign it. Creating a brand-new user as `newbie` would also be
+  // unusual — new accounts normally get a functional role from the
+  // outset — but admins may still want to do it for soft onboarding.
+  // No `memberHasNewbie` shortcut here — we are creating, not editing.
+  const visibleRoles = filterAssignableRoles(allRoles, callerRoles);
 
   useEffect(() => {
     if (open) {
@@ -317,7 +331,7 @@ export function CreateUserDialog({
               Роли <span className="text-destructive">*</span>
             </Label>
             <div className="space-y-2 rounded-md border p-3">
-              {allRoles.map((role) => {
+              {visibleRoles.map((role) => {
                 const colorClass =
                   ROLE_COLORS[role.slug] ?? "bg-slate-100 text-slate-700";
                 return (
