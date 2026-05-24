@@ -1,8 +1,22 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useMemo } from "react";
+
 import { AppToaster } from "@/shared/ui/app-toaster";
+import { FilterEmptyState, useFilterState } from "@/shared/ui/filter-bar";
 import type { UserAvatarChipUser } from "@/entities/user/ui/user-avatar-chip";
+
+import {
+  KanbanFilterBar,
+  useWorkspaceFiltersFromUrl,
+  WORKSPACE_FILTER_KEYS,
+} from "./kanban-filter-bar";
+import {
+  filterWorkspaceBoard,
+  hasActiveWorkspaceFilters,
+  totalCardCount,
+} from "../lib/filter-board";
 import type { WorkspaceKanbanBoard } from "../model/types";
 import { KANBAN_COLUMNS } from "../model/types";
 
@@ -39,6 +53,10 @@ export interface KanbanPageProps {
  * Client shell for the logistics / customs kanban board. The server component
  * (page.tsx) fetches the board once; subsequent mutations happen client-side
  * with optimistic updates inside `KanbanBoard`.
+ *
+ * Filters (Testing 2 rows 64-65) are URL-backed via `useFilterState` and apply
+ * client-side on the already-loaded board. The «Исполнитель» picker is hidden
+ * for member views — heads / admin / top_manager see it.
  */
 export function KanbanPage({
   domain,
@@ -46,23 +64,48 @@ export function KanbanPage({
   isHead,
   teamUsers,
 }: KanbanPageProps) {
-  const totalActive =
-    board.unassigned.length + board.in_progress.length;
+  const filters = useWorkspaceFiltersFromUrl();
+  const { setMany } = useFilterState();
+  const fullBoard = useMemo(() => normalizeBoard(board), [board]);
+  const filtered = useMemo(
+    () => filterWorkspaceBoard(fullBoard, filters),
+    [fullBoard, filters]
+  );
+
+  const totalFiltered = filtered.unassigned.length + filtered.in_progress.length;
+  const filtersActive = hasActiveWorkspaceFilters(filters);
+  const showEmptyState =
+    filtersActive &&
+    totalCardCount(filtered) === 0 &&
+    totalCardCount(fullBoard) > 0;
+
+  function handleClearAll() {
+    setMany(Object.fromEntries(WORKSPACE_FILTER_KEYS.map((k) => [k, null])));
+  }
 
   return (
     <>
       <div className="space-y-4">
-        <p className="text-sm text-muted-foreground">
-          {totalActive === 0
-            ? "Нет заявок в работе"
-            : `${totalActive} ${pluralizeInvoices(totalActive)} в работе`}
-        </p>
-        <KanbanBoard
-          domain={domain}
-          initialBoard={normalizeBoard(board)}
-          isHead={isHead}
+        <KanbanFilterBar
+          fullBoard={fullBoard}
+          showAssigneeFilter={isHead}
           teamUsers={teamUsers}
         />
+        <p className="text-sm text-muted-foreground">
+          {totalFiltered === 0
+            ? "Нет заявок в работе"
+            : `${totalFiltered} ${pluralizeInvoices(totalFiltered)} в работе`}
+        </p>
+        {showEmptyState ? (
+          <FilterEmptyState onClearAll={handleClearAll} />
+        ) : (
+          <KanbanBoard
+            domain={domain}
+            initialBoard={filtered}
+            isHead={isHead}
+            teamUsers={teamUsers}
+          />
+        )}
       </div>
       <AppToaster />
     </>

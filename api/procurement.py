@@ -164,14 +164,16 @@ async def get_kanban(request) -> JSONResponse:
     sb = get_supabase()
 
     # Pull (quote, brand) rows joined with their parent quote + customer.
-    # `tender_type` (Testing 2 row 67) lets the kanban card flag tender quotes
-    # — head_of_procurement triages them differently from regular КП.
+    # `tender_type` (Testing 2 row 67) lets the kanban card flag tender quotes.
+    # `customers.id` (Testing 2 row 66) lets the kanban filter bar group cards
+    # by customer id rather than by name (names alone collide for chains with
+    # identical labels).
     qbs_result = (
         sb.table("quote_brand_substates")
         .select(
             "quote_id, brand, substatus, updated_at, "
             "quotes!inner(id, idn_quote, workflow_status, organization_id, created_by, tender_type, "
-            "customers!customer_id(name))"
+            "customers!customer_id(id, name))"
         )
         .eq("quotes.workflow_status", "pending_procurement")
         .eq("quotes.organization_id", user["org_id"])
@@ -362,7 +364,14 @@ async def get_kanban(request) -> JSONResponse:
             days = _days_since(r.get("updated_at"))
 
         customer_data = parent.get("customers") or {}
-        customer_name = customer_data.get("name") if isinstance(customer_data, dict) else None
+        if isinstance(customer_data, dict):
+            customer_name = customer_data.get("name")
+            customer_id = (
+                str(customer_data.get("id")) if customer_data.get("id") else None
+            )
+        else:
+            customer_name = None
+            customer_id = None
 
         creator_id = str(parent.get("created_by")) if parent.get("created_by") else None
         manager_name = name_by_user.get(creator_id) if creator_id else None
@@ -370,14 +379,22 @@ async def get_kanban(request) -> JSONResponse:
             manager_name = None
 
         # МОЗ: distinct assigned_procurement_user UUIDs among items for this (quote, brand).
-        moz_ids: set[str] = set()
+        # We emit both names (display) and ids (filtering). Sorted by name for
+        # stable rendering; ids are sorted the same way to keep the two arrays
+        # index-aligned when consumers want a per-user chip render.
+        moz_ids_set: set[str] = set()
         for it in items_by_key.get((qid, brand), []):
             uid = it.get("assigned_procurement_user")
             if uid:
-                moz_ids.add(str(uid))
-        procurement_user_names = sorted(
-            (name_by_user[uid] for uid in moz_ids if name_by_user.get(uid))
-        )
+                moz_ids_set.add(str(uid))
+        named_moz = [
+            (name_by_user.get(uid) or "", uid)
+            for uid in moz_ids_set
+            if name_by_user.get(uid)
+        ]
+        named_moz.sort(key=lambda pair: pair[0])
+        procurement_user_names = [name for name, _ in named_moz]
+        procurement_user_ids = [uid for _, uid in named_moz]
 
         invoice_sums = invoice_sums_by_key.get((qid, brand), [])
 
@@ -390,11 +407,14 @@ async def get_kanban(request) -> JSONResponse:
             "quote_id": qid,
             "brand": brand,
             "idn_quote": parent.get("idn_quote"),
+            "customer_id": customer_id,
             "customer_name": customer_name,
             "procurement_substatus": substatus,
             "days_in_state": days,
             "updated_at": r.get("updated_at"),
+            "manager_id": creator_id,
             "manager_name": manager_name,
+            "procurement_user_ids": procurement_user_ids,
             "procurement_user_names": procurement_user_names,
             "invoice_sums": invoice_sums,
             "latest_reason": latest_reason,

@@ -14,11 +14,17 @@ export interface KanbanInvoiceSum {
  * The kanban is scoped per-brand: one quote with N brands produces N cards.
  * `brand` is the empty string `""` for items without a brand — such unbranded
  * lines are grouped into a single "Без бренда" card per quote.
+ *
+ * The `*_id` fields are required for filtering (Testing 2 row 66 filter bar);
+ * names alone collide when two customers/users share a label. They are
+ * optional on the type to stay backwards-compatible with older API responses
+ * (cached before the filter rollout).
  */
 export interface KanbanBrandCard {
   quote_id: string;
   brand: string;
   idn_quote: string;
+  customer_id?: string | null;
   customer_name: string | null;
   days_in_state: number;
   /**
@@ -30,7 +36,10 @@ export interface KanbanBrandCard {
   updated_at?: string | null;
   latest_reason: string | null;
   procurement_substatus: ProcurementSubstatus;
+  manager_id?: string | null;
   manager_name: string | null;
+  /** МОЗ ids parallel to `procurement_user_names` (same order). */
+  procurement_user_ids?: string[];
   procurement_user_names: string[];
   invoice_sums: KanbanInvoiceSum[];
   /**
