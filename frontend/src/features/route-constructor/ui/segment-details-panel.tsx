@@ -25,6 +25,7 @@ import {
   deleteSegmentExpense,
   updateSegment,
 } from "@/entities/logistics-segment";
+import { supplierDeliversFirstSegment } from "@/shared/lib/incoterms";
 import { cn } from "@/lib/utils";
 
 /**
@@ -72,6 +73,14 @@ interface SegmentDetailsPanelProps {
    */
   onMutation?: () => void;
   disabled?: boolean;
+  /**
+   * Parent invoice's `supplier_incoterms`. When this resolves to a
+   * supplier-delivers term (DAP/DPU/DDP/CPT/CIP/CFR/CIF) AND the selected
+   * segment is the first one, the cost input is locked at 0 and a
+   * «Поставщик доставляет» badge replaces the editable field. Testing 2
+   * row 44.
+   */
+  supplierIncoterms?: string | null;
 }
 
 export function SegmentDetailsPanel({
@@ -81,6 +90,7 @@ export function SegmentDetailsPanel({
   onLocalUpdate,
   onMutation,
   disabled,
+  supplierIncoterms,
 }: SegmentDetailsPanelProps) {
   if (!segment) {
     return (
@@ -124,6 +134,7 @@ export function SegmentDetailsPanel({
           revalidatePath={revalidatePath}
           onLocalUpdate={onLocalUpdate}
           disabled={disabled}
+          supplierIncoterms={supplierIncoterms}
         />
 
         <SegmentExpensesList
@@ -148,6 +159,7 @@ interface SegmentFieldsProps {
   revalidatePath: string;
   onLocalUpdate?: (id: string, patch: Partial<LogisticsSegment>) => void;
   disabled?: boolean;
+  supplierIncoterms?: string | null;
 }
 
 function SegmentFields({
@@ -156,6 +168,7 @@ function SegmentFields({
   revalidatePath,
   onLocalUpdate,
   disabled,
+  supplierIncoterms,
 }: SegmentFieldsProps) {
   const [label, setLabel] = useState(segment.label ?? "");
   const [carrier, setCarrier] = useState(segment.carrier ?? "");
@@ -168,6 +181,13 @@ function SegmentFields({
     segment.currencyCode,
   );
   const [, startTransition] = useTransition();
+
+  // Testing 2 row 44 — first-segment cost is locked at 0 when the parent
+  // invoice's supplier_incoterms implies the supplier is delivering the
+  // first leg at their own expense (D-terms + C-terms).
+  const isFirstSegment = segment.sequenceOrder === 1;
+  const supplierCoversFirstSegment =
+    isFirstSegment && supplierDeliversFirstSegment(supplierIncoterms);
 
   // Re-sync local input state ONLY when the user switches to a different
   // segment. Earlier code listed every individual field in the deps array,
@@ -188,6 +208,34 @@ function SegmentFields({
     setCurrencyCode(segment.currencyCode);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: see comment above
   }, [segment.id]);
+
+  // Testing 2 row 44 — once we enter the «supplier delivers» state on a
+  // first segment that still carries a non-zero cost, drop it to 0 on the
+  // server. Without this, switching the parent invoice's incoterms from
+  // EXW → DAP would leave the old buyer-paid cost dangling in the DB even
+  // though the UI now displays «Поставщик доставляет».
+  useEffect(() => {
+    if (!supplierCoversFirstSegment) return;
+    if ((segment.mainCostRub ?? 0) === 0) return;
+    setMainCost("0");
+    startTransition(async () => {
+      try {
+        await updateSegment({
+          segment_id: segment.id,
+          patch: { main_cost_rub: 0 },
+          revalidate_path: revalidatePath,
+        });
+        if (onLocalUpdate) onLocalUpdate(segment.id, { mainCostRub: 0 });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Не удалось сохранить";
+        toast.error(msg);
+      }
+    });
+    // We do NOT depend on segment.mainCostRub — the auto-zero ran once when
+    // the «supplier delivers» state turned on, no need to re-fire on each
+    // optimistic update inside the same render cycle.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supplierCoversFirstSegment, segment.id]);
 
   function patch(patch: SegmentPatch, local?: Partial<LogisticsSegment>) {
     // Field edits are optimistic-only: `onLocalUpdate` keeps the parent's
@@ -352,26 +400,44 @@ function SegmentFields({
         />
       </Field>
       <Field label="Стоимость">
-        <div className="flex gap-1.5">
-          <Input
-            type="number"
-            min={0}
-            step={1}
-            value={mainCost}
-            onChange={(e) => setMainCost(e.target.value)}
-            onBlur={(e) => handleCostBlur(e.target.value)}
-            placeholder="0"
-            disabled={disabled}
-            className="tabular-nums"
-            aria-label="Сумма"
-          />
-          <CurrencyPicker
-            value={currencyCode}
-            onChange={handleCurrencyChange}
-            disabled={disabled}
-            ariaLabel="Валюта стоимости"
-          />
-        </div>
+        {supplierCoversFirstSegment ? (
+          // Testing 2 row 44 — display-only banner when the supplier covers
+          // this leg under their Incoterms. Editable input is suppressed so
+          // logistics can't accidentally re-introduce a cost the customer
+          // shouldn't see.
+          <div className="rounded-md border border-border-light bg-accent-subtle/40 px-3 py-2 text-xs text-text">
+            <span className="font-medium">Поставщик доставляет</span>
+            {supplierIncoterms ? (
+              <span className="ml-1 text-text-muted">
+                (Incoterms {supplierIncoterms})
+              </span>
+            ) : null}
+            <span className="ml-2 tabular-nums text-text-muted">
+              · 0 {currencyCode}
+            </span>
+          </div>
+        ) : (
+          <div className="flex gap-1.5">
+            <Input
+              type="number"
+              min={0}
+              step={1}
+              value={mainCost}
+              onChange={(e) => setMainCost(e.target.value)}
+              onBlur={(e) => handleCostBlur(e.target.value)}
+              placeholder="0"
+              disabled={disabled}
+              className="tabular-nums"
+              aria-label="Сумма"
+            />
+            <CurrencyPicker
+              value={currencyCode}
+              onChange={handleCurrencyChange}
+              disabled={disabled}
+              ariaLabel="Валюта стоимости"
+            />
+          </div>
+        )}
       </Field>
 
       <Field label="Перевозчик">
