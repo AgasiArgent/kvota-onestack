@@ -131,6 +131,10 @@ export function KanbanBoard({
   const [forcedAssignCardKey, setForcedAssignCardKey] = useState<string | null>(
     null
   );
+  // Testing 2 row 75 — same one-at-a-time pattern for the reassign popover.
+  const [openReassignCardKey, setOpenReassignCardKey] = useState<string | null>(
+    null
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
@@ -313,6 +317,15 @@ export function KanbanBoard({
                 setForcedAssignCardKey(null);
                 router.refresh();
               }}
+              canReassign={canDistribute}
+              openReassignCardKey={openReassignCardKey}
+              onReassignOpenChange={(key, open) => {
+                setOpenReassignCardKey(open ? key : null);
+              }}
+              onReassigned={() => {
+                setOpenReassignCardKey(null);
+                router.refresh();
+              }}
             />
           ))}
         </div>
@@ -356,6 +369,10 @@ interface KanbanColumnProps {
   forcedAssignCardKey: string | null;
   onAssignOpenChange: (cardKey: string, open: boolean) => void;
   onAssigned: () => void;
+  canReassign: boolean;
+  openReassignCardKey: string | null;
+  onReassignOpenChange: (cardKey: string, open: boolean) => void;
+  onReassigned: () => void;
 }
 
 function KanbanColumn({
@@ -370,6 +387,10 @@ function KanbanColumn({
   forcedAssignCardKey,
   onAssignOpenChange,
   onAssigned,
+  canReassign,
+  openReassignCardKey,
+  onReassignOpenChange,
+  onReassigned,
 }: KanbanColumnProps) {
   const isValidTarget =
     fromActive !== null &&
@@ -425,6 +446,12 @@ function KanbanColumn({
                 onAssignOpenChange={(open) => onAssignOpenChange(key, open)}
                 assignNotice={isForced ? FORCED_ASSIGN_NOTICE : undefined}
                 onAssigned={onAssigned}
+                canReassign={canReassign}
+                reassignOpen={openReassignCardKey === key}
+                onReassignOpenChange={(open) =>
+                  onReassignOpenChange(key, open)
+                }
+                onReassigned={onReassigned}
               />
             );
           })
