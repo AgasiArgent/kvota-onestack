@@ -11,16 +11,17 @@ import {
 } from "../model/types";
 
 /**
- * Board-layout invariants. We verify that the 4 column keys and their Russian
+ * Board-layout invariants. We verify that the 5 column keys and their Russian
  * labels are present and stable — the KanbanBoard renders one column per key.
  * Full drag interaction is verified on localhost per
  * reference_localhost_browser_test.md (dnd-kit requires a real DOM).
  */
 describe("KanbanBoard — column configuration", () => {
-  it("produces exactly 4 columns in fixed order", () => {
-    expect(PROCUREMENT_SUBSTATUSES).toHaveLength(4);
+  it("produces exactly 5 columns in fixed order", () => {
+    expect(PROCUREMENT_SUBSTATUSES).toHaveLength(5);
     expect(PROCUREMENT_SUBSTATUSES[0]).toBe("distributing");
     expect(PROCUREMENT_SUBSTATUSES[3]).toBe("prices_ready");
+    expect(PROCUREMENT_SUBSTATUSES[4]).toBe("paused");
   });
 
   it("uses the Russian labels required by the UI spec", () => {
@@ -28,6 +29,7 @@ describe("KanbanBoard — column configuration", () => {
     expect(SUBSTATUS_LABELS_RU.searching_supplier).toBe("Поиск поставщика");
     expect(SUBSTATUS_LABELS_RU.waiting_prices).toBe("Ожидание цен");
     expect(SUBSTATUS_LABELS_RU.prices_ready).toBe("Цены готовы");
+    expect(SUBSTATUS_LABELS_RU.paused).toBe("На паузе");
   });
 
   it("KanbanColumns type accepts empty arrays per substatus", () => {
@@ -36,6 +38,7 @@ describe("KanbanBoard — column configuration", () => {
       searching_supplier: [],
       waiting_prices: [],
       prices_ready: [],
+      paused: [],
     };
     for (const sub of PROCUREMENT_SUBSTATUSES) {
       expect(empty[sub]).toEqual([]);
@@ -48,10 +51,32 @@ describe("KanbanBoard — column configuration", () => {
       searching_supplier: [],
       waiting_prices: [],
       prices_ready: [],
+      paused: [],
     };
     const counts = PROCUREMENT_SUBSTATUSES.map((s) => state[s].length);
-    expect(counts).toEqual([1, 0, 0, 0]);
+    expect(counts).toEqual([1, 0, 0, 0, 0]);
     expect(counts.reduce((a, b) => a + b, 0)).toBe(1);
+  });
+
+  it("paused column can hold cards from any active stage", () => {
+    const fromDistributing = makeCard({
+      quote_id: "q1",
+      brand: "ABB",
+      procurement_substatus: "paused",
+    });
+    const fromPricesReady = makeCard({
+      quote_id: "q2",
+      brand: "Siemens",
+      procurement_substatus: "paused",
+    });
+    const state: KanbanColumns = {
+      distributing: [],
+      searching_supplier: [],
+      waiting_prices: [],
+      prices_ready: [],
+      paused: [fromDistributing, fromPricesReady],
+    };
+    expect(state.paused).toHaveLength(2);
   });
 });
 
@@ -96,6 +121,7 @@ describe("KanbanBoard — per-(quote, brand) slicing", () => {
       searching_supplier: [],
       waiting_prices: [],
       prices_ready: [],
+      paused: [],
     };
     expect(state.distributing).toHaveLength(2);
     expect(brandCardKey(state.distributing[0])).not.toBe(
@@ -119,6 +145,7 @@ describe("KanbanBoard — per-(quote, brand) slicing", () => {
       searching_supplier: [],
       waiting_prices: [q1Siemens],
       prices_ready: [],
+      paused: [],
     };
     // Both cards share the same quote_id but live in different columns.
     expect(state.distributing[0].quote_id).toBe(state.waiting_prices[0].quote_id);

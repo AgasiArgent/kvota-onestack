@@ -164,6 +164,7 @@ describe("filterProcurementColumns", () => {
     prices_ready: [
       makeCard({ quote_id: "e", brand: "Nike", days_in_state: 1 }),
     ],
+    paused: [],
   };
 
   it("returns the full set with no filters", () => {

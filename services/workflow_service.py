@@ -3644,40 +3644,68 @@ class SubStateTransition:
 
 # Allowed procurement sub-status transitions
 # Forward flow: distributing → searching_supplier → waiting_prices → prices_ready
-# Backward moves require a reason (to prevent sloppy rollbacks)
+# Backward moves require a reason (to prevent sloppy rollbacks).
+# Paused is a parking lot — any active column can pause and any paused card
+# can resume to any active column (Testing 2 row 74).
+_PROCUREMENT_ROLES_LIST: List[str] = ["procurement", "admin", "head_of_procurement"]
+_ACTIVE_PROCUREMENT_SUBSTATUSES: List[str] = [
+    "distributing",
+    "searching_supplier",
+    "waiting_prices",
+    "prices_ready",
+]
+
 PROCUREMENT_SUBSTATUS_TRANSITIONS: List[SubStateTransition] = [
     # Forward
     SubStateTransition(
         "pending_procurement", "distributing", "searching_supplier",
-        ["procurement", "admin", "head_of_procurement"],
+        _PROCUREMENT_ROLES_LIST,
         requires_reason=False,
     ),
     SubStateTransition(
         "pending_procurement", "searching_supplier", "waiting_prices",
-        ["procurement", "admin", "head_of_procurement"],
+        _PROCUREMENT_ROLES_LIST,
         requires_reason=False,
     ),
     SubStateTransition(
         "pending_procurement", "waiting_prices", "prices_ready",
-        ["procurement", "admin", "head_of_procurement"],
+        _PROCUREMENT_ROLES_LIST,
         requires_reason=False,
     ),
     # Backward (require reason)
     SubStateTransition(
         "pending_procurement", "searching_supplier", "distributing",
-        ["procurement", "admin", "head_of_procurement"],
+        _PROCUREMENT_ROLES_LIST,
         requires_reason=True,
     ),
     SubStateTransition(
         "pending_procurement", "waiting_prices", "searching_supplier",
-        ["procurement", "admin", "head_of_procurement"],
+        _PROCUREMENT_ROLES_LIST,
         requires_reason=True,
     ),
     SubStateTransition(
         "pending_procurement", "prices_ready", "waiting_prices",
-        ["procurement", "admin", "head_of_procurement"],
+        _PROCUREMENT_ROLES_LIST,
         requires_reason=True,
     ),
+    # Pause from any active column — no reason required.
+    *[
+        SubStateTransition(
+            "pending_procurement", _sub, "paused",
+            _PROCUREMENT_ROLES_LIST,
+            requires_reason=False,
+        )
+        for _sub in _ACTIVE_PROCUREMENT_SUBSTATUSES
+    ],
+    # Resume from paused to any active column — no reason required.
+    *[
+        SubStateTransition(
+            "pending_procurement", "paused", _sub,
+            _PROCUREMENT_ROLES_LIST,
+            requires_reason=False,
+        )
+        for _sub in _ACTIVE_PROCUREMENT_SUBSTATUSES
+    ],
 ]
 
 

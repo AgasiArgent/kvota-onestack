@@ -86,13 +86,10 @@ export function KanbanBoard({
   // Applied to both the initial SSR payload AND every refresh propagated
   // from the server (e.g. after an auto-advance from a Server Action).
   function sortColumns(cols: KanbanColumns): KanbanColumns {
-    const out: KanbanColumns = {
-      distributing: [],
-      searching_supplier: [],
-      waiting_prices: [],
-      prices_ready: [],
-    };
-    for (const k of Object.keys(out) as Array<keyof KanbanColumns>) {
+    const out = Object.fromEntries(
+      PROCUREMENT_SUBSTATUSES.map((sub) => [sub, [] as KanbanBrandCard[]])
+    ) as KanbanColumns;
+    for (const k of PROCUREMENT_SUBSTATUSES) {
       out[k] = [...(cols[k] ?? [])].sort((a, b) => {
         const ta = a.updated_at ? Date.parse(a.updated_at) : NaN;
         const tb = b.updated_at ? Date.parse(b.updated_at) : NaN;
@@ -288,8 +285,8 @@ export function KanbanBoard({
         <div
           className={
             canDistribute
-              ? "grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4"
-              : "grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-3"
+              ? "grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5"
+              : "grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4"
           }
         >
           {visibleSubstatuses.map((sub) => (
@@ -404,19 +401,28 @@ function KanbanColumn({
   // переход" toast + rolls back. Silent rejection is worse UX.
   const { setNodeRef, isOver } = useDroppable({ id: substatus });
 
+  // Paused is a parking-lot column rendered with subdued styling so it's
+  // visually distinct from the active flow.
+  const isPaused = substatus === "paused";
+
   return (
     <div
       ref={setNodeRef}
       className={[
         "flex min-h-[300px] flex-col gap-2 rounded-lg border p-3",
-        "bg-muted/40",
+        isPaused ? "bg-muted/20 border-dashed" : "bg-muted/40",
         isOver && isValidTarget ? "border-primary ring-2 ring-primary/30" : "",
         isDisabledTarget ? "opacity-50" : "",
       ].join(" ")}
       aria-label={SUBSTATUS_LABELS_RU[substatus]}
     >
       <header className="flex items-center justify-between pb-1">
-        <h2 className="text-sm font-semibold text-foreground">
+        <h2
+          className={[
+            "text-sm font-semibold",
+            isPaused ? "text-muted-foreground" : "text-foreground",
+          ].join(" ")}
+        >
           {SUBSTATUS_LABELS_RU[substatus]}
         </h2>
         <span className="rounded-full bg-background px-2 py-0.5 text-xs text-muted-foreground">
