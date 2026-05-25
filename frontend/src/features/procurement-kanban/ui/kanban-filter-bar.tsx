@@ -5,6 +5,7 @@ import { useMemo } from "react";
 import {
   FilterBar,
   MultiSelectFilter,
+  SearchInputFilter,
   SingleSelectFilter,
   STAGE_AGE_OPTIONS,
   useFilterState,
@@ -24,6 +25,7 @@ const FILTER_KEYS = {
   manager: "manager",
   procurement: "procurement",
   stageAge: "stage_age",
+  idnSearch: "q",
 } as const;
 
 export const PROCUREMENT_FILTER_KEYS: ReadonlyArray<string> =
@@ -57,6 +59,7 @@ export function readProcurementFiltersFromParams(
     managerIds: readList(params, FILTER_KEYS.manager),
     procurementUserIds: readList(params, FILTER_KEYS.procurement),
     stageAge: stageValid,
+    idnSearch: readScalar(params, FILTER_KEYS.idnSearch),
   };
 }
 
@@ -170,6 +173,12 @@ export function KanbanFilterBar({
 
   return (
     <FilterBar hasActiveFilters={isActive} onClearAll={clearAll}>
+      <SearchInputFilter
+        value={current.idnSearch}
+        onChange={(next) => setSingle(FILTER_KEYS.idnSearch, next)}
+        placeholder="Поиск по IDN КП…"
+        ariaLabel="Поиск по IDN КП"
+      />
       <MultiSelectFilter
         label="Клиент"
         options={customerOptions}

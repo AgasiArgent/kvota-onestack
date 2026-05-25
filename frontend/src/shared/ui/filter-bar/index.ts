@@ -25,6 +25,9 @@ export type {
 export { DateRangeFilter } from "./date-range-filter";
 export type { DateRangeFilterProps } from "./date-range-filter";
 
+export { SearchInputFilter } from "./search-input-filter";
+export type { SearchInputFilterProps } from "./search-input-filter";
+
 export { FilterEmptyState } from "./filter-empty-state";
 export type { FilterEmptyStateProps } from "./filter-empty-state";
 

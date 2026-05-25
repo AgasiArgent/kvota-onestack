@@ -181,6 +181,7 @@ describe("cardPassesFilters", () => {
       stageFrom: null,
       stageTo: null,
       urgency: null,
+      idnSearch: null,
     };
     // Both slots match
     expect(
