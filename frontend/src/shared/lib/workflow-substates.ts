@@ -3,6 +3,10 @@
  *
  * Transitions are an explicit adjacency list so forward vs backward moves can be
  * distinguished. Backward moves require a reason and are recorded in status_history.
+ *
+ * `paused` is a parking lot — any active column can move INTO paused and any
+ * paused card can move BACK OUT to any active column. Pause is a substate,
+ * not a step in the linear flow, so it's neither forward nor backward.
  */
 
 export const PROCUREMENT_SUBSTATUSES = [
@@ -10,6 +14,7 @@ export const PROCUREMENT_SUBSTATUSES = [
   "searching_supplier",
   "waiting_prices",
   "prices_ready",
+  "paused",
 ] as const;
 
 export type ProcurementSubstatus = (typeof PROCUREMENT_SUBSTATUSES)[number];
@@ -19,7 +24,16 @@ export const SUBSTATUS_LABELS_RU: Record<ProcurementSubstatus, string> = {
   searching_supplier: "Поиск поставщика",
   waiting_prices: "Ожидание цен",
   prices_ready: "Цены готовы",
+  paused: "На паузе",
 };
+
+/** Active (non-paused) columns — used to enumerate pause↔resume transitions. */
+const ACTIVE_SUBSTATUSES = [
+  "distributing",
+  "searching_supplier",
+  "waiting_prices",
+  "prices_ready",
+] as const satisfies readonly ProcurementSubstatus[];
 
 /** Forward transitions — no reason required. */
 export const FORWARD_TRANSITIONS: ReadonlyArray<
@@ -28,6 +42,16 @@ export const FORWARD_TRANSITIONS: ReadonlyArray<
   ["distributing", "searching_supplier"],
   ["searching_supplier", "waiting_prices"],
   ["waiting_prices", "prices_ready"],
+  // Pause from any active column — treated as a forward (no reason) move.
+  ...ACTIVE_SUBSTATUSES.map(
+    (s) => [s, "paused"] as [ProcurementSubstatus, ProcurementSubstatus]
+  ),
+  // Resume from paused back to any active column — also no reason required:
+  // resuming work doesn't carry the same "why are you reverting" friction as
+  // a true backward step. If we later want a resume reason, add it here.
+  ...ACTIVE_SUBSTATUSES.map(
+    (s) => ["paused", s] as [ProcurementSubstatus, ProcurementSubstatus]
+  ),
 ] as const;
 
 /** Backward transitions — reason required. */

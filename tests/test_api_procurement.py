@@ -297,6 +297,7 @@ class TestGetKanban:
             "searching_supplier",
             "waiting_prices",
             "prices_ready",
+            "paused",
         }
 
         # МОЗ never sees the «Распределение» column.
@@ -321,6 +322,7 @@ class TestGetKanban:
         # q2 (no assignment) and q1/ABB (other user's brand) are scoped out.
         assert cols["waiting_prices"] == []
         assert cols["prices_ready"] == []
+        assert cols["paused"] == []
 
     @patch("api.procurement.get_supabase")
     def test_regular_procurement_with_no_assignment_sees_no_cards(self, mock_get_sb):
@@ -410,6 +412,7 @@ class TestGetKanban:
         assert cols["searching_supplier"] == []
         assert cols["waiting_prices"] == []
         assert cols["prices_ready"] == []
+        assert cols["paused"] == []
 
     @patch("api.procurement.get_supabase")
     def test_head_of_procurement_sees_org_wide_cards(self, mock_get_sb):

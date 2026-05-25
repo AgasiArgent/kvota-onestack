@@ -32,8 +32,14 @@ _READ_HISTORY_ROLES = {"procurement", "procurement_senior", "admin", "head_of_pr
 # regular МОЗ has no business with the «Распределение» column.
 _BROADER_SCOPE_ROLES = {"admin", "head_of_procurement", "procurement_senior"}
 
-# Fixed set of procurement sub-statuses — matches migration 274 check constraint
-_PROCUREMENT_SUBSTATUSES = ("distributing", "searching_supplier", "waiting_prices", "prices_ready")
+# Fixed set of procurement sub-statuses — matches migrations 274 + 326 check constraint
+_PROCUREMENT_SUBSTATUSES = (
+    "distributing",
+    "searching_supplier",
+    "waiting_prices",
+    "prices_ready",
+    "paused",
+)
 
 
 def _rows(response: Any) -> list[dict[str, Any]]:

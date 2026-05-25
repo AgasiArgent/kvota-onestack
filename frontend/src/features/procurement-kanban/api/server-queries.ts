@@ -27,10 +27,7 @@ export async function fetchKanbanData(): Promise<KanbanResponse> {
 }
 
 function emptyColumns(): KanbanColumns {
-  return {
-    distributing: [],
-    searching_supplier: [],
-    waiting_prices: [],
-    prices_ready: [],
-  };
+  return Object.fromEntries(
+    PROCUREMENT_SUBSTATUSES.map((sub) => [sub, [] as KanbanColumns[typeof sub]])
+  ) as KanbanColumns;
 }

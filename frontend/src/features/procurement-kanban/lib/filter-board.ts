@@ -9,6 +9,7 @@ import {
   isInStageAgeBucket,
   type StageAgeBucket,
 } from "@/shared/ui/filter-bar";
+import { PROCUREMENT_SUBSTATUSES } from "@/shared/lib/workflow-substates";
 
 import type { KanbanBrandCard, KanbanColumns } from "../model/types";
 
@@ -89,27 +90,17 @@ export function filterProcurementColumns(
   columns: KanbanColumns,
   filters: ProcurementFilterState
 ): KanbanColumns {
-  return {
-    distributing: columns.distributing.filter((c) =>
-      cardPassesProcurementFilters(c, filters)
-    ),
-    searching_supplier: columns.searching_supplier.filter((c) =>
-      cardPassesProcurementFilters(c, filters)
-    ),
-    waiting_prices: columns.waiting_prices.filter((c) =>
-      cardPassesProcurementFilters(c, filters)
-    ),
-    prices_ready: columns.prices_ready.filter((c) =>
-      cardPassesProcurementFilters(c, filters)
-    ),
-  };
+  return Object.fromEntries(
+    PROCUREMENT_SUBSTATUSES.map((sub) => [
+      sub,
+      columns[sub].filter((c) => cardPassesProcurementFilters(c, filters)),
+    ])
+  ) as KanbanColumns;
 }
 
 export function totalProcurementCardCount(columns: KanbanColumns): number {
-  return (
-    columns.distributing.length +
-    columns.searching_supplier.length +
-    columns.waiting_prices.length +
-    columns.prices_ready.length
+  return PROCUREMENT_SUBSTATUSES.reduce(
+    (acc, sub) => acc + columns[sub].length,
+    0
   );
 }
