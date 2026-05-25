@@ -44,7 +44,7 @@ export default async function AppLayout({
   return (
     <div className="flex min-h-screen">
       <Sidebar user={user} unassignedDistributionCount={unassignedDistributionCount} />
-      <main className="flex-1 sidebar-margin p-6">
+      <main className="flex-1 min-w-0 sidebar-margin p-6">
         {children}
       </main>
       <FeedbackButton />
