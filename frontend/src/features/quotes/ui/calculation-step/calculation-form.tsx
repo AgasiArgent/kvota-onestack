@@ -14,11 +14,6 @@ import { INCOTERMS_2020 } from "@/shared/lib/incoterms";
 import type { QuoteDetailRow } from "@/entities/quote/queries";
 import { PaymentSegmentsBlock } from "./payment-segments-block";
 
-const SALE_TYPES = [
-  { value: "поставка", label: "Поставка" },
-  { value: "транзит", label: "Транзит" },
-];
-
 const CURRENCIES = ["RUB", "USD", "EUR", "CNY"];
 const DM_FEE_TYPES = [
   { value: "fixed", label: "Фикс." },
@@ -47,24 +42,6 @@ export function CalculationForm({
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 pt-3">
-          <FormRow label="Тип сделки">
-            <Select
-              value={formValues.offer_sale_type}
-              onValueChange={(v) => onFieldChange("offer_sale_type", v ?? "")}
-            >
-              <SelectTrigger className="w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {SALE_TYPES.map((t) => (
-                  <SelectItem key={t.value} value={t.value}>
-                    {t.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </FormRow>
-
           <FormRow label="Инкотермс">
             <Select
               value={formValues.offer_incoterms}
