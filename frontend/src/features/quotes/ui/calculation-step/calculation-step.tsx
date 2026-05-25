@@ -33,6 +33,16 @@ export function CalculationStep({
   const [resultsItems, setResultsItems] = useState<CalculationResultsItem[]>(
     () => items.map(toPlaceholderResultItem)
   );
+  // Authoritative "has the engine produced rows for the current items?"
+  // signal. `quotes.total_quote_currency` (or `total_amount`) is a stale
+  // proxy: it lingers after items are replaced (FK cascade clears
+  // `quote_calculation_results` but the quote-level totals are not touched).
+  // See /tmp/validation-xlsm-investigate-2026-05-25.md. We presume true on
+  // first paint when the quote has a total — flipping it to false after the
+  // load avoids flashing a "Рассчитать" button at users whose data is fine.
+  const [hasCalcRows, setHasCalcRows] = useState<boolean>(
+    () => (quote as Record<string, unknown>).total_quote_currency != null
+  );
 
   useEffect(() => {
     const supabase = createClient();
@@ -42,18 +52,34 @@ export function CalculationStep({
     async function load() {
       const qiIds = items.map((it) => it.id);
       if (qiIds.length === 0) {
-        if (!cancelled) setResultsItems([]);
+        if (!cancelled) {
+          setResultsItems([]);
+          setHasCalcRows(false);
+        }
         return;
       }
 
-      const { data: cov, error } = await supabase
-        .from("invoice_item_coverage")
-        .select(
-          "quote_item_id, invoice_items!inner(invoice_id, base_price_vat)"
-        )
-        .in("quote_item_id", qiIds);
+      // Coverage join (base_price_vat) + calc-row presence — two queries
+      // in parallel keep the existing UX intact while adding the new gate.
+      const [coverageRes, calcCountRes] = await Promise.all([
+        supabase
+          .from("invoice_item_coverage")
+          .select(
+            "quote_item_id, invoice_items!inner(invoice_id, base_price_vat)"
+          )
+          .in("quote_item_id", qiIds),
+        supabase
+          .from("quote_calculation_results")
+          .select("quote_item_id", { count: "exact", head: true })
+          .in("quote_item_id", qiIds),
+      ]);
 
       if (cancelled) return;
+
+      const { data: cov, error } = coverageRes;
+      if (!calcCountRes.error) {
+        setHasCalcRows((calcCountRes.count ?? 0) > 0);
+      }
 
       if (error) {
         console.error("Failed to load invoice_items coverage:", error);
@@ -107,8 +133,11 @@ export function CalculationStep({
     []
   );
 
-  const hasCalculation =
-    (quote as Record<string, unknown>).total_quote_currency != null;
+  // Gate the export buttons on actual `quote_calculation_results` rows,
+  // not on the quote-level `total_quote_currency` (which is a stale proxy
+  // that lingers after items change — see download-validation-excel.ts and
+  // /tmp/validation-xlsm-investigate-2026-05-25.md).
+  const hasCalculation = hasCalcRows;
 
   return (
     <div className="flex-1 min-w-0">

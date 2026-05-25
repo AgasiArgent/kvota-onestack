@@ -168,6 +168,34 @@ export function ControlStep({
     });
   }, []);
 
+  // Authoritative "calc engine has produced rows for the current items?"
+  // signal — drives the Validation Excel button. Quote-level totals like
+  // `total_quote_currency` linger after items change (CASCADE clears the
+  // per-item rows but not the aggregate). Without this, controllers see an
+  // enabled button that downloads an all-zero workbook. See
+  // /tmp/validation-xlsm-investigate-2026-05-25.md.
+  const [hasCalcRows, setHasCalcRows] = useState<boolean>(false);
+  useEffect(() => {
+    const supabase = createClient();
+    let cancelled = false;
+    const qiIds = items.map((it) => it.id);
+    if (qiIds.length === 0) {
+      setHasCalcRows(false);
+      return;
+    }
+    (async () => {
+      const { count, error } = await supabase
+        .from("quote_calculation_results")
+        .select("quote_item_id", { count: "exact", head: true })
+        .in("quote_item_id", qiIds);
+      if (cancelled || error) return;
+      setHasCalcRows((count ?? 0) > 0);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [items]);
+
   // Invoice IDs for data fetching
   const invoiceIds = useMemo(
     () => invoices.map((inv) => inv.id),
@@ -308,6 +336,7 @@ export function ControlStep({
         userId={userId}
         workflowStatus={workflowStatus}
         needsApproval={approvalTriggers.length > 0}
+        hasCalculation={hasCalcRows}
       />
 
       <AppToaster />

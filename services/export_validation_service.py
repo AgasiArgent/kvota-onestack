@@ -1195,11 +1195,28 @@ def create_validation_excel(data) -> bytes:
 
     Returns:
         XLSM Excel file as bytes with macros
+
+    Raises:
+        ValueError: when none of ``data.items`` carry calculation results
+            (``item['calc']`` is empty for every item). Surfaces the
+            "calc never ran on current items" state instead of silently
+            emitting a workbook full of zeros — see
+            ``/tmp/validation-xlsm-investigate-2026-05-25.md``. The
+            ``/api/quotes/{id}/export/validation`` HTTP handler catches
+            this earlier and returns 409 NO_CALCULATION; this raise is
+            the safety net for direct callers like the golden-master
+            harness.
     """
     quote = data.quote
     items = data.items
     variables = data.variables
     calculations = data.calculations
+
+    if items and not any(item.get("calc") for item in items):
+        raise ValueError(
+            "No calculation results available for any item — "
+            "run «Рассчитать» before generating the validation Excel"
+        )
 
     # Helper to convert value from source_currency to USD
     # Brokerage and DM Fee are stored in ORIGINAL currency, need conversion to USD for export

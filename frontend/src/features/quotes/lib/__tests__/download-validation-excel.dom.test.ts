@@ -291,3 +291,70 @@ describe("downloadValidationExcel — error responses", () => {
     expect(windowOpenSpy).not.toHaveBeenCalled();
   });
 });
+
+describe("downloadValidationExcel — 409 NO_CALCULATION", () => {
+  /**
+   * Regression for the "validation file excel скачивается пустой" bug
+   * (2026-05-25). The Python API now returns 409 with code NO_CALCULATION
+   * when `quote_calculation_results` rows are missing for the quote's items
+   * (CASCADE-cleared after items changed; `quotes.total_amount` lingers and
+   * misleads the user). The client must show a specific directive toast
+   * — not the generic "Не удалось скачать..." — so the user knows the
+   * exact next step ("нажмите «Рассчитать»").
+   *
+   * See /tmp/validation-xlsm-investigate-2026-05-25.md for the diagnostic.
+   */
+  it("shows the Russian «Рассчитать» toast on 409 + code NO_CALCULATION", async () => {
+    globalThis.fetch = vi.fn(async () =>
+      buildResponse({
+        ok: false,
+        status: 409,
+        statusText: "Conflict",
+        json: {
+          success: false,
+          error: {
+            code: "NO_CALCULATION",
+            message:
+              "Расчёт не выполнен — нажмите «Рассчитать» перед скачиванием",
+          },
+        },
+      }),
+    ) as unknown as typeof fetch;
+
+    await downloadValidationExcel("q-no-calc");
+
+    expect(toastErrorMock).toHaveBeenCalledTimes(1);
+    const toastMessage = String(toastErrorMock.mock.calls[0]?.[0] ?? "");
+    expect(toastMessage).toContain("Расчёт не выполнен");
+    expect(toastMessage).toContain("Рассчитать");
+    // Must NOT use the generic prefix — this toast is directive, not a
+    // wrapped backend error.
+    expect(toastMessage).not.toContain("Не удалось скачать");
+    expect(toastSuccessMock).not.toHaveBeenCalled();
+    expect(windowOpenSpy).not.toHaveBeenCalled();
+    expect(createObjectURLMock).not.toHaveBeenCalled();
+  });
+
+  it("falls back to generic toast on 409 without NO_CALCULATION code", async () => {
+    // Other 409 conflicts (e.g. concurrent edits) should still use the
+    // generic "Не удалось скачать..." copy with the backend message.
+    globalThis.fetch = vi.fn(async () =>
+      buildResponse({
+        ok: false,
+        status: 409,
+        statusText: "Conflict",
+        json: {
+          success: false,
+          error: { code: "STALE_VERSION", message: "Quote was modified" },
+        },
+      }),
+    ) as unknown as typeof fetch;
+
+    await downloadValidationExcel("q-conflict");
+
+    expect(toastErrorMock).toHaveBeenCalledTimes(1);
+    const toastMessage = String(toastErrorMock.mock.calls[0]?.[0] ?? "");
+    expect(toastMessage).toContain("Не удалось скачать");
+    expect(toastMessage).toContain("Quote was modified");
+  });
+});
