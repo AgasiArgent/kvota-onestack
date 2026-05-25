@@ -4,11 +4,13 @@ import { useEffect, useState } from "react";
 import { AppToaster } from "@/shared/ui/app-toaster";
 import type { QuoteDetailRow, QuoteItemRow } from "@/entities/quote/queries";
 import { createClient } from "@/shared/lib/supabase/client";
+import { canEditQuoteCustomerFields } from "@/shared/lib/roles";
 import { SalesActionBar } from "./sales-action-bar";
 import type { ClientResponseModal } from "./sales-action-bar";
 import { SalesItemsTable, type SalesItemRow } from "./sales-items-table";
 import { SalesItemsEditor } from "./sales-items-editor";
 import { ClientResponseModals } from "./client-response-modals";
+import { DistributionCommentInline } from "./distribution-comment-inline";
 
 interface SalesStepProps {
   quote: QuoteDetailRow;
@@ -16,9 +18,27 @@ interface SalesStepProps {
   userRoles: string[];
 }
 
-export function SalesStep({ quote, items }: SalesStepProps) {
+/**
+ * Shape of the JSONB `kvota.quotes.sales_checklist` payload. Re-declared here
+ * (narrowed to only the field we read) instead of importing from
+ * `context-panel/sales-checklist-block` to keep the sales-step bundle from
+ * pulling the context-panel chunk.
+ */
+interface SalesChecklistJsonb {
+  distribution_comment?: string | null;
+}
+
+export function SalesStep({ quote, items, userRoles }: SalesStepProps) {
   const [activeModal, setActiveModal] = useState<ClientResponseModal>(null);
   const isDraft = (quote.workflow_status ?? "draft") === "draft";
+  // Mirror the customer-field edit gate (admin / sales / head_of_sales) for
+  // the inline editor. Testing 2 row 61: МОП / РОП need to amend the field
+  // both pre- and post-transfer; other roles see it read-only.
+  const canEditDistributionComment = canEditQuoteCustomerFields(userRoles);
+  const distributionComment =
+    (
+      (quote.sales_checklist as SalesChecklistJsonb | null) ?? null
+    )?.distribution_comment ?? null;
 
   // Phase 5d: base_price_vat moved from quote_items to invoice_items.
   // For read-only views (non-draft), project the composed price per
@@ -30,6 +50,20 @@ export function SalesStep({ quote, items }: SalesStepProps) {
     <div className="flex-1 min-w-0">
       <SalesActionBar quote={quote} items={items} onOpenModal={setActiveModal} />
       <div className="p-6 space-y-6">
+        {/* Testing 2 row 61 (МОП / РОП «Нет поля 21.05.2026»): surface the
+            distribution comment above the positions grid so it's actually
+            discoverable + editable post-transfer. Modal in transfer-dialog
+            remains as fallback path. For sales-tier the editor is always
+            visible (even when empty) so the affordance is impossible to miss;
+            for read-only roles we render the comment only when it carries
+            content — empty block on every quote would just be noise. */}
+        {(canEditDistributionComment || (distributionComment ?? "").trim().length > 0) && (
+          <DistributionCommentInline
+            quoteId={quote.id}
+            initialValue={distributionComment}
+            canEdit={canEditDistributionComment}
+          />
+        )}
         {isDraft ? (
           <SalesItemsEditor
             quoteId={quote.id}

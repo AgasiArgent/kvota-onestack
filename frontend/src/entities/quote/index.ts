@@ -56,7 +56,10 @@ export type {
   SubstatusTransitionResult,
   StatusHistoryEntry,
 } from "./mutations";
-export { assignBrandGroup } from "./server-actions";
+export {
+  assignBrandGroup,
+  updateDistributionComment,
+} from "./server-actions";
 export {
   STATUS_LABELS,
   STATUS_BADGE_STYLES,
