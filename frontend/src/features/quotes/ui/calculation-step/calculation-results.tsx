@@ -81,37 +81,39 @@ export function CalculationResults({ quote, items }: CalculationResultsProps) {
 
   const hasCalculation = totalWithVat != null;
 
-  if (!hasCalculation) {
-    return (
-      <Card>
-        <CardContent className="py-8 flex flex-col items-center gap-3 text-center">
-          <Info size={24} className="text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">
-            Расчёт ещё не выполнен. Заполните параметры и нажмите
-            &laquo;Рассчитать&raquo;.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
     <div className="space-y-4">
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <SummaryCard
-          label="Сумма без НДС"
-          value={fmt(revenueNoVat, currency)}
-        />
-        <SummaryCard
-          label="Сумма с НДС"
-          value={fmt(totalWithVat, currency)}
-        />
-        <SummaryCard label="Профит" value={fmt(profit, currency)} accent />
-        <SummaryCard label="Маржа" value={fmtPct(marginPercent)} accent />
-      </div>
+      {/* Pre-calc info banner — shows above the items table when no calc yet,
+          so the user still sees their positions while being told to run calc. */}
+      {!hasCalculation && (
+        <Card>
+          <CardContent className="py-3 px-4 flex items-center gap-2 text-sm text-muted-foreground">
+            <Info size={16} className="shrink-0" />
+            <span>
+              Расчёт ещё не выполнен. Заполните параметры и нажмите
+              &laquo;Рассчитать&raquo;.
+            </span>
+          </CardContent>
+        </Card>
+      )}
 
-      {/* Per-item table */}
+      {/* Summary cards — only after a successful calc */}
+      {hasCalculation && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <SummaryCard
+            label="Сумма без НДС"
+            value={fmt(revenueNoVat, currency)}
+          />
+          <SummaryCard
+            label="Сумма с НДС"
+            value={fmt(totalWithVat, currency)}
+          />
+          <SummaryCard label="Профит" value={fmt(profit, currency)} accent />
+          <SummaryCard label="Маржа" value={fmtPct(marginPercent)} accent />
+        </div>
+      )}
+
+      {/* Per-item table — always rendered. fmt() prints «—» for null prices. */}
       <Card>
         <CardContent className="p-0">
           <Table>

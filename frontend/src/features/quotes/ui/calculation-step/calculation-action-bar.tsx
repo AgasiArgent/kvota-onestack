@@ -42,7 +42,32 @@ export function CalculationActionBar({
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(extractErrorMessage(data) ?? "Calculation failed");
+      if (!res.ok) {
+        // Recoverable: backend returns MISSING_PRICES + items_without_price[].
+        // Show a persistent, descriptive toast listing the failing items in
+        // Russian so the user can act on it (the backend message is in EN).
+        const errorCode =
+          (data as { error?: { code?: unknown } } | null)?.error?.code;
+        const itemsWithoutPrice = (data as { items_without_price?: unknown } | null)
+          ?.items_without_price;
+        if (
+          errorCode === "MISSING_PRICES" &&
+          Array.isArray(itemsWithoutPrice) &&
+          itemsWithoutPrice.length > 0
+        ) {
+          const items = itemsWithoutPrice.filter(
+            (it): it is string => typeof it === "string",
+          );
+          if (items.length > 0) {
+            toast.error("Не у всех позиций есть цена", {
+              description: `Без цены: ${items.join(", ")}`,
+              duration: Infinity,
+            });
+            return;
+          }
+        }
+        throw new Error(extractErrorMessage(data) ?? "Calculation failed");
+      }
 
       toast.success("Расчёт выполнен");
       router.refresh();
