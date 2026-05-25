@@ -151,6 +151,62 @@ export async function downloadInvoiceXls(
 }
 
 // ---------------------------------------------------------------------------
+// XLS import (Testing 2 row 70)
+//
+// Counterpart of `downloadInvoiceXls`: clients edit the downloaded XLS offline
+// and re-upload it through «Загрузить XLS». The server matches rows back to
+// `invoice_items` by `idn_sku` and updates the supplier-side fields.
+//
+// Returns the structured summary so the caller can toast both the count of
+// updated rows and the list of articles that were not found in the КПП.
+// Throws on any error — duplicate articles surface as a generic Error with
+// the server's "Дубликаты артикулов: ..." message so the toast renders it
+// verbatim.
+// ---------------------------------------------------------------------------
+
+export interface UploadInvoiceXlsResult {
+  updated: number;
+  skipped: string[];
+  total_in_file: number;
+}
+
+export async function uploadInvoiceXls(
+  invoiceId: string,
+  file: File
+): Promise<UploadInvoiceXlsResult> {
+  const headers = await getAuthHeaders();
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  // NOTE: do NOT set Content-Type manually here — the browser must add the
+  // multipart boundary itself, otherwise Starlette's form parser can't read
+  // the file. `getAuthHeaders()` only returns Authorization, which is safe.
+  const res = await fetch(`/api/invoices/${invoiceId}/import-xls`, {
+    method: "POST",
+    headers,
+    body: formData,
+  });
+
+  if (!res.ok) {
+    let serverMessage: string | undefined;
+    try {
+      const json = (await res.json()) as { error?: { message?: string } };
+      serverMessage = json?.error?.message;
+    } catch {
+      // Body unparseable — fall through to the HTTP-status fallback below.
+    }
+    throw new Error(serverMessage ?? `Upload failed (HTTP ${res.status})`);
+  }
+
+  const json = (await res.json()) as {
+    success: boolean;
+    data: UploadInvoiceXlsResult;
+  };
+  return json.data;
+}
+
+// ---------------------------------------------------------------------------
 // Procurement-unlock request (Phase 5c)
 //
 // Name matches the backend route (/procurement-unlock-request). Phase 4a
