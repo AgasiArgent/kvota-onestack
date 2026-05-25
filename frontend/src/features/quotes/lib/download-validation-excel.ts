@@ -32,18 +32,33 @@ export async function downloadValidationExcel(quoteId: string): Promise<void> {
 
   if (!response.ok) {
     let message = response.statusText || `HTTP ${response.status}`;
+    let code: string | null = null;
     try {
       const body = (await response.json()) as {
-        error?: string | { message?: string };
+        error?: string | { code?: string; message?: string };
       };
       if (typeof body.error === "string") {
         message = body.error;
-      } else if (body.error?.message) {
-        message = body.error.message;
+      } else if (body.error) {
+        if (body.error.message) message = body.error.message;
+        if (typeof body.error.code === "string") code = body.error.code;
       }
     } catch {
       // Body was not JSON — fall back to statusText / HTTP code message above.
     }
+
+    // 409 NO_CALCULATION — the quote has stale `total_amount` but the
+    // per-item `quote_calculation_results` rows are missing (CASCADE-cleared
+    // after items changed). Show a directive toast that names the next
+    // action instead of the generic "Не удалось скачать..." copy. See
+    // /tmp/validation-xlsm-investigate-2026-05-25.md.
+    if (response.status === 409 && code === "NO_CALCULATION") {
+      toast.error(
+        "Расчёт не выполнен — нажмите «Рассчитать» перед скачиванием",
+      );
+      return;
+    }
+
     toast.error(`Не удалось скачать файл валидации: ${message}`);
     return;
   }

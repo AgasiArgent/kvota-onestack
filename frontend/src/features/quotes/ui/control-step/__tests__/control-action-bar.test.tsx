@@ -65,6 +65,7 @@ describe("ControlActionBar — Validation Excel button", () => {
         userId="user-1"
         workflowStatus="pending_quote_control"
         needsApproval={false}
+        hasCalculation={true}
       />,
     );
 
@@ -79,18 +80,39 @@ describe("ControlActionBar — Validation Excel button", () => {
     openSpy.mockRestore();
   });
 
-  it("is enabled when the bar renders in a control workflow state", () => {
+  it("is enabled when the bar renders in a control workflow state with hasCalculation=true", () => {
     render(
       <ControlActionBar
         quoteId="q-1"
         userId="user-1"
         workflowStatus="pending_quote_control"
         needsApproval={false}
+        hasCalculation={true}
       />,
     );
 
     const button = screen.getByRole("button", { name: /Validation Excel/ });
     expect((button as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("is disabled when hasCalculation=false (lingering total_amount, stale calc)", () => {
+    // Regression for the 2026-05-25 "validation file excel скачивается
+    // пустой" bug: ControlActionBar must disable the button when the
+    // parent has signalled that quote_calculation_results rows are
+    // missing — even though the quote still has a non-null total_amount.
+    // See /tmp/validation-xlsm-investigate-2026-05-25.md.
+    render(
+      <ControlActionBar
+        quoteId="q-1"
+        userId="user-1"
+        workflowStatus="pending_quote_control"
+        needsApproval={false}
+        hasCalculation={false}
+      />,
+    );
+
+    const button = screen.getByRole("button", { name: /Validation Excel/ });
+    expect((button as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("does not render the bar at all outside of control states", () => {
@@ -103,6 +125,7 @@ describe("ControlActionBar — Validation Excel button", () => {
         userId="user-1"
         workflowStatus="draft"
         needsApproval={false}
+        hasCalculation={true}
       />,
     );
 

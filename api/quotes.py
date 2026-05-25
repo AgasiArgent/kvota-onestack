@@ -1087,6 +1087,23 @@ async def export_validation(
             "INTERNAL_ERROR", "Failed to fetch quote data", status_code=500
         )
 
+    # Defensive guard — see /tmp/validation-xlsm-investigate-2026-05-25.md.
+    # `quote_calculation_results` is CASCADE-deleted when items change, but
+    # `quotes.total_amount` lingers from older calcs. Without this check the
+    # export silently produces a 1.6 MB workbook full of zeros (testers
+    # reported it as "пустой"). 409 + structured code lets the client show
+    # a clear "нажмите Рассчитать" toast instead of the misleading file.
+    #
+    # We only trip when items exist but none carry calc data — an empty
+    # items list is a structurally different state (corrupted quote) that
+    # is out of scope here.
+    if data.items and not any(item.get("calc") for item in data.items):
+        return error_response(
+            "NO_CALCULATION",
+            "Расчёт не выполнен — нажмите «Рассчитать» перед скачиванием",
+            status_code=409,
+        )
+
     try:
         excel_bytes = create_validation_excel(data)
     except Exception:

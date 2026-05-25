@@ -213,3 +213,82 @@ describe("CalculationActionBar — MISSING_PRICES handling", () => {
     expect(toastErrorMock).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * Validation-Excel button gating under the new hasCalculation contract
+ * ("validation file excel пустой" bug). Pre-fix: hasCalculation was derived
+ * from `quote.total_quote_currency != null`. That column lingers after
+ * `quote_items` are replaced — CASCADE clears `quote_calculation_results`
+ * but the quote-level aggregate is left untouched. New contract:
+ * hasCalculation is true ONLY when at least one calc-results row exists.
+ * Diagnostic: /tmp/validation-xlsm-investigate-2026-05-25.md.
+ */
+describe("CalculationActionBar — Validation Excel gating", () => {
+  it("hides export buttons when hasCalculation=false (the new no-stale-total gate)", () => {
+    render(
+      <CalculationActionBar
+        quoteId="q-stale-total"
+        formValues={{}}
+        hasCalculation={false}
+        workflowStatus="pending_quote_control"
+        isApproved={false}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: /Validation Excel/ }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /КП PDF/ }),
+    ).toBeNull();
+  });
+
+  it("renders export buttons when hasCalculation=true (the parent confirmed calc rows exist)", () => {
+    render(
+      <CalculationActionBar
+        quoteId="q-calculated"
+        formValues={{}}
+        hasCalculation={true}
+        workflowStatus="pending_quote_control"
+        isApproved={false}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: /Validation Excel/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /КП PDF/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("Calculate button label flips from «Рассчитать» to «Пересчитать» based on hasCalculation, not total_amount", () => {
+    const { rerender } = render(
+      <CalculationActionBar
+        quoteId="q-1"
+        formValues={{}}
+        hasCalculation={false}
+        workflowStatus="pending_sales_review"
+        isApproved={false}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: /^Рассчитать$/ }),
+    ).toBeInTheDocument();
+
+    rerender(
+      <CalculationActionBar
+        quoteId="q-1"
+        formValues={{}}
+        hasCalculation={true}
+        workflowStatus="pending_sales_review"
+        isApproved={false}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: /Пересчитать/ }),
+    ).toBeInTheDocument();
+  });
+});

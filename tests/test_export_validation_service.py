@@ -13,6 +13,8 @@ import os
 import sys
 from unittest.mock import MagicMock, patch
 
+import pytest  # noqa: E402
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from services.export_validation_service import (  # noqa: E402
@@ -83,7 +85,9 @@ def test_create_validation_excel_reads_weight_in_kg_from_item(
             "purchase_currency": "EUR",
             "supplier_country": "DE",
             "customs_code": "12345",
-            "calc": {},
+            # Non-empty calc — the 2026-05-25 guard rejects items that have
+            # no calc data (see test_create_validation_excel_raises_when_all_items_lack_calc).
+            "calc": {"S16": 0},
         }
     ]
     data = _make_export_data(items)
@@ -120,7 +124,9 @@ def test_create_validation_excel_reads_base_price_vat_from_item(
             "purchase_currency": "EUR",
             "supplier_country": "DE",
             "customs_code": "12345",
-            "calc": {},
+            # Non-empty calc — the 2026-05-25 guard rejects items that have
+            # no calc data (see test_create_validation_excel_raises_when_all_items_lack_calc).
+            "calc": {"S16": 0},
         }
     ]
     data = _make_export_data(items)
@@ -157,7 +163,9 @@ def test_create_validation_excel_ignores_legacy_weight_kg(
             "purchase_currency": "USD",
             "supplier_country": "CN",
             "customs_code": "67890",
-            "calc": {},
+            # Non-empty calc — the 2026-05-25 guard rejects items that have
+            # no calc data (see test_create_validation_excel_raises_when_all_items_lack_calc).
+            "calc": {"S16": 0},
         }
     ]
     data = _make_export_data(items)
@@ -197,7 +205,9 @@ def test_create_validation_excel_ignores_legacy_purchase_price_original(
             "purchase_currency": "USD",
             "supplier_country": "CN",
             "customs_code": "67890",
-            "calc": {},
+            # Non-empty calc — the 2026-05-25 guard rejects items that have
+            # no calc data (see test_create_validation_excel_raises_when_all_items_lack_calc).
+            "calc": {"S16": 0},
         }
     ]
     data = _make_export_data(items)
@@ -211,3 +221,48 @@ def test_create_validation_excel_ignores_legacy_purchase_price_original(
         "base_price_vat must come from invoice_items.base_price_vat, "
         "not fall back through legacy purchase_price_original"
     )
+
+
+# ============================================================================
+# Calc-presence guard — see /tmp/validation-xlsm-investigate-2026-05-25.md.
+# ============================================================================
+
+
+def test_create_validation_excel_raises_when_all_items_lack_calc():
+    """No item has calc results → raise ValueError instead of emitting zeros.
+
+    Mirrors the 409 NO_CALCULATION guard at the HTTP layer
+    (``api/quotes.py:export_validation``). The HTTP handler trips earlier, so
+    this raise is the safety net for direct callers (golden-master harness,
+    background jobs) that bypass the route.
+    """
+    items = [
+        {
+            "id": "ii-1",
+            "product_name": "Bearing",
+            "brand": "SKF",
+            "quantity": 10,
+            "weight_in_kg": 2.5,
+            "base_price_vat": 100.0,
+            "purchase_currency": "EUR",
+            "supplier_country": "DE",
+            "customs_code": "12345",
+            "calc": {},  # explicit empty — engine never wrote rows for it
+        },
+        {
+            "id": "ii-2",
+            "product_name": "Seal",
+            "brand": "SKF",
+            "quantity": 5,
+            "weight_in_kg": 1.0,
+            "base_price_vat": 20.0,
+            "purchase_currency": "EUR",
+            "supplier_country": "DE",
+            "customs_code": "67890",
+            "calc": {},
+        },
+    ]
+    data = _make_export_data(items)
+
+    with pytest.raises(ValueError, match="No calculation results"):
+        create_validation_excel(data)

@@ -264,3 +264,45 @@ class TestExportValidationHandler:
             resp.headers["content-disposition"]
             == 'attachment; filename="validation_q-fallback.xlsm"'
         )
+
+    @patch("api.quotes.create_validation_excel")
+    @patch("api.quotes.fetch_export_data")
+    @patch("api.quotes.get_supabase")
+    def test_no_calculation_returns_409(
+        self, mock_get_sb, mock_fetch, mock_create
+    ):
+        """Items exist but no ``calc`` data on any item → 409 NO_CALCULATION.
+
+        Production scenario: quotes.total_amount lingers from an older calc,
+        but quote_calculation_results was CASCADE-deleted when items were
+        replaced. fetch_export_data returns items with ``item['calc'] = {}``.
+        Before this guard, the handler would silently emit a 1.6 MB workbook
+        full of zeros and the user would report it as "пустой". See
+        ``/tmp/validation-xlsm-investigate-2026-05-25.md``.
+        """
+        from services.export_data_mapper import ExportData
+
+        mock_get_sb.return_value = _mock_supabase_for_org()
+        mock_fetch.return_value = ExportData(
+            quote={"id": "q-no-calc", "idn_quote": "Q-202605-0014"},
+            items=[
+                {"id": "ii-1", "product_name": "Bearing", "calc": {}},
+                {"id": "ii-2", "product_name": "Seal", "calc": {}},
+            ],
+            customer={},
+            organization={},
+            variables={},
+            calculations={},
+        )
+
+        req = _make_request(api_user_id="u-1")
+        resp = _run(export_validation(req, "q-no-calc"))
+
+        assert resp.status_code == 409
+        body = resp.body.decode("utf-8")
+        # Structured error envelope per api-first.md.
+        assert '"code":"NO_CALCULATION"' in body
+        # Russian directive surfaced to the client toast.
+        assert "Рассчитать" in body
+        # create_validation_excel is NOT called once the guard trips.
+        mock_create.assert_not_called()

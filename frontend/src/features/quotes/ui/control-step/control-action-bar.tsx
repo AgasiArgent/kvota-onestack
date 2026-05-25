@@ -17,6 +17,16 @@ interface ControlActionBarProps {
   userId: string;
   workflowStatus: string;
   needsApproval: boolean;
+  /**
+   * Authoritative signal that ``quote_calculation_results`` rows exist for
+   * this quote's items. Quote-level totals like ``total_quote_currency``
+   * are NOT reliable — they linger after items change (CASCADE clears the
+   * per-item rows but not the quote-level aggregate). When false, the
+   * "Validation Excel" button is disabled because the download would be an
+   * all-zero workbook. See
+   * ``/tmp/validation-xlsm-investigate-2026-05-25.md``.
+   */
+  hasCalculation: boolean;
 }
 
 export function ControlActionBar({
@@ -24,6 +34,7 @@ export function ControlActionBar({
   userId,
   workflowStatus,
   needsApproval,
+  hasCalculation,
 }: ControlActionBarProps) {
   const router = useRouter();
   const [loading, setLoading] = useState<string | null>(null);
@@ -129,6 +140,12 @@ export function ControlActionBar({
               size="sm"
               variant="outline"
               onClick={() => downloadValidationExcel(quoteId)}
+              disabled={!hasCalculation}
+              title={
+                !hasCalculation
+                  ? "Доступно после расчёта (нажмите «Рассчитать» в шаге Расчёт)"
+                  : undefined
+              }
             >
               <FileDown size={14} />
               Validation Excel
