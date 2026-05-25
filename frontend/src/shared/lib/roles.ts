@@ -86,6 +86,28 @@ export function canManageSupplierAssignees(roles: string[]): boolean {
   );
 }
 
+/**
+ * Returns true if the user can use the «Переназначить» button on a
+ * procurement kanban card (Testing 2 row 75 v2).
+ *
+ * v1 (PR #217) limited reassignment to admin / head_of_procurement /
+ * procurement_senior — the heads. v2 widens the gate to include regular
+ * `procurement` (МОЗ) so they can also reroute their own brand-slices to
+ * colleagues (cover sickness / vacation / overload).
+ *
+ * The РЛС policy on `kvota.quote_items` is the canonical authorization
+ * layer — МОЗ only sees rows they're assigned to anyway, so this UI gate
+ * is the visibility contract rather than the security boundary.
+ */
+export function canReassignBrandGroup(roles: string[]): boolean {
+  return (
+    roles.includes("admin") ||
+    roles.includes("head_of_procurement") ||
+    roles.includes("procurement_senior") ||
+    roles.includes("procurement")
+  );
+}
+
 const ASSIGNED_ITEMS_ROLES = ["procurement", "logistics", "customs"];
 
 /** Roles that grant broader quote access than procurement_senior's stage-only view. */
