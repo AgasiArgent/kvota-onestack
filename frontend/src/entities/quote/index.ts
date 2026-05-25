@@ -49,12 +49,16 @@ export {
   patchQuote,
   transitionSubstatus,
   fetchStatusHistory,
+  pauseQuote,
+  unpauseQuote,
+  fetchPauseHistory,
   restoreQuote,
 } from "./mutations";
 export type {
   CreateQuoteInput,
   SubstatusTransitionResult,
   StatusHistoryEntry,
+  PauseHistoryEntry,
 } from "./mutations";
 export {
   assignBrandGroup,

@@ -3,6 +3,9 @@ Procurement sub-status state machine API endpoints for Next.js frontend and AI a
 
 GET    /api/quotes/kanban                      — (Quote, brand) cards grouped by substatus
 POST   /api/quotes/{id}/substatus              — Transition a (quote, brand)'s sub-status
+POST   /api/quotes/{id}/pause                  — Pause a (quote, brand) with mandatory reason
+POST   /api/quotes/{id}/unpause                — Unpause a (quote, brand), closing the open pause row
+GET    /api/quotes/{id}/pause-history          — Full pause activity log (Testing 2 row 74)
 GET    /api/quotes/{id}/status-history         — Full audit log for a quote
 
 Unit of work on the kanban is (quote_id, brand) — a quote with N distinct
@@ -19,7 +22,12 @@ from typing import Any
 from starlette.responses import JSONResponse
 
 from services.database import get_supabase
-from services.workflow_service import transition_substatus
+from services.workflow_service import (
+    get_pause_history,
+    pause_quote,
+    transition_substatus,
+    unpause_quote,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -342,6 +350,50 @@ async def get_kanban(request) -> JSONResponse:
             uid = str(p.get("user_id"))
             name_by_user[uid] = p.get("full_name") or ""
 
+    # Batch-fetch latest open pause log per quote (Testing 2 row 74). Used to
+    # display the mandatory pause reason inline on «На паузе» cards plus the
+    # actor + paused_at timestamp. We scope to quotes that have at least one
+    # paused brand so the query stays small.
+    paused_quote_ids = {
+        str(r["quote_id"])
+        for r in qbs_rows
+        if (r.get("substatus") or "") == "paused" and r.get("quote_id")
+    }
+    pause_log_by_quote: dict[str, dict] = {}
+    if paused_quote_ids:
+        pause_rows_result = (
+            sb.table("procurement_pause_log")
+            .select("id, quote_id, paused_at, paused_by, reason")
+            .in_("quote_id", list(paused_quote_ids))
+            .is_("unpaused_at", "null")
+            .order("paused_at", desc=True)
+            .execute()
+        )
+        # Newest-first; for each quote, keep the first encountered (latest).
+        for prow in _rows(pause_rows_result):
+            qid_p = str(prow.get("quote_id"))
+            if qid_p in pause_log_by_quote:
+                continue
+            pause_log_by_quote[qid_p] = prow
+
+        # Enrich actor names from user_profiles — extend name_by_user
+        # in-place so the same lookup powers МОП/МОЗ resolution below.
+        new_actor_ids = {
+            str(p.get("paused_by"))
+            for p in pause_log_by_quote.values()
+            if p.get("paused_by") and str(p.get("paused_by")) not in name_by_user
+        }
+        if new_actor_ids:
+            extra_profiles = (
+                sb.table("user_profiles")
+                .select("user_id, full_name")
+                .in_("user_id", list(new_actor_ids))
+                .execute()
+            )
+            for p in _rows(extra_profiles):
+                uid = str(p.get("user_id"))
+                name_by_user[uid] = p.get("full_name") or ""
+
     columns: dict[str, list[dict]] = {s: [] for s in _PROCUREMENT_SUBSTATUSES}
 
     for r in qbs_rows:
@@ -409,6 +461,21 @@ async def get_kanban(request) -> JSONResponse:
         # the frontend can render the «Тендер» badge (Testing 2 row 67).
         tender_type = parent.get("tender_type") or None
 
+        # Pause log (Testing 2 row 74): for paused cards we surface the latest
+        # open pause row's reason + actor + timestamp inline so МОЗ doesn't
+        # have to open the history drawer to learn why a card is on pause.
+        pause_log = None
+        if substatus == "paused":
+            plog = pause_log_by_quote.get(qid)
+            if plog:
+                actor_id = str(plog.get("paused_by") or "")
+                pause_log = {
+                    "id": str(plog.get("id")),
+                    "paused_at": plog.get("paused_at"),
+                    "paused_by_name": name_by_user.get(actor_id, "") or None,
+                    "reason": plog.get("reason") or "",
+                }
+
         columns[substatus].append({
             "quote_id": qid,
             "brand": brand,
@@ -425,6 +492,7 @@ async def get_kanban(request) -> JSONResponse:
             "invoice_sums": invoice_sums,
             "latest_reason": latest_reason,
             "tender_type": tender_type,
+            "pause_log": pause_log,
         })
 
     return JSONResponse(
@@ -529,6 +597,248 @@ async def post_substatus(request, id: str) -> JSONResponse:
         },
         status_code=200,
     )
+
+
+# ============================================================================
+# POST /api/quotes/{id}/pause
+# ============================================================================
+
+
+def _validate_brand_body(body: dict) -> tuple[str | None, JSONResponse | None]:
+    """Extract + validate the `brand` field from a pause/unpause request body.
+
+    Returns (brand, None) on success or (None, error_response). Brand may be
+    "" (unbranded items) but must be present + a string — matches post_substatus.
+    """
+    if "brand" not in body:
+        return None, JSONResponse(
+            {"success": False, "error": {"code": "VALIDATION_ERROR", "message": "brand is required"}},
+            status_code=400,
+        )
+    brand = body.get("brand")
+    if not isinstance(brand, str):
+        return None, JSONResponse(
+            {"success": False, "error": {"code": "VALIDATION_ERROR", "message": "brand must be a string"}},
+            status_code=400,
+        )
+    return brand, None
+
+
+def _map_transition_error(msg: str) -> JSONResponse:
+    """Map a ValueError msg from workflow_service to the canonical envelope."""
+    lower = msg.lower()
+    if "not found" in lower:
+        return JSONResponse(
+            {"success": False, "error": {"code": "QUOTE_NOT_FOUND", "message": msg}},
+            status_code=404,
+        )
+    if lower.startswith("reason required"):
+        return JSONResponse(
+            {"success": False, "error": {"code": "REASON_REQUIRED", "message": msg}},
+            status_code=400,
+        )
+    if "invalid substatus transition" in lower:
+        return JSONResponse(
+            {"success": False, "error": {"code": "INVALID_TRANSITION", "message": msg}},
+            status_code=400,
+        )
+    return JSONResponse(
+        {"success": False, "error": {"code": "VALIDATION_ERROR", "message": msg}},
+        status_code=400,
+    )
+
+
+async def post_pause(request, id: str) -> JSONResponse:
+    """Pause a (quote, brand) card with a mandatory reason (Testing 2 row 74).
+
+    Path: POST /api/quotes/{id}/pause
+    Params (JSON body):
+        brand: str (required) — brand of the card. Use "" for unbranded.
+        reason: str (required, non-empty after trim)
+    Returns:
+        {"quote_id": ..., "brand": ..., "procurement_substatus": "paused"}
+    Side Effects:
+        - Inserts a procurement_pause_log row (unpaused_at=NULL).
+        - Writes status_history audit row via transition_substatus.
+        - Updates quote_brand_substates.substatus → 'paused'.
+    Roles: admin, procurement, procurement_senior, head_of_procurement
+    """
+    user, err = _resolve_user_context(request, _PROCUREMENT_ROLES)
+    if err:
+        return err
+    assert user is not None
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(
+            {"success": False, "error": {"code": "BAD_REQUEST", "message": "Invalid JSON body"}},
+            status_code=400,
+        )
+
+    brand, brand_err = _validate_brand_body(body)
+    if brand_err:
+        return brand_err
+
+    reason = (body.get("reason") or "").strip()
+    if not reason:
+        return JSONResponse(
+            {"success": False, "error": {"code": "REASON_REQUIRED", "message": "Reason is required for pause"}},
+            status_code=400,
+        )
+
+    try:
+        updated = pause_quote(
+            quote_id=id,
+            brand=brand or "",
+            user_id=user["id"],
+            user_roles=list(user["role_slugs"]),
+            reason=reason,
+        )
+    except ValueError as e:
+        return _map_transition_error(str(e))
+
+    return JSONResponse(
+        {
+            "success": True,
+            "data": {
+                "quote_id": str(updated.get("quote_id", id)),
+                "brand": updated.get("brand", brand or ""),
+                "procurement_substatus": updated.get("substatus", "paused"),
+            },
+        },
+        status_code=200,
+    )
+
+
+# ============================================================================
+# POST /api/quotes/{id}/unpause
+# ============================================================================
+
+
+async def post_unpause(request, id: str) -> JSONResponse:
+    """Unpause a (quote, brand) card by moving it to an active substatus.
+
+    Path: POST /api/quotes/{id}/unpause
+    Params (JSON body):
+        brand: str (required) — brand of the card. Use "" for unbranded.
+        to_substatus: str (optional, default 'searching_supplier') — target
+            active column. Must be one of distributing/searching_supplier/
+            waiting_prices/prices_ready.
+    Returns:
+        {"quote_id": ..., "brand": ..., "procurement_substatus": <new>}
+    Side Effects:
+        - Closes the latest open procurement_pause_log row (unpaused_at, unpaused_by).
+        - Writes status_history audit row via transition_substatus.
+        - Updates quote_brand_substates.substatus.
+    Roles: admin, procurement, procurement_senior, head_of_procurement
+    """
+    user, err = _resolve_user_context(request, _PROCUREMENT_ROLES)
+    if err:
+        return err
+    assert user is not None
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(
+            {"success": False, "error": {"code": "BAD_REQUEST", "message": "Invalid JSON body"}},
+            status_code=400,
+        )
+
+    brand, brand_err = _validate_brand_body(body)
+    if brand_err:
+        return brand_err
+
+    to_substatus = (body.get("to_substatus") or "searching_supplier").strip()
+    if to_substatus == "paused":
+        return JSONResponse(
+            {"success": False, "error": {"code": "VALIDATION_ERROR", "message": "to_substatus cannot be 'paused' on unpause"}},
+            status_code=400,
+        )
+
+    try:
+        updated = unpause_quote(
+            quote_id=id,
+            brand=brand or "",
+            to_substatus=to_substatus,
+            user_id=user["id"],
+            user_roles=list(user["role_slugs"]),
+        )
+    except ValueError as e:
+        return _map_transition_error(str(e))
+
+    return JSONResponse(
+        {
+            "success": True,
+            "data": {
+                "quote_id": str(updated.get("quote_id", id)),
+                "brand": updated.get("brand", brand or ""),
+                "procurement_substatus": updated.get("substatus", to_substatus),
+            },
+        },
+        status_code=200,
+    )
+
+
+# ============================================================================
+# GET /api/quotes/{id}/pause-history
+# ============================================================================
+
+
+async def get_pause_history_endpoint(request, id: str) -> JSONResponse:
+    """Return full pause activity log for a quote (Testing 2 row 74).
+
+    Path: GET /api/quotes/{id}/pause-history
+    Returns:
+        List of pause_log rows ordered by paused_at DESC. Each row:
+        id, paused_at, paused_by, paused_by_name, reason,
+        unpaused_at, unpaused_by, unpaused_by_name.
+    Roles: admin, procurement, procurement_senior, head_of_procurement
+    """
+    _, err = _resolve_user_context(request, _PROCUREMENT_ROLES)
+    if err:
+        return err
+
+    rows = get_pause_history(id)
+
+    # Batch-resolve actor names (paused_by + unpaused_by).
+    user_ids: set[str] = set()
+    for r in rows:
+        if r.get("paused_by"):
+            user_ids.add(str(r["paused_by"]))
+        if r.get("unpaused_by"):
+            user_ids.add(str(r["unpaused_by"]))
+
+    name_by_user: dict[str, str] = {}
+    if user_ids:
+        sb = get_supabase()
+        profiles_result = (
+            sb.table("user_profiles")
+            .select("user_id, full_name")
+            .in_("user_id", list(user_ids))
+            .execute()
+        )
+        for p in _rows(profiles_result):
+            uid = str(p.get("user_id"))
+            name_by_user[uid] = p.get("full_name") or ""
+
+    enriched = []
+    for r in rows:
+        paused_by = str(r.get("paused_by")) if r.get("paused_by") else None
+        unpaused_by = str(r.get("unpaused_by")) if r.get("unpaused_by") else None
+        enriched.append({
+            "id": str(r.get("id")),
+            "paused_at": r.get("paused_at"),
+            "paused_by": paused_by,
+            "paused_by_name": name_by_user.get(paused_by or "", "") or None,
+            "reason": r.get("reason") or "",
+            "unpaused_at": r.get("unpaused_at"),
+            "unpaused_by": unpaused_by,
+            "unpaused_by_name": name_by_user.get(unpaused_by or "", "") or None,
+        })
+
+    return JSONResponse({"success": True, "data": enriched}, status_code=200)
 
 
 # ============================================================================

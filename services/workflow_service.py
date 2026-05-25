@@ -3905,6 +3905,157 @@ def transition_substatus(
     return {"quote_id": quote_id, "brand": brand, "substatus": to_substatus}
 
 
+# ----------------------------------------------------------------------------
+# Procurement pause log (Testing 2 row 74)
+# ----------------------------------------------------------------------------
+#
+# `procurement_pause_log` (migration 327) records mandatory pause reasons +
+# activity history for the kanban «На паузе» column. Pause writes a new row
+# with unpaused_at=NULL ("currently paused"). Unpause closes the latest
+# matching row by setting unpaused_at + unpaused_by. The kanban GET joins
+# the latest open row onto paused cards to display the reason inline.
+#
+# These helpers are separate from `transition_substatus` because:
+#   - Pause REQUIRES a reason (PR #232's "no reason needed" assumption is
+#     overridden by Testing 2 row 74).
+#   - Unpause closes a log row (not a transition concern) and DOES NOT need
+#     a reason.
+#   - Reading pause_history is independent of status_history.
+
+
+def pause_quote(
+    quote_id: str,
+    brand: str,
+    user_id: str,
+    user_roles: List[str],
+    reason: str,
+) -> dict:
+    """Pause a (quote, brand) card with a mandatory reason.
+
+    1. Validate reason is non-empty (raises ValueError if not).
+    2. Validate transition active→paused via existing role check.
+    3. Move kanban card via transition_substatus.
+    4. Insert procurement_pause_log row (unpaused_at=NULL).
+
+    Returns the updated quote_brand_substates row dict. Raises ValueError
+    for invalid input/transition.
+    """
+    if not reason or not reason.strip():
+        raise ValueError("Reason required for pause")
+
+    sb = get_supabase()
+
+    # Move kanban card first — if this raises (invalid transition), we
+    # won't leave an orphan pause_log row. `transition_substatus` does
+    # the role + state validation. reason="" because the substate flow's
+    # forward-to-paused move doesn't require it (Testing 2 row 74's
+    # mandatory reason is enforced via the pause_log layer instead).
+    updated = transition_substatus(
+        quote_id=quote_id,
+        brand=brand,
+        to_substatus="paused",
+        user_id=user_id,
+        user_roles=user_roles,
+        reason="",
+    )
+
+    sb.table("procurement_pause_log").insert({
+        "quote_id": quote_id,
+        "paused_by": user_id,
+        "reason": reason.strip(),
+    }).execute()
+
+    return updated
+
+
+def unpause_quote(
+    quote_id: str,
+    brand: str,
+    to_substatus: str,
+    user_id: str,
+    user_roles: List[str],
+) -> dict:
+    """Unpause a (quote, brand) card by moving it back to an active column.
+
+    Closes the latest open pause_log row (unpaused_at IS NULL) for the quote.
+    No reason required on unpause.
+
+    Returns the updated quote_brand_substates row dict.
+    """
+    sb = get_supabase()
+
+    updated = transition_substatus(
+        quote_id=quote_id,
+        brand=brand,
+        to_substatus=to_substatus,
+        user_id=user_id,
+        user_roles=user_roles,
+        reason="",
+    )
+
+    # Close the latest open pause row for this quote (one per unpause).
+    # The edge case where two brands of the same quote were paused at
+    # different times produces two open rows; each unpause closes one,
+    # preserving FIFO ordering when both brands are later unpaused.
+    open_row = (
+        sb.table("procurement_pause_log")
+        .select("id")
+        .eq("quote_id", quote_id)
+        .is_("unpaused_at", "null")
+        .order("paused_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    open_rows = getattr(open_row, "data", None) or []
+    if open_rows:
+        sb.table("procurement_pause_log").update({
+            "unpaused_at": datetime.now(timezone.utc).isoformat(),
+            "unpaused_by": user_id,
+        }).eq("id", open_rows[0]["id"]).execute()
+
+    return updated
+
+
+def get_pause_history(quote_id: str) -> List[dict]:
+    """Return all pause_log rows for a quote, newest first.
+
+    Includes both open (unpaused_at IS NULL) and closed entries. The caller
+    layer enriches with actor full_name.
+    """
+    sb = get_supabase()
+    result = (
+        sb.table("procurement_pause_log")
+        .select(
+            "id, quote_id, paused_at, paused_by, reason, "
+            "unpaused_at, unpaused_by"
+        )
+        .eq("quote_id", quote_id)
+        .order("paused_at", desc=True)
+        .execute()
+    )
+    return getattr(result, "data", None) or []
+
+
+def get_latest_open_pause(quote_id: str) -> Optional[dict]:
+    """Return the latest open (unpaused_at IS NULL) pause_log row for a quote.
+
+    Returns None if no open pause exists. Used by the kanban GET to surface
+    the reason inline on paused cards.
+    """
+    sb = get_supabase()
+    result = (
+        sb.table("procurement_pause_log")
+        .select("id, paused_at, paused_by, reason")
+        .eq("quote_id", quote_id)
+        .is_("unpaused_at", "null")
+        .order("paused_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    rows = getattr(result, "data", None) or []
+    return rows[0] if rows else None
+
+
 def maybe_advance_after_distribution(
     quote_id: str,
     brand: str,

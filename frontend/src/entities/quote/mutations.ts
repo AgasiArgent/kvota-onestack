@@ -2090,3 +2090,101 @@ export async function transitionSubstatus(
   }
   return json.data as SubstatusTransitionResult;
 }
+
+// ---------------------------------------------------------------------------
+// Pause activity log (Testing 2 row 74)
+// ---------------------------------------------------------------------------
+
+export interface PauseHistoryEntry {
+  id: string;
+  paused_at: string; // ISO-8601
+  paused_by: string | null;
+  paused_by_name: string | null;
+  reason: string;
+  unpaused_at: string | null;
+  unpaused_by: string | null;
+  unpaused_by_name: string | null;
+}
+
+async function postWithAuth<T>(path: string, body: unknown): Promise<T> {
+  const supabase = createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  const res = await fetch(path, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(session?.access_token
+        ? { Authorization: `Bearer ${session.access_token}` }
+        : {}),
+    },
+    body: JSON.stringify(body),
+  });
+
+  const json = await res.json();
+  if (!res.ok || !json.success) {
+    throw new Error(
+      json?.error?.message ?? `Request failed (HTTP ${res.status})`
+    );
+  }
+  return json.data as T;
+}
+
+/**
+ * POST /api/quotes/{id}/pause — mandatory pause reason (Testing 2 row 74).
+ * Reason must be non-empty; backend rejects empty/whitespace strings with 400
+ * REASON_REQUIRED. Inserts a procurement_pause_log row and moves the kanban
+ * card to the «На паузе» column.
+ */
+export async function pauseQuote(
+  quoteId: string,
+  brand: string,
+  reason: string
+): Promise<SubstatusTransitionResult> {
+  return postWithAuth<SubstatusTransitionResult>(
+    `/api/quotes/${quoteId}/pause`,
+    { brand, reason }
+  );
+}
+
+/**
+ * POST /api/quotes/{id}/unpause — closes the latest open pause_log row and
+ * moves the kanban card back to an active column. No reason required.
+ */
+export async function unpauseQuote(
+  quoteId: string,
+  brand: string,
+  toSubstatus: string
+): Promise<SubstatusTransitionResult> {
+  return postWithAuth<SubstatusTransitionResult>(
+    `/api/quotes/${quoteId}/unpause`,
+    { brand, to_substatus: toSubstatus }
+  );
+}
+
+/**
+ * GET /api/quotes/{id}/pause-history — full pause activity log for a quote,
+ * newest first. Includes open + closed entries.
+ */
+export async function fetchPauseHistory(
+  quoteId: string
+): Promise<PauseHistoryEntry[]> {
+  const supabase = createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  const res = await fetch(`/api/quotes/${quoteId}/pause-history`, {
+    headers: {
+      ...(session?.access_token
+        ? { Authorization: `Bearer ${session.access_token}` }
+        : {}),
+    },
+  });
+
+  const json = await res.json();
+  if (!res.ok || !json.success) return [];
+  return (json.data ?? []) as PauseHistoryEntry[];
+}

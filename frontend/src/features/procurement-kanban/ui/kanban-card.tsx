@@ -11,6 +11,7 @@ import {
   brandCardKey,
   type KanbanBrandCard,
   type KanbanInvoiceSum,
+  type KanbanPauseLog,
 } from "../model/types";
 
 export interface KanbanCardProps {
@@ -44,6 +45,12 @@ export interface KanbanCardProps {
   onReassignOpenChange?: (open: boolean) => void;
   /** Called after a successful reassignment. */
   onReassigned?: () => void;
+  /**
+   * Testing 2 row 74 — click handler for the inline pause reason on «На
+   * паузе» cards. Opens the full pause-history drawer. Optional because
+   * non-paused cards don't use it.
+   */
+  onPauseHistoryClick?: (card: KanbanBrandCard) => void;
 }
 
 const EM_DASH = "—";
@@ -77,6 +84,26 @@ function formatDistributionTimestamp(iso: string): string | null {
   return dateFormatter.format(new Date(parsed));
 }
 
+/** Max characters before truncating the inline pause reason. */
+export const PAUSE_INLINE_REASON_MAX = 80;
+
+/**
+ * Format the inline pause label rendered on «На паузе» cards.
+ * Shape: «На паузе с ДД.ММ.ГГ: <truncated reason> (<author>)».
+ * Exported for unit tests.
+ */
+export function formatPauseInline(log: KanbanPauseLog): string {
+  const date = formatDistributionTimestamp(log.paused_at) ?? log.paused_at;
+  const reasonRaw = log.reason || "";
+  const reason =
+    reasonRaw.length > PAUSE_INLINE_REASON_MAX
+      ? `${reasonRaw.slice(0, PAUSE_INLINE_REASON_MAX - 1).trimEnd()}…`
+      : reasonRaw;
+  const author = log.paused_by_name?.trim();
+  const authorSuffix = author ? ` (${author})` : "";
+  return `На паузе с ${date}: ${reason}${authorSuffix}`;
+}
+
 /**
  * Draggable per-(quote, brand) card. Clicking the card body (without dragging)
  * opens the status history panel. The Quote IDN is a link that navigates to
@@ -98,6 +125,7 @@ export function KanbanCard({
   reassignOpen = false,
   onReassignOpenChange,
   onReassigned,
+  onPauseHistoryClick,
 }: KanbanCardProps) {
   const isDistributing = card.procurement_substatus === "distributing";
   const canAssign =
@@ -139,6 +167,12 @@ export function KanbanCard({
   const distributionTimestamp = card.updated_at
     ? formatDistributionTimestamp(card.updated_at)
     : null;
+  // Testing 2 row 74 — paused cards show the latest pause reason inline so
+  // users don't have to open the history drawer. Click on the inline row
+  // opens the full pause-history panel.
+  const isPaused = card.procurement_substatus === "paused";
+  const pauseLog = isPaused ? card.pause_log : null;
+  const pauseInline = pauseLog ? formatPauseInline(pauseLog) : null;
 
   return (
     <div
@@ -227,13 +261,31 @@ export function KanbanCard({
             <span className="font-medium">Этап с:</span> {distributionTimestamp}
           </p>
         )}
-        {reason && (
-          <p
-            className="line-clamp-2 italic text-muted-foreground"
-            title={reason}
+        {pauseInline ? (
+          <button
+            type="button"
+            // Prevent dnd-kit drag activation AND the card-level click that
+            // opens the substatus history; this opens the pause-history
+            // drawer instead.
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onPauseHistoryClick?.(card);
+            }}
+            className="line-clamp-2 truncate text-left italic text-muted-foreground hover:text-foreground hover:underline"
+            title={pauseLog?.reason || pauseInline}
           >
-            <span className="font-medium not-italic">Коммент:</span> {reason}
-          </p>
+            {pauseInline}
+          </button>
+        ) : (
+          reason && (
+            <p
+              className="line-clamp-2 italic text-muted-foreground"
+              title={reason}
+            >
+              <span className="font-medium not-italic">Коммент:</span> {reason}
+            </p>
+          )
         )}
       </div>
       {canAssign && workload && orgId && (

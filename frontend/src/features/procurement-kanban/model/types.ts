@@ -8,6 +8,17 @@ export interface KanbanInvoiceSum {
 }
 
 /**
+ * Latest open pause log row surfaced on «На паузе» cards (Testing 2 row 74).
+ * Drives the inline reason display: «На паузе с ДД.ММ.ГГ: <reason> (<actor>)».
+ */
+export interface KanbanPauseLog {
+  id: string;
+  paused_at: string; // ISO-8601
+  paused_by_name: string | null;
+  reason: string;
+}
+
+/**
  * A single (quote, brand) slice as rendered on the kanban board. Mirrors the
  * shape returned by GET /api/quotes/kanban?status=pending_procurement.
  *
@@ -49,6 +60,12 @@ export interface KanbanBrandCard {
    * (Testing 2 row 67).
    */
   tender_type?: string | null;
+  /**
+   * Latest open pause log row (Testing 2 row 74). Null unless the card is
+   * in the «На паузе» column AND there's an active pause_log row for the
+   * quote. Drives inline reason display + click-through to history drawer.
+   */
+  pause_log?: KanbanPauseLog | null;
 }
 
 /**
