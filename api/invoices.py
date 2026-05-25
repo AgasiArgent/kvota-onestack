@@ -522,13 +522,15 @@ async def complete_invoice_procurement(request, id: str) -> JSONResponse:
             customs_assigned: bool — same as above for customs.
     Side Effects:
         - Stamps invoices.procurement_completed_at + procurement_completed_by.
-        - Calls assign_logistics_to_invoices(quote_id) — idempotent partial
-          assignment for siblings still lacking logistics.
-        - Calls assign_customs_to_invoices(quote_id) — idempotent partial
-          assignment for siblings still lacking customs.
+        - Stamps invoices.logistics_deadline_at / customs_deadline_at from
+          procurement_completed_at + sla_hours (Testing 2 row 43): the SLA
+          timer runs from stage entry, independent of assignment.
         - When this was the last incomplete invoice on the quote, atomically
           advances quotes.workflow_status (race-guarded conditional UPDATE).
         - Inserts a workflow_transitions audit row on advance.
+        - No logistics/customs auto-distribution. The invoice surfaces in
+          the «Нераспределено» kanban column until a head/member assigns it
+          (logistics-customs-kanban REQ-3).
     Roles: procurement, head_of_procurement, admin
     Errors:
         401 — Authentication required

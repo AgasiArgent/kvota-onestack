@@ -2544,6 +2544,14 @@ def assign_logistics_to_invoices(quote_id: str) -> Dict:
         # already-assigned rows like the customs RPC does — see m286) and stamp
         # the SLA timer columns ``logistics_assigned_at`` /
         # ``logistics_deadline_at`` introduced by m285.
+        #
+        # Note (Testing 2 row 43): this helper is no longer called by the
+        # normal workflow (auto-distribution removed — logistics-customs-kanban
+        # REQ-3). It is retained only for one-off backfill scripts in
+        # ``scripts/``. Live procurement completions stamp the deadline at
+        # stage entry (procurement_completed_at + sla_hours, m325). The
+        # assignment helper preserves the legacy assigned_at + sla_hours
+        # semantics for backwards compatibility with the backfill scripts.
         invoices_response = supabase.table("invoices") \
             .select("id, pickup_country, assigned_logistics_user, logistics_sla_hours") \
             .eq("quote_id", quote_id) \
@@ -2695,6 +2703,11 @@ def assign_customs_to_invoices(quote_id: str) -> Dict:
           `customs_deadline_at` for matched invoices.
         - Leaves unmatched invoices with NULL assignment → they appear in
           head_of_customs "Неназначенные" inbox.
+
+    Note (Testing 2 row 43): this helper is no longer called by the normal
+    workflow. Live procurement completions stamp the deadline at stage
+    entry (procurement_completed_at + sla_hours, m325). This helper is
+    retained for one-off backfill scripts only.
 
     Roles: internal (not exposed as API directly; called by workflow).
     """
@@ -3193,12 +3206,14 @@ def complete_procurement(
     # The race-guarded variant ``_atomic_advance_to_logistics_and_customs`` is
     # used by the per-invoice completion path where multiple users may finish
     # simultaneously — see ``complete_procurement_for_invoice``.
+    completed_at_dt = datetime.now(timezone.utc)
+    completed_at_iso = completed_at_dt.isoformat()
     try:
         supabase.table("quotes") \
             .update({
-                "procurement_completed_at": datetime.now(timezone.utc).isoformat(),
+                "procurement_completed_at": completed_at_iso,
                 "workflow_status": WorkflowStatus.PENDING_LOGISTICS_AND_CUSTOMS.value,
-                "stage_entered_at": datetime.now(timezone.utc).isoformat(),
+                "stage_entered_at": completed_at_iso,
                 "overdue_notified_at": None,
             }) \
             .eq("id", quote_id) \
@@ -3209,6 +3224,46 @@ def complete_procurement(
             error_message=f"Failed to update quote: {str(e)}",
             quote_id=quote_id,
             from_status=current_status
+        )
+
+    # Testing 2 row 43 — stamp per-invoice SLA deadlines from stage entry.
+    #
+    # The quote-level path is legacy (most procurement completions go through
+    # complete_procurement_for_invoice now), but we still need invoices on
+    # this quote to enter the logistics+customs stage with running SLA
+    # timers. Each invoice's deadline = now + sla_hours (per-row column,
+    # default 72 — see m285).
+    try:
+        sla_response = supabase.table("invoices") \
+            .select("id, logistics_sla_hours, customs_sla_hours") \
+            .eq("quote_id", quote_id) \
+            .execute()
+        sla_rows = sla_response.data or []
+        # Group by (logistics_sla_hours, customs_sla_hours) so each group
+        # gets a single UPDATE. Most quotes have <10 invoices that share
+        # SLA defaults, so the loop is tiny.
+        grouped: Dict[Tuple[int, int], List[str]] = defaultdict(list)
+        for row in sla_rows:
+            l_sla = row.get("logistics_sla_hours") or 72
+            c_sla = row.get("customs_sla_hours") or 72
+            grouped[(l_sla, c_sla)].append(row["id"])
+        for (l_sla, c_sla), invoice_ids in grouped.items():
+            l_deadline = (completed_at_dt + timedelta(hours=l_sla)).isoformat()
+            c_deadline = (completed_at_dt + timedelta(hours=c_sla)).isoformat()
+            supabase.table("invoices") \
+                .update({
+                    "logistics_deadline_at": l_deadline,
+                    "customs_deadline_at": c_deadline,
+                }) \
+                .in_("id", invoice_ids) \
+                .execute()
+    except Exception as e:
+        # Non-critical — log and continue. Workflow already advanced; missing
+        # deadlines surface as "—" in the kanban badge until an operator
+        # touches the invoice.
+        logger.warning(
+            "Failed to stamp logistics/customs deadlines on invoices for quote %s: %s",
+            quote_id, str(e)
         )
 
     # Log the transition in workflow_transitions
@@ -3472,12 +3527,48 @@ def complete_procurement_for_invoice(
             quote_id=quote_id,
         )
 
-    # Stamp per-invoice completion flags
+    # Stamp per-invoice completion flags AND SLA deadlines.
+    #
+    # Testing 2 row 43 (timer source = stage entry): logistics_deadline_at /
+    # customs_deadline_at must run from the moment the invoice enters the
+    # logistics+customs stage, regardless of whether anyone is assigned yet.
+    # We compute both deadlines as ``procurement_completed_at + sla_hours``
+    # using the per-invoice ``logistics_sla_hours`` / ``customs_sla_hours``
+    # columns (default 72h — see m285). Reassign / self-pull server actions
+    # only stamp ``*_assigned_at`` going forward; they no longer touch
+    # ``*_deadline_at``.
+    try:
+        sla_response = supabase.table("invoices") \
+            .select("logistics_sla_hours, customs_sla_hours") \
+            .eq("id", invoice_id) \
+            .single() \
+            .execute()
+        sla_row = sla_response.data or {}
+        logistics_sla_hours = sla_row.get("logistics_sla_hours") or 72
+        customs_sla_hours = sla_row.get("customs_sla_hours") or 72
+    except Exception:
+        # Defensive fallback — if the SLA columns are unreadable for any
+        # reason, still stamp completion + deadlines using the defaults so
+        # the timer starts. Better than leaving the invoice with no SLA.
+        logistics_sla_hours = 72
+        customs_sla_hours = 72
+
+    completed_at_dt = datetime.now(timezone.utc)
+    completed_at_iso = completed_at_dt.isoformat()
+    logistics_deadline_iso = (
+        completed_at_dt + timedelta(hours=logistics_sla_hours)
+    ).isoformat()
+    customs_deadline_iso = (
+        completed_at_dt + timedelta(hours=customs_sla_hours)
+    ).isoformat()
+
     try:
         supabase.table("invoices") \
             .update({
-                "procurement_completed_at": datetime.now(timezone.utc).isoformat(),
+                "procurement_completed_at": completed_at_iso,
                 "procurement_completed_by": actor_id,
+                "logistics_deadline_at": logistics_deadline_iso,
+                "customs_deadline_at": customs_deadline_iso,
             }) \
             .eq("id", invoice_id) \
             .execute()
@@ -3492,7 +3583,9 @@ def complete_procurement_for_invoice(
     # No auto-distribution: logistics/customs assignment is now manual via the
     # workspace kanban (logistics-customs-kanban spec, REQ-3). The invoice is
     # left unassigned and surfaces in the «Нераспределено» kanban column once
-    # the quote reaches the logistics+customs stage.
+    # the quote reaches the logistics+customs stage. The SLA timer above runs
+    # from procurement completion, not from assignment — so the deadline is
+    # visible (and overdue-checkable) even on unassigned cards.
 
     # Was this the last incomplete invoice on the quote? If yes, advance the
     # workflow_status atomically.
