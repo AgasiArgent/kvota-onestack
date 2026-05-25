@@ -193,9 +193,26 @@ function buildInitialValues(
     brokerage_extra: sv("brokerage_extra", "0"),
     brokerage_extra_currency: sv("brokerage_extra_currency", "RUB"),
     advance_to_supplier: sv("advance_to_supplier", "100"),
-    // Payment terms
+    // Payment terms — multi-segment (Testing 2 row 46, spec
+    // .kiro/specs/payment-segments-row-46/). 10 PaymentTerms fields matching
+    // the calc engine эталон. Anchor 5 % is derived (= 100 - Σ anchors 1-4).
     advance_from_client: sv("advance_from_client", "100"),
     time_to_advance: sv("time_to_advance", "0"),
+    advance_on_loading: sv("advance_on_loading", "0"),
+    time_to_advance_loading: sv("time_to_advance_loading", "0"),
+    advance_on_going_to_country_destination: sv(
+      "advance_on_going_to_country_destination",
+      "0"
+    ),
+    time_to_advance_going_to_country_destination: sv(
+      "time_to_advance_going_to_country_destination",
+      "0"
+    ),
+    advance_on_customs_clearance: sv("advance_on_customs_clearance", "0"),
+    time_to_advance_on_customs_clearance: sv(
+      "time_to_advance_on_customs_clearance",
+      "0"
+    ),
     time_to_advance_on_receiving: sv("time_to_advance_on_receiving", "0"),
     // DM fee
     dm_fee_type: sv("dm_fee_type", "fixed"),
