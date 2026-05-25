@@ -23,8 +23,11 @@ from api.composition import (
 from api.plan_fact import quotes_search as _quotes_search
 from api.procurement import (
     get_kanban as _get_kanban,
+    get_pause_history_endpoint as _get_pause_history,
     get_status_history as _get_status_history,
+    post_pause as _post_pause,
     post_substatus as _post_substatus,
+    post_unpause as _post_unpause,
 )
 from api.customs import (
     refresh_customs_snapshot_handler as _refresh_customs_snapshot,
@@ -68,6 +71,24 @@ async def get_kanban(request: Request) -> JSONResponse:
 async def post_substatus(request: Request, quote_id: str) -> JSONResponse:
     """Transition a (quote, brand) procurement sub-status."""
     return await _post_substatus(request, quote_id)
+
+
+@router.post("/{quote_id}/pause")
+async def post_pause(request: Request, quote_id: str) -> JSONResponse:
+    """Pause a (quote, brand) card with a mandatory reason (Testing 2 row 74)."""
+    return await _post_pause(request, quote_id)
+
+
+@router.post("/{quote_id}/unpause")
+async def post_unpause(request: Request, quote_id: str) -> JSONResponse:
+    """Unpause a (quote, brand) card, closing the latest open pause log row."""
+    return await _post_unpause(request, quote_id)
+
+
+@router.get("/{quote_id}/pause-history")
+async def get_pause_history(request: Request, quote_id: str) -> JSONResponse:
+    """Return full pause activity log for a quote (Testing 2 row 74)."""
+    return await _get_pause_history(request, quote_id)
 
 
 @router.get("/{quote_id}/status-history")

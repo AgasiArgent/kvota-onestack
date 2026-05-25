@@ -16,6 +16,8 @@ import { toast } from "sonner";
 import { KanbanCard } from "./kanban-card";
 import { SubstatusReasonDialog } from "./substatus-reason-dialog";
 import { StatusHistoryPanel } from "./status-history-panel";
+import { PauseReasonDialog } from "./pause-reason-dialog";
+import { PauseHistoryPanel } from "./pause-history-panel";
 import {
   PROCUREMENT_SUBSTATUSES,
   SUBSTATUS_LABELS_RU,
@@ -24,7 +26,11 @@ import {
   isProcurementSubstatus,
   type ProcurementSubstatus,
 } from "@/shared/lib/workflow-substates";
-import { transitionSubstatus } from "@/entities/quote/mutations";
+import {
+  pauseQuote,
+  transitionSubstatus,
+  unpauseQuote,
+} from "@/entities/quote/mutations";
 import type { ProcurementUserWorkload } from "@/shared/types/procurement-user";
 import { countUnassignedItems } from "../lib/count-unassigned";
 import {
@@ -52,6 +58,16 @@ interface PendingBackwardMove {
   card: KanbanBrandCard;
   from: ProcurementSubstatus;
   to: ProcurementSubstatus;
+}
+
+/**
+ * A drop INTO the «На паузе» column. Awaits a mandatory reason
+ * (Testing 2 row 74). On confirm the parent commits via pauseQuote;
+ * on cancel the optimistic move is rolled back.
+ */
+interface PendingPauseMove {
+  card: KanbanBrandCard;
+  from: ProcurementSubstatus;
 }
 
 /**
@@ -119,6 +135,13 @@ export function KanbanBoard({
   const [historyQuote, setHistoryQuote] = useState<KanbanBrandCard | null>(
     null
   );
+  // Testing 2 row 74 — pending pause move + matching dialog submit state.
+  const [pendingPause, setPendingPause] =
+    useState<PendingPauseMove | null>(null);
+  const [submittingPause, setSubmittingPause] = useState(false);
+  // Testing 2 row 74 — drawer with full pause activity log.
+  const [pauseHistoryQuote, setPauseHistoryQuote] =
+    useState<KanbanBrandCard | null>(null);
   const [pendingKeys, setPendingKeys] = useState<Set<string>>(new Set());
   // Which card (if any) has its assign popover open. Only one at a time.
   const [openAssignCardKey, setOpenAssignCardKey] = useState<string | null>(
@@ -195,6 +218,62 @@ export function KanbanBoard({
     }
   }
 
+  /**
+   * Commit a pause via the dedicated `/api/quotes/{id}/pause` endpoint. Server
+   * inserts a procurement_pause_log row and moves the kanban card. Rollback
+   * matches commitTransition: returns the card to its original column on
+   * failure. After success we refresh the page so the latest pause_log shows
+   * up inline on the moved card.
+   */
+  async function commitPause(
+    card: KanbanBrandCard,
+    from: ProcurementSubstatus,
+    reason: string
+  ) {
+    const key = brandCardKey(card);
+    markPending(key, true);
+    try {
+      await pauseQuote(card.quote_id, card.brand, reason);
+      toast.success(
+        `${card.idn_quote}: ${SUBSTATUS_LABELS_RU[from]} → ${SUBSTATUS_LABELS_RU["paused"]}`
+      );
+      // Refresh so the pause_log fields propagate into the card model.
+      router.refresh();
+    } catch (err) {
+      moveCard(key, "paused", from, from);
+      const msg = err instanceof Error ? err.message : "Не удалось поставить на паузу";
+      toast.error(msg);
+    } finally {
+      markPending(key, false);
+    }
+  }
+
+  /**
+   * Commit an unpause via the dedicated `/api/quotes/{id}/unpause` endpoint.
+   * No reason required — the server closes the open pause_log row. Rollback
+   * matches commitTransition: returns the card to «На паузе» on failure.
+   */
+  async function commitUnpause(
+    card: KanbanBrandCard,
+    to: ProcurementSubstatus
+  ) {
+    const key = brandCardKey(card);
+    markPending(key, true);
+    try {
+      await unpauseQuote(card.quote_id, card.brand, to);
+      toast.success(
+        `${card.idn_quote}: ${SUBSTATUS_LABELS_RU["paused"]} → ${SUBSTATUS_LABELS_RU[to]}`
+      );
+      router.refresh();
+    } catch (err) {
+      moveCard(key, to, "paused", "paused");
+      const msg = err instanceof Error ? err.message : "Не удалось снять с паузы";
+      toast.error(msg);
+    } finally {
+      markPending(key, false);
+    }
+  }
+
   function handleDragStart(event: DragStartEvent) {
     const card = event.active.data.current?.card as
       | KanbanBrandCard
@@ -248,7 +327,14 @@ export function KanbanBoard({
     // Optimistic move first so the UI feels instant.
     moveCard(brandCardKey(card), from, to);
 
-    if (isBackwardTransition(from, to)) {
+    // Pause has a mandatory reason (Testing 2 row 74) — open the dedicated
+    // pause dialog. Unpause has no reason and commits directly. Active↔active
+    // moves keep the original substatus reason flow.
+    if (to === "paused") {
+      setPendingPause({ card, from });
+    } else if (from === "paused") {
+      void commitUnpause(card, to);
+    } else if (isBackwardTransition(from, to)) {
       setPendingBackward({ card, from, to });
     } else {
       void commitTransition(card, from, to);
@@ -273,6 +359,26 @@ export function KanbanBoard({
     // Roll back the optimistic move.
     moveCard(brandCardKey(card), to, from, from);
     setPendingBackward(null);
+  }
+
+  async function handlePauseConfirm(reason: string) {
+    if (!pendingPause) return;
+    setSubmittingPause(true);
+    const { card, from } = pendingPause;
+    try {
+      await commitPause(card, from, reason);
+      setPendingPause(null);
+    } finally {
+      setSubmittingPause(false);
+    }
+  }
+
+  function handlePauseCancel() {
+    if (!pendingPause) return;
+    const { card, from } = pendingPause;
+    // Roll back the optimistic move to «На паузе».
+    moveCard(brandCardKey(card), "paused", from, from);
+    setPendingPause(null);
   }
 
   return (
@@ -323,6 +429,7 @@ export function KanbanBoard({
                 setOpenReassignCardKey(null);
                 router.refresh();
               }}
+              onPauseHistoryClick={setPauseHistoryQuote}
             />
           ))}
         </div>
@@ -344,11 +451,27 @@ export function KanbanBoard({
         submitting={submittingReason}
       />
 
+      <PauseReasonDialog
+        open={pendingPause !== null}
+        quoteIdn={pendingPause?.card.idn_quote ?? null}
+        brand={pendingPause?.card.brand ?? null}
+        onConfirm={handlePauseConfirm}
+        onCancel={handlePauseCancel}
+        submitting={submittingPause}
+      />
+
       <StatusHistoryPanel
         open={historyQuote !== null}
         quoteId={historyQuote?.quote_id ?? null}
         quoteIdn={historyQuote?.idn_quote ?? null}
         onClose={() => setHistoryQuote(null)}
+      />
+
+      <PauseHistoryPanel
+        open={pauseHistoryQuote !== null}
+        quoteId={pauseHistoryQuote?.quote_id ?? null}
+        quoteIdn={pauseHistoryQuote?.idn_quote ?? null}
+        onClose={() => setPauseHistoryQuote(null)}
       />
     </>
   );
@@ -370,6 +493,7 @@ interface KanbanColumnProps {
   openReassignCardKey: string | null;
   onReassignOpenChange: (cardKey: string, open: boolean) => void;
   onReassigned: () => void;
+  onPauseHistoryClick: (card: KanbanBrandCard) => void;
 }
 
 function KanbanColumn({
@@ -388,6 +512,7 @@ function KanbanColumn({
   openReassignCardKey,
   onReassignOpenChange,
   onReassigned,
+  onPauseHistoryClick,
 }: KanbanColumnProps) {
   const isValidTarget =
     fromActive !== null &&
@@ -458,6 +583,7 @@ function KanbanColumn({
                   onReassignOpenChange(key, open)
                 }
                 onReassigned={onReassigned}
+                onPauseHistoryClick={onPauseHistoryClick}
               />
             );
           })
