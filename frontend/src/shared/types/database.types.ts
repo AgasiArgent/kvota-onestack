@@ -5203,6 +5203,13 @@ export type Database = {
           export_data: Json | null
           deleted_at: string | null
           deleted_by: string | null
+          payment_on_loading_pct: number
+          payment_on_loading_days: number
+          payment_on_country_arrival_pct: number
+          payment_on_country_arrival_days: number
+          payment_on_customs_clearance_pct: number
+          payment_on_customs_clearance_days: number
+          payment_on_receiving_days: number
         }
         Insert: {
           id?: string
@@ -5249,6 +5256,13 @@ export type Database = {
           export_data?: Json | null
           deleted_at?: string | null
           deleted_by?: string | null
+          payment_on_loading_pct?: number
+          payment_on_loading_days?: number
+          payment_on_country_arrival_pct?: number
+          payment_on_country_arrival_days?: number
+          payment_on_customs_clearance_pct?: number
+          payment_on_customs_clearance_days?: number
+          payment_on_receiving_days?: number
         }
         Update: {
           id?: string
@@ -5295,6 +5309,13 @@ export type Database = {
           export_data?: Json | null
           deleted_at?: string | null
           deleted_by?: string | null
+          payment_on_loading_pct?: number
+          payment_on_loading_days?: number
+          payment_on_country_arrival_pct?: number
+          payment_on_country_arrival_days?: number
+          payment_on_customs_clearance_pct?: number
+          payment_on_customs_clearance_days?: number
+          payment_on_receiving_days?: number
         }
         Relationships: []
       }

@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { INCOTERMS_2020 } from "@/shared/lib/incoterms";
 import type { QuoteDetailRow } from "@/entities/quote/queries";
+import { PaymentSegmentsBlock } from "./payment-segments-block";
 
 const SALE_TYPES = [
   { value: "поставка", label: "Поставка" },
@@ -132,65 +133,28 @@ export function CalculationForm({
         </CardContent>
       </Card>
 
-      {/* Section 3: Payment terms */}
-      <Card size="sm">
-        <CardHeader className="border-b">
-          <CardTitle className="text-xs uppercase tracking-wide text-muted-foreground">
-            Условия оплаты
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3 pt-3">
-          <FormRow label="Аванс клиента">
-            <div className="flex items-center gap-1">
-              <Input
-                type="number"
-                min={0}
-                max={100}
-                step={1}
-                value={formValues.advance_from_client}
-                onChange={(e) =>
-                  onFieldChange("advance_from_client", e.target.value)
-                }
-                className="w-16 text-right"
-              />
-              <span className="text-xs text-muted-foreground">%</span>
-            </div>
-          </FormRow>
-
-          <FormRow label="До аванса">
-            <div className="flex items-center gap-1">
-              <Input
-                type="number"
-                min={0}
-                value={formValues.time_to_advance}
-                onChange={(e) =>
-                  onFieldChange("time_to_advance", e.target.value)
-                }
-                className="w-16 text-right"
-              />
-              <span className="text-xs text-muted-foreground">дн.</span>
-            </div>
-          </FormRow>
-
-          <FormRow label="До расчёта">
-            <div className="flex items-center gap-1">
-              <Input
-                type="number"
-                min={0}
-                value={formValues.time_to_advance_on_receiving}
-                onChange={(e) =>
-                  onFieldChange(
-                    "time_to_advance_on_receiving",
-                    e.target.value
-                  )
-                }
-                className="w-16 text-right"
-              />
-              <span className="text-xs text-muted-foreground">дн.</span>
-            </div>
-          </FormRow>
-        </CardContent>
-      </Card>
+      {/* Section 3: Payment terms — multi-segment block (Testing 2 row 46,
+          spec .kiro/specs/payment-segments-row-46/). Replaces single-anchor
+          FormRows with 5 anchor rows + presets. */}
+      <div className="lg:col-span-2">
+        <PaymentSegmentsBlock
+          values={{
+            advance_from_client: formValues.advance_from_client,
+            time_to_advance: formValues.time_to_advance,
+            advance_on_loading: formValues.advance_on_loading,
+            time_to_advance_loading: formValues.time_to_advance_loading,
+            advance_on_going_to_country_destination:
+              formValues.advance_on_going_to_country_destination,
+            time_to_advance_going_to_country_destination:
+              formValues.time_to_advance_going_to_country_destination,
+            advance_on_customs_clearance: formValues.advance_on_customs_clearance,
+            time_to_advance_on_customs_clearance:
+              formValues.time_to_advance_on_customs_clearance,
+            time_to_advance_on_receiving: formValues.time_to_advance_on_receiving,
+          }}
+          onFieldChange={onFieldChange}
+        />
+      </div>
 
       {/* Section 4: DM fee */}
       <Card size="sm">

@@ -182,10 +182,26 @@ async def calculate_quote(
     brokerage_extra = body.get("brokerage_extra", "0")
     brokerage_extra_currency = body.get("brokerage_extra_currency", "RUB")
 
-    # Payment terms
+    # Payment terms — multi-segment (Testing 2 row 46, spec
+    # .kiro/specs/payment-segments-row-46/). All 10 PaymentTerms fields map
+    # 1:1 onto the calc engine эталон; the body carries them in engine field
+    # names so calculation_mapper.PaymentTerms picks them up directly via the
+    # variables dict (see services.calculation_helpers).
     advance_from_client = body.get("advance_from_client", "100")
     advance_to_supplier = body.get("advance_to_supplier", "100")
     time_to_advance = body.get("time_to_advance", "0")
+    advance_on_loading = body.get("advance_on_loading", "0")
+    time_to_advance_loading = body.get("time_to_advance_loading", "0")
+    advance_on_going_to_country_destination = body.get(
+        "advance_on_going_to_country_destination", "0"
+    )
+    time_to_advance_going_to_country_destination = body.get(
+        "time_to_advance_going_to_country_destination", "0"
+    )
+    advance_on_customs_clearance = body.get("advance_on_customs_clearance", "0")
+    time_to_advance_on_customs_clearance = body.get(
+        "time_to_advance_on_customs_clearance", "0"
+    )
     time_to_advance_on_receiving = body.get("time_to_advance_on_receiving", "0")
 
     # DM Fee
@@ -300,6 +316,18 @@ async def calculate_quote(
             'advance_from_client': safe_decimal(advance_from_client),
             'advance_to_supplier': safe_decimal(advance_to_supplier),
             'time_to_advance': safe_int(time_to_advance),
+            'advance_on_loading': safe_decimal(advance_on_loading),
+            'time_to_advance_loading': safe_int(time_to_advance_loading),
+            'advance_on_going_to_country_destination': safe_decimal(
+                advance_on_going_to_country_destination
+            ),
+            'time_to_advance_going_to_country_destination': safe_int(
+                time_to_advance_going_to_country_destination
+            ),
+            'advance_on_customs_clearance': safe_decimal(advance_on_customs_clearance),
+            'time_to_advance_on_customs_clearance': safe_int(
+                time_to_advance_on_customs_clearance
+            ),
             'time_to_advance_on_receiving': safe_int(time_to_advance_on_receiving),
             'dm_fee_type': dm_fee_type,
             'dm_fee_value': safe_decimal(dm_fee_value),
