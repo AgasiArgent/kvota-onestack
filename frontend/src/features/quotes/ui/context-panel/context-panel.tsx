@@ -404,6 +404,15 @@ function QuoteInfoBlock({
  * Single МОЛ / МОТ row. Mirrors the МОП row format (label · ФИО) and adds the
  * attach timestamp underneath in muted small text — keeps the panel compact
  * but answers «когда привязали» without expanding history.
+ *
+ * Testing 2 row 79 (FB-260525, РОЗ + СтМОЗ + МОЗ): the attach date was
+ * rendered as a bare «DD.MM HH:MM» line under the name with no semantic
+ * label, so testers reading the panel could not tell what the number meant
+ * and reported the date as missing. We now prefix the line with «Назначен:»
+ * and surface the year (DD.MM.YYYY HH:MM) so the moment is unambiguous from
+ * any pipeline step. Null `assigned_at` still hides the line — the dash
+ * placeholder added more noise than signal for legacy quotes (see test
+ * "omits the timestamp line when assigned_at is null but still shows ФИО").
  */
 function DomainAssigneeRow({
   label,
@@ -421,11 +430,31 @@ function DomainAssigneeRow({
       </div>
       {assignee.assigned_at && (
         <div className="text-[11px] text-muted-foreground tabular-nums pl-[2.25rem]">
-          {formatParticipantDate(assignee.assigned_at)}
+          {"Назначен: "}{formatAssignmentDate(assignee.assigned_at)}
         </div>
       )}
     </div>
   );
+}
+
+/**
+ * «Когда привязали» timestamp for the active-responsibles block. Surfaces
+ * the year so testers reading a stale snapshot or a year-old quote don't
+ * have to infer it from context — Testing 2 row 79 (FB-260525, РОЗ + СтМОЗ +
+ * МОЗ). The history log below the active block uses `formatParticipantDate`
+ * (compact, no year) because the row carries an actor badge that already
+ * scopes the moment.
+ */
+function formatAssignmentDate(dateStr: string): string {
+  const d = new Date(dateStr);
+  return d.toLocaleDateString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/Moscow",
+  });
 }
 
 function formatParticipantDate(dateStr: string | null): string {
