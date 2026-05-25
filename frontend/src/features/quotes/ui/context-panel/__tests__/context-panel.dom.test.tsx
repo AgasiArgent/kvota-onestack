@@ -731,3 +731,253 @@ describe("ContextPanel — sales checklist visible on every step (Testing 2 row 
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Testing 2 row 79 (FB-260525) — «Назначен: DD.MM.YYYY HH:MM» on every
+// active responsible row (МОП / МОЗ / МОЛ / МОТ).
+// ---------------------------------------------------------------------------
+//
+// Tester РОЗ + СтМОЗ + МОЗ reported that the Участники inf-panel «не
+// указывает дату и время распределения». The data was already on the row
+// (`assigned_at`) but was rendered as a bare «DD.MM HH:MM» line with no
+// semantic prefix and no year — testers reading the panel could not tell
+// what the number meant. Fix: prefix with «Назначен:» and add the year so
+// the moment is unambiguous from any pipeline step.
+
+describe("ContextPanel — «Назначен:» label + year on assignee rows (row 79)", () => {
+  const PREFIX = "Назначен:";
+
+  it("renders МОЛ row with «Назначен: DD.MM.YYYY HH:MM»", () => {
+    const dataMol: QuoteContextData = {
+      salesChecklist: null,
+      contactPerson: null,
+      salesManager: null,
+      participants: [],
+      procurementAssignees: [],
+      logisticsAssignees: [
+        {
+          user_id: "u-mol-1",
+          full_name: "Сергей Логистов",
+          assigned_at: "2026-04-15T08:30:00Z",
+        },
+      ],
+      customsAssignees: [],
+    };
+
+    render(
+      <ContextPanel
+        quote={makeQuote()}
+        data={dataMol}
+        userRoles={["head_of_logistics"]}
+      />,
+    );
+
+    const row = screen.getByTestId("context-panel-logistics-assignee");
+    expect(row).toHaveTextContent(PREFIX);
+    // DD.MM.YYYY HH:MM — Europe/Moscow shifts 08:30 UTC → 11:30 MSK
+    expect(row.textContent).toMatch(/Назначен:\s*15\.04\.2026[,\s]+11:30/);
+  });
+
+  it("renders МОТ row with «Назначен: DD.MM.YYYY HH:MM»", () => {
+    const dataMot: QuoteContextData = {
+      salesChecklist: null,
+      contactPerson: null,
+      salesManager: null,
+      participants: [],
+      procurementAssignees: [],
+      logisticsAssignees: [],
+      customsAssignees: [
+        {
+          user_id: "u-mot-1",
+          full_name: "Анна Таможникова",
+          assigned_at: "2026-04-16T05:00:00Z",
+        },
+      ],
+    };
+
+    render(
+      <ContextPanel
+        quote={makeQuote()}
+        data={dataMot}
+        userRoles={["head_of_customs"]}
+      />,
+    );
+
+    const row = screen.getByTestId("context-panel-customs-assignee");
+    expect(row).toHaveTextContent(PREFIX);
+    expect(row.textContent).toMatch(/Назначен:\s*16\.04\.2026[,\s]+08:00/);
+  });
+
+  it("renders МОЗ row with «Назначен: DD.MM.YYYY HH:MM»", () => {
+    const dataMoz: QuoteContextData = {
+      salesChecklist: null,
+      contactPerson: null,
+      salesManager: null,
+      participants: [],
+      procurementAssignees: [
+        {
+          user_id: "u-moz-1",
+          full_name: "Екатерина Закупщик",
+          assigned_at: "2026-05-20T12:30:24Z",
+        },
+      ],
+      logisticsAssignees: [],
+      customsAssignees: [],
+    };
+
+    render(
+      <ContextPanel
+        quote={makeQuote()}
+        data={dataMoz}
+        userRoles={["head_of_procurement"]}
+      />,
+    );
+
+    const row = screen.getByTestId("context-panel-procurement-assignee");
+    expect(row).toHaveTextContent(PREFIX);
+    expect(row.textContent).toMatch(/Назначен:\s*20\.05\.2026[,\s]+15:30/);
+  });
+
+  it("renders МОП row with «Назначен: …» sourced from quote.created_at", () => {
+    const dataMop: QuoteContextData = {
+      salesChecklist: null,
+      contactPerson: null,
+      salesManager: {
+        id: "u-mop",
+        full_name: "Денис Рогачёв",
+        phone: null,
+        email: null,
+      },
+      participants: [],
+      procurementAssignees: [],
+      logisticsAssignees: [],
+      customsAssignees: [],
+    };
+
+    const quote = makeQuote({
+      created_at: "2026-04-15T07:00:00Z",
+    });
+
+    render(
+      <ContextPanel quote={quote} data={dataMop} userRoles={["sales"]} />,
+    );
+
+    const row = screen.getByTestId("context-panel-sales-manager");
+    expect(row).toHaveTextContent(PREFIX);
+    expect(row.textContent).toMatch(/Назначен:\s*15\.04\.2026[,\s]+10:00/);
+  });
+
+  it("renders each МОЗ user's «Назначен:» line independently on a multi-МОЗ quote", () => {
+    const dataMulti: QuoteContextData = {
+      salesChecklist: null,
+      contactPerson: null,
+      salesManager: null,
+      participants: [],
+      procurementAssignees: [
+        {
+          user_id: "u-moz-a",
+          full_name: "Закупщик А",
+          assigned_at: "2026-05-20T12:30:00Z",
+        },
+        {
+          user_id: "u-moz-b",
+          full_name: "Закупщик Б",
+          assigned_at: "2026-05-21T09:15:00Z",
+        },
+      ],
+      logisticsAssignees: [],
+      customsAssignees: [],
+    };
+
+    render(
+      <ContextPanel
+        quote={makeQuote()}
+        data={dataMulti}
+        userRoles={["head_of_procurement"]}
+      />,
+    );
+
+    const rows = screen.getAllByTestId("context-panel-procurement-assignee");
+    expect(rows).toHaveLength(2);
+    // Each row carries its own «Назначен: …» line independently.
+    expect(rows[0].textContent).toMatch(/Назначен:\s*20\.05\.2026[,\s]+15:30/);
+    expect(rows[1].textContent).toMatch(/Назначен:\s*21\.05\.2026[,\s]+12:15/);
+  });
+
+  it("does not crash and shows ФИО without «Назначен:» line when assigned_at is null", () => {
+    // Edge case from the task spec: legacy quotes that pre-date kanban
+    // auto-advance and have no workflow_transitions row for the МОЗ leave
+    // `assigned_at` as null. The row must still render ФИО — never crash —
+    // and the date line is hidden (the task allows either hiding or a dash;
+    // hiding keeps the panel compact, see the row 2 follow-up tests above).
+    const dataNull: QuoteContextData = {
+      salesChecklist: null,
+      contactPerson: null,
+      salesManager: null,
+      participants: [],
+      procurementAssignees: [
+        {
+          user_id: "u-moz-legacy",
+          full_name: "Старый Закупщик",
+          assigned_at: null,
+        },
+      ],
+      logisticsAssignees: [],
+      customsAssignees: [],
+    };
+
+    render(
+      <ContextPanel
+        quote={makeQuote()}
+        data={dataNull}
+        userRoles={["head_of_procurement"]}
+      />,
+    );
+
+    const row = screen.getByTestId("context-panel-procurement-assignee");
+    expect(row).toHaveTextContent("Старый Закупщик");
+    // No «Назначен:» when assigned_at is null — line is hidden, not stubbed.
+    expect(row.textContent).not.toContain(PREFIX);
+  });
+
+  it("keeps the compact «DD.MM HH:MM» format (no year) in «История переходов» list", () => {
+    // The history log lives in a constrained-width collapsed <details> with
+    // an actor badge that already scopes the moment, so we intentionally
+    // keep it on the compact format. This pins that we DON'T accidentally
+    // surface the year in the history rows (which would push the badge off
+    // the line on narrow viewports).
+    const dataHistory: QuoteContextData = {
+      salesChecklist: null,
+      contactPerson: null,
+      salesManager: null,
+      participants: [
+        {
+          id: "wt-1",
+          actor_id: "u-actor",
+          actor_role: "sales",
+          actor_name: "Денис Рогачёв",
+          from_status: "draft",
+          to_status: "pending_procurement",
+          created_at: "2026-04-15T09:00:00Z",
+        },
+      ],
+      procurementAssignees: [],
+      logisticsAssignees: [],
+      customsAssignees: [],
+    };
+
+    render(
+      <ContextPanel
+        quote={makeQuote()}
+        data={dataHistory}
+        userRoles={["sales"]}
+      />,
+    );
+
+    const history = screen.getByTestId("context-panel-history");
+    // Compact format: DD.MM HH:MM — no year, no «Назначен:» prefix.
+    expect(history.textContent).toMatch(/15\.04\b/);
+    expect(history.textContent).not.toMatch(/15\.04\.2026/);
+    expect(history.textContent).not.toContain(PREFIX);
+  });
+});
