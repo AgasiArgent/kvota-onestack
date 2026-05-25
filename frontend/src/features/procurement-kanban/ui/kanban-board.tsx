@@ -43,6 +43,13 @@ export interface KanbanBoardProps {
    * column is irrelevant noise (МОЗ-45).
    */
   canDistribute: boolean;
+  /**
+   * Testing 2 row 75 v2 — whether the user may reroute already-distributed
+   * brand-slices via the «Переназначить» button. Decoupled from
+   * `canDistribute` so regular МОЗ (which can't distribute) can still
+   * reassign their own in-flight slices to colleagues.
+   */
+  canReassign: boolean;
 }
 
 const FORCED_ASSIGN_NOTICE =
@@ -74,6 +81,7 @@ export function KanbanBoard({
   workload,
   orgId,
   canDistribute,
+  canReassign,
 }: KanbanBoardProps) {
   const visibleSubstatuses = canDistribute
     ? PROCUREMENT_SUBSTATUSES
@@ -314,7 +322,7 @@ export function KanbanBoard({
                 setForcedAssignCardKey(null);
                 router.refresh();
               }}
-              canReassign={canDistribute}
+              canReassign={canReassign}
               openReassignCardKey={openReassignCardKey}
               onReassignOpenChange={(key, open) => {
                 setOpenReassignCardKey(open ? key : null);

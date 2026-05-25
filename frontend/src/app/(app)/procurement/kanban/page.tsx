@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getSessionUser, fetchProcurementWorkload } from "@/entities/user";
 import { KanbanPage } from "@/features/procurement-kanban";
 import { fetchKanbanData } from "@/features/procurement-kanban/api/server-queries";
+import { canReassignBrandGroup } from "@/shared/lib/roles";
 
 export default async function ProcurementKanbanPage() {
   const user = await getSessionUser();
@@ -22,6 +23,12 @@ export default async function ProcurementKanbanPage() {
     user.roles.includes("head_of_procurement") ||
     user.roles.includes("procurement_senior");
 
+  // Testing 2 row 75 v2: «Переназначить» is allowed for every procurement
+  // tier including regular МОЗ — they reroute their own brand-slices when
+  // someone is sick / on vacation / overloaded. RLS on quote_items ensures
+  // they cannot touch slices outside their own scope.
+  const canReassign = canReassignBrandGroup(user.roles);
+
   const orgId = user.orgId;
   const [data, workload] = await Promise.all([
     fetchKanbanData(),
@@ -34,6 +41,7 @@ export default async function ProcurementKanbanPage() {
       workload={workload}
       orgId={orgId}
       canDistribute={canDistribute}
+      canReassign={canReassign}
     />
   );
 }

@@ -8,6 +8,7 @@ import {
   canEditComposition,
   canEditQuoteCustomerFields,
   shouldShowFinancials,
+  canReassignBrandGroup,
 } from "../roles";
 
 describe("isSalesOnly", () => {
@@ -497,5 +498,58 @@ describe("shouldShowFinancials", () => {
 
   it("returns false for empty roles", () => {
     expect(shouldShowFinancials([])).toBe(false);
+  });
+});
+
+/**
+ * Testing 2 row 75 v2: regular МОЗ (procurement) joins admin /
+ * head_of_procurement / procurement_senior on the «Переназначить» surface.
+ * The РЛС layer still scopes each user to their own data, so МОЗ cannot
+ * grief someone else's slice — the UI gate is the contract.
+ */
+describe("canReassignBrandGroup", () => {
+  // --- Procurement-tier roles that CAN reassign (v2 expansion) ---
+  it.each([
+    ["admin"],
+    ["head_of_procurement"],
+    ["procurement_senior"],
+    ["procurement"],
+  ])("returns true for %s", (role) => {
+    expect(canReassignBrandGroup([role])).toBe(true);
+  });
+
+  it("returns true for procurement + sales combo (procurement role grants access)", () => {
+    expect(canReassignBrandGroup(["procurement", "sales"])).toBe(true);
+  });
+
+  it("returns true for admin + procurement combo", () => {
+    expect(canReassignBrandGroup(["admin", "procurement"])).toBe(true);
+  });
+
+  // --- Roles that CANNOT reassign ---
+  it.each([
+    ["sales"],
+    ["head_of_sales"],
+    ["logistics"],
+    ["customs"],
+    ["finance"],
+    ["quote_controller"],
+    ["spec_controller"],
+    ["top_manager"],
+    ["head_of_logistics"],
+  ])("returns false for %s", (role) => {
+    expect(canReassignBrandGroup([role])).toBe(false);
+  });
+
+  it("returns false for sales + logistics combo (neither is procurement-tier)", () => {
+    expect(canReassignBrandGroup(["sales", "logistics"])).toBe(false);
+  });
+
+  it("returns false for empty roles", () => {
+    expect(canReassignBrandGroup([])).toBe(false);
+  });
+
+  it("returns false for unknown role", () => {
+    expect(canReassignBrandGroup(["unknown_role_xyz"])).toBe(false);
   });
 });

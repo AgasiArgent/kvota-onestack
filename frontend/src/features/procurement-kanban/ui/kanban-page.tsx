@@ -52,6 +52,13 @@ export interface KanbanPageProps {
    * procurement_senior — should see that column.
    */
   canDistribute: boolean;
+  /**
+   * Testing 2 row 75 v2 — whether the user is allowed to reroute an
+   * already-distributed brand-slice via the «Переназначить» button on the
+   * card. Decoupled from `canDistribute` so regular МОЗ (which cannot
+   * distribute, see МОЗ-45) can still reassign their own slices.
+   */
+  canReassign: boolean;
 }
 
 /**
@@ -68,6 +75,7 @@ export function KanbanPage({
   workload,
   orgId,
   canDistribute,
+  canReassign,
 }: KanbanPageProps) {
   const filters = useProcurementFiltersFromUrl();
   const { setMany } = useFilterState();
@@ -116,6 +124,7 @@ export function KanbanPage({
             workload={workload}
             orgId={orgId}
             canDistribute={canDistribute}
+            canReassign={canReassign}
           />
         )}
       </div>

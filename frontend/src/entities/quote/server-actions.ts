@@ -218,6 +218,11 @@ export async function assignBrandGroup(
  * Testing 2 row 75: «Кнопка переназначения в канбане закупок» — the head
  * needs to swap МОЗ on already-routed slices when someone is sick / on
  * vacation / overloaded without resetting the workflow.
+ *
+ * Testing 2 row 75 v2: regular `procurement` (МОЗ) is now allowed too — they
+ * cover for each other when someone is out. RLS on `kvota.quote_items`
+ * scopes МОЗ to slices they're already assigned to, so they cannot
+ * accidentally grief other people's work.
  */
 export async function reassignBrandGroup(
   itemIds: string[],
@@ -229,7 +234,8 @@ export async function reassignBrandGroup(
   const isAllowed =
     user.roles.includes("admin") ||
     user.roles.includes("head_of_procurement") ||
-    user.roles.includes("procurement_senior");
+    user.roles.includes("procurement_senior") ||
+    user.roles.includes("procurement");
   if (!isAllowed) return { success: false, error: "Not authorized" };
 
   if (itemIds.length === 0) {
