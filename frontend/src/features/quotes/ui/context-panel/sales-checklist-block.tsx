@@ -1,7 +1,18 @@
 "use client";
 
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
-import { ClipboardList } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  ClipboardList,
+  Loader2,
+  Pencil,
+  Check,
+  X,
+} from "lucide-react";
+import { toast } from "sonner";
+import { updateDistributionComment } from "@/entities/quote/server-actions";
 
 /**
  * Shape of the JSONB `kvota.quotes.sales_checklist` payload written by the
@@ -40,6 +51,22 @@ export interface SalesChecklist {
 
 interface SalesChecklistBlockProps {
   checklist: SalesChecklist | null;
+  /**
+   * Testing 2 row 61: МОП / РОП need to amend the distribution_comment after
+   * transfer (when the modal is unreachable). When true, this block renders
+   * an edit affordance on the «Комментарий для распределения» line.
+   *
+   * Defaults to false so the existing read-only callers
+   * (procurement / logistics / customs context panels) keep their current
+   * behaviour without any prop change.
+   */
+  canEditDistributionComment?: boolean;
+  /**
+   * Quote id needed to wire the inline edit through to
+   * `updateDistributionComment`. Required when `canEditDistributionComment`
+   * is true; otherwise unused.
+   */
+  quoteId?: string;
 }
 
 const REQUEST_TYPE_BADGES: {
@@ -61,11 +88,17 @@ const REQUEST_TYPE_BADGES: {
  * populated `sales_checklist` (e.g., legacy quotes pre-dating the dialog).
  *
  * Tester edge case (Testing 2 row 29): "if all fields null → hide block".
+ *
+ * Testing 2 row 61: when the viewer can edit distribution_comment, we want
+ * to keep the block visible even for an otherwise-empty checklist so the
+ * edit affordance stays reachable. Callers that grant edit access pass
+ * `includeEditableSlot=true`.
  */
 export function hasSalesChecklistContent(
   checklist: SalesChecklist | null,
+  options: { includeEditableSlot?: boolean } = {},
 ): checklist is SalesChecklist {
-  if (!checklist) return false;
+  if (!checklist) return options.includeEditableSlot ?? false;
   if (
     checklist.is_estimate ||
     checklist.is_tender ||
@@ -77,15 +110,31 @@ export function hasSalesChecklistContent(
   if (checklist.equipment_description?.trim().length > 0) {
     return true;
   }
-  return (checklist.distribution_comment?.trim().length ?? 0) > 0;
+  if ((checklist.distribution_comment?.trim().length ?? 0) > 0) {
+    return true;
+  }
+  // Editable slot keeps the block alive even for an empty checklist so МОП /
+  // РОП always have somewhere to add the hint after transfer.
+  return options.includeEditableSlot ?? false;
 }
 
-export function SalesChecklistBlock({ checklist }: SalesChecklistBlockProps) {
-  if (!hasSalesChecklistContent(checklist)) return null;
+export function SalesChecklistBlock({
+  checklist,
+  canEditDistributionComment = false,
+  quoteId,
+}: SalesChecklistBlockProps) {
+  if (
+    !hasSalesChecklistContent(checklist, {
+      includeEditableSlot: canEditDistributionComment,
+    })
+  ) {
+    return null;
+  }
 
-  const activeBadges = REQUEST_TYPE_BADGES.filter((b) => checklist[b.key]);
-  const description = checklist.equipment_description?.trim();
-  const distributionComment = checklist.distribution_comment?.trim();
+  const activeBadges = checklist
+    ? REQUEST_TYPE_BADGES.filter((b) => checklist[b.key])
+    : [];
+  const description = checklist?.equipment_description?.trim() ?? "";
 
   return (
     <div
@@ -124,18 +173,226 @@ export function SalesChecklistBlock({ checklist }: SalesChecklistBlockProps) {
         </div>
       )}
 
-      {distributionComment && (
-        <div
-          className="space-y-1"
-          data-testid="context-panel-distribution-comment"
-        >
-          <span className="text-xs text-muted-foreground">
-            Комментарий для распределения
-          </span>
-          <div className="rounded-md bg-muted/30 px-3 py-2 text-sm text-foreground whitespace-pre-wrap break-words">
-            {distributionComment}
+      <DistributionCommentRow
+        value={checklist?.distribution_comment ?? null}
+        canEdit={canEditDistributionComment}
+        quoteId={quoteId}
+      />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Distribution comment row — read-only by default, inline-edit for МОП / РОП
+// ---------------------------------------------------------------------------
+
+/**
+ * Single «Комментарий для распределения» line. Three states:
+ *   - readonly + has value → render value as before (existing behaviour).
+ *   - readonly + empty → render nothing (parent block hidden by content gate).
+ *   - canEdit → render value + «Изменить» button; clicking the button swaps in
+ *     an inline textarea with save / cancel actions.
+ *
+ * Testing 2 row 61: after transfer, МОП / РОП lose access to the
+ * «Передать в закупки» modal; this affordance restores edit capability without
+ * reopening the modal.
+ */
+function DistributionCommentRow({
+  value,
+  canEdit,
+  quoteId,
+}: {
+  value: string | null;
+  canEdit: boolean;
+  quoteId?: string;
+}) {
+  const trimmed = (value ?? "").trim();
+
+  if (!canEdit) {
+    // Legacy read-only path — render only when there's content. Returns
+    // before any hook is called so existing test setups stay simple for
+    // non-edit roles (procurement / logistics / customs etc.).
+    if (!trimmed) return null;
+    return (
+      <div
+        className="space-y-1"
+        data-testid="context-panel-distribution-comment"
+      >
+        <span className="text-xs text-muted-foreground">
+          Комментарий для распределения
+        </span>
+        <div className="rounded-md bg-muted/30 px-3 py-2 text-sm text-foreground whitespace-pre-wrap break-words">
+          {trimmed}
+        </div>
+      </div>
+    );
+  }
+
+  // Defer editor state to a dedicated component so its hooks only fire for
+  // sales-tier viewers (admin / sales / head_of_sales). Keeps the read-only
+  // path (every other role) hook-free.
+  return (
+    <DistributionCommentEditor
+      value={value}
+      quoteId={quoteId}
+      initialTrimmed={trimmed}
+    />
+  );
+}
+
+function DistributionCommentEditor({
+  value,
+  quoteId,
+  initialTrimmed,
+}: {
+  value: string | null;
+  quoteId?: string;
+  initialTrimmed: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<string>(value ?? "");
+  const [saving, setSaving] = useState(false);
+  // Latest server-confirmed value — used so the read-only display reflects
+  // the just-saved comment without waiting for the parent's
+  // `revalidatePath` to round-trip. The server action revalidates the
+  // route, so other consumers (sales-step inline editor, kanban card)
+  // pick up the new value on their next navigation/refresh.
+  const [displayValue, setDisplayValue] = useState<string>(initialTrimmed);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Keep draft + display in sync with external value changes when not
+  // actively editing (parent prop updates after navigation/refresh).
+  useEffect(() => {
+    if (!editing) {
+      setDraft(value ?? "");
+      setDisplayValue((value ?? "").trim());
+    }
+  }, [value, editing]);
+
+  // Focus the textarea when entering edit mode so the user can start typing
+  // immediately. Cursor lands at the end of existing content.
+  useEffect(() => {
+    if (editing && textareaRef.current) {
+      const ta = textareaRef.current;
+      ta.focus();
+      const len = ta.value.length;
+      ta.setSelectionRange(len, len);
+    }
+  }, [editing]);
+
+  const trimmed = displayValue;
+
+  const handleSave = useCallback(async () => {
+    if (!quoteId) {
+      toast.error("Не удалось определить КП для сохранения");
+      return;
+    }
+    const normalised = draft.trim();
+    if (normalised === displayValue) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await updateDistributionComment(
+        quoteId,
+        normalised.length > 0 ? normalised : null,
+      );
+      if (!res.success) {
+        toast.error(res.error ?? "Не удалось сохранить комментарий");
+        return;
+      }
+      toast.success("Комментарий обновлён");
+      // Adopt server-canonical value locally so the read-only line updates
+      // immediately. The server action's revalidatePath ensures other
+      // consumers see the change on their next navigation.
+      setDisplayValue((res.value ?? "").trim());
+      setEditing(false);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Не удалось сохранить комментарий",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }, [draft, quoteId, displayValue]);
+
+  const handleCancel = useCallback(() => {
+    setDraft(displayValue);
+    setEditing(false);
+  }, [displayValue]);
+
+  return (
+    <div
+      className="space-y-1"
+      data-testid="context-panel-distribution-comment"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs text-muted-foreground">
+          Комментарий для распределения
+        </span>
+        {!editing && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-xs"
+            onClick={() => setEditing(true)}
+            data-testid="context-panel-distribution-comment-edit"
+          >
+            <Pencil size={12} />
+            {trimmed ? "Изменить" : "Добавить"}
+          </Button>
+        )}
+      </div>
+      {editing ? (
+        <div className="space-y-2">
+          <Textarea
+            ref={textareaRef}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="Опционально: уточнения для МОЛ / МОТ"
+            rows={3}
+            disabled={saving}
+            data-testid="context-panel-distribution-comment-textarea"
+          />
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              className="bg-accent text-white hover:bg-accent-hover"
+              onClick={() => void handleSave()}
+              disabled={saving}
+              data-testid="context-panel-distribution-comment-save"
+            >
+              {saving ? (
+                <Loader2 size={12} className="animate-spin" />
+              ) : (
+                <Check size={12} />
+              )}
+              Сохранить
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={handleCancel}
+              disabled={saving}
+              data-testid="context-panel-distribution-comment-cancel"
+            >
+              <X size={12} />
+              Отмена
+            </Button>
           </div>
         </div>
+      ) : trimmed ? (
+        <div className="rounded-md bg-muted/30 px-3 py-2 text-sm text-foreground whitespace-pre-wrap break-words">
+          {trimmed}
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground italic">
+          Не указан
+        </p>
       )}
     </div>
   );

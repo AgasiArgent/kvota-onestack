@@ -59,7 +59,18 @@ interface ContextPanelProps {
 export function ContextPanel({ quote, data, userRoles }: ContextPanelProps) {
   const showFinancials = canViewQuoteFinancials(userRoles);
   const canEditCustomerFields = canEditQuoteCustomerFields(userRoles);
-  const showSalesChecklist = hasSalesChecklistContent(data.salesChecklist);
+  // Testing 2 row 61: МОП / РОП need to amend `distribution_comment` after
+  // the «Передать в закупки» modal is no longer reachable. We reuse the same
+  // sales-tier gate (admin / sales / head_of_sales) — `canEditQuoteCustomerFields`
+  // already encodes that exact set, so we read from the same role-helper to
+  // avoid drift between the two affordances.
+  const canEditDistributionComment = canEditCustomerFields;
+  // Keep the block visible for sales-tier even when the checklist payload is
+  // empty (so the «Добавить» edit affordance is reachable post-transfer);
+  // for other roles, fall back to the existing content gate.
+  const showSalesChecklist = hasSalesChecklistContent(data.salesChecklist, {
+    includeEditableSlot: canEditDistributionComment,
+  });
   return (
     <div className="mx-6 mt-3 mb-1 rounded-lg border border-border bg-muted/30 p-4">
       <QuoteInfoBlock
@@ -78,10 +89,18 @@ export function ContextPanel({ quote, data, userRoles }: ContextPanelProps) {
           fetch in queries.ts already loads it; this block surfaces it for
           every role that can read the quote past Заявка. Hidden entirely when
           the checklist carries no content (legacy quotes / quotes that
-          skipped the dialog). */}
+          skipped the dialog).
+
+          Testing 2 row 61: for МОП / РОП, the block stays visible even with
+          an empty checklist so the inline «Добавить» edit on
+          distribution_comment is reachable post-transfer. */}
       {showSalesChecklist && (
         <div className="mt-4 pt-4 border-t border-border">
-          <SalesChecklistBlock checklist={data.salesChecklist} />
+          <SalesChecklistBlock
+            checklist={data.salesChecklist}
+            canEditDistributionComment={canEditDistributionComment}
+            quoteId={quote.id}
+          />
         </div>
       )}
     </div>

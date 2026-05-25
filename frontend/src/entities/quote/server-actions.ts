@@ -6,6 +6,99 @@ import { revalidatePath } from "next/cache";
 import { maybeAdvanceBrandSlices } from "./kanban-auto-advance";
 
 /**
+ * Roles allowed to edit `sales_checklist.distribution_comment` after the
+ * quote has already been transferred to procurement. Mirrors the sales-tier
+ * gate used elsewhere on the quote (`canEditQuoteCustomerFields`) plus admin
+ * for ops overrides.
+ *
+ * Testing 2 row 61: МОП / РОП requested inline edit on the sales step + edit
+ * affordance on the context panel once the modal is no longer reachable. Other
+ * roles (МОЗ / МОЛ / МОТ / финансы и т.д.) remain read-only on this field.
+ */
+const DISTRIBUTION_COMMENT_EDIT_ROLES = new Set([
+  "admin",
+  "sales",
+  "head_of_sales",
+]);
+
+/**
+ * Update the optional `sales_checklist.distribution_comment` JSONB field on a
+ * quote without disturbing the rest of the checklist payload.
+ *
+ * Testing 2 row 61: МОП / РОП previously only had access to this field via
+ * the «Передать в закупки» modal — invisible once the quote leaves the draft
+ * stage, and easy to miss in the modal itself (buried below a mandatory
+ * textarea). This action powers both the inline editor on the sales step and
+ * the edit affordance on the context-panel sales-checklist block.
+ *
+ * Whitespace-only input is normalised to `null` so the JSONB shape stays
+ * clean (matches the back-end normalisation in
+ * `api/quotes.py::submit_procurement`).
+ *
+ * Server Action — called from client components on the quote detail page.
+ * Authorization is enforced server-side: only admin / sales / head_of_sales
+ * may write this field; the underlying RLS UPDATE policy on `kvota.quotes`
+ * is the canonical enforcement layer.
+ */
+export async function updateDistributionComment(
+  quoteId: string,
+  comment: string | null,
+): Promise<{ success: boolean; error?: string; value: string | null }> {
+  const user = await getSessionUser();
+  if (!user?.orgId) {
+    return { success: false, error: "Not authenticated", value: null };
+  }
+
+  const allowed = user.roles.some((r) => DISTRIBUTION_COMMENT_EDIT_ROLES.has(r));
+  if (!allowed) {
+    return { success: false, error: "Not authorized", value: null };
+  }
+
+  const trimmed =
+    typeof comment === "string" && comment.trim().length > 0
+      ? comment.trim()
+      : null;
+
+  const supabase = createAdminClient();
+
+  // Read-modify-write the JSONB so we only touch `distribution_comment` and
+  // preserve every other key МОП already filled (is_estimate / is_tender /
+  // direct_request / trading_org_request / equipment_description /
+  // completed_at / completed_by). A bare UPDATE with `{distribution_comment}`
+  // would overwrite the entire JSONB.
+  const { data: row, error: readErr } = await supabase
+    .from("quotes")
+    .select("sales_checklist")
+    .eq("id", quoteId)
+    .eq("organization_id", user.orgId)
+    .maybeSingle();
+  if (readErr) {
+    return { success: false, error: readErr.message, value: null };
+  }
+  if (!row) {
+    return { success: false, error: "Quote not found", value: null };
+  }
+
+  const existing =
+    (row.sales_checklist as Record<string, unknown> | null) ?? {};
+  const next = { ...existing, distribution_comment: trimmed };
+
+  const { error: updateErr } = await supabase
+    .from("quotes")
+    .update({ sales_checklist: next })
+    .eq("id", quoteId)
+    .eq("organization_id", user.orgId);
+  if (updateErr) {
+    return { success: false, error: updateErr.message, value: null };
+  }
+
+  // Revalidate the quote detail page so a fresh server render picks up the
+  // new value (the inline editor itself is controlled and already in sync).
+  revalidatePath(`/quotes/${quoteId}`);
+  return { success: true, value: trimmed };
+}
+
+/**
  * Assigns a brand-slice of quote items to a procurement user (МОЗ) and
  * optionally pins the brand so future quotes with the same brand auto-route
  * to the same user.
