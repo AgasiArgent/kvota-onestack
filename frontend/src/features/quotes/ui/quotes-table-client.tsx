@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useMemo } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DataTable,
   type DataTableColumn,
@@ -110,9 +111,16 @@ export function QuotesTableClient({
   actionStatuses,
 }: QuotesTableClientProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const canCreate = hasAnyRole(userRoles, CREATE_ROLES);
   const showFinancials = shouldShowFinancials(userRoles);
+
+  // Testing 2 row 19: replaced split-table grouping ("Требует вашего
+  // действия / Остальные") with a toolbar filter toggle. URL-driven so the
+  // state is sharable and survives refresh. Off by default → one flat list
+  // ordered by the current sort.
+  const onlyAction = searchParams?.get("onlyAction") === "true";
 
   // Auto-open create dialog when ?create=true
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -338,16 +346,52 @@ export function QuotesTableClient({
     [actionStatuses]
   );
 
+  // Visible rows = all rows by default, narrowed to actionable ones when the
+  // "Только требует действия" toggle is on.
+  const visibleRows = useMemo(() => {
+    if (!onlyAction) return rows;
+    return rows.filter((q) => actionStatusSet.has(q.workflow_status));
+  }, [rows, onlyAction, actionStatusSet]);
+
+  const handleOnlyActionChange = useCallback(
+    (next: boolean) => {
+      const sp = new URLSearchParams(searchParams?.toString() ?? "");
+      if (next) {
+        sp.set("onlyAction", "true");
+      } else {
+        sp.delete("onlyAction");
+      }
+      // Reset pagination when the filter scope changes — pages from the wider
+      // list don't make sense after narrowing the view.
+      sp.delete("page");
+      const qs = sp.toString();
+      router.replace(qs ? `/quotes?${qs}` : "/quotes");
+    },
+    [router, searchParams]
+  );
+
   function handleRowClick(quote: QuoteListItem) {
     router.push(`/quotes/${quote.id}`);
   }
+
+  const actionToggle = (
+    <label className="flex items-center gap-2 cursor-pointer select-none">
+      <Checkbox
+        checked={onlyAction}
+        onCheckedChange={(checked) => handleOnlyActionChange(checked === true)}
+      />
+      <span className="text-sm text-text-secondary">
+        Только требует действия
+      </span>
+    </label>
+  );
 
   return (
     <>
       <DataTable<QuoteListItem>
         tableKey="quotes"
-        rows={rows}
-        total={total}
+        rows={visibleRows}
+        total={onlyAction ? visibleRows.length : total}
         page={page}
         pageSize={pageSize}
         rowKey={(q) => q.id}
@@ -357,10 +401,7 @@ export function QuotesTableClient({
         search={{
           placeholder: "Поиск по КП, клиенту, бренду...",
         }}
-        rowGrouping={{
-          label: "Требует вашего действия",
-          predicate: (q) => actionStatusSet.has(q.workflow_status),
-        }}
+        toolbarFilter={actionToggle}
         topBarActions={
           canCreate ? (
             <Button
