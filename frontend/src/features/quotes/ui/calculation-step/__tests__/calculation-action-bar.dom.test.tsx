@@ -292,3 +292,118 @@ describe("CalculationActionBar — Validation Excel gating", () => {
     ).toBeInTheDocument();
   });
 });
+
+/**
+ * Hard-stop 5% markup (Testing 2 row 47).
+ *
+ * Decision-doc Q3: «Hard stop 5%, ниже Рассчитать не работает».
+ * Frontend duty: button disabled at markup < 5 so users never POST a request
+ * the backend will reject. Backend still validates (defence in depth) — see
+ * MARKUP_TOO_LOW branch below for the recoverable-toast contract that mirrors
+ * the MISSING_PRICES pattern from PR #234.
+ */
+describe("CalculationActionBar — markup hard stop", () => {
+  it("disables «Рассчитать» when markup < 5 (4.9)", () => {
+    render(
+      <CalculationActionBar
+        quoteId="q-1"
+        formValues={{ markup: "4.9" }}
+        hasCalculation={false}
+        workflowStatus="draft"
+        isApproved={false}
+      />,
+    );
+    const btn = screen.getByRole("button", { name: /Рассчитать/ });
+    expect(btn).toBeDisabled();
+  });
+
+  it("disables «Рассчитать» when markup is 0", () => {
+    render(
+      <CalculationActionBar
+        quoteId="q-1"
+        formValues={{ markup: "0" }}
+        hasCalculation={false}
+        workflowStatus="draft"
+        isApproved={false}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /Рассчитать/ })).toBeDisabled();
+  });
+
+  it("enables «Рассчитать» at the exact 5% boundary", () => {
+    render(
+      <CalculationActionBar
+        quoteId="q-1"
+        formValues={{ markup: "5" }}
+        hasCalculation={false}
+        workflowStatus="draft"
+        isApproved={false}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /Рассчитать/ })).not.toBeDisabled();
+  });
+
+  it("enables «Рассчитать» above 5%", () => {
+    render(
+      <CalculationActionBar
+        quoteId="q-1"
+        formValues={{ markup: "15" }}
+        hasCalculation={false}
+        workflowStatus="draft"
+        isApproved={false}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /Рассчитать/ })).not.toBeDisabled();
+  });
+
+  it("enables «Рассчитать» when markup is missing (treat as not-yet-set, not invalid)", () => {
+    render(
+      <CalculationActionBar
+        quoteId="q-1"
+        formValues={{}}
+        hasCalculation={false}
+        workflowStatus="draft"
+        isApproved={false}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /Рассчитать/ })).not.toBeDisabled();
+  });
+});
+
+describe("CalculationActionBar — MARKUP_TOO_LOW backend response", () => {
+  it("shows persistent Russian toast on 400 MARKUP_TOO_LOW", async () => {
+    mockFetchResponse(400, {
+      success: false,
+      error: {
+        code: "MARKUP_TOO_LOW",
+        message: "Наценка должна быть не менее 5%",
+      },
+    });
+
+    render(
+      <CalculationActionBar
+        quoteId="q-1"
+        // markup=15 here so the FE-side gate doesn't block — we want the
+        // server-side rejection path to fire.
+        formValues={{ markup: "15" }}
+        hasCalculation={false}
+        workflowStatus="draft"
+        isApproved={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Рассчитать/ }));
+
+    await waitFor(() => expect(toastErrorMock).toHaveBeenCalledTimes(1));
+
+    const [title, opts] = toastErrorMock.mock.calls[0] as [
+      string,
+      { description?: string; duration?: number } | undefined,
+    ];
+    expect(title).toBe("Наценка должна быть не менее 5%");
+    expect(opts?.duration).toBe(Infinity);
+
+    expect(toastSuccessMock).not.toHaveBeenCalled();
+    expect(refreshMock).not.toHaveBeenCalled();
+  });
+});

@@ -267,6 +267,106 @@ class TestCalculateQuoteShape:
 
 
 # ----------------------------------------------------------------------------
+# Hard-stop 5% markup (Testing 2 row 47)
+# ----------------------------------------------------------------------------
+
+
+class TestCalculateMarkupHardStop:
+    """Defense-in-depth: even if the FE-side disable is bypassed, the
+    backend rejects markup < 5 with a structured 400 the FE can surface."""
+
+    @patch("api.quotes.get_composed_items")
+    @patch("api.quotes.get_supabase")
+    def test_markup_below_5_returns_400(self, mock_get_sb, mock_composed):
+        """markup=4 → 400 MARKUP_TOO_LOW before the engine is touched."""
+        mock_get_sb.return_value = _mock_supabase_for_calc(
+            quote={"id": "q-1", "currency": "USD"}
+        )
+        mock_composed.return_value = [
+            {
+                "id": "item-1",
+                "is_unavailable": False,
+                "purchase_price_original": 100,
+                "base_price_vat": 120,
+                "product_name": "Widget",
+                "brand": "Acme",
+                "quantity": 1,
+            },
+        ]
+
+        req = _make_request(api_user_id="u-1", body={"markup": "4"})
+        resp = _run(calculate_quote(req, "q-1"))
+
+        assert resp.status_code == 400
+        assert _body(resp) == {
+            "success": False,
+            "error": {
+                "code": "MARKUP_TOO_LOW",
+                "message": "Наценка должна быть не менее 5%",
+            },
+        }
+
+    @patch("api.quotes.get_composed_items")
+    @patch("api.quotes.get_supabase")
+    def test_markup_exactly_5_is_not_blocked(self, mock_get_sb, mock_composed):
+        """markup=5 → MARKUP_TOO_LOW guard does NOT fire. The handler may
+        still 500 deeper in the pipeline because we have not mocked the
+        engine — that's fine. The point of this assertion is to prove the
+        guard is strictly <, not <=."""
+        mock_get_sb.return_value = _mock_supabase_for_calc(
+            quote={"id": "q-1", "currency": "USD"}
+        )
+        mock_composed.return_value = [
+            {
+                "id": "item-1",
+                "is_unavailable": False,
+                "purchase_price_original": 100,
+                "base_price_vat": 120,
+                "product_name": "Widget",
+                "brand": "Acme",
+                "quantity": 1,
+            },
+        ]
+
+        req = _make_request(api_user_id="u-1", body={"markup": "5"})
+        resp = _run(calculate_quote(req, "q-1"))
+
+        body = _body(resp)
+        # The MARKUP_TOO_LOW guard MUST NOT match at exactly 5.
+        err = body.get("error")
+        if isinstance(err, dict):
+            assert err.get("code") != "MARKUP_TOO_LOW", (
+                f"5% must be valid, got 400 MARKUP_TOO_LOW: {body!r}"
+            )
+
+    @patch("api.quotes.get_composed_items")
+    @patch("api.quotes.get_supabase")
+    def test_markup_4_9_returns_400(self, mock_get_sb, mock_composed):
+        """Edge case: 4.9% (decimal just below threshold) → 400 MARKUP_TOO_LOW."""
+        mock_get_sb.return_value = _mock_supabase_for_calc(
+            quote={"id": "q-1", "currency": "USD"}
+        )
+        mock_composed.return_value = [
+            {
+                "id": "item-1",
+                "is_unavailable": False,
+                "purchase_price_original": 100,
+                "base_price_vat": 120,
+                "product_name": "Widget",
+                "brand": "Acme",
+                "quantity": 1,
+            },
+        ]
+
+        req = _make_request(api_user_id="u-1", body={"markup": "4.9"})
+        resp = _run(calculate_quote(req, "q-1"))
+
+        assert resp.status_code == 400
+        body = _body(resp)
+        assert body["error"]["code"] == "MARKUP_TOO_LOW"
+
+
+# ----------------------------------------------------------------------------
 # Happy path + calc-engine error
 # ----------------------------------------------------------------------------
 

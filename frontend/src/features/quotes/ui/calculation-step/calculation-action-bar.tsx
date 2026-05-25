@@ -6,6 +6,7 @@ import { Calculator, FileDown, Loader2, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { downloadValidationExcel } from "@/features/quotes/lib/download-validation-excel";
+import { isMarkupBelowMinimum } from "@/features/quotes/lib/markup";
 import { extractErrorMessage } from "@/shared/lib/errors";
 
 interface CalculationActionBarProps {
@@ -66,6 +67,16 @@ export function CalculationActionBar({
             return;
           }
         }
+        // Hard-stop markup guard (Testing 2 row 47). FE button is disabled
+        // when markup < 5, but direct API callers / form-state edge cases
+        // can still produce this response — surface a persistent toast in
+        // Russian using the backend message (already localized).
+        if (errorCode === "MARKUP_TOO_LOW") {
+          const msg =
+            extractErrorMessage(data) ?? "Наценка должна быть не менее 5%";
+          toast.error(msg, { duration: Infinity });
+          return;
+        }
         throw new Error(extractErrorMessage(data) ?? "Calculation failed");
       }
 
@@ -111,13 +122,18 @@ export function CalculationActionBar({
     workflowStatus === "procurement_complete"
   );
 
+  // Hard stop: markup must be ≥ 5% (Testing 2 row 47). Mirrors the
+  // MARKUP_TOO_LOW backend guard in api/quotes.py::calculate_quote.
+  const markupBlocked = isMarkupBelowMinimum(formValues.markup);
+
   return (
     <div className="sticky top-[52px] z-[5] bg-card border-b border-border px-6 py-2 flex items-center gap-2">
       <Button
         size="sm"
         className="bg-accent text-white hover:bg-accent-hover"
         onClick={handleCalculate}
-        disabled={loading !== null}
+        disabled={loading !== null || markupBlocked}
+        title={markupBlocked ? "Наценка не может быть меньше 5%" : undefined}
       >
         {loading === "calc" ? (
           <Loader2 size={14} className="animate-spin" />

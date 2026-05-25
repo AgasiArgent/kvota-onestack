@@ -209,6 +209,16 @@ async def calculate_quote(
     dm_fee_value = body.get("dm_fee_value", "0")
     dm_fee_currency = body.get("dm_fee_currency", "RUB")
 
+    # Hard stop: markup must be ≥ 5% (Testing 2 row 47). The FE-side disables
+    # the «Рассчитать» button when markup < 5, but this guard exists for
+    # defence-in-depth — direct API callers (AI agents, curl) also hit it.
+    if safe_decimal(markup) < Decimal("5"):
+        return error_response(
+            "MARKUP_TOO_LOW",
+            "Наценка должна быть не менее 5%",
+            status_code=400,
+        )
+
     # Validate that all available items have prices
     items_without_price = []
     for item in items:
