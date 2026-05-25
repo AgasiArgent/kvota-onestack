@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, Search, X } from "lucide-react";
+import { Search, X } from "lucide-react";
 
 import {
   Table,
@@ -56,14 +56,14 @@ export interface DataTableProps<T> {
     placeholder?: string;
   };
 
-  /** Row grouping: matching rows are rendered above the rest with a labeled header. */
-  rowGrouping?: {
-    label: string;
-    predicate: (row: T) => boolean;
-  };
-
   /** Top-bar slot on the right (e.g., "Create new" button). */
   topBarActions?: React.ReactNode;
+
+  /**
+   * Inline filter rendered in the stats row, e.g. a "Только требует действия"
+   * checkbox. Sits next to the totals count.
+   */
+  toolbarFilter?: React.ReactNode;
 
   /** Empty state content when rows.length === 0. */
   emptyState?: React.ReactNode;
@@ -82,9 +82,9 @@ const SEARCH_DEBOUNCE_MS = 300;
  * Reusable DataTable shell.
  *
  * Wraps table rendering, top bar (search + view selector + column visibility +
- * custom actions), per-column filter/sort headers, row grouping, pagination,
- * and empty state. State lives in the URL via useTableState; the consumer is
- * responsible for fetching rows based on that state.
+ * custom actions), per-column filter/sort headers, pagination, and empty
+ * state. State lives in the URL via useTableState; the consumer is responsible
+ * for fetching rows based on that state.
  */
 export function DataTable<T>({
   tableKey,
@@ -99,8 +99,8 @@ export function DataTable<T>({
   defaultSort,
   onRowClick,
   search,
-  rowGrouping,
   topBarActions,
+  toolbarFilter,
   emptyState,
   viewsEnabled = false,
   currentUserId,
@@ -191,20 +191,6 @@ export function DataTable<T>({
     const visibleSet = new Set(state.visibleColumns);
     return columns.filter((c) => c.alwaysVisible || visibleSet.has(c.key));
   }, [columns, state.visibleColumns]);
-
-  // Row grouping: split into action rows and rest
-  const { actionRows, otherRows } = useMemo(() => {
-    if (!rowGrouping) {
-      return { actionRows: [] as T[], otherRows: [...rows] };
-    }
-    const action: T[] = [];
-    const other: T[] = [];
-    for (const row of rows) {
-      if (rowGrouping.predicate(row)) action.push(row);
-      else other.push(row);
-    }
-    return { actionRows: action, otherRows: other };
-  }, [rows, rowGrouping]);
 
   const totalPages = Math.ceil(total / pageSize);
   const colSpan = visibleColumns.length;
@@ -320,9 +306,12 @@ export function DataTable<T>({
         {topBarActions && <div className="ml-auto">{topBarActions}</div>}
       </div>
 
-      {/* Stats row + clear filters */}
+      {/* Stats row + toolbar filter + clear filters */}
       <div className="flex items-center justify-between text-sm text-muted-foreground">
-        <span>Всего: {total}</span>
+        <div className="flex items-center gap-4">
+          <span>Всего: {total}</span>
+          {toolbarFilter}
+        </div>
         {showClearFilters && (
           <Button
             variant="ghost"
@@ -382,46 +371,7 @@ export function DataTable<T>({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {/* Action row group */}
-          {rowGrouping && actionRows.length > 0 && (
-            <>
-              <TableRow className="hover:bg-transparent bg-accent-subtle/50">
-                <TableCell colSpan={colSpan} className="py-3 px-0">
-                  <div className="border-l-4 border-accent pl-3 flex items-center gap-2 text-sm font-semibold text-foreground">
-                    <AlertCircle size={16} className="text-accent shrink-0" />
-                    {rowGrouping.label} ({actionRows.length})
-                  </div>
-                </TableCell>
-              </TableRow>
-              {actionRows.map((row) => (
-                <DataTableRow
-                  key={rowKey(row)}
-                  row={row}
-                  columns={visibleColumns}
-                  onClick={onRowClick}
-                />
-              ))}
-              {otherRows.length > 0 && (
-                <>
-                  <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={colSpan} className="py-2 px-0">
-                      <div className="border-t border-border" />
-                    </TableCell>
-                  </TableRow>
-                  <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={colSpan} className="py-2 px-0">
-                      <span className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">
-                        Остальные
-                      </span>
-                    </TableCell>
-                  </TableRow>
-                </>
-              )}
-            </>
-          )}
-
-          {/* Other rows */}
-          {otherRows.map((row) => (
+          {rows.map((row) => (
             <DataTableRow
               key={rowKey(row)}
               row={row}
