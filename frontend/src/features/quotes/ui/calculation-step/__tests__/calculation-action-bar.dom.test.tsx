@@ -1,62 +1,230 @@
 // @vitest-environment jsdom
 /**
- * Validation-Excel button gating under the new hasCalculation contract
- * (2026-05-25, "validation file excel скачивается пустой" bug).
+ * Calc-step P0 fix (2026-05-25) — MISSING_PRICES banner.
  *
- * Pre-fix: hasCalculation was derived from `quote.total_quote_currency != null`.
- * That column lingers after `quote_items` are replaced — the CASCADE clears
- * `quote_calculation_results` but the quote-level aggregate is left untouched.
- * Effect: the Validation Excel button stayed enabled for quotes whose engine
- * never ran on the current items, the download produced an all-zero .xlsm,
- * and testers reported it as "пустой".
+ * Pre-fix: clicking «Рассчитать» on a quote with an unpriced item produced a
+ * 400 with body
+ *   {"success": false,
+ *    "error": {"code": "MISSING_PRICES", "message": "Not all items have prices"},
+ *    "items_without_price": ["Brand — Item"]}
+ * The frontend toast read only `error.message` — English, no item names,
+ * dismissed after 4s. The tester had no actionable signal.
  *
- * New contract: `hasCalculation` is true ONLY when at least one
- * `quote_calculation_results` row exists for the quote's items. The parent
- * `CalculationStep` performs the count query and passes a boolean down. This
- * file tests the action-bar's contract under that boolean — i.e., when the
- * caller has correctly computed hasCalculation=false for a quote that has a
- * lingering total but no per-item calc rows, the export section is hidden.
- *
- * Diagnostic: /tmp/validation-xlsm-investigate-2026-05-25.md.
+ * Post-fix contract:
+ *   - On MISSING_PRICES with non-empty items_without_price[], the toast is
+ *     Russian, lists every blocked item, and is persistent (duration: Infinity).
+ *   - On any OTHER error, the original behavior is preserved (toast.error
+ *     with the extracted message).
+ *   - On 200 success, toast.success("Расчёт выполнен") fires and the router
+ *     is refreshed.
  */
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
+const refreshMock = vi.fn();
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ refresh: vi.fn() }),
+  useRouter: () => ({ refresh: refreshMock }),
 }));
 
+const toastErrorMock = vi.fn();
+const toastSuccessMock = vi.fn();
 vi.mock("sonner", () => ({
   toast: {
-    error: vi.fn(),
-    success: vi.fn(),
+    error: (...args: unknown[]) => toastErrorMock(...args),
+    success: (...args: unknown[]) => toastSuccessMock(...args),
     info: vi.fn(),
     warning: vi.fn(),
   },
 }));
 
-const { downloadValidationExcelMock } = vi.hoisted(() => ({
-  downloadValidationExcelMock: vi.fn(),
+vi.mock("@/shared/lib/supabase/client", () => ({
+  createClient: () => ({
+    auth: {
+      getSession: async () => ({
+        data: { session: { access_token: "fake-token" } },
+      }),
+    },
+  }),
 }));
+
 vi.mock("@/features/quotes/lib/download-validation-excel", () => ({
-  downloadValidationExcel: downloadValidationExcelMock,
+  downloadValidationExcel: vi.fn(),
 }));
 
 import { CalculationActionBar } from "../calculation-action-bar";
 
-afterEach(() => {
-  cleanup();
-  downloadValidationExcelMock.mockReset();
+const originalFetch = global.fetch;
+
+beforeEach(() => {
+  refreshMock.mockReset();
+  toastErrorMock.mockReset();
+  toastSuccessMock.mockReset();
 });
 
+afterEach(() => {
+  cleanup();
+  global.fetch = originalFetch;
+});
+
+function mockFetchResponse(status: number, body: unknown): void {
+  global.fetch = vi.fn().mockResolvedValue({
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+  }) as unknown as typeof fetch;
+}
+
+describe("CalculationActionBar — MISSING_PRICES handling", () => {
+  it("shows persistent Russian banner with item list on 400 + items_without_price", async () => {
+    mockFetchResponse(400, {
+      success: false,
+      error: { code: "MISSING_PRICES", message: "Not all items have prices" },
+      items_without_price: [
+        "Китайский бренд — Миксер пневматический PM-3/TJ3",
+        "Brand B — Item X",
+      ],
+    });
+
+    render(
+      <CalculationActionBar
+        quoteId="q-1"
+        formValues={{}}
+        hasCalculation={false}
+        workflowStatus="draft"
+        isApproved={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Рассчитать/ }));
+
+    await waitFor(() => expect(toastErrorMock).toHaveBeenCalledTimes(1));
+
+    const [title, opts] = toastErrorMock.mock.calls[0] as [
+      string,
+      { description?: string; duration?: number },
+    ];
+    expect(title).toBe("Не у всех позиций есть цена");
+    expect(opts.description).toContain(
+      "Китайский бренд — Миксер пневматический PM-3/TJ3",
+    );
+    expect(opts.description).toContain("Brand B — Item X");
+    expect(opts.duration).toBe(Infinity);
+
+    // Success toast must not fire on error.
+    expect(toastSuccessMock).not.toHaveBeenCalled();
+    // Router must not refresh on error.
+    expect(refreshMock).not.toHaveBeenCalled();
+  });
+
+  it("falls back to extracted error message when items_without_price is missing", async () => {
+    mockFetchResponse(400, {
+      success: false,
+      error: { code: "MISSING_PRICES", message: "Not all items have prices" },
+      // items_without_price intentionally absent
+    });
+
+    render(
+      <CalculationActionBar
+        quoteId="q-1"
+        formValues={{}}
+        hasCalculation={false}
+        workflowStatus="draft"
+        isApproved={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Рассчитать/ }));
+
+    await waitFor(() => expect(toastErrorMock).toHaveBeenCalledTimes(1));
+
+    const [msg] = toastErrorMock.mock.calls[0] as [string];
+    // Single-arg shape — the original behaviour.
+    expect(msg).toBe("Not all items have prices");
+  });
+
+  it("falls back to extracted error message when items_without_price is an empty array", async () => {
+    mockFetchResponse(400, {
+      success: false,
+      error: { code: "MISSING_PRICES", message: "Not all items have prices" },
+      items_without_price: [],
+    });
+
+    render(
+      <CalculationActionBar
+        quoteId="q-1"
+        formValues={{}}
+        hasCalculation={false}
+        workflowStatus="draft"
+        isApproved={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Рассчитать/ }));
+
+    await waitFor(() => expect(toastErrorMock).toHaveBeenCalledTimes(1));
+
+    const [msg] = toastErrorMock.mock.calls[0] as [string];
+    expect(msg).toBe("Not all items have prices");
+  });
+
+  it("preserves original toast behavior for non-MISSING_PRICES errors", async () => {
+    mockFetchResponse(500, {
+      success: false,
+      error: { code: "INTERNAL_ERROR", message: "Something broke" },
+    });
+
+    render(
+      <CalculationActionBar
+        quoteId="q-1"
+        formValues={{}}
+        hasCalculation={false}
+        workflowStatus="draft"
+        isApproved={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Рассчитать/ }));
+
+    await waitFor(() => expect(toastErrorMock).toHaveBeenCalledTimes(1));
+
+    const [msg] = toastErrorMock.mock.calls[0] as [string];
+    // Single-arg form — generic path, NOT the structured persistent banner.
+    expect(msg).toBe("Something broke");
+  });
+
+  it("fires success toast and refreshes router on 200", async () => {
+    mockFetchResponse(200, { success: true });
+
+    render(
+      <CalculationActionBar
+        quoteId="q-1"
+        formValues={{}}
+        hasCalculation={false}
+        workflowStatus="draft"
+        isApproved={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Рассчитать/ }));
+
+    await waitFor(() => expect(toastSuccessMock).toHaveBeenCalledTimes(1));
+    expect(toastSuccessMock).toHaveBeenCalledWith("Расчёт выполнен");
+    expect(refreshMock).toHaveBeenCalledTimes(1);
+    expect(toastErrorMock).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Validation-Excel button gating under the new hasCalculation contract
+ * ("validation file excel пустой" bug). Pre-fix: hasCalculation was derived
+ * from `quote.total_quote_currency != null`. That column lingers after
+ * `quote_items` are replaced — CASCADE clears `quote_calculation_results`
+ * but the quote-level aggregate is left untouched. New contract:
+ * hasCalculation is true ONLY when at least one calc-results row exists.
+ * Diagnostic: /tmp/validation-xlsm-investigate-2026-05-25.md.
+ */
 describe("CalculationActionBar — Validation Excel gating", () => {
   it("hides export buttons when hasCalculation=false (the new no-stale-total gate)", () => {
-    // This is the regression scenario: in production, the parent would
-    // previously have computed `hasCalculation = total_quote_currency != null`
-    // and rendered the buttons even when no calc rows existed. The new
-    // parent computes `hasCalculation = (calc-row count > 0)` so the right
-    // value is passed in. Asserting the action-bar's downstream behavior:
-    // when the gate is false, the export section is not rendered.
     render(
       <CalculationActionBar
         quoteId="q-stale-total"
@@ -67,8 +235,6 @@ describe("CalculationActionBar — Validation Excel gating", () => {
       />,
     );
 
-    // The "Validation Excel" and "КП PDF" buttons are wrapped in
-    // `{hasCalculation && (...)}` — they should not be in the DOM.
     expect(
       screen.queryByRole("button", { name: /Validation Excel/ }),
     ).toBeNull();
@@ -88,8 +254,6 @@ describe("CalculationActionBar — Validation Excel gating", () => {
       />,
     );
 
-    // Both export buttons are visible. (The PDF button is disabled until
-    // approval; that contract is unrelated to this bug.)
     expect(
       screen.getByRole("button", { name: /Validation Excel/ }),
     ).toBeInTheDocument();
@@ -99,9 +263,6 @@ describe("CalculationActionBar — Validation Excel gating", () => {
   });
 
   it("Calculate button label flips from «Рассчитать» to «Пересчитать» based on hasCalculation, not total_amount", () => {
-    // Companion check: the "first run vs subsequent run" wording is also
-    // driven by hasCalculation, so it correctly says «Рассчитать» when the
-    // calc never ran on the current items even if total_amount lingers.
     const { rerender } = render(
       <CalculationActionBar
         quoteId="q-1"
