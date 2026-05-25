@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, ChevronDown, ChevronRight, Download, Loader2, Mail, Package, Paperclip, Plus, Trash2, Undo2, Weight } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronRight, Download, Loader2, Mail, Package, Paperclip, Plus, Trash2, Undo2, Upload, Weight } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -54,7 +54,11 @@ import {
 import { SUBSTATUS_LABELS_RU } from "@/shared/lib/workflow-substates";
 import { INCOTERMS_2020 } from "@/shared/lib/incoterms";
 import { SUPPORTED_CURRENCIES } from "@/shared/lib/currencies";
-import { downloadInvoiceXls, markInvoiceSent } from "@/entities/invoice/mutations";
+import {
+  downloadInvoiceXls,
+  markInvoiceSent,
+  uploadInvoiceXls,
+} from "@/entities/invoice/mutations";
 import { createClient } from "@/shared/lib/supabase/client";
 import { extractErrorMessage } from "@/shared/lib/errors";
 import { CityAutocomplete, CountryCombobox, findCountryByCode } from "@/shared/ui/geo";
@@ -172,6 +176,12 @@ export function InvoiceCard({
   const [unassigning, setUnassigning] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [downloadingXls, setDownloadingXls] = useState(false);
+  // Testing 2 row 70: XLS upload back into the КПП. The hidden file input
+  // is triggered by the «Загрузить XLS» button; on file selection the
+  // handler below POSTs to /api/invoices/{id}/import-xls and surfaces the
+  // server summary via toast.
+  const [uploadingXls, setUploadingXls] = useState(false);
+  const importFileInputRef = useRef<HTMLInputElement | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
   const [language, setLanguage] = useState<"ru" | "en">("ru");
   // State shape mirrors what fetchCargoPlaces returns from
@@ -824,6 +834,38 @@ export function InvoiceCard({
       toast.error(extractErrorMessage(err) ?? "Не удалось скачать XLS");
     } finally {
       setDownloadingXls(false);
+    }
+  }
+
+  // Testing 2 row 70 — XLS import handler. The hidden <input type="file">
+  // dispatches this on selection; the server matches rows by `idn_sku` and
+  // returns a summary we render as a single toast (or one toast per
+  // outcome when there are both updates and skipped articles).
+  async function handleUploadXls(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    // Clear the input value immediately so the user can re-upload the same
+    // file after a failed attempt — otherwise onChange wouldn't fire again
+    // for the same filename.
+    event.target.value = "";
+
+    setUploadingXls(true);
+    try {
+      const result = await uploadInvoiceXls(invoice.id, file);
+      if (result.skipped.length > 0) {
+        toast.warning(
+          `Обновлено ${result.updated} поз. Не найдены: ${result.skipped.join(", ")}`
+        );
+      } else {
+        toast.success(`Обновлено ${result.updated} поз.`);
+      }
+      router.refresh();
+      setRefreshKey((k) => k + 1);
+    } catch (err) {
+      console.error("[invoice-card] upload XLS failed:", err);
+      toast.error(extractErrorMessage(err) ?? "Не удалось загрузить XLS");
+    } finally {
+      setUploadingXls(false);
     }
   }
 
@@ -1641,6 +1683,32 @@ export function InvoiceCard({
                     <Download size={14} className="mr-1" />
                   )}
                   Скачать XLS
+                </Button>
+                {/* Testing 2 row 70 — bulk-update КПП from an edited XLS.
+                    File picker is a hidden <input> triggered by the button so
+                    we keep the button's visual treatment consistent with the
+                    sibling actions in this toolbar. */}
+                <input
+                  ref={importFileInputRef}
+                  type="file"
+                  accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  className="hidden"
+                  onChange={handleUploadXls}
+                  aria-label="Загрузить XLS"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs"
+                  onClick={() => importFileInputRef.current?.click()}
+                  disabled={uploadingXls}
+                >
+                  {uploadingXls ? (
+                    <Loader2 size={14} className="animate-spin mr-1" />
+                  ) : (
+                    <Upload size={14} className="mr-1" />
+                  )}
+                  Загрузить XLS
                 </Button>
                 <Button
                   variant="outline"

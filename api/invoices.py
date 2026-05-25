@@ -224,6 +224,104 @@ async def download_invoice_xls(request, id: str) -> Response:
 
 
 # ============================================================================
+# POST /api/invoices/{id}/import-xls  (Testing 2 row 70)
+# ============================================================================
+
+
+async def import_invoice_xls(request, id: str) -> JSONResponse:
+    """Bulk-update КПП positions from an uploaded XLS.
+
+    Path: POST /api/invoices/{id}/import-xls
+    Params:
+        file: multipart/form-data — xlsx matching the «Скачать XLS» template
+    Returns:
+        200 ``{"success": true, "data": {"updated": N, "skipped": [...],
+        "total_in_file": M}}`` on success.
+        400 ``{"success": false, "error": {"code": "DUPLICATES", "message":
+        "Дубликаты артикулов: [list]"}}`` when the file has duplicates.
+        400 ``MISSING_FILE`` / ``INVALID_FILE`` for upload / parse errors.
+    Side Effects:
+        ``UPDATE kvota.invoice_items`` for every matched (idn_sku) row.
+    Roles: procurement, procurement_senior, admin, head_of_procurement
+    """
+    user, err = _get_procurement_user(request)
+    if err:
+        return err
+
+    _, err = _verify_invoice_ownership(id, user["org_id"])
+    if err:
+        return err
+
+    # ---- Parse the multipart form ------------------------------------------
+    try:
+        form = await request.form()
+    except Exception as exc:
+        logger.error("XLS import: failed to read form for invoice %s: %s", id, exc)
+        return JSONResponse(
+            {"success": False, "error": {"code": "INVALID_FILE", "message": "Не удалось прочитать форму"}},
+            status_code=400,
+        )
+
+    upload = form.get("file")
+    if upload is None or not hasattr(upload, "read"):
+        return JSONResponse(
+            {
+                "success": False,
+                "error": {"code": "MISSING_FILE", "message": "Файл не передан"},
+            },
+            status_code=400,
+        )
+
+    file_bytes = await upload.read()
+    if not file_bytes:
+        return JSONResponse(
+            {
+                "success": False,
+                "error": {"code": "INVALID_FILE", "message": "Пустой файл"},
+            },
+            status_code=400,
+        )
+
+    # ---- Dispatch to the service ------------------------------------------
+    from services.xls_import_service import (
+        DuplicateArticlesError,
+        import_invoice_xls as _import,
+    )
+
+    try:
+        summary = _import(invoice_id=id, file_bytes=file_bytes)
+    except DuplicateArticlesError as exc:
+        return JSONResponse(
+            {
+                "success": False,
+                "error": {
+                    "code": "DUPLICATES",
+                    "message": f"Дубликаты артикулов: {', '.join(exc.duplicates)}",
+                    "duplicates": exc.duplicates,
+                },
+            },
+            status_code=400,
+        )
+    except Exception as exc:
+        logger.error("XLS import: service failed for invoice %s: %s", id, exc)
+        return JSONResponse(
+            {
+                "success": False,
+                "error": {
+                    "code": "INVALID_FILE",
+                    "message": "Не удалось разобрать XLS",
+                },
+            },
+            status_code=400,
+        )
+
+    return JSONResponse(
+        {"success": True, "data": summary},
+        status_code=200,
+    )
+
+
+# ============================================================================
 # GET /api/invoices/{id}/letter-draft
 # ============================================================================
 

@@ -20,6 +20,7 @@ from api.invoices import (
     download_invoice_xls as _download_xls,
     get_letter_draft as _get_letter_draft,
     get_send_history as _get_send_history,
+    import_invoice_xls as _import_xls,
     request_procurement_unlock as _request_procurement_unlock,
     save_letter_draft as _save_letter_draft,
     send_letter_draft as _send_letter_draft,
@@ -32,6 +33,12 @@ router = APIRouter(tags=["invoices"])
 async def post_download_xls(request: Request, invoice_id: str) -> Response:
     """Generate and download invoice as XLSX."""
     return await _download_xls(request, invoice_id)
+
+
+@router.post("/{invoice_id}/import-xls")
+async def post_import_xls(request: Request, invoice_id: str) -> JSONResponse:
+    """Bulk-update КПП positions from an uploaded XLS (Testing 2 row 70)."""
+    return await _import_xls(request, invoice_id)
 
 
 @router.get("/{invoice_id}/letter-draft")
