@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { INCOTERMS_2020 } from "@/shared/lib/incoterms";
 import type { QuoteDetailRow } from "@/entities/quote/queries";
+import { isMarkupBelowMinimum, MARKUP_BELOW_MIN_ERROR } from "../../lib/markup";
 import { PaymentSegmentsBlock } from "./payment-segments-block";
 
 const SALE_TYPES = [
@@ -122,9 +123,15 @@ export function CalculationForm({
                   value={formValues.markup}
                   onChange={(e) => onFieldChange("markup", e.target.value)}
                   className="w-20 text-right"
+                  aria-invalid={isMarkupBelowMinimum(formValues.markup)}
                 />
                 <span className="text-xs text-muted-foreground">%</span>
               </div>
+              {isMarkupBelowMinimum(formValues.markup) && (
+                <span className="text-[10px] text-destructive">
+                  {MARKUP_BELOW_MIN_ERROR}
+                </span>
+              )}
               <span className="text-[10px] text-muted-foreground">
                 Минимальная наценка — 5%
               </span>
