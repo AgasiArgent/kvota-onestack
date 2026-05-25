@@ -21,6 +21,12 @@ export interface WorkspaceFilterState {
   stageTo: string | null;
   /** Срочность bucket against `deadlineAt`. */
   urgency: UrgencyBucket | null;
+  /**
+   * «Поиск по IDN КП» — case-insensitive substring match against the card's
+   * `idn` (display form, e.g. "Q-202604-0018 / inv-1") AND `quoteIdn`
+   * ("Q-202604-0018"). Null when unset. (Testing 2 row 66.)
+   */
+  idnSearch: string | null;
 }
 
 export function emptyWorkspaceFilters(): WorkspaceFilterState {
@@ -30,6 +36,7 @@ export function emptyWorkspaceFilters(): WorkspaceFilterState {
     stageFrom: null,
     stageTo: null,
     urgency: null,
+    idnSearch: null,
   };
 }
 
@@ -41,7 +48,8 @@ export function hasActiveWorkspaceFilters(
     filters.assigneeIds.length > 0 ||
     filters.stageFrom !== null ||
     filters.stageTo !== null ||
-    filters.urgency !== null
+    filters.urgency !== null ||
+    (filters.idnSearch !== null && filters.idnSearch.trim().length > 0)
   );
 }
 
@@ -96,6 +104,16 @@ export function cardPassesFilters(
   // Urgency (deadline-based)
   if (filters.urgency) {
     if (!isInUrgencyBucket(card.deadlineAt, filters.urgency, now)) return false;
+  }
+
+  // IDN substring search (Testing 2 row 66). Case-insensitive against both
+  // the composite display IDN ("Q-… / inv-…") and the bare `quoteIdn` so
+  // testers can paste either form. Whitespace-only is a no-op.
+  if (filters.idnSearch && filters.idnSearch.trim().length > 0) {
+    const needle = filters.idnSearch.trim().toLowerCase();
+    const hayIdn = (card.idn ?? "").toLowerCase();
+    const hayQuote = (card.quoteIdn ?? "").toLowerCase();
+    if (!hayIdn.includes(needle) && !hayQuote.includes(needle)) return false;
   }
 
   return true;

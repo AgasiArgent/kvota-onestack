@@ -24,6 +24,8 @@ export interface ProcurementFilterState {
   procurementUserIds: readonly string[];
   /** «На этапе > N дней» bucket. */
   stageAge: StageAgeBucket | null;
+  /** «Поиск по IDN КП» — substring match against `idn_quote`. Null when unset. */
+  idnSearch: string | null;
 }
 
 export function emptyProcurementFilters(): ProcurementFilterState {
@@ -33,6 +35,7 @@ export function emptyProcurementFilters(): ProcurementFilterState {
     managerIds: [],
     procurementUserIds: [],
     stageAge: null,
+    idnSearch: null,
   };
 }
 
@@ -44,7 +47,8 @@ export function hasActiveProcurementFilters(
     filters.brands.length > 0 ||
     filters.managerIds.length > 0 ||
     filters.procurementUserIds.length > 0 ||
-    filters.stageAge !== null
+    filters.stageAge !== null ||
+    (filters.idnSearch !== null && filters.idnSearch.trim().length > 0)
   );
 }
 
@@ -81,6 +85,16 @@ export function cardPassesProcurementFilters(
   // Stage age (days_in_state)
   if (filters.stageAge) {
     if (!isInStageAgeBucket(card.days_in_state, filters.stageAge)) return false;
+  }
+
+  // IDN substring search (Testing 2 row 66). Case-insensitive against
+  // `idn_quote` ("Q-202604-0001"). Whitespace-only filters are no-ops; the
+  // caller is expected to send `null` for empty queries but we defend in
+  // depth.
+  if (filters.idnSearch && filters.idnSearch.trim().length > 0) {
+    const needle = filters.idnSearch.trim().toLowerCase();
+    const haystack = (card.idn_quote ?? "").toLowerCase();
+    if (!haystack.includes(needle)) return false;
   }
 
   return true;

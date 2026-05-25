@@ -6,6 +6,7 @@ import {
   DateRangeFilter,
   FilterBar,
   MultiSelectFilter,
+  SearchInputFilter,
   SingleSelectFilter,
   URGENCY_OPTIONS,
   useFilterState,
@@ -28,6 +29,7 @@ const FILTER_KEYS = {
   stageFrom: "stage_from",
   stageTo: "stage_to",
   urgency: "urgency",
+  idnSearch: "q",
 } as const;
 
 /** Keys this filter bar manages — used by the «Сбросить все» wipe. */
@@ -77,6 +79,7 @@ export function readFiltersFromParams(
     stageFrom: readScalar(FILTER_KEYS.stageFrom),
     stageTo: readScalar(FILTER_KEYS.stageTo),
     urgency: urgencyValid,
+    idnSearch: readScalar(FILTER_KEYS.idnSearch),
   };
 }
 
@@ -175,6 +178,12 @@ export function KanbanFilterBar({
 
   return (
     <FilterBar hasActiveFilters={isActive} onClearAll={clearAll}>
+      <SearchInputFilter
+        value={current.idnSearch}
+        onChange={(next) => filters.setSingle(FILTER_KEYS.idnSearch, next)}
+        placeholder="Поиск по IDN КП…"
+        ariaLabel="Поиск по IDN КП"
+      />
       <MultiSelectFilter
         label="Клиент"
         options={customerOptions}
