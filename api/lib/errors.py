@@ -14,10 +14,19 @@ def error_response(
     code: str,
     message: str,
     status_code: int = 400,
+    detail: dict[str, Any] | None = None,
 ) -> JSONResponse:
-    """Canonical structured error envelope per .kiro/steering/api-first.md."""
+    """Canonical structured error envelope per .kiro/steering/api-first.md.
+
+    The optional ``detail`` dict carries safe debugging context (e.g.,
+    ``{"exception_class": "ValueError"}``). Never put raw exception messages
+    or sensitive data here — server-side ``logger.exception`` captures those.
+    """
+    error: dict[str, Any] = {"code": code, "message": message}
+    if detail is not None:
+        error["detail"] = detail
     return JSONResponse(
-        {"success": False, "error": {"code": code, "message": message}},
+        {"success": False, "error": error},
         status_code=status_code,
     )
 
