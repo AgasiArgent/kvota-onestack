@@ -171,6 +171,13 @@ export function LogisticsStep({
   const [templates, setTemplates] = useState<LogisticsTemplate[]>([]);
   // FX rates: foreign-currency → RUB, used by RouteTotalsCard (3.7).
   const [ratesToRub, setRatesToRub] = useState<FxRateMap>({});
+  // Testing 2 row 80 — count of invoice_items on this quote whose
+  // purchase_price_original is NULL or <= 0. While > 0 the
+  // «Завершить логистику» button is disabled, matching the backend gate
+  // in api/logistics.complete. We hold this client-side instead of
+  // re-deriving from `items` because the truth lives on invoice_items
+  // (per-supplier line), not quote_items (per-cart line).
+  const [unpricedInvoiceItemsCount, setUnpricedInvoiceItemsCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [completing, startCompleting] = useTransition();
   const router = useRouter();
@@ -260,6 +267,7 @@ export function LogisticsStep({
         segmentsRes,
         expensesRes,
         ratesRes,
+        invoiceItemsPricingRes,
       ] = await Promise.all([
         // Locations — all types, org-scoped
         supabase
@@ -312,6 +320,19 @@ export function LogisticsStep({
           )
           .order("fetched_at", { ascending: false })
           .limit(20),
+        // Testing 2 row 80 — pricing gate. Pull the minimum columns
+        // needed to count invoice_items whose purchase_price_original is
+        // still NULL or <= 0 across ALL of this quote's invoices. The
+        // server enforces the same rule (api/logistics.complete returns
+        // 409 UNPRICED_INVOICE_ITEMS) — this client-side count exists so
+        // we can disable the button + show "Осталось проценить N КПП"
+        // without first making the user click and parse a toast.
+        invoiceIds.length > 0
+          ? supabase
+              .from("invoice_items")
+              .select("id, purchase_price_original")
+              .in("invoice_id", invoiceIds)
+          : { data: [], error: null },
       ]);
 
       if (cancelled) return;
@@ -440,10 +461,26 @@ export function LogisticsStep({
         if (numeric > 0) rates[code] = numeric;
       }
 
+      // Pricing gate count (Testing 2 row 80). Treat NULL, 0, and any
+      // non-numeric junk as "unpriced" — mirrors the server-side
+      // ``_is_priced`` helper in api/logistics.py.
+      const pricingRows =
+        (invoiceItemsPricingRes.data ?? []) as Array<{
+          id: string;
+          purchase_price_original: number | string | null;
+        }>;
+      const unpricedCount = pricingRows.reduce((acc, row) => {
+        const raw = row.purchase_price_original;
+        if (raw == null) return acc + 1;
+        const numeric = typeof raw === "number" ? raw : Number(raw);
+        return Number.isFinite(numeric) && numeric > 0 ? acc : acc + 1;
+      }, 0);
+
       setLocations(locs);
       setTemplates(tmpls);
       setSegmentsByInvoice(byInvoice);
       setRatesToRub(rates);
+      setUnpricedInvoiceItemsCount(unpricedCount);
       setLoading(false);
     }
 
@@ -533,6 +570,7 @@ export function LogisticsStep({
             onComplete={handleCompleteLogistics}
             displayCurrency={quote.currency ?? "RUB"}
             fxRates={ratesToRub}
+            unpricedInvoiceItemsCount={unpricedInvoiceItemsCount}
           />
           {/* Cargo digest from procurement — РОЛ Тест 07 #3.3 + МОЛ Тест row 14. */}
           <InvoiceCargoSummary

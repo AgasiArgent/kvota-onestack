@@ -37,6 +37,23 @@ _LOCATION_TYPES = {"supplier", "hub", "customs", "own_warehouse", "client"}
 _SEGMENT_CURRENCIES = {"RUB", "USD", "EUR", "CNY"}
 
 
+def _is_priced(value: object) -> bool:
+    """Return True iff ``value`` is a positive numeric price.
+
+    Used by the logistics-complete pricing gate (Testing 2 row 80) to
+    detect ``invoice_items`` rows whose ``purchase_price_original`` is
+    NULL, zero, or any non-numeric junk. The "unit_price > 0" check is
+    intentionally strict — a row with price = 0 is "not yet priced" in
+    procurement's vocabulary, not "free".
+    """
+    if value is None:
+        return False
+    try:
+        return float(value) > 0
+    except (TypeError, ValueError):
+        return False
+
+
 def _validate_currency(value: object) -> str | None:
     """Return value if it's an allowed currency code, else None.
 
@@ -1099,8 +1116,45 @@ async def complete(request: Request) -> JSONResponse:
             409,
         )
 
-    now_iso = datetime.now(timezone.utc).isoformat()
     sb = get_supabase()
+
+    # Testing 2 row 80 pricing gate. Logistics may not be completed while
+    # any invoice_item on the quote still lacks a positive
+    # ``purchase_price_original`` (МОП still has КПП to price). We check
+    # ALL invoices on the quote, not just the one being completed: the
+    # quote-level rollup below only fires when every invoice is done, so a
+    # half-priced sibling invoice would otherwise let the user complete
+    # this one and then get stuck waiting for the rollup.
+    quote_id = invoice.get("quote_id")
+    if quote_id:
+        sibling_ids_res = (
+            sb.table("invoices")
+            .select("id")
+            .eq("quote_id", quote_id)
+            .execute()
+        )
+        sibling_ids = [str(row["id"]) for row in (sibling_ids_res.data or [])]
+        if sibling_ids:
+            items_res = (
+                sb.table("invoice_items")
+                .select("id, purchase_price_original")
+                .in_("invoice_id", sibling_ids)
+                .execute()
+            )
+            unpriced = [
+                row
+                for row in (items_res.data or [])
+                if not _is_priced(row.get("purchase_price_original"))
+            ]
+            if unpriced:
+                return error_response(
+                    "UNPRICED_INVOICE_ITEMS",
+                    f"Осталось проценить {len(unpriced)} КПП.",
+                    409,
+                    detail={"unpriced_count": len(unpriced)},
+                )
+
+    now_iso = datetime.now(timezone.utc).isoformat()
     res = (
         sb.table("invoices")
         .update(
@@ -1124,8 +1178,8 @@ async def complete(request: Request) -> JSONResponse:
     # the workflow_transitions audit row, and triggers the parallel-merge
     # auto-advance to ``pending_sales_review`` when customs is also done.
     # Failures here MUST NOT roll back the per-invoice write the user just
-    # confirmed — the rollup is best-effort.
-    quote_id = invoice.get("quote_id")
+    # confirmed — the rollup is best-effort. ``quote_id`` was resolved
+    # above for the pricing gate; reuse it here.
     if quote_id:
         sibling_res = (
             sb.table("invoices")
