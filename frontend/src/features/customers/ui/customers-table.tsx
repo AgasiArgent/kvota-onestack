@@ -63,6 +63,15 @@ interface Props {
    * customs roles do not see them. See `shouldShowFinancials`.
    */
   userRoles: string[];
+  /**
+   * Whether the current user is authorized to open the «Новый клиент»
+   * dialog (Testing 2 row 82). Computed server-side via
+   * `canCreateCustomer(user.roles)` — the button is hidden for roles that
+   * only consume customer data (logistics / customs / finance / newbie).
+   * Defaults to `false` for safety; callers that omit the prop see no
+   * create surface.
+   */
+  canCreate?: boolean;
 }
 
 const PAGE_SIZE = 50;
@@ -87,6 +96,7 @@ export function CustomersTable({
   orgId,
   financials,
   userRoles,
+  canCreate = false,
 }: Props) {
   const showFinancials = shouldShowFinancials(userRoles);
   const router = useRouter();
@@ -196,14 +206,16 @@ export function CustomersTable({
           </button>
         </div>
 
-        <Button
-          size="sm"
-          className="ml-auto bg-accent text-white hover:bg-accent-hover"
-          onClick={() => setCreateDialogOpen(true)}
-        >
-          <Plus size={16} />
-          Новый клиент
-        </Button>
+        {canCreate && (
+          <Button
+            size="sm"
+            className="ml-auto bg-accent text-white hover:bg-accent-hover"
+            onClick={() => setCreateDialogOpen(true)}
+          >
+            <Plus size={16} />
+            Новый клиент
+          </Button>
+        )}
       </div>
 
       {/* Stats row */}
@@ -315,11 +327,13 @@ export function CustomersTable({
           return `/customers?${params.toString()}`;
         }}
       />
-      <CreateCustomerDialog
-        orgId={orgId}
-        open={createDialogOpen}
-        onOpenChange={setCreateDialogOpen}
-      />
+      {canCreate && (
+        <CreateCustomerDialog
+          orgId={orgId}
+          open={createDialogOpen}
+          onOpenChange={setCreateDialogOpen}
+        />
+      )}
     </div>
   );
 }
