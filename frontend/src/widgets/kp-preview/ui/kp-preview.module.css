@@ -60,30 +60,19 @@
 }
 
 /* ============================================================
-   Logo (MASTER BEARING wordmark)
+   Logo (full Master Bearing wordmark PNG, recolored white via filter
+   so the blue brand asset reads on the blue header bar — mirrors
+   `.kp-logo__img` in `services/kp_export.py` so the on-screen preview
+   matches the downloaded PDF)
    ============================================================ */
 .kpLogo {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  color: #ffffff;
-  font-weight: 700;
-  letter-spacing: 0.02em;
 }
-.kpLogo svg {
-  width: 38px;
-  height: 38px;
-  flex-shrink: 0;
-}
-.kpLogoText {
-  display: flex;
-  flex-direction: column;
-  line-height: 0.95;
-  font-size: 17px;
-  letter-spacing: 0.04em;
-}
-.kpLogoText span {
-  font-weight: 700;
+.kpLogoImg {
+  width: 150px;
+  height: auto;
+  filter: brightness(0) invert(1);
 }
 
 /* ============================================================
