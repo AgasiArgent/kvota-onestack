@@ -244,23 +244,17 @@ describe("procurement-handsontable — autosave preserves scroll (Testing 2 row 
   });
 
   /**
-   * PR #190 reviewer F3-2 — the in-place imperative sync `useEffect`'s
-   * dependency array is `[items, salesByItemId, quoteItemMetadataByItemId]`.
-   * Adding/changing `quoteItemMetadataByItemId` between renders DOES fire
-   * the effect (which patches cells via `setDataAtRowProp("external")`),
-   * but it MUST NOT change the `data` reference handed to `<HotTable />`.
-   *
-   * `initialData` is memoized on `rowIdSignature` only (the row-id join key),
-   * with the metadata read through a ref. If the wrong dep is ever added to
-   * the `initialData` memo, the `data` reference would churn on every
-   * metadata fetch from the parent — that's the exact scroll-reset symptom
-   * the rowIdSignature fix was designed to prevent.
+   * m328 (Testing 2 row 69) retired the `quoteItemMetadataByItemId` prop —
+   * payment terms now live on `kvota.invoices`, rendered in the invoice-card
+   * header. The two tests that exercised the (former) `quoteItemMetadataByItemId`
+   * stability contract have been removed; the structural-stability contract
+   * for `data` (covered by the two tests above) is unchanged and still
+   * load-bearing for the cell-autosave scroll-preservation behavior.
    */
-  it("keeps the same `data` reference when `quoteItemMetadataByItemId` is added between renders (PR #190 F3-2)", () => {
+  it("keeps the same `data` reference across cosmetic re-renders that don't change row IDs (m328 follow-up)", () => {
     hotTableCalls.length = 0;
 
-    // First render — no metadata yet (parent is still fetching the coverage
-    // join that produces the metadata map).
+    // First render.
     const { rerender } = render(
       createElement(ProcurementHandsontable, {
         items: [sampleItem],
@@ -272,85 +266,19 @@ describe("procurement-handsontable — autosave preserves scroll (Testing 2 row 
     expect(hotTableCalls.length).toBeGreaterThan(0);
     const firstData = hotTableCalls[0].data;
 
-    // Second render — metadata map arrives from the parent's async fetch.
-    // Same row IDs, same order; only the metadata prop went from undefined
-    // to a populated map. The data reference MUST stay stable.
-    const metadataMap = {
-      "ii-1": {
-        quoteItemIds: ["qi-1"],
-        supplier_payment_terms: "30% advance, 70% before shipment",
-        advance_to_supplier_percent: 30,
-      },
-    };
+    // Second render — same row IDs, a value-only change to one field. The
+    // imperative sync effect should patch via setDataAtRowProp; the `data`
+    // reference must stay stable.
     rerender(
       createElement(ProcurementHandsontable, {
-        items: [sampleItem],
+        items: [{ ...sampleItem, brand: "NewBrand" }],
         invoiceId: "inv-1",
         procurementCompleted: false,
-        quoteItemMetadataByItemId: metadataMap,
       })
     );
 
     expect(hotTableCalls.length).toBeGreaterThan(1);
     const lastData = hotTableCalls[hotTableCalls.length - 1].data;
-
-    // Load-bearing: if `quoteItemMetadataByItemId` ever leaks into the
-    // `initialData` memo's dep array, this assertion fails and the table
-    // jumps on every metadata fetch.
-    expect(lastData).toBe(firstData);
-  });
-
-  it("keeps the same `data` reference when `quoteItemMetadataByItemId` values change (autosave of % аванса / условия оплаты)", () => {
-    hotTableCalls.length = 0;
-
-    const initialMetadata = {
-      "ii-1": {
-        quoteItemIds: ["qi-1"],
-        supplier_payment_terms: "30% advance, 70% before shipment",
-        advance_to_supplier_percent: 30,
-      },
-    };
-
-    // First render — table mounts with a populated metadata map.
-    const { rerender } = render(
-      createElement(ProcurementHandsontable, {
-        items: [sampleItem],
-        invoiceId: "inv-1",
-        procurementCompleted: false,
-        quoteItemMetadataByItemId: initialMetadata,
-      })
-    );
-
-    expect(hotTableCalls.length).toBeGreaterThan(0);
-    const firstData = hotTableCalls[0].data;
-
-    // Second render — user just edited the % аванса cell. The parent
-    // re-fetched and produced a new metadata map (different reference,
-    // updated values) for the same row IDs in the same order. The data
-    // reference handed to `<HotTable />` MUST stay stable; value updates
-    // flow into HoT through the imperative `setDataAtRowProp` effect, not
-    // by re-handing `data`.
-    const updatedMetadata = {
-      "ii-1": {
-        quoteItemIds: ["qi-1"],
-        supplier_payment_terms: "50% advance, 50% on delivery",
-        advance_to_supplier_percent: 50,
-      },
-    };
-    rerender(
-      createElement(ProcurementHandsontable, {
-        items: [sampleItem],
-        invoiceId: "inv-1",
-        procurementCompleted: false,
-        quoteItemMetadataByItemId: updatedMetadata,
-      })
-    );
-
-    expect(hotTableCalls.length).toBeGreaterThan(1);
-    const lastData = hotTableCalls[hotTableCalls.length - 1].data;
-
-    // Same guarantee as the row-20 autosave path — different prop reference,
-    // same data array reference, no scroll reset.
     expect(lastData).toBe(firstData);
   });
 });

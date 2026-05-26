@@ -23,10 +23,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ProcurementItemsEditor } from "./procurement-items-editor";
-import type {
-  ProcurementEditorItem,
-  QuoteItemPaymentMetadata,
-} from "./procurement-handsontable";
+import type { ProcurementEditorItem } from "./procurement-handsontable";
 import { SendHistoryPanel } from "./send-history-panel";
 import { ProcurementUnlockButton } from "./procurement-unlock-button";
 import { LetterDraftComposer } from "./letter-draft-composer";
@@ -209,6 +206,17 @@ export function InvoiceCard({
   const [vatRateLocal, setVatRateLocal] = useState(
     invoice.vat_rate != null ? String(invoice.vat_rate) : ""
   );
+  // Testing 2 row 69 (m328) — supplier payment fields moved from positions to
+  // the invoice level. Per-supplier AND per-invoice: two invoices from the
+  // same supplier may carry different payment terms (e.g., one prepaid lot
+  // + one stocking lot under FCA). Saves go through handleSaveInvoiceField
+  // on blur, mirroring vat_rate / pickup_address.
+  const [advancePctLocal, setAdvancePctLocal] = useState(
+    invoice.advance_pct != null ? String(invoice.advance_pct) : ""
+  );
+  const [paymentTermsLocal, setPaymentTermsLocal] = useState(
+    invoice.payment_terms ?? ""
+  );
   // VAT autofill from kvota.vat_rates_by_country (РОЗ-95, МОЗ-82). Fires on
   // pickup-country change. Conservative: never overwrites a manually-entered
   // or saved value — autofill only when the local vat_rate is empty.
@@ -313,17 +321,6 @@ export function InvoiceCard({
         name_en: string | null;
       }
     >
-  >({});
-  // feat/kpp-supplier-fields — per-row supplier-payment metadata joined from
-  // quote_items via invoice_item_coverage. Each entry carries the underlying
-  // quote_item_id(s) needed to persist edits + the current values for the
-  // two editable cells (% аванса and Условия оплаты). For 1:1 covered rows
-  // the list has one element; for merge rows it has multiple, and edits
-  // propagate to all of them. The «Завершить закупку» gate (cannotComplete
-  // below) reads `advance_to_supplier_percent` from this map to enforce the
-  // P1 rule that advance % is required before finalising the КП.
-  const [paymentMetaByItemId, setPaymentMetaByItemId] = useState<
-    Record<string, QuoteItemPaymentMetadata>
   >({});
   // Testing 2 row 20 (v3) — distinguish initial load from autosave refetch.
   //
@@ -479,7 +476,6 @@ export function InvoiceCard({
         if (rows.length === 0) {
           setFetchedCoverage({});
           setSalesByItemId({});
-          setPaymentMetaByItemId({});
           setSplitableByItemId({});
           setSplitChildByItemId({});
           setMergeableByItemId({});
@@ -524,16 +520,12 @@ export function InvoiceCard({
             quantity: number;
             unit: string | null;
             name_en: string | null;
-            supplier_payment_terms: string | null;
-            advance_to_supplier_percent: number | null;
           }
         >();
         if (referencedQiIds.length > 0) {
           const { data: qis } = await supabase
             .from("quote_items")
-            .select(
-              "id, product_code, product_name, quantity, unit, name_en, supplier_payment_terms, advance_to_supplier_percent"
-            )
+            .select("id, product_code, product_name, quantity, unit, name_en")
             .in("id", referencedQiIds);
           for (const qi of (qis ?? []) as Array<{
             id: string;
@@ -542,8 +534,6 @@ export function InvoiceCard({
             quantity: number;
             unit: string | null;
             name_en: string | null;
-            supplier_payment_terms: string | null;
-            advance_to_supplier_percent: number | null;
           }>) {
             qiById.set(qi.id, {
               product_code: qi.product_code,
@@ -551,8 +541,6 @@ export function InvoiceCard({
               quantity: qi.quantity,
               unit: qi.unit,
               name_en: qi.name_en,
-              supplier_payment_terms: qi.supplier_payment_terms,
-              advance_to_supplier_percent: qi.advance_to_supplier_percent,
             });
           }
         }
@@ -723,29 +711,9 @@ export function InvoiceCard({
           }
         }
 
-        // feat/kpp-supplier-fields — payment metadata: per invoice_item, list
-        // all covered quote_item_ids + read-back values (% аванса and Условия
-        // оплаты). The first covering quote_item supplies the displayed
-        // values. For merged rows (N qi → 1 ii) the displayed value matches
-        // the first qi; edits propagate to all qi in `quoteItemIds`.
-        const paymentMap: Record<string, QuoteItemPaymentMetadata> = {};
-        for (const ii of rows) {
-          const covers = coverageByIi.get(ii.id) ?? [];
-          if (covers.length === 0) continue;
-          const ids = covers.map((c) => c.quote_item_id);
-          const firstQi = qiById.get(ids[0]);
-          paymentMap[ii.id] = {
-            quoteItemIds: ids,
-            supplier_payment_terms: firstQi?.supplier_payment_terms ?? null,
-            advance_to_supplier_percent:
-              firstQi?.advance_to_supplier_percent ?? null,
-          };
-        }
-
         if (!cancelled) {
           setFetchedCoverage(summary);
           setSalesByItemId(salesMap);
-          setPaymentMetaByItemId(paymentMap);
           setOneToOneCandidates(candidates);
           setSplitableByItemId(splitable);
           setSplitChildByItemId(splitChild);
@@ -970,25 +938,13 @@ export function InvoiceCard({
   );
   const hasNoPositions = invoiceItems.length === 0;
   const hasNoPricedPositions = positionsWithPriceCount === 0;
-  // feat/kpp-supplier-fields P1 — «обязательно должен быть % аванса»: every
-  // *covered* invoice_item must have a non-null advance_to_supplier_percent
-  // on its covering quote_item before procurement can be completed.
-  //
-  // Skip rows whose meta is missing — that means either (a) the load() effect
-  // for `invoice_item_coverage` is still in flight (don't block the button
-  // during the initial fetch race) or (b) the row has zero covers and was
-  // omitted from the paymentMap at construction time (uncovered rows aren't
-  // in the КПП yet, so they shouldn't gate completion). Only flag rows where
-  // we know the linked quote_item exists AND its advance % is unset.
-  const positionsMissingAdvance = invoiceItems.filter((item) => {
-    const meta = paymentMetaByItemId[item.id];
-    if (!meta) return false;
-    return (
-      meta.advance_to_supplier_percent == null ||
-      Number.isNaN(meta.advance_to_supplier_percent)
-    );
-  });
-  const hasMissingAdvance = positionsMissingAdvance.length > 0;
+  // P1 «обязательно должен быть % аванса» — now an invoice-level field
+  // after the m328 move. The header input (rendered below) feeds invoice
+  // .advance_pct via Supabase update; we read it back through the prop on
+  // each render so the «Завершить закупку» gate flips automatically once
+  // the user fills the field.
+  const hasMissingAdvance =
+    invoice.advance_pct == null || Number.isNaN(Number(invoice.advance_pct));
   const cannotComplete =
     hasNoPositions || hasNoPricedPositions || hasMissingAdvance;
 
@@ -1384,7 +1340,7 @@ export function InvoiceCard({
                 )}
               </div>
 
-              {/* Row: Currency + VAT */}
+              {/* Row: Currency + VAT + payment fields (m328, Testing 2 row 69) */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <div className="space-y-1">
                   <span className="text-xs text-muted-foreground">Валюта</span>
@@ -1424,6 +1380,59 @@ export function InvoiceCard({
                       void handleSaveInvoiceField({ vat_rate: parsed });
                     }}
                     className="h-7 text-xs tabular-nums"
+                  />
+                </div>
+                {/* m328: % аванса — invoice-level (was per-position before). */}
+                <div className="space-y-1" data-testid="invoice-card-advance-pct">
+                  <span className="text-xs text-muted-foreground">% аванса</span>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    placeholder="0–100"
+                    value={advancePctLocal}
+                    onChange={(e) => setAdvancePctLocal(e.target.value)}
+                    onBlur={() => {
+                      const trimmed = advancePctLocal.trim();
+                      if (trimmed === "") {
+                        if (invoice.advance_pct == null) return;
+                        void handleSaveInvoiceField({ advance_pct: null });
+                        return;
+                      }
+                      const parsed = parseFloat(trimmed);
+                      if (
+                        Number.isNaN(parsed) ||
+                        parsed < 0 ||
+                        parsed > 100
+                      ) {
+                        return;
+                      }
+                      if (parsed === (invoice.advance_pct ?? null)) return;
+                      void handleSaveInvoiceField({ advance_pct: parsed });
+                    }}
+                    className="h-7 text-xs tabular-nums"
+                    aria-label="% аванса"
+                  />
+                </div>
+                {/* m328: Условия оплаты — invoice-level free text. */}
+                <div className="space-y-1" data-testid="invoice-card-payment-terms">
+                  <span className="text-xs text-muted-foreground">
+                    Условия оплаты
+                  </span>
+                  <Input
+                    type="text"
+                    placeholder="напр. 30% аванс, 70% по отгрузке"
+                    value={paymentTermsLocal}
+                    onChange={(e) => setPaymentTermsLocal(e.target.value)}
+                    onBlur={() => {
+                      const next = paymentTermsLocal.trim();
+                      const value = next === "" ? null : next;
+                      if (value === (invoice.payment_terms ?? null)) return;
+                      void handleSaveInvoiceField({ payment_terms: value });
+                    }}
+                    className="h-7 text-xs"
+                    aria-label="Условия оплаты"
                   />
                 </div>
               </div>
@@ -1781,7 +1790,6 @@ export function InvoiceCard({
               invoiceId={invoice.id}
               procurementCompleted={procurementCompleted}
               salesByItemId={salesByItemId}
-              quoteItemMetadataByItemId={paymentMetaByItemId}
               splitableByItemId={splitableByItemId}
               splitChildByItemId={splitChildByItemId}
               mergeableByItemId={mergeableByItemId}
@@ -2032,7 +2040,7 @@ export function InvoiceCard({
                   ? `КПП ${invoice.invoice_number} не содержит позиций. Добавьте позиции, прежде чем завершать закупку.`
                   : hasNoPricedPositions
                     ? `В КПП ${invoice.invoice_number} ни у одной позиции не указана цена закупки. Заполните цены, прежде чем завершать закупку.`
-                    : `В КПП ${invoice.invoice_number} у ${positionsMissingAdvance.length} поз. не указан % аванса поставщику. Заполните «% аванса» для всех позиций, прежде чем завершать закупку.`
+                    : `Для КПП ${invoice.invoice_number} не указан % аванса поставщику. Заполните «% аванса» в шапке инвойса, прежде чем завершать закупку.`
                 : `Закупка по КПП ${invoice.invoice_number} будет завершена. КП перейдёт на этап логистики. Изменения после этого требуют отдельного одобрения. Продолжить?`}
             </DialogDescription>
           </DialogHeader>

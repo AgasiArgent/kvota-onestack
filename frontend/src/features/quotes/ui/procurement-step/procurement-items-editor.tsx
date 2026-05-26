@@ -1,15 +1,9 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import type {
-  ProcurementEditorItem,
-  QuoteItemPaymentMetadata,
-} from "./procurement-handsontable";
+import type { ProcurementEditorItem } from "./procurement-handsontable";
 
-export type {
-  ProcurementEditorItem,
-  QuoteItemPaymentMetadata,
-} from "./procurement-handsontable";
+export type { ProcurementEditorItem } from "./procurement-handsontable";
 
 const ProcurementHandsontable = dynamic(
   () =>
@@ -39,12 +33,6 @@ interface ProcurementItemsEditorProps {
     string,
     { product_code: string; product_name: string; unit: string }
   >;
-  /**
-   * feat/kpp-supplier-fields — per-row payment metadata, indexed by
-   * invoice_item.id. Read-through to ProcurementHandsontable; see
-   * QuoteItemPaymentMetadata for shape.
-   */
-  quoteItemMetadataByItemId?: Record<string, QuoteItemPaymentMetadata>;
   /**
    * Per-row eligibility for the inline split action. Map key is the
    * invoice_item.id; value carries the source quote_item info needed to
@@ -104,7 +92,6 @@ export function ProcurementItemsEditor({
   invoiceId,
   procurementCompleted,
   salesByItemId,
-  quoteItemMetadataByItemId,
   splitableByItemId,
   splitChildByItemId,
   mergeableByItemId,
@@ -121,7 +108,6 @@ export function ProcurementItemsEditor({
       invoiceId={invoiceId}
       procurementCompleted={procurementCompleted}
       salesByItemId={salesByItemId}
-      quoteItemMetadataByItemId={quoteItemMetadataByItemId}
       splitableByItemId={splitableByItemId}
       splitChildByItemId={splitChildByItemId}
       mergeableByItemId={mergeableByItemId}

@@ -1,22 +1,14 @@
 /**
- * КПП Handsontable — column wiring tests for supplier-side payment fields and
- * editable brand (feat/kpp-supplier-fields).
+ * КПП Handsontable — column wiring tests.
  *
- * Verifies the rendered <HotTable> column props for three КПП fields:
+ * Verifies the rendered <HotTable> column props:
  *
- *   - `brand`            — was `readOnly: true` before this change; МОЗ must
- *                          be able to change brand when supplier replies with
- *                          a substitute.
- *   - `supplier_payment_terms`        — new editable text column.
- *   - `advance_to_supplier_percent`   — new editable numeric column with 0-100
- *                                       validator. Required by «Завершить
- *                                       закупку» gate (P1 rule).
- *
- * The underlying schema is on `kvota.quote_items` (migration 016) but the
- * handsontable rows are bound to `invoice_items.id`. Per-row metadata
- * (quote_item_ids, supplier_payment_terms, advance_to_supplier_percent) flows
- * in via the new `quoteItemMetadataByItemId` prop — the invoice-card derives
- * it from the existing coverage join.
+ *   - `brand` — was `readOnly: true` before; МОЗ must be able to change
+ *     brand when the supplier replies with a substitute. Locked again only
+ *     when the КПП itself is completed (procurementCompleted=true).
+ *   - Negative assertions on `% аванса` / `Условия оплаты` — those moved to
+ *     the invoice-level header block in m328 (Testing 2 row 69). The
+ *     handsontable must NOT carry per-position columns for them anymore.
  *
  * Test pattern mirrors `procurement-handsontable-jump.dom.test.tsx`: capture
  * <HotTable> props at render time, assert on the columns/colHeaders arrays.
@@ -77,7 +69,6 @@ vi.mock("@/shared/lib/supabase/client", () => ({
 
 vi.mock("@/entities/quote/mutations", () => ({
   updateInvoiceItem: async () => ({}),
-  updateQuoteItem: async () => ({}),
   unassignInvoiceItem: async () => ({}),
 }));
 
@@ -174,13 +165,15 @@ describe("procurement-handsontable — brand editable (P2)", () => {
   });
 });
 
-describe("procurement-handsontable — payment-terms columns (P1)", () => {
-  it("exports the new column keys", () => {
-    expect(PROCUREMENT_COLUMN_KEYS).toContain("supplier_payment_terms");
-    expect(PROCUREMENT_COLUMN_KEYS).toContain("advance_to_supplier_percent");
+describe("procurement-handsontable — payment-terms moved to invoice level (m328, Testing 2 row 69)", () => {
+  it("does NOT expose `% аванса` / `Условия оплаты` as per-position column keys", () => {
+    expect(PROCUREMENT_COLUMN_KEYS).not.toContain("supplier_payment_terms");
+    expect(PROCUREMENT_COLUMN_KEYS).not.toContain(
+      "advance_to_supplier_percent"
+    );
   });
 
-  it("renders a text column for supplier_payment_terms", () => {
+  it("does NOT render per-position columns for the moved fields", () => {
     hotTableCalls.length = 0;
 
     renderToString(
@@ -191,50 +184,11 @@ describe("procurement-handsontable — payment-terms columns (P1)", () => {
       })
     );
 
-    const col = findColumn("supplier_payment_terms");
-    expect(col).toBeDefined();
-    expect(col?.type).toBe("text");
+    expect(findColumn("supplier_payment_terms")).toBeUndefined();
+    expect(findColumn("advance_to_supplier_percent")).toBeUndefined();
   });
 
-  it("renders a numeric column with 0-100 validator for advance_to_supplier_percent", () => {
-    hotTableCalls.length = 0;
-
-    renderToString(
-      createElement(ProcurementHandsontable, {
-        items: [sampleItem],
-        invoiceId: "inv-1",
-        procurementCompleted: false,
-      })
-    );
-
-    const col = findColumn("advance_to_supplier_percent");
-    expect(col).toBeDefined();
-    expect(col?.type).toBe("numeric");
-    expect(typeof col?.validator).toBe("function");
-
-    // Exercise the validator over the range.
-    const calls: boolean[] = [];
-    const cb = (ok: boolean) => calls.push(ok);
-
-    // valid
-    col!.validator!(0, cb);
-    col!.validator!(50, cb);
-    col!.validator!(100, cb);
-    // empty / null are allowed (let the gate enforce required, not the cell)
-    col!.validator!("", cb);
-    col!.validator!(null, cb);
-    expect(calls.every((v) => v === true)).toBe(true);
-
-    // invalid
-    const bad: boolean[] = [];
-    const badCb = (ok: boolean) => bad.push(ok);
-    col!.validator!(-1, badCb);
-    col!.validator!(101, badCb);
-    col!.validator!(150, badCb);
-    expect(bad.every((v) => v === false)).toBe(true);
-  });
-
-  it("includes Cyrillic headers for the new columns", () => {
+  it("does NOT include per-position headers `% аванса` / `Условия оплаты`", () => {
     hotTableCalls.length = 0;
 
     renderToString(
@@ -247,7 +201,7 @@ describe("procurement-handsontable — payment-terms columns (P1)", () => {
 
     const props = hotTableCalls[hotTableCalls.length - 1];
     const headers = props.colHeaders as string[];
-    expect(headers).toContain("% аванса");
-    expect(headers).toContain("Условия оплаты");
+    expect(headers).not.toContain("% аванса");
+    expect(headers).not.toContain("Условия оплаты");
   });
 });
