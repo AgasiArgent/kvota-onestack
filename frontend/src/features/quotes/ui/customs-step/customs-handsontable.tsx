@@ -347,18 +347,96 @@ export interface DutyCompositeUpdates {
   customs_manual_rate_payload?: null;
 }
 
+/**
+ * Robust paste-aware numeric parser. Testing 2 row 72 — «Десятичные
+ * округляются при копировании % пошлины».
+ *
+ * Tester re-report: pasting `7.5` into the «% пошлины» cell silently
+ * truncated to `7` (or rounded to `8` on the calc preview) — full
+ * decimal precision was lost.
+ *
+ * Root cause: the previous fix replaced only the first comma with a dot
+ * (`String(val).replace(",", ".")`). That handled the ru-RU `12,5` case
+ * but missed:
+ *
+ *   - Thousands-grouped values pasted from Excel/Sheets:
+ *     `1 234,56` (ru-RU space grouping), `1.234,56` (de-DE), `1,234.56`
+ *     (en-US). The naïve first-comma replace produces `1.234.56` →
+ *     `parseFloat` stops at the second dot → 1.234.
+ *   - Trailing unit suffixes that the user copies along with the number
+ *     (`7.5%`, `7,5 ₽/кг`). `parseFloat` happens to tolerate these but
+ *     only when the decimal separator already matches the locale —
+ *     mixing them with comma decimals broke parsing.
+ *   - Non-breaking spaces (U+00A0) used by Excel as thousands separator
+ *     in ru-RU exports — `trim()` does not strip them.
+ *
+ * Strategy:
+ *
+ *   1. Strip everything except digits, `.`, `,`, `-`, `+`. This removes
+ *      currency suffixes, percent signs, regular and non-breaking
+ *      spaces, and locale-specific group separators that aren't `.` or
+ *      `,`.
+ *   2. If both `.` and `,` are present, the LAST one is the decimal
+ *      separator (Excel/Sheets always emit the decimal last). Drop all
+ *      occurrences of the other character (it's a thousands grouping),
+ *      then replace the decimal with `.`.
+ *   3. If only `,` is present, treat it as the decimal — unless there
+ *      are multiple commas, in which case the commas are en-US grouping
+ *      and the value has no fractional part (`1,234,567`).
+ *   4. Pass through `parseFloat`. Anything that's still ambiguous bails
+ *      out as `null` so we don't silently corrupt user input.
+ */
+export function parsePastedNumeric(rawValue: unknown): number | null {
+  if (rawValue == null) return null;
+  if (typeof rawValue === "number") {
+    return Number.isFinite(rawValue) ? rawValue : null;
+  }
+  const str = String(rawValue).trim();
+  if (str === "") return null;
+
+  // Strip suffixes/prefixes (currency, %, regular + non-breaking spaces).
+  // Keep only digits, separators, and sign characters.
+  const cleaned = str.replace(/[^\d.,+-]/g, "");
+  if (cleaned === "" || cleaned === "-" || cleaned === "+") return null;
+
+  const lastDot = cleaned.lastIndexOf(".");
+  const lastComma = cleaned.lastIndexOf(",");
+
+  let normalized: string;
+  if (lastDot >= 0 && lastComma >= 0) {
+    // Both separators present — the later one is the decimal, the other
+    // is the thousands grouping (Excel/Sheets convention).
+    if (lastComma > lastDot) {
+      // ru-RU/de-DE style: 1.234,56 → 1234.56
+      normalized = cleaned.replace(/\./g, "").replace(",", ".");
+    } else {
+      // en-US style: 1,234.56 → 1234.56
+      normalized = cleaned.replace(/,/g, "");
+    }
+  } else if (lastComma >= 0) {
+    // Only commas. A single comma is the decimal (12,5). Multiple commas
+    // are en-US grouping with no fractional part (1,234,567 → 1234567).
+    const commaCount = (cleaned.match(/,/g) ?? []).length;
+    normalized =
+      commaCount === 1 ? cleaned.replace(",", ".") : cleaned.replace(/,/g, "");
+  } else {
+    // Only dots (or none). A single dot is the decimal. Multiple dots
+    // are de-DE-style grouping (1.234.567 → 1234567).
+    const dotCount = (cleaned.match(/\./g) ?? []).length;
+    normalized = dotCount > 1 ? cleaned.replace(/\./g, "") : cleaned;
+  }
+
+  const parsed = parseFloat(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 export function buildDutyCompositeUpdates(
   rawValue: unknown,
   rowState: DutyCompositeRowState,
 ): DutyCompositeUpdates {
-  // Normalize comma → dot before parseFloat. Handsontable copies the
-  // displayed value in ru-RU locale (a 12.5 cell renders as "12,5"), and
-  // `parseFloat("12,5")` stops at the comma → 12, silently dropping the
-  // fractional part. Same hazard when МВЭД types the value directly with
-  // the Russian comma decimal. Testing 2 row 72: «Десятичные округляются
-  // при копировании % пошлины».
-  const parsed = parseFloat(String(rawValue).trim().replace(",", "."));
-  const num = Number.isNaN(parsed) ? null : parsed;
+  // Locale-aware numeric parser preserves decimals through paste.
+  // See parsePastedNumeric for the full reasoning (Testing 2 row 72).
+  const num = parsePastedNumeric(rawValue);
   const mode: DutyMode = rowState.customs_duty_per_kg != null ? "perKg" : "pct";
   const updates: DutyCompositeUpdates =
     mode === "perKg"
@@ -1147,11 +1225,10 @@ export function CustomsHandsontable({
             continue;
           }
           if (NUMERIC_FIELDS.has(field)) {
-            // Same comma-decimal normalization as buildDutyCompositeUpdates
+            // Same locale-aware paste parser as buildDutyCompositeUpdates
             // (Testing 2 row 72). Applies to Утильсбор / Акциз / Экосбор —
             // all reach this branch via the same paste path.
-            const parsed = parseFloat(String(val).trim().replace(",", "."));
-            updates[field] = isNaN(parsed) ? null : parsed;
+            updates[field] = parsePastedNumeric(val);
           } else if (BOOLEAN_FIELDS.has(field)) {
             updates[field] = Boolean(val);
           } else if (field === "hs_code") {
