@@ -14,6 +14,7 @@ import {
 } from "@dnd-kit/core";
 import { toast } from "sonner";
 import type { UserAvatarChipUser } from "@/entities/user/ui/user-avatar-chip";
+import { preserveScroll } from "@/shared/lib/scroll";
 import { KanbanCard } from "./kanban-card";
 import { selfPullInvoice } from "../server-actions";
 import {
@@ -191,7 +192,20 @@ export function KanbanBoard({
   function handleAssigned() {
     setOpenAssignId(null);
     setPendingHeadMove(null);
-    router.refresh();
+    // Testing 2 rows 62/63 — preserve scroll position across the post-
+    // assignment refresh. router.refresh() pulls fresh server data; the
+    // card then moves columns (e.g. «Нераспределено» → «В работе»)
+    // through the `setBoard(initialBoard)` re-seed effect. The intermediate
+    // loading state in the parent page can collapse layout briefly,
+    // letting the browser reset scrollTop to 0 — heads picking an
+    // assignee on a card far below the fold lost their place.
+    //
+    // Same fix pattern as Testing 2 row 58 (route-constructor template
+    // apply): snapshot scrollY, restore via two-rAF chain after the
+    // refresh settles.
+    void preserveScroll(async () => {
+      router.refresh();
+    });
   }
 
   function handleAssignCancelled() {

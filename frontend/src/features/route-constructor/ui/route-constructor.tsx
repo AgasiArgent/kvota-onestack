@@ -15,6 +15,7 @@ import {
 import type { LogisticsTemplate } from "@/entities/logistics-template";
 import { applyLogisticsTemplate } from "@/entities/logistics-template";
 import type { FxRateMap } from "@/shared/lib/fx-convert";
+import { preserveScroll } from "@/shared/lib/scroll";
 import { AddSegmentDialog } from "./add-segment-dialog";
 import { NewSegmentButton } from "./new-segment-button";
 import { RouteTotalsCard } from "./route-totals-card";
@@ -200,37 +201,26 @@ export function RouteConstructor({
     // resulting layout collapse causes the browser to reset scroll to the
     // top of the page, so the user loses their place on long quotes.
     //
-    // We snapshot scrollY before firing the mutation and restore it after
-    // the post-mutation render cycle (two rAF ticks — first lets React
-    // commit, second lets the browser paint after layout reflow).
-    const savedScrollY =
-      typeof window !== "undefined" ? window.scrollY : 0;
-    startTransition(async () => {
-      try {
-        await applyLogisticsTemplate({
-          template_id: template.id,
-          invoice_id: invoiceId,
-          revalidate_path: revalidatePath,
-        });
-        toast.success(`Шаблон «${template.name}» применён`);
-        router.refresh();
-        onMutation?.();
-      } catch (err) {
-        toast.error(
-          err instanceof Error ? err.message : "Не удалось применить шаблон",
-        );
-      }
-      if (typeof window !== "undefined" && savedScrollY > 0) {
-        // Two rAFs: the first waits for React to flush its post-mutation
-        // render, the second waits for the browser to lay out the new
-        // DOM. By the time we scroll, the page is back to its full
-        // height and the scroll target is reachable.
-        window.requestAnimationFrame(() => {
-          window.requestAnimationFrame(() => {
-            window.scrollTo({ top: savedScrollY, behavior: "instant" });
+    // `preserveScroll` snapshots scrollY before the mutation and restores
+    // it via a two-rAF chain after the action settles. See
+    // shared/lib/scroll.ts.
+    startTransition(() => {
+      void preserveScroll(async () => {
+        try {
+          await applyLogisticsTemplate({
+            template_id: template.id,
+            invoice_id: invoiceId,
+            revalidate_path: revalidatePath,
           });
-        });
-      }
+          toast.success(`Шаблон «${template.name}» применён`);
+          router.refresh();
+          onMutation?.();
+        } catch (err) {
+          toast.error(
+            err instanceof Error ? err.message : "Не удалось применить шаблон",
+          );
+        }
+      });
     });
   }
 
