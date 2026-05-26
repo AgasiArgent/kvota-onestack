@@ -24,7 +24,91 @@
 
 import { describe, expect, it } from "vitest";
 
-import { buildDutyCompositeUpdates } from "../customs-handsontable";
+import {
+  buildDutyCompositeUpdates,
+  parsePastedNumeric,
+} from "../customs-handsontable";
+
+describe("parsePastedNumeric — Testing 2 row 72 (decimal precision on paste)", () => {
+  // Each case mirrors a real shape МВЭД testers have pasted into «% пошлины»
+  // and the surrounding numeric customs columns. Tester re-report:
+  // pasting `7.5` was silently truncated to `7` (or rounded to `8` in the
+  // calc preview) — the new locale-aware parser keeps the full precision.
+
+  it("preserves a dot decimal (`7.5` → 7.5)", () => {
+    // Plain en-US input. parseFloat already handles this — the test guards
+    // against future regressions of the cleanup logic stripping the dot.
+    expect(parsePastedNumeric("7.5")).toBe(7.5);
+  });
+
+  it("preserves a multi-digit dot decimal (`7.123` → 7.123)", () => {
+    // DB column is NUMERIC(15,4), so we must preserve at least 4 decimals.
+    expect(parsePastedNumeric("7.123")).toBe(7.123);
+  });
+
+  it("preserves a comma decimal (`7,5` → 7.5)", () => {
+    // ru-RU keyboard / Excel ru-RU export.
+    expect(parsePastedNumeric("7,5")).toBe(7.5);
+  });
+
+  it("strips a trailing % suffix (`7.5%` → 7.5)", () => {
+    // Tester habit — copy «12,5%» from the customs reference column,
+    // paste into the editable cell. The % must not block parsing.
+    expect(parsePastedNumeric("7.5%")).toBe(7.5);
+  });
+
+  it("strips a trailing currency unit (`0,5 ₽/кг` → 0.5)", () => {
+    // ₽/кг chip text is sometimes copied along with the value.
+    expect(parsePastedNumeric("0,5 ₽/кг")).toBe(0.5);
+  });
+
+  it("handles ru-RU thousands grouping with space (`1 234,56` → 1234.56)", () => {
+    // Excel ru-RU exports a non-breaking space (U+00A0) between thousands.
+    // The naïve `replace(",", ".")` would yield `1 234.56` and parseFloat
+    // would stop at the space → 1, dropping the entire fractional part.
+    expect(parsePastedNumeric("1 234,56")).toBe(1234.56);
+    expect(parsePastedNumeric("1 234,56")).toBe(1234.56);
+  });
+
+  it("handles de-DE thousands grouping with dot (`1.234,56` → 1234.56)", () => {
+    // Excel de-DE format: comma decimal, dot thousands separator. The old
+    // first-comma-only fix produced `1.234.56` → parseFloat stopped at the
+    // second dot → 1.234. New parser drops dots and replaces the trailing
+    // comma with a dot.
+    expect(parsePastedNumeric("1.234,56")).toBe(1234.56);
+  });
+
+  it("handles en-US thousands grouping with comma (`1,234.56` → 1234.56)", () => {
+    // Excel en-US default. parseFloat already eats this on its own, but the
+    // old `replace(",", ".")` corrupted it to `1.234.56` → 1.234.
+    expect(parsePastedNumeric("1,234.56")).toBe(1234.56);
+  });
+
+  it("handles multi-comma en-US grouping with no decimal (`1,234,567` → 1234567)", () => {
+    // No fractional part — every comma is a thousands separator.
+    expect(parsePastedNumeric("1,234,567")).toBe(1234567);
+  });
+
+  it("passes through a JS number unchanged (`7.5` number → 7.5)", () => {
+    // HoT's valueSetter often converts the pasted string to a number
+    // before afterChange fires. The parser must not corrupt that path.
+    expect(parsePastedNumeric(7.5)).toBe(7.5);
+  });
+
+  it("returns null for empty / unparseable input", () => {
+    expect(parsePastedNumeric("")).toBeNull();
+    expect(parsePastedNumeric("   ")).toBeNull();
+    expect(parsePastedNumeric("abc")).toBeNull();
+    expect(parsePastedNumeric("—")).toBeNull();
+    expect(parsePastedNumeric(null)).toBeNull();
+    expect(parsePastedNumeric(undefined)).toBeNull();
+  });
+
+  it("handles negative values (`-7,5` → -7.5)", () => {
+    expect(parsePastedNumeric("-7,5")).toBe(-7.5);
+    expect(parsePastedNumeric("-1.234,56")).toBe(-1234.56);
+  });
+});
 
 describe("buildDutyCompositeUpdates — Auto-mode rows", () => {
   it("writes customs_duty when current mode is percent (perKg slot is null)", () => {
@@ -57,6 +141,34 @@ describe("buildDutyCompositeUpdates — Auto-mode rows", () => {
     });
     expect(updates.customs_duty_per_kg).toBe(0.25);
     expect(updates.customs_duty).toBeNull();
+  });
+
+  it("preserves dot decimals from a plain paste (`7.5`, Testing 2 row 72 re-report)", () => {
+    // Tester re-report after PR #215 — `7.5` was still rounding because
+    // upstream paste-cleanup logic stripped the dot.
+    const updates = buildDutyCompositeUpdates("7.5", {
+      customs_duty_per_kg: null,
+      customs_manual_override: false,
+    });
+    expect(updates.customs_duty).toBe(7.5);
+  });
+
+  it("preserves 3-decimal precision (`7.123`)", () => {
+    // DB is NUMERIC(15,4) — 4 fractional digits must round-trip cleanly.
+    const updates = buildDutyCompositeUpdates("7.123", {
+      customs_duty_per_kg: null,
+      customs_manual_override: false,
+    });
+    expect(updates.customs_duty).toBe(7.123);
+  });
+
+  it("recovers thousands-grouped values (`1.234,56` → 1234.56)", () => {
+    // de-DE Excel export. Old parser produced 1.234, dropping the decimals.
+    const updates = buildDutyCompositeUpdates("1.234,56", {
+      customs_duty_per_kg: null,
+      customs_manual_override: false,
+    });
+    expect(updates.customs_duty).toBe(1234.56);
   });
 
   it("writes customs_duty_per_kg when current mode is perKg", () => {
