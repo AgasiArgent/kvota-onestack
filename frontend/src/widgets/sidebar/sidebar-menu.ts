@@ -174,7 +174,22 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
 
   // === REGISTRIES ===
   const registries: MenuItem[] = [];
-  if (hasRole("sales", "sales_manager", "top_manager", "head_of_sales")) {
+  // Testing 2 row 82 — РОЗ reported no «Создать клиента» button on
+  // /customers. Root cause was that the sidebar entry was sales-only, so
+  // procurement-tier users had no link to the page. Widening to the same
+  // role set as `canCreateCustomer` (admin + sales tier + procurement
+  // tier + top_manager) keeps the nav and the action gate in sync.
+  if (
+    hasRole(
+      "sales",
+      "sales_manager",
+      "top_manager",
+      "head_of_sales",
+      "procurement",
+      "procurement_senior",
+      "head_of_procurement"
+    )
+  ) {
     registries.push({
       icon: Users,
       label: "Клиенты",

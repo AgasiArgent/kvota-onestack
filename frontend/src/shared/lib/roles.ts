@@ -308,3 +308,39 @@ const LOCATION_CREATE_ROLES = [
 export function canCreateLocation(roles: string[]): boolean {
   return roles.some((r) => LOCATION_CREATE_ROLES.includes(r));
 }
+
+/**
+ * Roles allowed to create customers via the «Новый клиент» dialog on the
+ * /customers page (Testing 2 row 82). The complaint: РОЗ
+ * (head_of_procurement) reported no create button. Underlying issue was
+ * twofold — the sidebar entry was gated to sales-only, and there was no
+ * explicit role gate on the dialog trigger.
+ *
+ * Authorized: admin, sales tier (МОП, РОП), procurement tier (МОЗ, СтМОЗ,
+ * РОЗ), top_manager. Customers are a sales/procurement collaboration
+ * surface — both tiers may need to add a new counterparty when triaging
+ * a deal.
+ *
+ * Excluded: logistics, customs, finance, controllers, currency_controller,
+ * newbie — they consume customer data downstream and have no business
+ * creating new counterparties. The kvota.customers INSERT RLS policy is
+ * organization-scoped (no role check), so this gate is the visibility
+ * contract — backend trust is maintained by RLS at the org boundary.
+ */
+const CUSTOMER_CREATE_ROLES = [
+  "admin",
+  "top_manager",
+  "sales",
+  "head_of_sales",
+  "procurement",
+  "procurement_senior",
+  "head_of_procurement",
+];
+
+/**
+ * Returns true if the user may create a customer via the /customers page
+ * «Новый клиент» dialog.
+ */
+export function canCreateCustomer(roles: string[]): boolean {
+  return roles.some((r) => CUSTOMER_CREATE_ROLES.includes(r));
+}

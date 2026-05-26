@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { fetchCustomersList, fetchCustomerFinancials } from "@/entities/customer";
 import { getSessionUser, fetchUserSalesGroupId } from "@/entities/user";
-import { isSalesOnly } from "@/shared/lib/roles";
+import { canCreateCustomer, isSalesOnly } from "@/shared/lib/roles";
 import { CustomersTable } from "@/features/customers";
 
 interface Props {
@@ -42,6 +42,7 @@ export default async function CustomersPage({ searchParams }: Props) {
         orgId={user.orgId}
         financials={financials}
         userRoles={user.roles}
+        canCreate={canCreateCustomer(user.roles)}
       />
     </div>
   );
