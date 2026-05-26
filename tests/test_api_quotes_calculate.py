@@ -441,10 +441,10 @@ class TestCalculateHappyPath:
     @patch("api.quotes.calculate_multiproduct_quote")
     @patch("api.quotes.get_composed_items")
     @patch("api.quotes.get_supabase")
-    def test_calc_engine_exception_returns_500(
+    def test_calc_engine_exception_returns_500_with_engine_error_code(
         self, mock_get_sb, mock_composed, mock_calc
     ):
-        """Calculation engine blows up → 500 with the exception message."""
+        """Calculation engine blows up → 500 CALC_ENGINE_ERROR with exception_class detail."""
         mock_get_sb.return_value = _mock_supabase_for_calc(
             quote={"id": "q-1", "currency": "USD"}
         )
@@ -465,7 +465,108 @@ class TestCalculateHappyPath:
         resp = _run(calculate_quote(req, "q-1"))
 
         assert resp.status_code == 500
-        assert _body(resp) == {
-            "success": False,
-            "error": {"code": "INTERNAL_ERROR", "message": "engine exploded"},
-        }
+        payload = _body(resp)
+        assert payload["success"] is False
+        assert payload["error"]["code"] == "CALC_ENGINE_ERROR"
+        assert "Calculation engine" in payload["error"]["message"]
+        # Raw exception message must NOT leak; only safe class name in detail.
+        assert "engine exploded" not in json.dumps(payload)
+        assert payload["error"]["detail"]["exception_class"] == "RuntimeError"
+
+    @patch("api.quotes.calculate_multiproduct_quote")
+    @patch("api.quotes.get_composed_items")
+    @patch("api.quotes.get_supabase")
+    def test_build_inputs_exception_returns_500_with_build_error_code(
+        self, mock_get_sb, mock_composed, mock_calc
+    ):
+        """build_calculation_inputs raises → 500 BUILD_INPUTS_ERROR.
+
+        Note: build_calculation_inputs is imported inside the handler from
+        services.calculation_helpers, so we patch at the services boundary.
+        """
+        mock_get_sb.return_value = _mock_supabase_for_calc(
+            quote={"id": "q-1", "currency": "USD"}
+        )
+        mock_composed.return_value = [
+            {
+                "id": "item-1",
+                "is_unavailable": False,
+                "purchase_price_original": 100,
+                "base_price_vat": 120,
+                "product_name": "Widget",
+                "brand": "Acme",
+                "quantity": 1,
+            },
+        ]
+        # Patch the function as actually imported by the handler
+        with patch(
+            "services.calculation_helpers.build_calculation_inputs",
+            side_effect=KeyError("missing_field"),
+        ):
+            req = _make_request(api_user_id="u-1", body={})
+            resp = _run(calculate_quote(req, "q-1"))
+
+        assert resp.status_code == 500
+        payload = _body(resp)
+        assert payload["error"]["code"] == "BUILD_INPUTS_ERROR"
+        assert "prepare calculation inputs" in payload["error"]["message"]
+        # Raw key name must NOT leak; only class name.
+        assert "missing_field" not in json.dumps(payload)
+        assert payload["error"]["detail"]["exception_class"] == "KeyError"
+        # calc engine must NOT have been called when build failed.
+        mock_calc.assert_not_called()
+
+    @patch("api.quotes.calculate_multiproduct_quote")
+    @patch("api.quotes.get_composed_items")
+    @patch("api.quotes.get_supabase")
+    def test_db_write_exception_returns_500_with_unexpected_error_code(
+        self, mock_get_sb, mock_composed, mock_calc
+    ):
+        """Failure outside the per-phase buckets (e.g., DB write) → 500
+        UNEXPECTED_CALC_ERROR with exception_class detail. Confirms the
+        outer safety net catches and structures errors that bypass the
+        granular catches.
+        """
+        sb = _mock_supabase_for_calc(quote={"id": "q-1", "currency": "USD"})
+
+        def boom_table(name: str):
+            tbl = MagicMock()
+            if name == "organization_members":
+                tbl.select.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
+                    {"organization_id": "org-1"}
+                ]
+            elif name == "quotes":
+                (
+                    tbl.select.return_value.eq.return_value
+                    .eq.return_value.is_.return_value.execute.return_value.data
+                ) = [{"id": "q-1", "currency": "USD"}]
+                tbl.update.return_value.eq.return_value.execute.side_effect = (
+                    ConnectionError("supabase down")
+                )
+            elif name == "invoices":
+                tbl.select.return_value.eq.return_value.execute.return_value.data = []
+            return tbl
+
+        sb.table.side_effect = boom_table
+        mock_get_sb.return_value = sb
+        mock_composed.return_value = [
+            {
+                "id": "item-1",
+                "is_unavailable": False,
+                "purchase_price_original": 100,
+                "base_price_vat": 120,
+                "product_name": "Widget",
+                "brand": "Acme",
+                "quantity": 1,
+            },
+        ]
+        mock_calc.return_value = [_fake_calc_result()]
+
+        req = _make_request(api_user_id="u-1", body={})
+        resp = _run(calculate_quote(req, "q-1"))
+
+        assert resp.status_code == 500
+        payload = _body(resp)
+        assert payload["error"]["code"] == "UNEXPECTED_CALC_ERROR"
+        assert "supabase down" not in json.dumps(payload)
+        assert payload["error"]["detail"]["exception_class"] == "ConnectionError"

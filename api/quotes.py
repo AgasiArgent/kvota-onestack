@@ -345,9 +345,37 @@ async def calculate_quote(
             'exchange_rate': safe_decimal(exchange_rate),
         }
 
-        # Build calculation inputs and run engine
-        calc_inputs = build_calculation_inputs(items, variables)
-        results = calculate_multiproduct_quote(calc_inputs)
+        # Build calculation inputs and run engine — wrapped separately so
+        # we can identify which phase failed when the next 500 fires.
+        try:
+            calc_inputs = build_calculation_inputs(items, variables)
+        except Exception as e:
+            logger.exception(
+                "BUILD_INPUTS_ERROR quote_id=%s user_id=%s",
+                quote_id,
+                user.get("id"),
+            )
+            return error_response(
+                "BUILD_INPUTS_ERROR",
+                "Failed to prepare calculation inputs",
+                status_code=500,
+                detail={"exception_class": e.__class__.__name__},
+            )
+
+        try:
+            results = calculate_multiproduct_quote(calc_inputs)
+        except Exception as e:
+            logger.exception(
+                "CALC_ENGINE_ERROR quote_id=%s user_id=%s",
+                quote_id,
+                user.get("id"),
+            )
+            return error_response(
+                "CALC_ENGINE_ERROR",
+                "Calculation engine raised an exception",
+                status_code=500,
+                detail={"exception_class": e.__class__.__name__},
+            )
 
         # Calculate totals
         total_purchase = sum(safe_decimal(r.purchase_price_total_quote_currency) for r in results)
@@ -632,9 +660,21 @@ async def calculate_quote(
         })
 
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return error_response("INTERNAL_ERROR", str(e), status_code=500)
+        # Final safety net — anything not caught by the per-phase buckets
+        # (DB writes, version snapshot, totals math). Logger captures the
+        # full traceback for server-side grep; client gets safe message
+        # + exception class only.
+        logger.exception(
+            "UNEXPECTED_CALC_ERROR quote_id=%s user_id=%s",
+            quote_id,
+            user.get("id"),
+        )
+        return error_response(
+            "UNEXPECTED_CALC_ERROR",
+            "An unexpected error occurred during calculation",
+            status_code=500,
+            detail={"exception_class": e.__class__.__name__},
+        )
 
 
 async def submit_procurement(
