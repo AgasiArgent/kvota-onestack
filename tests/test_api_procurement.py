@@ -261,7 +261,7 @@ class TestGetKanban:
                     {"roles": {"slug": "procurement"}}
                 ]
             elif name == "quote_brand_substates":
-                tbl.select.return_value.eq.return_value.eq.return_value.is_.return_value.execute.return_value.data = qbs_rows
+                tbl.select.return_value.or_.return_value.eq.return_value.is_.return_value.execute.return_value.data = qbs_rows
             elif name == "status_history":
                 tbl.select.return_value.in_.return_value.order.return_value.execute.return_value.data = history_rows
             elif name == "quote_items":
@@ -383,7 +383,7 @@ class TestGetKanban:
                     {"roles": {"slug": "procurement"}}
                 ]
             elif name == "quote_brand_substates":
-                tbl.select.return_value.eq.return_value.eq.return_value.is_.return_value.execute.return_value.data = qbs_rows
+                tbl.select.return_value.or_.return_value.eq.return_value.is_.return_value.execute.return_value.data = qbs_rows
             elif name == "status_history":
                 tbl.select.return_value.in_.return_value.order.return_value.execute.return_value.data = []
             elif name == "quote_items":
@@ -472,7 +472,7 @@ class TestGetKanban:
                     {"roles": {"slug": "head_of_procurement"}}
                 ]
             elif name == "quote_brand_substates":
-                tbl.select.return_value.eq.return_value.eq.return_value.is_.return_value.execute.return_value.data = qbs_rows
+                tbl.select.return_value.or_.return_value.eq.return_value.is_.return_value.execute.return_value.data = qbs_rows
             elif name == "status_history":
                 tbl.select.return_value.in_.return_value.order.return_value.execute.return_value.data = []
             elif name == "quote_items":
@@ -549,7 +549,7 @@ class TestGetKanban:
                     {"roles": {"slug": "procurement_senior"}}
                 ]
             elif name == "quote_brand_substates":
-                tbl.select.return_value.eq.return_value.eq.return_value.is_.return_value.execute.return_value.data = qbs_rows
+                tbl.select.return_value.or_.return_value.eq.return_value.is_.return_value.execute.return_value.data = qbs_rows
             elif name == "status_history":
                 tbl.select.return_value.in_.return_value.order.return_value.execute.return_value.data = []
             elif name == "quote_items":
@@ -576,6 +576,248 @@ class TestGetKanban:
         # Distributing card is visible — broader scope keeps it.
         assert len(cols["distributing"]) == 1
         assert cols["distributing"][0]["quote_id"] == "q1"
+
+
+# ----------------------------------------------------------------------------
+# GET /api/quotes/kanban — Testing 2 row 83
+# Completed-procurement visibility per role
+# ----------------------------------------------------------------------------
+
+
+class TestGetKanbanCompletedVisibility:
+    """Quotes whose workflow advanced past procurement (procurement_completed_at
+    IS NOT NULL) must remain visible on the procurement kanban to admin /
+    head_of_procurement (РОЗ) / procurement_senior (СтМОЗ) — and to regular
+    procurement (МОЗ) for their own brand-slices. Tester report: when the
+    last invoice on a quote was completed the quote vanished from
+    /procurement; visibility should persist so РОЗ can audit the trail and
+    МОЗ can see what they just finished.
+    """
+
+    @staticmethod
+    def _build_supabase(role: str, *, items_assigned_to: str = "user-1"):
+        """Build a Supabase mock returning a single (q1, Siemens) card whose
+        parent quote has already advanced to pending_logistics_and_customs and
+        carries procurement_completed_at. The Siemens item is assigned to
+        ``items_assigned_to`` so МОЗ ownership can be flipped per test.
+        """
+        three_days_ago = (
+            datetime.now(timezone.utc) - timedelta(days=3)
+        ).isoformat()
+        completed_at = (
+            datetime.now(timezone.utc) - timedelta(hours=2)
+        ).isoformat()
+
+        qbs_rows = [
+            {
+                "quote_id": "q1",
+                "brand": "Siemens",
+                # Substatus stays at the last forward value (prices_ready)
+                # after the quote-level transition — there is no "completed"
+                # sub-state.
+                "substatus": "prices_ready",
+                "updated_at": three_days_ago,
+                "quotes": {
+                    "id": "q1",
+                    "idn_quote": "Q-202604-0099",
+                    "workflow_status": "pending_logistics_and_customs",
+                    "organization_id": "org-1",
+                    "created_by": "creator-1",
+                    "tender_type": None,
+                    "procurement_completed_at": completed_at,
+                    "customers": {"id": "cust-1", "name": "Acme"},
+                },
+            },
+        ]
+        quote_items_rows = [
+            {
+                "id": "item-1",
+                "quote_id": "q1",
+                "brand": "Siemens",
+                "quantity": 2,
+                "assigned_procurement_user": items_assigned_to,
+            },
+        ]
+
+        sb = MagicMock()
+
+        def table_side_effect(name: str):
+            tbl = MagicMock()
+            if name == "organization_members":
+                tbl.select.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
+                    {"organization_id": "org-1"}
+                ]
+            elif name == "user_roles":
+                tbl.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = [
+                    {"roles": {"slug": role}}
+                ]
+            elif name == "quote_brand_substates":
+                tbl.select.return_value.or_.return_value.eq.return_value.is_.return_value.execute.return_value.data = qbs_rows
+            elif name == "status_history":
+                tbl.select.return_value.in_.return_value.order.return_value.execute.return_value.data = []
+            elif name == "quote_items":
+                tbl.select.return_value.in_.return_value.execute.return_value.data = quote_items_rows
+            elif name == "invoices":
+                tbl.select.return_value.in_.return_value.execute.return_value.data = []
+            elif name == "invoice_items":
+                tbl.select.return_value.in_.return_value.execute.return_value.data = []
+            elif name == "user_profiles":
+                tbl.select.return_value.in_.return_value.execute.return_value.data = []
+            return tbl
+
+        sb.table.side_effect = table_side_effect
+        return sb, completed_at
+
+    @patch("api.procurement.get_supabase")
+    def test_filter_uses_or_clause_with_procurement_completed_at(self, mock_get_sb):
+        """The kanban query must apply a PostgREST `or` clause that admits
+        both pending_procurement quotes and any quote with
+        `procurement_completed_at IS NOT NULL`. Guards the regression that
+        produced "Данные скрыты" — pinning the workflow_status to a single
+        literal would drop completed-procurement quotes silently.
+
+        Captures `or_` calls on the `quote_brand_substates` table chain by
+        instrumenting the mock table with a recording side-effect.
+        """
+        sb, _ = self._build_supabase("head_of_procurement")
+
+        recorded_or_calls: list[tuple] = []
+        original_side_effect = sb.table.side_effect
+
+        def recording_side_effect(name: str):
+            tbl = original_side_effect(name)
+            if name == "quote_brand_substates":
+                real_or = tbl.select.return_value.or_
+
+                def record_or(*args, **kwargs):
+                    recorded_or_calls.append((args, kwargs))
+                    return real_or.return_value
+
+                tbl.select.return_value.or_ = record_or
+            return tbl
+
+        sb.table.side_effect = recording_side_effect
+        mock_get_sb.return_value = sb
+
+        req = _make_request(query={"status": "pending_procurement"})
+        resp = _run(get_kanban(req))
+        assert resp.status_code == 200
+
+        # `or_` was invoked on the qbs select chain with a filter mentioning
+        # procurement_completed_at — proves the visibility window was widened
+        # beyond `workflow_status = 'pending_procurement'`.
+        assert any(
+            "procurement_completed_at" in (args[0] if args else "")
+            for args, _ in recorded_or_calls
+        ), (
+            f"Expected or_() called with procurement_completed_at filter; "
+            f"got {recorded_or_calls!r}"
+        )
+
+    @patch("api.procurement.get_supabase")
+    def test_head_of_procurement_sees_completed_procurement_card(self, mock_get_sb):
+        """РОЗ — head_of_procurement has broader scope; the completed card
+        must surface in the kanban regardless of ownership."""
+        sb, completed_at = self._build_supabase("head_of_procurement")
+        mock_get_sb.return_value = sb
+
+        req = _make_request(query={"status": "pending_procurement"})
+        resp = _run(get_kanban(req))
+        assert resp.status_code == 200
+
+        import json
+
+        payload = json.loads(resp.body)
+        cols = payload["data"]["columns"]
+        # Substatus stays at prices_ready post-completion → that column carries
+        # the card.
+        assert len(cols["prices_ready"]) == 1
+        card = cols["prices_ready"][0]
+        assert card["quote_id"] == "q1"
+        assert card["brand"] == "Siemens"
+        assert card["idn_quote"] == "Q-202604-0099"
+        assert card["procurement_completed_at"] == completed_at
+
+    @patch("api.procurement.get_supabase")
+    def test_procurement_senior_sees_completed_procurement_card(self, mock_get_sb):
+        """СтМОЗ — procurement_senior also has broader scope; completion
+        does not hide the card."""
+        sb, _ = self._build_supabase("procurement_senior")
+        mock_get_sb.return_value = sb
+
+        req = _make_request(query={"status": "pending_procurement"})
+        resp = _run(get_kanban(req))
+        assert resp.status_code == 200
+
+        import json
+
+        payload = json.loads(resp.body)
+        cols = payload["data"]["columns"]
+        assert len(cols["prices_ready"]) == 1
+        assert cols["prices_ready"][0]["quote_id"] == "q1"
+
+    @patch("api.procurement.get_supabase")
+    def test_admin_sees_completed_procurement_card(self, mock_get_sb):
+        """admin has broader scope; completion does not hide the card."""
+        sb, _ = self._build_supabase("admin")
+        mock_get_sb.return_value = sb
+
+        req = _make_request(query={"status": "pending_procurement"})
+        resp = _run(get_kanban(req))
+        assert resp.status_code == 200
+
+        import json
+
+        payload = json.loads(resp.body)
+        cols = payload["data"]["columns"]
+        assert len(cols["prices_ready"]) == 1
+        assert cols["prices_ready"][0]["quote_id"] == "q1"
+
+    @patch("api.procurement.get_supabase")
+    def test_regular_procurement_sees_own_completed_card(self, mock_get_sb):
+        """МОЗ — regular procurement keeps the per-user scope filter, but
+        their own brand-slice must remain visible after completion. The
+        mock assigns item-1 to user-1 (the caller), so the slice is owned.
+        """
+        sb, _ = self._build_supabase("procurement", items_assigned_to="user-1")
+        mock_get_sb.return_value = sb
+
+        req = _make_request(query={"status": "pending_procurement"})
+        resp = _run(get_kanban(req))
+        assert resp.status_code == 200
+
+        import json
+
+        payload = json.loads(resp.body)
+        cols = payload["data"]["columns"]
+        assert len(cols["prices_ready"]) == 1
+        assert cols["prices_ready"][0]["quote_id"] == "q1"
+
+    @patch("api.procurement.get_supabase")
+    def test_regular_procurement_does_not_see_other_users_completed_card(
+        self, mock_get_sb
+    ):
+        """МОЗ scope still applies for completed quotes — a card whose items
+        belong to a different procurement user must NOT surface for the
+        caller. The fix widens the workflow-status filter, not the
+        per-user authorization gate.
+        """
+        sb, _ = self._build_supabase("procurement", items_assigned_to="other-user")
+        mock_get_sb.return_value = sb
+
+        req = _make_request(query={"status": "pending_procurement"})
+        resp = _run(get_kanban(req))
+        assert resp.status_code == 200
+
+        import json
+
+        payload = json.loads(resp.body)
+        cols = payload["data"]["columns"]
+        # The other user's card is filtered out — every column is empty.
+        assert cols["distributing"] == []
+        assert cols["searching_supplier"] == []
+        assert cols["waiting_prices"] == []
+        assert cols["prices_ready"] == []
 
 
 # ----------------------------------------------------------------------------
