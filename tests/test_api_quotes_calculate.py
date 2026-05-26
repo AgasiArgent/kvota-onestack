@@ -570,3 +570,189 @@ class TestCalculateHappyPath:
         assert payload["error"]["code"] == "UNEXPECTED_CALC_ERROR"
         assert "supabase down" not in json.dumps(payload)
         assert payload["error"]["detail"]["exception_class"] == "ConnectionError"
+
+
+# ----------------------------------------------------------------------------
+# Excluded items: is_unavailable + import_banned (Testing 2 row 87)
+# ----------------------------------------------------------------------------
+#
+# Customer-decided exclusions on quote_items must NOT crash the calc step and
+# MUST NOT participate in totals. Two flags live on quote_items:
+#
+#   * is_unavailable=True  — refused by procurement (МОП/МОЗ): item is N/A,
+#     no КПП was raised, no price will ever exist.
+#   * import_banned=True  — disallowed by customs (e.g. "В наличии в РФ"): item
+#     reaches КПП but is dropped at customs.
+#
+# Both behave identically at the calc layer: skip from price validation, skip
+# from build_calculation_inputs, skip from the per-item result persistence
+# zip. The composition_service.get_composed_items adapter already emits a
+# _legacy_shape dict (no purchase_price_original) for such items; we just need
+# to teach the price-validation loop and the result-persistence zip to skip
+# them.
+#
+# The current bug (Row 87, quote ec48c1fc-...): an import_banned item with no
+# price reaches the MISSING_PRICES guard before build_calculation_inputs has a
+# chance to filter it. Result: every calc call returns 400 instead of dropping
+# the banned item and proceeding with the remaining items. Tester observed
+# this on quote ec48c1fc-... position 25 "Миксер пневматический PM-3/TJ3".
+
+
+class TestCalculateExcludedItems:
+    """Excluded items (is_unavailable / import_banned) must be dropped, not
+    block the calc. See Testing 2 row 87."""
+
+    @patch("api.quotes.list_quote_versions")
+    @patch("api.quotes.create_quote_version")
+    @patch("api.quotes.calculate_multiproduct_quote")
+    @patch("api.quotes.get_composed_items")
+    @patch("api.quotes.get_supabase")
+    def test_import_banned_item_without_price_does_not_block_calc(
+        self,
+        mock_get_sb,
+        mock_composed,
+        mock_calc,
+        mock_create_version,
+        mock_list_versions,
+    ):
+        """import_banned item with no price + one priced item → 200, banned
+        item is dropped from totals, MISSING_PRICES is NOT raised.
+
+        Reproduces Testing 2 row 87 directly: МОП refused position 25 at the
+        customs stage (import_banned=True), but the rest of the КПП has prices.
+        The calc must succeed against the priced items and treat the banned
+        one as silently excluded.
+        """
+        mock_get_sb.return_value = _mock_supabase_for_calc(
+            quote={"id": "q-1", "currency": "USD", "customer_id": "cust-1"}
+        )
+        mock_composed.return_value = [
+            {
+                "id": "item-priced",
+                "is_unavailable": False,
+                "import_banned": False,
+                "purchase_price_original": 100,
+                "base_price_vat": 120,
+                "product_name": "Регулятор давления Graco",
+                "brand": "GRACO",
+                "quantity": 1,
+            },
+            {
+                "id": "item-banned",
+                "is_unavailable": False,
+                "import_banned": True,
+                "import_ban_reason": "В наличии в РФ",
+                # No price — this is the exact shape that crashed in prod.
+                "purchase_price_original": None,
+                "base_price_vat": None,
+                "product_name": "Миксер пневматический PM-3/TJ3",
+                "brand": "Китайский бренд",
+                "quantity": 1,
+            },
+        ]
+        mock_calc.return_value = [_fake_calc_result()]
+        mock_list_versions.return_value = []
+
+        req = _make_request(api_user_id="u-1", body={})
+        resp = _run(calculate_quote(req, "q-1"))
+
+        # MUST NOT crash with MISSING_PRICES — banned item is excluded, not
+        # missing-priced.
+        assert resp.status_code == 200, _body(resp)
+        payload = _body(resp)
+        assert payload["success"] is True
+
+    @patch("api.quotes.get_composed_items")
+    @patch("api.quotes.get_supabase")
+    def test_only_excluded_items_returns_missing_prices(
+        self, mock_get_sb, mock_composed
+    ):
+        """Edge case: every item is excluded → no priced items → still a 400,
+        but it must come from MISSING_PRICES (or EMPTY) — not a 500."""
+        mock_get_sb.return_value = _mock_supabase_for_calc(
+            quote={"id": "q-1", "currency": "USD"}
+        )
+        mock_composed.return_value = [
+            {
+                "id": "item-banned-1",
+                "is_unavailable": False,
+                "import_banned": True,
+                "purchase_price_original": None,
+                "product_name": "Widget A",
+                "brand": "Acme",
+                "quantity": 1,
+            },
+            {
+                "id": "item-banned-2",
+                "is_unavailable": True,
+                "import_banned": False,
+                "purchase_price_original": None,
+                "product_name": "Widget B",
+                "brand": "Acme",
+                "quantity": 1,
+            },
+        ]
+
+        req = _make_request(api_user_id="u-1", body={})
+        resp = _run(calculate_quote(req, "q-1"))
+
+        # Either MISSING_PRICES or NO_CALCULABLE_ITEMS — both are structured
+        # 4xx, neither is a 500. The exact code is fine to evolve; the
+        # important invariant is "no 5xx and no MISSING_PRICES naming an
+        # already-excluded item."
+        assert resp.status_code in (400, 422), _body(resp)
+        body = _body(resp)
+        assert body["success"] is False
+        # If MISSING_PRICES is emitted, the items_without_price list MUST NOT
+        # contain items we already excluded (banned/unavailable).
+        if body.get("error", {}).get("code") == "MISSING_PRICES":
+            assert body.get("items_without_price", []) == [], (
+                f"Excluded items leaked into MISSING_PRICES: {body!r}"
+            )
+
+    @patch("api.quotes.get_composed_items")
+    @patch("api.quotes.get_supabase")
+    def test_is_unavailable_without_price_does_not_appear_in_missing_prices(
+        self, mock_get_sb, mock_composed
+    ):
+        """Regression: is_unavailable items must not appear in MISSING_PRICES.
+
+        Already covered by the pre-existing skip on line 225 of api/quotes.py,
+        but pinning it as a test so symmetry with import_banned is enforced —
+        i.e. removing one skip without the other would fail this.
+        """
+        mock_get_sb.return_value = _mock_supabase_for_calc(
+            quote={"id": "q-1", "currency": "USD"}
+        )
+        mock_composed.return_value = [
+            {
+                "id": "item-priced",
+                "is_unavailable": False,
+                "import_banned": False,
+                "purchase_price_original": 50,
+                "base_price_vat": 60,
+                "product_name": "Priced",
+                "brand": "Acme",
+                "quantity": 1,
+            },
+            {
+                "id": "item-na",
+                "is_unavailable": True,
+                "import_banned": False,
+                "purchase_price_original": None,
+                "product_name": "Unavailable",
+                "brand": "Acme",
+                "quantity": 1,
+            },
+        ]
+
+        req = _make_request(api_user_id="u-1", body={"markup": "15"})
+        resp = _run(calculate_quote(req, "q-1"))
+
+        # Either the calc proceeds (200) or it errors for some other reason,
+        # but it MUST NOT raise MISSING_PRICES on the is_unavailable item.
+        body = _body(resp)
+        if body.get("error", {}).get("code") == "MISSING_PRICES":
+            assert "Unavailable" not in json.dumps(body, ensure_ascii=False), (
+                f"is_unavailable item leaked into MISSING_PRICES: {body!r}"
+            )

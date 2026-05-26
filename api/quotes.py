@@ -59,6 +59,25 @@ __all__ = [
 ]
 
 
+def _is_excluded_from_calc(item: Dict[str, Any]) -> bool:
+    """Return True when an item is excluded from the calculation engine.
+
+    Mirrors the exclusion in ``services.calculation_helpers.build_calculation_inputs``
+    so the price-validation loop and the per-item result-persistence zip stay in
+    sync with the engine input. Two customer-decided exclusion flags live on
+    quote_items:
+
+    * ``is_unavailable`` — refused by procurement (МОП/МОЗ marked it N/A,
+      no КПП will be raised).
+    * ``import_banned`` — disallowed by customs after a КПП exists
+      (e.g. "В наличии в РФ" — Testing 2 row 87).
+
+    Both result in the item being silently dropped from totals — they are not
+    "missing prices" and must never block a calc run.
+    """
+    return bool(item.get("is_unavailable") or item.get("import_banned"))
+
+
 async def calculate_quote(
     request: Request,
     quote_id: str,
@@ -219,10 +238,15 @@ async def calculate_quote(
             status_code=400,
         )
 
-    # Validate that all available items have prices
+    # Validate that all available items have prices. Excluded items
+    # (is_unavailable=N/A from procurement; import_banned=blocked at customs —
+    # Testing 2 row 87) are not expected to carry a price — skip them so they
+    # never appear in items_without_price. The calc-input builder applies the
+    # same exclusion, so any item we skip here is also dropped from the engine
+    # run below.
     items_without_price = []
     for item in items:
-        if item.get("is_unavailable"):
+        if _is_excluded_from_calc(item):
             continue
         price = safe_decimal(item.get("purchase_price_original") or item.get("base_price_vat"))
         if price <= 0:
@@ -237,6 +261,17 @@ async def calculate_quote(
             "error": {"code": "MISSING_PRICES", "message": "Not all items have prices"},
             "items_without_price": items_without_price,
         }, status_code=400)
+
+    # All items are excluded (every one is is_unavailable or import_banned) —
+    # there is literally nothing to calculate. Surface a structured 4xx so
+    # the FE can show a clear message instead of hitting a 500 deeper in the
+    # engine on an empty input list. Testing 2 row 87 corner case.
+    if not any(not _is_excluded_from_calc(item) for item in items):
+        return error_response(
+            "NO_CALCULABLE_ITEMS",
+            "Все позиции исключены из расчёта (нет в наличии или запрещены к ввозу)",
+            status_code=400,
+        )
 
     try:
         # Aggregate logistics from invoices
@@ -446,9 +481,15 @@ async def calculate_quote(
                 .insert(variables_record) \
                 .execute()
 
-        # Store per-item calculation results
+        # Store per-item calculation results.
+        # build_calculation_inputs() drops excluded items (is_unavailable /
+        # import_banned), so the `results` list is the same length and order
+        # as the included subset. Filter `items` the same way before zipping —
+        # otherwise an excluded item in the MIDDLE of the list would silently
+        # write the wrong calc result to the next priced item.
+        included_items = [it for it in items if not _is_excluded_from_calc(it)]
         rate = float(exchange_rate_to_usd)
-        for item, result in zip(items, results):
+        for item, result in zip(included_items, results):
             phase_results = {
                 "N16": float(result.purchase_price_no_vat or 0),
                 "P16": float(result.purchase_price_after_discount or 0),
