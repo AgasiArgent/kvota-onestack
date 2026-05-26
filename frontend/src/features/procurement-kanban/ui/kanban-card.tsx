@@ -173,6 +173,11 @@ export function KanbanCard({
   const isPaused = card.procurement_substatus === "paused";
   const pauseLog = isPaused ? card.pause_log : null;
   const pauseInline = pauseLog ? formatPauseInline(pauseLog) : null;
+  // Testing 2 row 83 — quotes whose workflow has moved past procurement still
+  // surface on this board (so procurement can audit and МОЗ can see their
+  // completed work). Mark the card with a «Готово» badge so the user knows
+  // the slice is no longer actionable from this screen.
+  const isProcurementComplete = Boolean(card.procurement_completed_at);
 
   return (
     <div
@@ -224,6 +229,14 @@ export function KanbanCard({
               title={`Тендер${card.tender_type && card.tender_type !== "tender" ? ` (${card.tender_type})` : ""}`}
             >
               Тендер
+            </span>
+          )}
+          {isProcurementComplete && (
+            <span
+              className="inline-flex items-center rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800"
+              title="Закупка завершена — заказ передан на следующий этап"
+            >
+              Готово
             </span>
           )}
         </div>

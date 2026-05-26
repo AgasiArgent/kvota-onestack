@@ -66,6 +66,15 @@ export interface KanbanBrandCard {
    * quote. Drives inline reason display + click-through to history drawer.
    */
   pause_log?: KanbanPauseLog | null;
+  /**
+   * Quote-level `procurement_completed_at` timestamp (Testing 2 row 83).
+   * Non-null cards represent slices whose workflow has already moved past
+   * `pending_procurement` (e.g. `pending_logistics_and_customs`); they
+   * stay visible on the procurement kanban so РОЗ / СтМОЗ / МОЗ can audit
+   * the completed work instead of seeing the slice disappear silently.
+   * The UI renders a «Готово» badge when this is set.
+   */
+  procurement_completed_at?: string | null;
 }
 
 /**

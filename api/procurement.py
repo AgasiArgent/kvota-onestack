@@ -154,6 +154,10 @@ async def get_kanban(request) -> JSONResponse:
           - invoice_sums (list[dict]) — per-supplier-invoice totals restricted to this brand:
               [{"invoice_number": str, "currency": str, "total": float}, ...]
           - latest_reason (str | None)
+          - procurement_completed_at (str | None) — quote-level completion
+              timestamp (Testing 2 row 83). Non-null cards represent slices
+              whose workflow already moved past procurement but should remain
+              visible to procurement roles.
     Side Effects: none (read-only)
     Roles: procurement, admin, head_of_procurement
     """
@@ -182,14 +186,30 @@ async def get_kanban(request) -> JSONResponse:
     # `customers.id` (Testing 2 row 66) lets the kanban filter bar group cards
     # by customer id rather than by name (names alone collide for chains with
     # identical labels).
+    #
+    # Visibility window (Testing 2 row 83): two overlapping cohorts surface on
+    # the procurement kanban —
+    #   (a) `workflow_status = 'pending_procurement'` — work in progress, and
+    #   (b) `procurement_completed_at IS NOT NULL` — quotes that already
+    #       finished procurement and advanced past `pending_procurement`.
+    # Tester report: when the last invoice on a quote was completed the quote
+    # vanished from /procurement for РОЗ / СтМОЗ / МОЗ alike, which made it
+    # look like the data had been hidden. Procurement should still see those
+    # slices (the rows remain in `quote_brand_substates` after the workflow
+    # advances). The МОЗ scope filter further down keeps regular МОЗ to their
+    # own brand-slices for both cohorts.
     qbs_result = (
         sb.table("quote_brand_substates")
         .select(
             "quote_id, brand, substatus, updated_at, "
             "quotes!inner(id, idn_quote, workflow_status, organization_id, created_by, tender_type, "
+            "procurement_completed_at, "
             "customers!customer_id(id, name))"
         )
-        .eq("quotes.workflow_status", "pending_procurement")
+        .or_(
+            "workflow_status.eq.pending_procurement,procurement_completed_at.not.is.null",
+            reference_table="quotes",
+        )
         .eq("quotes.organization_id", user["org_id"])
         # Exclude soft-deleted quotes — their quote_brand_substates rows
         # survive via CASCADE only on HARD delete; soft delete (deleted_at
@@ -493,6 +513,10 @@ async def get_kanban(request) -> JSONResponse:
             "latest_reason": latest_reason,
             "tender_type": tender_type,
             "pause_log": pause_log,
+            # Testing 2 row 83: surface the quote-level completion flag so the
+            # UI can mark post-procurement cards as «Готово» rather than
+            # hiding them entirely.
+            "procurement_completed_at": parent.get("procurement_completed_at"),
         })
 
     return JSONResponse(
