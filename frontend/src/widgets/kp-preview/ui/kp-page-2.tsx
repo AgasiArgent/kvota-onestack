@@ -57,9 +57,10 @@ export function KpPage2({ data }: KpPage2Props) {
 
   return (
     <div className={styles.kpPage}>
-      {/* Header */}
+      {/* Header — mirrors page 1's blue+red slash geometry */}
       <div className={styles.kp2Head}>
         <div className={styles.kp2HeadBluebar} />
+        <div className={styles.kp2HeadRedbar} />
         <div className={styles.kp2HeadLogo}>
           <MasterBearingMark />
         </div>
