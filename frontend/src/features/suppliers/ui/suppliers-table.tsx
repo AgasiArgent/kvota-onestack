@@ -23,7 +23,10 @@ import {
 } from "@/components/ui/table";
 import { Pagination } from "@/shared/ui/pagination";
 import { useFilterNavigation } from "@/shared/lib/use-filter-navigation";
-import type { SupplierListItem } from "@/entities/supplier/types";
+import type {
+  SupplierListItem,
+  SupplierInvoiceTotal,
+} from "@/entities/supplier/types";
 
 interface Props {
   initialData: SupplierListItem[];
@@ -69,6 +72,34 @@ export function SuppliersTable({
     return str.length > max ? str.slice(0, max) + "..." : str;
   }
 
+  // Russian-locale date format (DD.MM.YYYY) — matches the rest of the app.
+  const dateFormatter = new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+
+  function formatDate(iso: string | null): string {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "—";
+    return dateFormatter.format(d);
+  }
+
+  // Currencies differ across КПП so we render one chip per currency,
+  // sorted by amount desc (set in the query). "12 500 EUR · 800 USD".
+  function formatTotals(totals: SupplierInvoiceTotal[]): string {
+    if (totals.length === 0) return "—";
+    return totals
+      .map(
+        (t) =>
+          `${new Intl.NumberFormat("ru-RU", {
+            maximumFractionDigits: 2,
+          }).format(t.amount)} ${t.currency}`
+      )
+      .join(" · ");
+  }
+
   function handleSearchChange(value: string) {
     setSearchValue(value);
     clearTimeout(debounceRef.current);
@@ -102,7 +133,7 @@ export function SuppliersTable({
           <Input
             value={searchValue}
             onChange={(e) => handleSearchChange(e.target.value)}
-            placeholder="Поиск по названию или коду..."
+            placeholder="Поиск по названию..."
             className="pl-9"
           />
         </div>
@@ -139,15 +170,16 @@ export function SuppliersTable({
         <span>Неактивные: {inactiveCount}</span>
       </div>
 
-      {/* Table */}
+      {/* Table — columns per Testing 2 row 84 (РОЗ/СтМОЗ/МОЗ request):
+          Наименование · Страна · МОЗ · Дата последнего КПП · Сумма КПП · Статус. */}
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[30%]">Наименование</TableHead>
-            <TableHead>Код</TableHead>
-            <TableHead>Страна / Город</TableHead>
-            <TableHead>Рег. номер</TableHead>
-            <TableHead>Контакт</TableHead>
+            <TableHead className="w-[28%]">Наименование</TableHead>
+            <TableHead>Страна</TableHead>
+            <TableHead>МОЗ</TableHead>
+            <TableHead>Дата последнего КПП</TableHead>
+            <TableHead>Сумма КПП</TableHead>
             <TableHead>Статус</TableHead>
           </TableRow>
         </TableHeader>
@@ -161,23 +193,18 @@ export function SuppliersTable({
                 >
                   {truncate(supplier.name, 50)}
                 </Link>
-                {supplier.supplier_code && (
-                  <Badge variant="secondary" className="ml-2 text-xs">
-                    {supplier.supplier_code}
-                  </Badge>
-                )}
-              </TableCell>
-              <TableCell className="text-text-muted tabular-nums">
-                {supplier.supplier_code ?? "—"}
               </TableCell>
               <TableCell className="text-text-muted">
-                {[supplier.country, supplier.city].filter(Boolean).join(", ") || "—"}
-              </TableCell>
-              <TableCell className="text-text-muted tabular-nums">
-                {supplier.registration_number ?? "—"}
+                {supplier.country ?? "—"}
               </TableCell>
               <TableCell className="text-text-muted">
-                {supplier.primary_contact_name ?? "—"}
+                {supplier.assignee_name ?? "—"}
+              </TableCell>
+              <TableCell className="text-text-muted tabular-nums">
+                {formatDate(supplier.last_invoice_at)}
+              </TableCell>
+              <TableCell className="text-text-muted tabular-nums">
+                {formatTotals(supplier.invoice_totals)}
               </TableCell>
               <TableCell>
                 <Badge variant={supplier.is_active ? "default" : "secondary"}>

@@ -1,5 +1,6 @@
 export type {
   SupplierListItem,
+  SupplierInvoiceTotal,
   SupplierDetail,
   SupplierContact,
   BrandAssignment,
