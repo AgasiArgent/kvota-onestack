@@ -200,3 +200,72 @@ class TestProposalDefaults:
     def test_user_subtitle_overrides_default(self) -> None:
         html = render_proposal_html(KpProposal(subtitle="custom subtitle"))
         assert "custom subtitle" in html
+
+
+# ---------------------------------------------------------------------------
+# Currency
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestCurrencyRendering:
+    """Currency switches the symbol used in column headers, grand total
+    suffix, and the Сумма КП headline. The headline additionally annotates
+    the ISO code in parens — first-mention disclosure, REQ choice 2026-05-26.
+    """
+
+    @staticmethod
+    def _render(code: str) -> str:
+        return render_proposal_html(
+            KpProposal(
+                amount="1 250 000",
+                items=(KpItem(name="X", model="m", qty="1", price="100"),),
+                currency=code,
+            )
+        )
+
+    def test_default_is_ruble(self) -> None:
+        # No currency field passed → default "RUB" via dataclass default.
+        html = render_proposal_html(KpProposal(amount="1 250 000"))
+        assert "Цена за ед., ₽" in html
+        assert "(RUB)" in html
+
+    def test_usd_renders_dollar_in_headers(self) -> None:
+        html = self._render("USD")
+        assert "Цена за ед., $" in html
+        assert "Сумма, $" in html
+        assert "₽" not in html
+
+    def test_usd_headline_carries_iso_code(self) -> None:
+        html = self._render("USD")
+        # Headline format: `1 250 000` + `<span class="suffix">$ (USD)</span>`
+        assert "$ (USD)" in html
+
+    def test_eur_symbol_renders(self) -> None:
+        html = self._render("EUR")
+        assert "€" in html
+        assert "(EUR)" in html
+
+    def test_cny_symbol_renders(self) -> None:
+        html = self._render("CNY")
+        assert "¥" in html
+        assert "(CNY)" in html
+
+    def test_try_symbol_renders(self) -> None:
+        html = self._render("TRY")
+        assert "₺" in html
+        assert "(TRY)" in html
+
+    def test_aed_omits_redundant_code_annotation(self) -> None:
+        """AED has no shaping-safe glyph, so we use 'AED' as the symbol.
+        That makes the headline `AED (AED)` look silly — strip the paren.
+        """
+        html = self._render("AED")
+        assert "Цена за ед., AED" in html
+        assert "AED (AED)" not in html
+
+    def test_unknown_currency_falls_back_to_ruble(self) -> None:
+        html = self._render("XXX")
+        # Defensive: typo or future-enum value still renders something
+        # readable instead of crashing.
+        assert "₽" in html

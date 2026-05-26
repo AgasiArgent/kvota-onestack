@@ -60,4 +60,13 @@ export interface KpProposal {
   foot_phone: string;
   foot_site: string;
   foot_email: string;
+  /**
+   * ISO-4217 currency code. Defaults to "RUB" so older localStorage
+   * payloads (saved before this field existed) keep rendering with the
+   * ruble suffix on the next form load. See `CURRENCIES` in
+   * `entities/kp-proposal/lib/currency.ts` for the supported set.
+   */
+  currency: CurrencyCode;
 }
+
+export type CurrencyCode = "RUB" | "USD" | "EUR" | "CNY" | "AED" | "TRY";

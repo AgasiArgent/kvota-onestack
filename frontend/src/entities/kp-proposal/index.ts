@@ -5,7 +5,20 @@
  * barrel — never reach into `model/` or `lib/` directly.
  */
 
-export type { KpItem, KpPackagingItem, KpServices, KpProposal } from "./model/types";
+export type {
+  KpItem,
+  KpPackagingItem,
+  KpServices,
+  KpProposal,
+  CurrencyCode,
+} from "./model/types";
+export {
+  CURRENCIES,
+  currencyEntry,
+  currencySymbol,
+  headlineSuffix,
+} from "./lib/currency";
+export type { CurrencyEntry } from "./lib/currency";
 export {
   kpProposalSchema,
   kpItemSchema,

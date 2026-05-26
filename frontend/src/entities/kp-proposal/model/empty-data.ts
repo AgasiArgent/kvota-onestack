@@ -43,4 +43,5 @@ export const EMPTY_PROPOSAL: KpProposal = {
   foot_phone: "",
   foot_site: "",
   foot_email: "",
+  currency: "RUB",
 };

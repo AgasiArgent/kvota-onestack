@@ -107,8 +107,17 @@ class TestMasterBearingSvgFragments:
         # Validate it's an SVG root (with or without xmlns prefix).
         assert root.tag.endswith("svg"), f"expected <svg> root, got {root.tag}"
 
-    def test_logo_svg_parses(self) -> None:
-        self._assert_parses(MASTER_BEARING.logo_svg)
+    def test_logo_html_is_inline_base64_img(self) -> None:
+        """Logo is a PNG base64-inlined as an ``<img>`` tag.
+
+        Inlined so chromium-headless-shell renders it (file:// URLs are
+        silently dropped — ADR-8). White-on-blue look is achieved via the
+        CSS ``filter: brightness(0) invert(1)`` rule in ``.kp-logo__img``.
+        """
+        logo = MASTER_BEARING.logo_html
+        assert logo.startswith("<img"), f"expected <img> tag, got {logo[:40]!r}"
+        assert 'src="data:image/png;base64,' in logo
+        assert 'class="kp-logo__img"' in logo
 
     def test_footer_feature_count(self) -> None:
         assert len(MASTER_BEARING.page1_footer_features) == 4

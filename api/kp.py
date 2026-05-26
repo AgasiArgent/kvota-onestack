@@ -164,6 +164,10 @@ def _build_proposal(body: Any) -> KpProposal:
         foot_phone=_s("foot_phone"),
         foot_site=_s("foot_site"),
         foot_email=_s("foot_email"),
+        # Currency arrives as a 3-letter ISO code; the renderer falls back
+        # to RUB on any unknown value, so we forward whatever the client
+        # sends instead of validating an enum at this layer.
+        currency=_s("currency") or "RUB",
     )
 
 

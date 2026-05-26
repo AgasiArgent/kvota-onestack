@@ -119,6 +119,52 @@ class KpProposal:
     foot_phone: str = ""
     foot_site: str = ""
     foot_email: str = ""
+    # ISO-4217 code from CURRENCIES. Defaults to RUB so older payloads
+    # (pre-currency field) keep rendering with the ruble suffix.
+    currency: str = "RUB"
+
+
+# ---------------------------------------------------------------------------
+# Currency table
+# ---------------------------------------------------------------------------
+
+
+# Symbol used as the suffix after each monetary value. For currencies whose
+# glyph requires non-Latin shaping (AED → د.إ) Inter has no coverage, so we
+# fall back to the ISO-4217 code as the visible mark — keeping every code
+# self-contained in this dict means the renderer never needs Inter coverage
+# heuristics.
+CURRENCIES: dict[str, dict[str, str]] = {
+    "RUB": {"symbol": "₽", "name": "Российский рубль"},
+    "USD": {"symbol": "$", "name": "Доллар США"},
+    "EUR": {"symbol": "€", "name": "Евро"},
+    "CNY": {"symbol": "¥", "name": "Китайский юань"},
+    "AED": {"symbol": "AED", "name": "Дирхам ОАЭ"},
+    "TRY": {"symbol": "₺", "name": "Турецкая лира"},
+}
+
+_FALLBACK_CURRENCY = "RUB"
+
+
+def currency_symbol(code: str) -> str:
+    """Return the suffix glyph for a currency code, or fall back to RUB.
+
+    The renderer is defensive: an unknown code (typo, future enum value
+    not yet whitelisted on this branch) still produces a readable suffix.
+    """
+    entry = CURRENCIES.get(code) or CURRENCIES[_FALLBACK_CURRENCY]
+    return entry["symbol"]
+
+
+def _headline_suffix(code: str) -> str:
+    """Suffix for the Сумма КП headline: ``₽ (RUB)`` or just ``AED``.
+
+    The code annotation is dropped when symbol == code (AED) so the line
+    doesn't read ``AED (AED)`` — REQ: hybrid format only meaningful when
+    glyph and code differ.
+    """
+    symbol = currency_symbol(code)
+    return f"{symbol} ({code})" if symbol != code else symbol
 
 
 # ---------------------------------------------------------------------------
@@ -341,25 +387,19 @@ html, body {{
 }}
 
 /* ============================================================
-   Logo (MASTER BEARING wordmark)
+   Logo (full Master Bearing wordmark PNG, recolored white via filter
+   so the blue brand asset reads on the blue header bar without
+   needing a second logo variant)
    ============================================================ */
 .kp-logo {{
     display: inline-flex;
     align-items: center;
-    gap: 10px;
-    color: #fff;
-    font-weight: 700;
-    letter-spacing: 0.02em;
 }}
-.kp-logo svg {{ width: 38px; height: 38px; flex-shrink: 0; }}
-.kp-logo__text {{
-    display: inline-flex;
-    flex-direction: column;
-    line-height: 0.95;
-    font-size: 17px;
-    letter-spacing: 0.04em;
+.kp-logo__img {{
+    width: 150px;
+    height: auto;
+    filter: brightness(0) invert(1);
 }}
-.kp-logo__text span {{ font-weight: 700; }}
 
 /* ============================================================
    PAGE 1 — Header
@@ -1111,7 +1151,7 @@ def _page_1(proposal: KpProposal, branding: KpBranding) -> str:
                 "ruble",
                 "Сумма КП:",
                 _fmt_ru(proposal.amount) if proposal.amount else "",
-                suffix="₽",
+                suffix=_headline_suffix(proposal.currency),
             ),
             _kp_field(branding, "pin", "Адрес поставки:", proposal.address),
             _kp_field(branding, "pkg", "Цена включает:", proposal.price_includes, tall=True),
@@ -1142,7 +1182,9 @@ def _page_1(proposal: KpProposal, branding: KpBranding) -> str:
         )
     grand_total = calc_grand_total(proposal.items)
     grand_total_str = (
-        f"{_fmt_ru(str(grand_total))} ₽" if grand_total > 0 else ""
+        f"{_fmt_ru(str(grand_total))} {currency_symbol(proposal.currency)}"
+        if grand_total > 0
+        else ""
     )
 
     # Footer features — exactly four tiles from branding (REQ-15.5).
@@ -1163,10 +1205,7 @@ def _page_1(proposal: KpProposal, branding: KpBranding) -> str:
             <div class="kp1-head__redbar">{red_poly}</div>
             <div class="kp1-head__logo">
                 <div class="kp-logo">
-                    {branding.logo_svg}
-                    <div class="kp-logo__text">
-                        <span>MASTER</span><span>BEARING</span>
-                    </div>
+                    {branding.logo_html}
                 </div>
             </div>
             <div class="kp1-head__illu">
@@ -1197,8 +1236,8 @@ def _page_1(proposal: KpProposal, branding: KpBranding) -> str:
                     <div>Наименование техники</div>
                     <div>Модель / Характеристики</div>
                     <div class="right">Кол-во</div>
-                    <div class="right">Цена за ед., ₽</div>
-                    <div class="right">Сумма, ₽</div>
+                    <div class="right">Цена за ед., {_e(currency_symbol(proposal.currency))}</div>
+                    <div class="right">Сумма, {_e(currency_symbol(proposal.currency))}</div>
                 </div>
                 {''.join(item_rows_html)}
                 <div class="kp-table__total">
@@ -1329,10 +1368,7 @@ def _page_2(proposal: KpProposal, branding: KpBranding) -> str:
             <div class="kp2-head__bluebar">{blue_poly}</div>
             <div class="kp2-head__logo">
                 <div class="kp-logo">
-                    {branding.logo_svg}
-                    <div class="kp-logo__text">
-                        <span>MASTER</span><span>BEARING</span>
-                    </div>
+                    {branding.logo_html}
                 </div>
             </div>
             <div class="kp2-head__title">
