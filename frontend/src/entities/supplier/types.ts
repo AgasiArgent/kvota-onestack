@@ -1,13 +1,29 @@
+/**
+ * Aggregated total of invoice_items for a supplier, bucketed by currency.
+ * One bucket per distinct purchase_currency used across the supplier's КПП.
+ */
+export interface SupplierInvoiceTotal {
+  currency: string;
+  amount: number;
+}
+
+/**
+ * Suppliers table row (Testing 2 row 84). Columns:
+ *   1. Наименование (name)
+ *   2. Страна (country)
+ *   3. МОЗ (assigned procurement manager — first supplier_assignees user)
+ *   4. Дата последнего КПП (MAX(invoices.created_at) for this supplier)
+ *   5. Сумма КПП (SUM(invoice_items.purchase_price_original * quantity), bucketed by currency)
+ *   6. Статус (is_active)
+ */
 export interface SupplierListItem {
   id: string;
   name: string;
-  supplier_code: string | null;
   country: string | null;
-  city: string | null;
-  registration_number: string | null;
   is_active: boolean;
-  primary_contact_name: string | null;
-  primary_contact_email: string | null;
+  assignee_name: string | null;
+  last_invoice_at: string | null;
+  invoice_totals: SupplierInvoiceTotal[];
 }
 
 export interface SupplierDetail {

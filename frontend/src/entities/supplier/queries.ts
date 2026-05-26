@@ -5,6 +5,7 @@ import { getAssignedSupplierIds } from "@/shared/lib/access";
 import { fetchActiveAuthUserIds } from "@/entities/user";
 import type {
   SupplierListItem,
+  SupplierInvoiceTotal,
   SupplierDetail,
   SupplierContact,
   BrandAssignment,
@@ -30,23 +31,140 @@ function getUntypedClient(): UntypedClient {
   return createAdminClient() as unknown as UntypedClient;
 }
 
-interface ContactRow {
+interface AssigneeRow {
   supplier_id: string;
-  name: string;
-  email: string | null;
+  user_id: string;
+  created_at: string;
 }
 
-async function fetchPrimaryContactsForSuppliers(
+/**
+ * Fetch one МОЗ per supplier (earliest-assigned user). Returns map
+ * `supplier_id → full_name`. Empty map if no supplier_ids passed.
+ */
+async function fetchPrimaryAssignees(
   supplierIds: string[]
-): Promise<ContactRow[]> {
-  if (supplierIds.length === 0) return [];
+): Promise<Map<string, string>> {
+  if (supplierIds.length === 0) return new Map();
   const untyped = getUntypedClient();
+  const supabase = createAdminClient();
+
   const { data } = await untyped
-    .from("supplier_contacts")
-    .select("supplier_id, name, email")
+    .from("supplier_assignees")
+    .select("supplier_id, user_id, created_at")
     .in("supplier_id", supplierIds)
-    .eq("is_primary", true);
-  return (data ?? []) as ContactRow[];
+    .order("created_at", { ascending: true });
+
+  const rows = (data ?? []) as AssigneeRow[];
+
+  // Keep the earliest-assigned МОЗ per supplier (deterministic display).
+  const firstPerSupplier = new Map<string, string>();
+  for (const row of rows) {
+    if (!firstPerSupplier.has(row.supplier_id)) {
+      firstPerSupplier.set(row.supplier_id, row.user_id);
+    }
+  }
+
+  const userIds = [...new Set(firstPerSupplier.values())];
+  if (userIds.length === 0) return new Map();
+
+  const { data: profiles } = await supabase
+    .from("user_profiles")
+    .select("user_id, full_name")
+    .in("user_id", userIds);
+
+  const nameById = new Map(
+    (profiles ?? []).map((p) => [p.user_id, p.full_name ?? ""])
+  );
+
+  const result = new Map<string, string>();
+  for (const [supplierId, userId] of firstPerSupplier) {
+    const name = nameById.get(userId);
+    if (name) result.set(supplierId, name);
+  }
+  return result;
+}
+
+interface InvoiceAggregateRow {
+  supplier_id: string;
+  created_at: string | null;
+  invoice_items: Array<{
+    quantity: number | null;
+    purchase_price_original: number | null;
+    purchase_currency: string | null;
+  }> | null;
+}
+
+/**
+ * Aggregate per-supplier totals from invoices + invoice_items:
+ *   - last_invoice_at: MAX(invoices.created_at)
+ *   - totals: per-currency SUM(invoice_items.purchase_price_original * quantity)
+ *
+ * Currencies differ across КПП, so summing into a single number would be wrong.
+ * Each currency gets its own bucket; the UI renders them as "12 500 EUR · 800 USD".
+ */
+async function fetchInvoiceAggregatesForSuppliers(
+  supplierIds: string[]
+): Promise<
+  Map<
+    string,
+    { last_invoice_at: string | null; totals: SupplierInvoiceTotal[] }
+  >
+> {
+  if (supplierIds.length === 0) return new Map();
+  const supabase = createAdminClient();
+
+  const { data } = await supabase
+    .from("invoices")
+    .select(
+      "supplier_id, created_at, invoice_items(quantity, purchase_price_original, purchase_currency)"
+    )
+    .in("supplier_id", supplierIds);
+
+  const rows = (data ?? []) as unknown as InvoiceAggregateRow[];
+  const acc = new Map<
+    string,
+    { last_invoice_at: string | null; totals: Map<string, number> }
+  >();
+
+  for (const inv of rows) {
+    const bucket = acc.get(inv.supplier_id) ?? {
+      last_invoice_at: null,
+      totals: new Map<string, number>(),
+    };
+
+    if (inv.created_at) {
+      if (!bucket.last_invoice_at || inv.created_at > bucket.last_invoice_at) {
+        bucket.last_invoice_at = inv.created_at;
+      }
+    }
+
+    for (const item of inv.invoice_items ?? []) {
+      const qty = Number(item.quantity ?? 0);
+      const price = Number(item.purchase_price_original ?? 0);
+      const currency = (item.purchase_currency ?? "").trim().toUpperCase();
+      if (!currency || !Number.isFinite(qty) || !Number.isFinite(price)) continue;
+      const line = qty * price;
+      if (line === 0) continue;
+      bucket.totals.set(currency, (bucket.totals.get(currency) ?? 0) + line);
+    }
+
+    acc.set(inv.supplier_id, bucket);
+  }
+
+  const result = new Map<
+    string,
+    { last_invoice_at: string | null; totals: SupplierInvoiceTotal[] }
+  >();
+  for (const [supplierId, bucket] of acc) {
+    const totals: SupplierInvoiceTotal[] = [...bucket.totals.entries()]
+      .map(([currency, amount]) => ({ currency, amount }))
+      .sort((a, b) => b.amount - a.amount);
+    result.set(supplierId, {
+      last_invoice_at: bucket.last_invoice_at,
+      totals,
+    });
+  }
+  return result;
 }
 
 export async function fetchSuppliersList(
@@ -73,7 +191,7 @@ export async function fetchSuppliersList(
 
   let query = supabase
     .from("suppliers")
-    .select("id, name, supplier_code, country, city, is_active", {
+    .select("id, name, country, is_active", {
       count: "exact",
     })
     .eq("organization_id", orgId)
@@ -101,8 +219,7 @@ export async function fetchSuppliersList(
   const rows = data ?? [];
   const supplierIds = rows.map((s) => s.id);
 
-  // Fetch primary contacts and active/inactive counts in parallel
-  // Counts query uses same visibility filter as main query
+  // Active/inactive counts use same visibility filter as the main query.
   let countsQuery = supabase
     .from("suppliers")
     .select("is_active")
@@ -111,31 +228,26 @@ export async function fetchSuppliersList(
     countsQuery = countsQuery.in("id", assignedIds.length > 0 ? assignedIds : [EMPTY_RESULT_UUID]);
   }
 
-  const [contactsResult, allStatuses] = await Promise.all([
-    fetchPrimaryContactsForSuppliers(supplierIds),
+  const [assigneeMap, invoiceAggregates, allStatuses] = await Promise.all([
+    fetchPrimaryAssignees(supplierIds),
+    fetchInvoiceAggregatesForSuppliers(supplierIds),
     countsQuery,
   ]);
-
-  const contactMap = new Map(
-    contactsResult.map((c: ContactRow) => [c.supplier_id, { name: c.name, email: c.email }])
-  );
 
   const allList = allStatuses.data ?? [];
   const activeCount = allList.filter((s) => s.is_active !== false).length;
   const inactiveCount = allList.filter((s) => s.is_active === false).length;
 
   const items: SupplierListItem[] = rows.map((row) => {
-    const contact = contactMap.get(row.id);
+    const aggregate = invoiceAggregates.get(row.id);
     return {
       id: row.id,
       name: row.name,
-      supplier_code: row.supplier_code,
       country: row.country,
-      city: row.city,
-      registration_number: null,
       is_active: row.is_active !== false,
-      primary_contact_name: contact?.name ?? null,
-      primary_contact_email: contact?.email ?? null,
+      assignee_name: assigneeMap.get(row.id) ?? null,
+      last_invoice_at: aggregate?.last_invoice_at ?? null,
+      invoice_totals: aggregate?.totals ?? [],
     };
   });
 
