@@ -599,6 +599,17 @@ def build_calculation_inputs(items: List[Dict], variables: Dict[str, Any]) -> Li
         if item.get('import_banned'):
             continue
 
+        # Testing 2 row 90: МОП-controlled exclusion (included_in_calc=False).
+        # Default True so legacy items still flow through. Distinct from
+        # is_unavailable (system N/A) and import_banned (customs auto-block):
+        # this one is set explicitly by МОП on the calc step.
+        # NOTE: Row 87 (parallel) adds auto-exclusion for rejected/customs-
+        # disallowed items — that filter sits in this same loop. When both
+        # branches merge, keep both filters; the UI distinguishes them via
+        # separate flags exposed by the composition view.
+        if item.get('included_in_calc') is False:
+            continue
+
         # Get item's purchase currency
         item_currency = item.get('purchase_currency') or item.get('currency_of_base_price', 'USD')
 

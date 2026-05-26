@@ -33,6 +33,7 @@ from services.composition_service import (
     ConcurrencyError,
     ValidationError,
     apply_composition,
+    apply_included_in_calc,
     freeze_composition,
     get_composition_view,
 )
@@ -397,6 +398,133 @@ async def apply_composition_endpoint(request, quote_id: str) -> JSONResponse:
 
     return JSONResponse(
         {"success": True, "data": {"quote_id": quote_id, "composition_complete": composition_complete}},
+        status_code=200,
+    )
+
+
+# ============================================================================
+# Testing 2 row 90 — POST /api/quotes/{quote_id}/inclusion
+# ============================================================================
+
+
+async def apply_inclusion_endpoint(request, quote_id: str) -> JSONResponse:
+    """Persist МОП's per-item include/exclude decisions for the calc step.
+
+    Path: POST /api/quotes/{quote_id}/inclusion
+
+    Params (JSON body):
+        inclusion: Dict[quote_item_id, bool] (required) — True keeps the
+            item in the calculation, False excludes it. Items omitted from
+            the map are left untouched.
+
+    Returns:
+        quote_id: str
+        updated: int — Number of quote_items rows whose flag was set.
+
+    Errors:
+        400 BAD_REQUEST       — malformed JSON body
+        400 VALIDATION_ERROR  — inclusion missing, non-dict, or contains
+                                non-bool values
+        401 UNAUTHORIZED
+        403 INSUFFICIENT_PERMISSIONS — role not in COMPOSITION_WRITE_ROLES
+        404 NOT_FOUND         — quote not visible
+
+    Side Effects:
+        Updates quote_items.included_in_calc for affected items.
+        Bumps quotes.updated_at.
+
+    Roles: sales, head_of_sales, procurement, procurement_senior,
+        head_of_procurement, admin, top_manager, finance, quote_controller,
+        spec_controller
+    """
+    user, user_roles, err = _authenticate_and_load_roles(request)
+    if err:
+        return err
+
+    role_err = _check_roles(user_roles, COMPOSITION_WRITE_ROLES)
+    if role_err:
+        return role_err
+
+    _, org_err = _verify_quote_org(quote_id, user["org_id"])
+    if org_err:
+        return org_err
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(
+            {"success": False, "error": {"code": "BAD_REQUEST", "message": "Invalid JSON body"}},
+            status_code=400,
+        )
+
+    inclusion = body.get("inclusion")
+    if not isinstance(inclusion, dict):
+        return JSONResponse(
+            {
+                "success": False,
+                "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "inclusion must be a dict of quote_item_id -> bool",
+                },
+            },
+            status_code=400,
+        )
+
+    # Server-side strict validation: every value must be a real bool.
+    # Truthiness ambiguity (e.g. "false" string) would otherwise silently
+    # set the wrong flag.
+    coerced: dict[str, bool] = {}
+    for qi_id, value in inclusion.items():
+        if not isinstance(qi_id, str) or not qi_id:
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "inclusion keys must be non-empty quote_item_id strings",
+                    },
+                },
+                status_code=400,
+            )
+        if not isinstance(value, bool):
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": f"inclusion[{qi_id}] must be a bool, got {type(value).__name__}",
+                    },
+                },
+                status_code=400,
+            )
+        coerced[qi_id] = value
+
+    sb = get_supabase()
+    try:
+        apply_included_in_calc(
+            quote_id=quote_id,
+            inclusion_map=coerced,
+            supabase=sb,
+            user_id=user["id"],
+        )
+    except Exception as e:
+        logger.error("apply_included_in_calc failed for quote %s: %s", quote_id, e)
+        return JSONResponse(
+            {
+                "success": False,
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": "Failed to apply inclusion update",
+                },
+            },
+            status_code=500,
+        )
+
+    return JSONResponse(
+        {
+            "success": True,
+            "data": {"quote_id": quote_id, "updated": len(coerced)},
+        },
         status_code=200,
     )
 

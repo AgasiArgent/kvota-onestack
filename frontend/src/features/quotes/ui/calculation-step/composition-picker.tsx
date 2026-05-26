@@ -74,6 +74,35 @@ async function _postSelection(
   return payload.data ?? { composition_complete: false };
 }
 
+/**
+ * Testing 2 row 90 — persist МОП's per-item include/exclude decision.
+ *
+ * Distinct from `_postSelection`: that one picks WHICH supplier per item.
+ * This one decides whether the item participates in the calc at all. The
+ * backend filter sits in `build_calculation_inputs()` so excluded rows are
+ * dropped before reaching the locked calc engine.
+ */
+async function _postInclusion(
+  quoteId: string,
+  inclusion: Record<string, boolean>
+): Promise<{ updated: number }> {
+  const authHeader = await _getAuthHeader();
+  const res = await fetch(`/api/quotes/${quoteId}/inclusion`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeader },
+    body: JSON.stringify({ inclusion }),
+  });
+  const payload = await res.json();
+  if (!res.ok || !payload.success) {
+    const err = new Error(
+      payload.error?.message || "Failed to apply inclusion"
+    );
+    (err as Error & { code?: string }).code = payload.error?.code;
+    throw err;
+  }
+  return payload.data ?? { updated: 0 };
+}
+
 export function CompositionPicker({ quoteId }: CompositionPickerProps) {
   const [view, setView] = useState<CompositionView | null>(null);
   const [loading, setLoading] = useState(true);
@@ -100,6 +129,40 @@ export function CompositionPicker({ quoteId }: CompositionPickerProps) {
       cancelled = true;
     };
   }, [quoteId]);
+
+  const handleToggleInclusion = useCallback(
+    async (quoteItemId: string, included: boolean) => {
+      if (!view) return;
+
+      // Optimistic update
+      const previousView = view;
+      const optimisticView: CompositionView = {
+        ...view,
+        items: view.items.map((item) =>
+          item.quote_item_id === quoteItemId
+            ? { ...item, included_in_calc: included }
+            : item
+        ),
+      };
+      setView(optimisticView);
+      setSaving(true);
+
+      try {
+        await _postInclusion(quoteId, { [quoteItemId]: included });
+        toast.success(
+          included ? "Позиция включена в расчёт" : "Позиция исключена из расчёта"
+        );
+      } catch (e: unknown) {
+        setView(previousView);
+        toast.error(
+          e instanceof Error ? e.message : "Не удалось сохранить выбор"
+        );
+      } finally {
+        setSaving(false);
+      }
+    },
+    [view, quoteId]
+  );
 
   const handleSelect = useCallback(
     async (quoteItemId: string, invoiceId: string) => {
@@ -177,12 +240,16 @@ export function CompositionPicker({ quoteId }: CompositionPickerProps) {
     return null;
   }
 
-  // If no item has more than one alternative, there is nothing to compose.
-  // Hide the picker — the legacy single-supplier path handles display.
+  // Testing 2 row 90: the picker now also hosts the МОП "include/exclude"
+  // toggle, so show it whenever there is more than one alternative OR more
+  // than one item (the latter is the case where МОП wants to drop a line
+  // even though there's a single supplier). For single-item single-supplier
+  // quotes there is genuinely nothing to compose — keep the legacy hide.
   const hasMultiSupplierChoice = view.items.some(
     (item) => item.alternatives.length > 1
   );
-  if (!hasMultiSupplierChoice) {
+  const hasMultipleItems = view.items.length > 1;
+  if (!hasMultiSupplierChoice && !hasMultipleItems) {
     return null;
   }
 
@@ -208,6 +275,7 @@ export function CompositionPicker({ quoteId }: CompositionPickerProps) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left text-muted-foreground">
+              <th className="py-2 pr-2 font-medium w-12 text-center">В&nbsp;расчёт</th>
               <th className="py-2 pr-4 font-medium">Позиция</th>
               <th className="py-2 px-2 font-medium w-20">Кол-во</th>
               <th className="py-2 px-2 font-medium">Поставщики</th>
@@ -220,6 +288,7 @@ export function CompositionPicker({ quoteId }: CompositionPickerProps) {
                 item={item}
                 disabled={saving || !view.can_edit}
                 onSelect={handleSelect}
+                onToggleInclusion={handleToggleInclusion}
               />
             ))}
           </tbody>
@@ -239,21 +308,56 @@ export function CompositionItemRow({
   item,
   disabled,
   onSelect,
+  onToggleInclusion,
 }: {
   item: CompositionItem;
   disabled: boolean;
   onSelect: (quoteItemId: string, invoiceId: string) => void;
+  /**
+   * Testing 2 row 90 — МОП toggle for including/excluding the row from the
+   * calc. Optional so the picker-coverage tests (which exercise the
+   * `coverage_summary`/`divergent_markups` rendering only) keep their
+   * pre-row-90 prop signature. When omitted the checkbox is a no-op.
+   */
+  onToggleInclusion?: (quoteItemId: string, included: boolean) => void;
 }) {
   const alternatives = item.alternatives;
   const selected = item.selected_invoice_id;
+  // Treat undefined as included — coverage-summary tests construct items
+  // without the new flag, and pre-migration rows from the API will eventually
+  // surface as true once the migration runs.
+  const included = item.included_in_calc !== false;
 
+  // Testing 2 row 90: when МОП excludes a row we grey it out and surface the
+  // reason label. The toggle stays interactive so МОП can re-include it.
   return (
-    <tr className="border-b border-border/40 last:border-0 align-top">
+    <tr
+      className={`border-b border-border/40 last:border-0 align-top ${
+        included ? "" : "opacity-50"
+      }`}
+    >
+      <td className="py-3 pr-2 text-center">
+        <input
+          type="checkbox"
+          aria-label="Включить позицию в расчёт"
+          checked={included}
+          disabled={disabled || !onToggleInclusion}
+          onChange={(e) =>
+            onToggleInclusion?.(item.quote_item_id, e.target.checked)
+          }
+          className="h-4 w-4 cursor-pointer accent-accent disabled:cursor-not-allowed"
+        />
+      </td>
       <td className="py-3 pr-4">
         <div className="font-medium">{item.name ?? "—"}</div>
         {(item.brand || item.sku) && (
           <div className="text-xs text-muted-foreground">
             {[item.brand, item.sku].filter(Boolean).join(" · ")}
+          </div>
+        )}
+        {!included && (
+          <div className="text-xs italic text-amber-600 dark:text-amber-400 mt-0.5">
+            Исключено по решению МОП
           </div>
         )}
       </td>
@@ -285,7 +389,7 @@ export function CompositionItemRow({
                   name={`composition-${item.quote_item_id}`}
                   value={alt.invoice_id}
                   checked={selected === alt.invoice_id}
-                  disabled={disabled}
+                  disabled={disabled || !included}
                   onChange={() => onSelect(item.quote_item_id, alt.invoice_id)}
                   className="h-3.5 w-3.5 mt-1 cursor-pointer accent-accent disabled:cursor-not-allowed"
                 />

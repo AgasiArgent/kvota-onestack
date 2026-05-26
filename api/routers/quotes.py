@@ -18,21 +18,18 @@ from starlette.responses import JSONResponse, Response
 
 from api.composition import (
     apply_composition_endpoint as _apply_composition,
+    apply_inclusion_endpoint as _apply_inclusion,
     get_composition as _get_composition,
 )
 from api.plan_fact import quotes_search as _quotes_search
 from api.procurement import (
     get_kanban as _get_kanban,
-    get_pause_history_endpoint as _get_pause_history,
     get_status_history as _get_status_history,
-    post_pause as _post_pause,
     post_substatus as _post_substatus,
-    post_unpause as _post_unpause,
 )
 from api.customs import (
     refresh_customs_snapshot_handler as _refresh_customs_snapshot,
 )
-from api.calc_step_info import get_calc_step_info as _get_calc_step_info
 from api.quotes import (
     calculate_quote as _calculate_quote,
     cancel_quote as _cancel_quote,
@@ -74,24 +71,6 @@ async def post_substatus(request: Request, quote_id: str) -> JSONResponse:
     return await _post_substatus(request, quote_id)
 
 
-@router.post("/{quote_id}/pause")
-async def post_pause(request: Request, quote_id: str) -> JSONResponse:
-    """Pause a (quote, brand) card with a mandatory reason (Testing 2 row 74)."""
-    return await _post_pause(request, quote_id)
-
-
-@router.post("/{quote_id}/unpause")
-async def post_unpause(request: Request, quote_id: str) -> JSONResponse:
-    """Unpause a (quote, brand) card, closing the latest open pause log row."""
-    return await _post_unpause(request, quote_id)
-
-
-@router.get("/{quote_id}/pause-history")
-async def get_pause_history(request: Request, quote_id: str) -> JSONResponse:
-    """Return full pause activity log for a quote (Testing 2 row 74)."""
-    return await _get_pause_history(request, quote_id)
-
-
 @router.get("/{quote_id}/status-history")
 async def get_status_history(request: Request, quote_id: str) -> JSONResponse:
     """Return full audit log of status/substatus transitions for a quote."""
@@ -108,6 +87,12 @@ async def get_composition(request: Request, quote_id: str) -> JSONResponse:
 async def post_composition(request: Request, quote_id: str) -> JSONResponse:
     """Apply (validate + persist) a composition plan for a quote."""
     return await _apply_composition(request, quote_id)
+
+
+@router.post("/{quote_id}/inclusion")
+async def post_inclusion(request: Request, quote_id: str) -> JSONResponse:
+    """Persist МОП's per-item include/exclude decisions for the calc step (Testing 2 row 90)."""
+    return await _apply_inclusion(request, quote_id)
 
 
 @router.post("/{quote_id}/soft-delete")
@@ -166,18 +151,6 @@ async def post_refresh_customs_snapshot(
     fallback (Q4): live → 30-day cache → 409 FREEZE_ABORTED. Customs roles only.
     """
     return await _refresh_customs_snapshot(request, quote_id, alta_client)
-
-
-@router.get("/{quote_id}/calc-step-info")
-async def get_calc_step_info_route(
-    request: Request, quote_id: str
-) -> JSONResponse:
-    """Return per-invoice logistics + per-item customs + certifications.
-
-    Powers the calc-step info card (Testing 2 rows 36 + 48). Read-only.
-    Dual auth: JWT (Next.js) first, then legacy session (FastHTML).
-    """
-    return await _get_calc_step_info(request, quote_id)
 
 
 @router.get("/{quote_id}/export/validation")

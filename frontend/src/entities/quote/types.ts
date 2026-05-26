@@ -39,6 +39,16 @@ export interface CompositionItem {
   name: string | null;
   quantity: number | null;
   selected_invoice_id: string | null;
+  /**
+   * Testing 2 row 90: МОП-controlled inclusion flag. When `false` the
+   * item is rendered greyed-out with an "Исключено по решению МОП" label
+   * and is dropped by the backend `build_calculation_inputs()` so it does
+   * not contribute to totals. Optional in the type so pre-row-90 test
+   * fixtures (which omit the field) continue to typecheck; the picker
+   * treats `undefined` the same as `true`. Pre-migration API responses
+   * also omit the field — same behaviour.
+   */
+  included_in_calc?: boolean;
   alternatives: CompositionAlternative[];
 }
 

@@ -147,9 +147,15 @@ def _legacy_shape(qi: dict) -> dict:
         # Customer-side flags / markups (preserved verbatim)
         "is_unavailable": qi.get("is_unavailable", False),
         "import_banned": qi.get("import_banned", False),
+        # Testing 2 row 90: МОП-controlled inclusion flag — defaults TRUE so
+        # legacy rows are still picked up by build_calculation_inputs().
+        "included_in_calc": qi.get("included_in_calc", True),
         "markup": qi.get("markup"),
         "supplier_discount": qi.get("supplier_discount"),
         "vat_rate": qi.get("vat_rate"),
+        # Traceability — keep quote_item_id available for the legacy shape so
+        # the front-end can correlate calc inputs with picker rows.
+        "quote_item_id": qi.get("id"),
     }
 
 
@@ -188,6 +194,9 @@ def _build_calc_item(qi: dict, ii: dict, ratio) -> dict:
         # Customer-side flags + sales markups — from quote_item
         "is_unavailable": qi.get("is_unavailable", False),
         "import_banned": qi.get("import_banned", False),
+        # Testing 2 row 90: МОП-controlled inclusion flag. The downstream
+        # build_calculation_inputs() drops rows with included_in_calc=False.
+        "included_in_calc": qi.get("included_in_calc", True),
         "markup": qi.get("markup"),
         "supplier_discount": qi.get("supplier_discount"),
         "vat_rate": qi.get("vat_rate"),
@@ -257,10 +266,14 @@ def get_composed_items(quote_id: str, supabase) -> list[dict]:
     Returns:
         List of item dicts ready to feed into ``build_calculation_inputs()``.
     """
+    # Testing 2 row 90: items ordered by `position` so calc engine receives them
+    # in the order МОП entered them on the request. Without ORDER BY, PostgREST
+    # returns rows in physical/insertion order — non-deterministic across edits.
     items_resp = (
         supabase.table("quote_items")
         .select("*")
         .eq("quote_id", quote_id)
+        .order("position", desc=False)
         .execute()
     )
     qi_rows: list[dict] = items_resp.data or []
@@ -355,14 +368,22 @@ def is_procurement_complete(quote_id: str, supabase) -> bool:
     """
     qi_rows: list[dict] = (
         supabase.table("quote_items")
-        .select("id, is_unavailable, composition_selected_invoice_id")
+        .select("id, is_unavailable, included_in_calc, composition_selected_invoice_id")
         .eq("quote_id", quote_id)
         .execute()
         .data
         or []
     )
 
-    required_qi = [qi for qi in qi_rows if not qi.get("is_unavailable")]
+    # Testing 2 row 90: МОП-excluded rows (included_in_calc=False) are
+    # intentionally out of the calc and therefore out of procurement readiness
+    # — same treatment as is_unavailable. Default True preserves legacy
+    # behaviour when the column is absent (pre-migration 331 rows).
+    required_qi = [
+        qi for qi in qi_rows
+        if not qi.get("is_unavailable")
+        and qi.get("included_in_calc", True) is not False
+    ]
     if not required_qi:
         # Empty quote (or everything N/A) can't be "complete"
         return False
@@ -444,10 +465,13 @@ def get_composition_view(
                 (UI warning: ``get_composed_items`` will use the first qi's
                 markup — see design.md §7.1).
     """
+    # Testing 2 row 90: order by position so the picker renders items in
+    # request order (same as fetchQuoteItems and get_composed_items above).
     items_resp = (
         supabase.table("quote_items")
         .select("*")
         .eq("quote_id", quote_id)
+        .order("position", desc=False)
         .execute()
     )
     items: list[dict] = items_resp.data or []
@@ -611,7 +635,10 @@ def get_composition_view(
     all_have_selection = True
     for item in items:
         selected = item.get("composition_selected_invoice_id")
-        if selected is None:
+        included_in_calc = bool(item.get("included_in_calc", True))
+        # Excluded items don't break "composition_complete" — they are
+        # intentionally out of the calc, so an unset supplier on them is fine.
+        if included_in_calc and selected is None:
             all_have_selection = False
         view_items.append({
             "quote_item_id": item["id"],
@@ -620,6 +647,10 @@ def get_composition_view(
             "name": item.get("product_name") or item.get("name"),
             "quantity": item.get("quantity"),
             "selected_invoice_id": selected,
+            # Testing 2 row 90: МОП-controlled inclusion flag, surfaced so the
+            # picker UI can render the row greyed-out with an "Исключено по
+            # решению МОП" label and a toggle to re-include.
+            "included_in_calc": included_in_calc,
             "alternatives": alternatives_by_item.get(item["id"], []),
         })
 
@@ -768,6 +799,57 @@ def apply_composition(
         "Composition applied: quote_id=%s items=%d user_id=%s",
         quote_id,
         len(selection_map),
+        user_id,
+    )
+
+
+# ============================================================================
+# Testing 2 row 90 — apply included_in_calc flag
+# ============================================================================
+
+
+def apply_included_in_calc(
+    quote_id: str,
+    inclusion_map: dict[str, bool],
+    supabase,
+    user_id: str,
+) -> None:
+    """Persist МОП's per-item include/exclude decisions for the calc step.
+
+    Each entry of ``inclusion_map`` maps ``quote_item_id`` to a boolean:
+    True keeps the item in the calculation, False excludes it. Items not
+    present in the map are left untouched. The flag itself is read by
+    ``services.calculation_helpers.build_calculation_inputs()`` which drops
+    rows with included_in_calc=False before passing them to the calc
+    engine.
+
+    Args:
+        quote_id: Quote UUID (used for the updated_at bump only — no further
+            cross-row validation is needed because the column is local to
+            quote_items and the API layer already verifies org access).
+        inclusion_map: ``{quote_item_id: bool}``. Empty map is a no-op.
+        supabase: Supabase client (schema-scoped to kvota).
+        user_id: Acting user ID (logged; no audit table yet).
+    """
+    if not inclusion_map:
+        return
+
+    for qi_id, included in inclusion_map.items():
+        supabase.table("quote_items").update(
+            {"included_in_calc": bool(included)}
+        ).eq("id", qi_id).execute()
+
+    # Bump quotes.updated_at so downstream caches invalidate (same pattern as
+    # apply_composition above — keeps the two MОП-controlled fields in sync).
+    now_iso = datetime.now(timezone.utc).isoformat()
+    supabase.table("quotes").update({"updated_at": now_iso}).eq(
+        "id", quote_id
+    ).execute()
+
+    logger.info(
+        "Inclusion applied: quote_id=%s items=%d user_id=%s",
+        quote_id,
+        len(inclusion_map),
         user_id,
     )
 
