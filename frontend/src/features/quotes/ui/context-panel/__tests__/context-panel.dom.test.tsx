@@ -79,6 +79,7 @@ const data: QuoteContextData = {
   procurementAssignees: [],
   logisticsAssignees: [],
   customsAssignees: [],
+  pickupLocations: [],
 };
 
 afterEach(() => {
@@ -258,6 +259,7 @@ describe("ContextPanel — МОЛ / МОТ assignees in Участники", () 
     procurementAssignees: [],
     logisticsAssignees: [],
     customsAssignees: [],
+    pickupLocations: [],
   };
 
   it("renders МОЛ row with full name + attach timestamp (3.1)", () => {
@@ -381,6 +383,7 @@ describe("ContextPanel — МОЛ / МОТ assignees in Участники", () 
       procurementAssignees: [],
       logisticsAssignees: [],
       customsAssignees: [],
+      pickupLocations: [],
     };
 
     render(
@@ -405,6 +408,7 @@ describe("ContextPanel — МОЛ / МОТ assignees in Участники", () 
         },
       ],
       customsAssignees: [],
+      pickupLocations: [],
     };
 
     render(
@@ -487,6 +491,7 @@ describe("ContextPanel — МОЗ + МОП date + history separator (row 2)", ()
       procurementAssignees: [],
       logisticsAssignees: [],
       customsAssignees: [],
+      pickupLocations: [],
     };
 
     const quote = makeQuote({
@@ -519,6 +524,7 @@ describe("ContextPanel — МОЗ + МОП date + history separator (row 2)", ()
       ],
       logisticsAssignees: [],
       customsAssignees: [],
+      pickupLocations: [],
     };
 
     render(
@@ -559,6 +565,7 @@ describe("ContextPanel — МОЗ + МОП date + history separator (row 2)", ()
       procurementAssignees: [],
       logisticsAssignees: [],
       customsAssignees: [],
+      pickupLocations: [],
     };
 
     render(
@@ -762,6 +769,7 @@ describe("ContextPanel — «Назначен:» label + year on assignee rows (
         },
       ],
       customsAssignees: [],
+      pickupLocations: [],
     };
 
     render(
@@ -793,6 +801,7 @@ describe("ContextPanel — «Назначен:» label + year on assignee rows (
           assigned_at: "2026-04-16T05:00:00Z",
         },
       ],
+      pickupLocations: [],
     };
 
     render(
@@ -823,6 +832,7 @@ describe("ContextPanel — «Назначен:» label + year on assignee rows (
       ],
       logisticsAssignees: [],
       customsAssignees: [],
+      pickupLocations: [],
     };
 
     render(
@@ -852,6 +862,7 @@ describe("ContextPanel — «Назначен:» label + year on assignee rows (
       procurementAssignees: [],
       logisticsAssignees: [],
       customsAssignees: [],
+      pickupLocations: [],
     };
 
     const quote = makeQuote({
@@ -887,6 +898,7 @@ describe("ContextPanel — «Назначен:» label + year on assignee rows (
       ],
       logisticsAssignees: [],
       customsAssignees: [],
+      pickupLocations: [],
     };
 
     render(
@@ -924,6 +936,7 @@ describe("ContextPanel — «Назначен:» label + year on assignee rows (
       ],
       logisticsAssignees: [],
       customsAssignees: [],
+      pickupLocations: [],
     };
 
     render(
@@ -964,6 +977,7 @@ describe("ContextPanel — «Назначен:» label + year on assignee rows (
       procurementAssignees: [],
       logisticsAssignees: [],
       customsAssignees: [],
+      pickupLocations: [],
     };
 
     render(
@@ -979,5 +993,96 @@ describe("ContextPanel — «Назначен:» label + year on assignee rows (
     expect(history.textContent).toMatch(/15\.04\b/);
     expect(history.textContent).not.toMatch(/15\.04\.2026/);
     expect(history.textContent).not.toContain(PREFIX);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Testing 2 row 78 — pickup locations on /quotes/{id} info panel
+// ---------------------------------------------------------------------------
+//
+// The tester sheet originally asked for "show locations in КП" on the
+// /locations page, but the user clarified in chat: «78 на /quotes не на
+// /locations!» — the quote ↔ location relationship belongs on the quote
+// detail surface (info panel), aggregated from quote_items.pickup_location_id.
+// These tests pin the rendering: section visible only when at least one
+// item carries a pickup location; LocationChip used (consistent with the
+// workspace kanban / route-constructor surfaces).
+
+describe("ContextPanel — pickup locations block (Testing 2 row 78)", () => {
+  it("renders «Локации забора» heading and one chip per distinct location", () => {
+    const dataWithLocations: QuoteContextData = {
+      ...data,
+      pickupLocations: [
+        { id: "loc-cn-1", country: "Китай", city: "Шанхай", type: "supplier" },
+        { id: "loc-de-1", country: "Германия", city: "Берлин", type: "supplier" },
+      ],
+    };
+
+    render(
+      <ContextPanel
+        quote={makeQuote()}
+        data={dataWithLocations}
+        userRoles={["sales"]}
+      />,
+    );
+
+    const block = screen.getByTestId("context-panel-pickup-locations");
+    expect(block).toHaveTextContent("Локации забора");
+    expect(block).toHaveTextContent("Китай · Шанхай");
+    expect(block).toHaveTextContent("Германия · Берлин");
+  });
+
+  it("hides the block entirely when pickupLocations is empty (no empty heading)", () => {
+    render(
+      <ContextPanel quote={makeQuote()} data={data} userRoles={["sales"]} />,
+    );
+
+    expect(
+      screen.queryByTestId("context-panel-pickup-locations"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Локации забора")).not.toBeInTheDocument();
+  });
+
+  it("renders the block for non-sales roles too (МОЛ / МОТ need to know «откуда»)", () => {
+    const dataWithLocations: QuoteContextData = {
+      ...data,
+      pickupLocations: [
+        { id: "loc-cn-1", country: "Китай", city: "Шанхай", type: "supplier" },
+      ],
+    };
+
+    render(
+      <ContextPanel
+        quote={makeQuote()}
+        data={dataWithLocations}
+        userRoles={["logistics"]}
+      />,
+    );
+
+    expect(
+      screen.getByTestId("context-panel-pickup-locations"),
+    ).toHaveTextContent("Китай · Шанхай");
+  });
+
+  it("renders a country-only chip when city is absent", () => {
+    const dataWithLocations: QuoteContextData = {
+      ...data,
+      pickupLocations: [
+        { id: "loc-cn-no-city", country: "Китай", type: "supplier" },
+      ],
+    };
+
+    render(
+      <ContextPanel
+        quote={makeQuote()}
+        data={dataWithLocations}
+        userRoles={["sales"]}
+      />,
+    );
+
+    const block = screen.getByTestId("context-panel-pickup-locations");
+    expect(block).toHaveTextContent("Китай");
+    // No middot separator when city is absent.
+    expect(block.textContent).not.toMatch(/Китай\s*·/);
   });
 });

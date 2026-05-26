@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { User, Package, TrendingUp, Users } from "lucide-react";
+import { User, Package, TrendingUp, Users, MapPin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { QuoteDetailRow } from "@/entities/quote/queries";
+import { LocationChip, type LocationOption } from "@/entities/location";
 import { ContactDropdownSelect } from "./contact-dropdown-select";
 import { AddressDropdownSelect } from "./address-dropdown-select";
 import {
@@ -103,6 +104,57 @@ export function ContextPanel({ quote, data, userRoles }: ContextPanelProps) {
           />
         </div>
       )}
+      {/* Testing 2 row 78 (user override: «78 на /quotes не на /locations!»):
+          surface the distinct pickup locations referenced by this quote's
+          items so every role looking at the info panel can see «откуда»
+          без drilling into individual items. Hidden when no item carries a
+          pickup_location_id — avoids an empty heading on legacy / unrouted
+          quotes. */}
+      {data.pickupLocations.length > 0 && (
+        <PickupLocationsBlock locations={data.pickupLocations} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * «Локации забора» — chips for every distinct `kvota.locations` row
+ * referenced by this quote's items (`quote_items.pickup_location_id`).
+ *
+ * Uses the shared `LocationChip` so the rendering matches the workspace
+ * kanban + route-constructor surfaces (country flag + «Country · City»),
+ * preventing the visual drift called out in `frontend-consistency.md`.
+ */
+function PickupLocationsBlock({
+  locations,
+}: {
+  locations: LocationOption[];
+}) {
+  return (
+    <div
+      className="mt-4 pt-4 border-t border-border"
+      data-testid="context-panel-pickup-locations"
+    >
+      <div className="flex items-center gap-2 mb-2">
+        <MapPin size={14} className="text-muted-foreground" />
+        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+          Локации забора
+        </h4>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {locations.map((loc) => (
+          <LocationChip
+            key={loc.id}
+            location={{
+              country: loc.country,
+              city: loc.city,
+              iso2: loc.iso2,
+              type: loc.type,
+            }}
+            size="sm"
+          />
+        ))}
+      </div>
     </div>
   );
 }
