@@ -91,6 +91,19 @@ class TestFontWiring:
         # picks the correct font parser path.
         assert html_doc.count("format('truetype')") == 4
 
+    def test_hero_and_mountains_inlined_as_data_uris(self, html_doc: str) -> None:
+        """Hero + mountains PNGs must be base64-inlined.
+
+        Same chromium-headless-shell ``file://`` drop bug as the fonts — if
+        we emit a plain path here the downloaded PDF renders broken-image
+        placeholders. Regression guard for the prod incident 2026-05-26
+        where downloaded PDFs showed missing-image icons.
+        """
+        # Hero (page 1) + mountains (page 2 contacts background) = 2 imgs.
+        assert html_doc.count("data:image/png;base64,") >= 2
+        # No raw file:// URL must leak into the rendered HTML.
+        assert "file://" not in html_doc
+
 
 # ---------------------------------------------------------------------------
 # Padding — minimum visible slots

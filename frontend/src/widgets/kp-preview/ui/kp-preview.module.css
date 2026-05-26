@@ -450,7 +450,8 @@
 }
 
 /* ============================================================
-   PAGE 2 — Header
+   PAGE 2 — Header (mirrors page 1's blue+red slash geometry so both
+   pages read as the same brand; only hero is exclusive to page 1)
    ============================================================ */
 .kp2Head {
   height: 110px;
@@ -460,21 +461,29 @@
   position: absolute;
   top: 0;
   left: 0;
-  width: 280px;
+  width: 410px;
   height: 100%;
   background: var(--kp-primary-blue);
-  clip-path: polygon(0 0, 100% 0, calc(100% - 38px) 100%, 0 100%);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 56px) 100%, 0 100%);
+}
+.kp2HeadRedbar {
+  position: absolute;
+  top: 0;
+  left: 408px;
+  width: 70px;
+  height: 100%;
+  background: var(--kp-primary-red);
+  clip-path: polygon(56px 0, 100% 0, calc(100% - 56px) 100%, 0 100%);
 }
 .kp2HeadLogo {
   position: absolute;
-  top: 50%;
+  top: 30px;
   left: 38px;
-  transform: translateY(-50%);
   z-index: 2;
 }
 .kp2HeadTitle {
   position: absolute;
-  left: 290px;
+  left: 500px;
   top: 50%;
   transform: translateY(-50%);
   z-index: 1;
@@ -497,7 +506,7 @@
 .kp2HeadPageno {
   position: absolute;
   right: 0;
-  top: 24px;
+  top: 30px;
   background: var(--kp-primary-red);
   color: #ffffff;
   padding: 8px 18px;

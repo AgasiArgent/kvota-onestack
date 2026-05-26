@@ -39,10 +39,12 @@ Design notes:
 from __future__ import annotations
 
 import asyncio
+import base64
 import html
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from functools import lru_cache
+from pathlib import Path
 from typing import Tuple
 
 # playwright is imported lazily inside ``render_proposal_pdf_async`` so that
@@ -294,6 +296,24 @@ def _e(value: object) -> str:
     return html.escape(str(value))
 
 
+def _png_data_uri(path: Path) -> str:
+    """Inline a PNG file as a ``data:image/png;base64,...`` URI.
+
+    Used for hero + mountains illustrations. Originally these were emitted
+    via ``Path.as_uri()`` (i.e. ``file://``). That worked under WeasyPrint
+    and full headed Chromium, but ``chromium-headless-shell`` (the variant
+    Playwright launches by default in our container) silently drops
+    ``file://`` references for ``<img>`` tags and renders the alt-text
+    placeholder instead — same regression class as the font drop noted in
+    ADR-8. Inlining sidesteps the asset loader entirely.
+
+    Cost: ~1.4 MB extra in-memory HTML per render (hero PNG). Acceptable
+    since the render pass is bounded and the bytes are GC'd immediately.
+    """
+    b64 = base64.b64encode(path.read_bytes()).decode("ascii")
+    return f"data:image/png;base64,{b64}"
+
+
 # ---------------------------------------------------------------------------
 # CSS
 # ---------------------------------------------------------------------------
@@ -318,8 +338,6 @@ def _kp_styles(branding: KpBranding) -> str:
     single brand so the cache holds one entry; ``maxsize=4`` leaves
     headroom for the multi-brand future without unbounded growth.
     """
-    import base64
-
     blue = branding.primary_blue
     red = branding.primary_red
     cream = branding.accent_cream
@@ -693,6 +711,9 @@ html, body {{
 /* ============================================================
    PAGE 2 — Header
    ============================================================ */
+/* Page 2 head mirrors page 1's blue+red slash geometry so both pages read
+   as the same brand. Hero illustration stays exclusive to page 1 (cover),
+   but every other anchor (bar dimensions, logo position, slash) lines up. */
 .kp2-head {{
     height: 110px;
     position: relative;
@@ -700,21 +721,28 @@ html, body {{
 .kp2-head__bluebar {{
     position: absolute;
     top: 0; left: 0;
-    width: 280px;
+    width: 410px;
     height: 100%;
     background: {blue};
-    clip-path: polygon(0 0, 100% 0, calc(100% - 38px) 100%, 0 100%);
+    clip-path: polygon(0 0, 100% 0, calc(100% - 56px) 100%, 0 100%);
 }}
 .kp2-head__bluebar svg {{ position: absolute; inset: 0; width: 100%; height: 100%; }}
+.kp2-head__redbar {{
+    position: absolute;
+    top: 0; left: 408px;
+    width: 70px; height: 100%;
+    background: {red};
+    clip-path: polygon(56px 0, 100% 0, calc(100% - 56px) 100%, 0 100%);
+}}
+.kp2-head__redbar svg {{ position: absolute; inset: 0; width: 100%; height: 100%; }}
 .kp2-head__logo {{
     position: absolute;
-    top: 50%; left: 38px;
-    transform: translateY(-50%);
+    top: 30px; left: 38px;
     z-index: 2;
 }}
 .kp2-head__title {{
     position: absolute;
-    left: 290px; top: 50%;
+    left: 500px; top: 50%;
     transform: translateY(-50%);
     z-index: 1;
 }}
@@ -734,7 +762,7 @@ html, body {{
 }}
 .kp2-head__pageno {{
     position: absolute;
-    right: 0; top: 24px;
+    right: 0; top: 30px;
     background: {red};
     color: #fff;
     padding: 8px 18px;
@@ -1134,7 +1162,7 @@ def _page_1(proposal: KpProposal, branding: KpBranding) -> str:
         points="0,0 100,0 33,100 0,100", fill=branding.primary_red
     )
 
-    hero_uri = branding.hero_machinery_path.resolve().as_uri()
+    hero_uri = _png_data_uri(branding.hero_machinery_path)
 
     # Info-grid field rows (REQ-3.1: 11 labelled fields).
     info_rows = "".join(
@@ -1304,10 +1332,15 @@ def _page_2(proposal: KpProposal, branding: KpBranding) -> str:
     blue_poly = _svg_polygon(
         points="0,0 100,0 86,100 0,100", fill=branding.primary_blue
     )
+    # Head red slash — mirrors `kp1-head__redbar` so both page heads share
+    # the same blue+slash signature.
+    red_poly = _svg_polygon(
+        points="56,0 100,0 44,100 0,100", fill=branding.primary_red
+    )
     foot_red_poly = _svg_polygon(
         points="0,0 100,0 33,100 0,100", fill=branding.primary_red
     )
-    mountains_uri = branding.mountains_path.resolve().as_uri()
+    mountains_uri = _png_data_uri(branding.mountains_path)
 
     spec_rows = "".join(
         f"""
@@ -1366,6 +1399,7 @@ def _page_2(proposal: KpProposal, branding: KpBranding) -> str:
     <div class="kp-page">
         <div class="kp2-head">
             <div class="kp2-head__bluebar">{blue_poly}</div>
+            <div class="kp2-head__redbar">{red_poly}</div>
             <div class="kp2-head__logo">
                 <div class="kp-logo">
                     {branding.logo_html}
