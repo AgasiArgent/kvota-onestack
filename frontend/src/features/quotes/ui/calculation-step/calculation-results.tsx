@@ -20,6 +20,12 @@ import type { QuoteDetailRow } from "@/entities/quote/queries";
  * invoice's invoice_items rows, and the parent page composes a flat list
  * (via composition_service.get_composed_items) for this renderer. Only the
  * fields actually rendered in the table are in this shape.
+ *
+ * Testing 2 row 87: items refused by procurement (`is_unavailable=true`) or
+ * disallowed by customs (`import_banned=true`) are excluded from the calc
+ * engine but MUST still appear in this table as greyed-out «Исключено» rows
+ * — МОП needs to see what was filtered and why. Both flags are carried on
+ * the item shape; the renderer disables totals for excluded rows.
  */
 export interface CalculationResultsItem {
   id: string;
@@ -27,6 +33,9 @@ export interface CalculationResultsItem {
   brand: string | null;
   quantity: number | null;
   base_price_vat: number | null;
+  is_unavailable?: boolean | null;
+  import_banned?: boolean | null;
+  import_ban_reason?: string | null;
 }
 
 const CURRENCY_SYMBOLS: Record<string, string> = {
@@ -133,31 +142,61 @@ export function CalculationResults({ quote, items }: CalculationResultsProps) {
             </TableHeader>
             <TableBody>
               {items.map((item) => {
-                const priceVat = item.base_price_vat;
+                // Testing 2 row 87 — excluded items (МОП refused or customs
+                // banned) are shown in the table for visibility but do not
+                // participate in totals and are visually de-emphasised.
+                const excluded =
+                  item.is_unavailable === true || item.import_banned === true;
+                const exclusionReason = item.is_unavailable
+                  ? "Отказались МОП/МОЗ — нет в КПП"
+                  : item.import_banned
+                    ? item.import_ban_reason
+                      ? `Запрет ввоза на таможне: ${item.import_ban_reason}`
+                      : "Запрет ввоза на таможне"
+                    : null;
+                const priceVat = excluded ? null : item.base_price_vat;
                 const qty = item.quantity ?? 0;
                 const lineTotal =
                   priceVat != null ? priceVat * qty : null;
 
                 return (
-                  <TableRow key={item.id}>
+                  <TableRow
+                    key={item.id}
+                    className={excluded ? "text-muted-foreground" : undefined}
+                  >
                     <TableCell className="text-sm">
-                      <div>
-                        {item.product_name}
-                        {item.brand && (
-                          <span className="ml-1 text-xs text-muted-foreground">
-                            ({item.brand})
+                      <div className="flex items-center gap-2">
+                        <span className={excluded ? "line-through" : undefined}>
+                          {item.product_name}
+                          {item.brand && (
+                            <span className="ml-1 text-xs text-muted-foreground">
+                              ({item.brand})
+                            </span>
+                          )}
+                        </span>
+                        {excluded && (
+                          <span
+                            className="inline-flex items-center rounded border border-muted-foreground/30 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground"
+                            title={exclusionReason ?? undefined}
+                          >
+                            Исключено
                           </span>
                         )}
                       </div>
+                      {excluded && exclusionReason && (
+                        <div className="mt-1 text-[11px] text-muted-foreground">
+                          {exclusionReason}
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell className="text-sm text-right tabular-nums">
                       {qty}
                     </TableCell>
                     <TableCell className="text-sm text-right tabular-nums">
-                      {fmt(priceVat, currency)}
+                      {excluded ? "—" : fmt(priceVat, currency)}
                     </TableCell>
                     <TableCell className="text-sm text-right tabular-nums">
-                      {fmt(lineTotal, currency)}
+                      {excluded ? "—" : fmt(lineTotal, currency)}
                     </TableCell>
                   </TableRow>
                 );

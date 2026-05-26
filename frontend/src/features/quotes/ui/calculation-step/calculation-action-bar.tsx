@@ -77,6 +77,16 @@ export function CalculationActionBar({
           toast.error(msg, { duration: Infinity });
           return;
         }
+        // Testing 2 row 87 — every position is excluded (МОП refused or
+        // customs banned). Backend already returns a localized message; we
+        // just need to surface it persistently.
+        if (errorCode === "NO_CALCULABLE_ITEMS") {
+          const msg =
+            extractErrorMessage(data) ??
+            "Все позиции исключены из расчёта (нет в наличии или запрещены к ввозу)";
+          toast.error(msg, { duration: Infinity });
+          return;
+        }
         throw new Error(extractErrorMessage(data) ?? "Calculation failed");
       }
 

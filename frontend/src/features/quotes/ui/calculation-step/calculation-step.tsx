@@ -116,6 +116,11 @@ export function CalculationStep({
           brand: it.brand,
           quantity: it.quantity ?? null,
           base_price_vat: priceByQi.get(it.id) ?? null,
+          // Testing 2 row 87 — surface exclusion flags so the table can grey
+          // out rows refused by procurement / banned by customs.
+          is_unavailable: it.is_unavailable ?? false,
+          import_banned: it.import_banned ?? false,
+          import_ban_reason: it.import_ban_reason ?? null,
         }))
       );
     }
@@ -177,12 +182,18 @@ export function CalculationStep({
 function toPlaceholderResultItem(item: QuoteItemRow): CalculationResultsItem {
   // Initial render before invoice_items coverage is loaded. base_price_vat is
   // null until the async fetch completes; the renderer already handles null.
+  // Testing 2 row 87 — carry exclusion flags through the placeholder so the
+  // greyed-out «Исключено» state appears on first paint, not only after the
+  // async coverage fetch lands.
   return {
     id: item.id,
     product_name: item.product_name,
     brand: item.brand,
     quantity: item.quantity ?? null,
     base_price_vat: null,
+    is_unavailable: item.is_unavailable ?? false,
+    import_banned: item.import_banned ?? false,
+    import_ban_reason: item.import_ban_reason ?? null,
   };
 }
 
