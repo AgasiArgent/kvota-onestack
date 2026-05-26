@@ -1049,3 +1049,183 @@ class TestGetStatusHistory:
 
         payload = json.loads(resp.body)
         assert payload["data"] == []
+
+
+# ============================================================================
+# GET /api/quotes/kanban — Testing 2 row 67 follow-up
+# ============================================================================
+
+
+class TestGetKanbanDistributionComment:
+    """МОП-authored `quotes.sales_checklist.distribution_comment` must be
+    mirrored to every kanban card so РОЗ / СтМОЗ / МОЗ read the hand-off hint
+    inline (Testing 2 row 67 follow-up, FB-260525). The value is trimmed
+    before serialisation; empty / whitespace-only payloads serialise as null
+    so the frontend's `?.trim() ?? ""` check renders nothing extra.
+    """
+
+    @staticmethod
+    def _build_supabase(*, sales_checklist):
+        """Build a Supabase mock returning a single (q1, Siemens) card with
+        the given `sales_checklist` payload on the parent quote. Caller is
+        head_of_procurement (broader scope → no ownership filtering needed).
+        """
+        three_days_ago = (
+            datetime.now(timezone.utc) - timedelta(days=3)
+        ).isoformat()
+
+        qbs_rows = [
+            {
+                "quote_id": "q1",
+                "brand": "Siemens",
+                "substatus": "searching_supplier",
+                "updated_at": three_days_ago,
+                "quotes": {
+                    "id": "q1",
+                    "idn_quote": "Q-202604-0099",
+                    "workflow_status": "pending_procurement",
+                    "organization_id": "org-1",
+                    "created_by": "creator-1",
+                    "tender_type": None,
+                    "procurement_completed_at": None,
+                    "sales_checklist": sales_checklist,
+                    "customers": {"id": "cust-1", "name": "Acme"},
+                },
+            },
+        ]
+        quote_items_rows = [
+            {
+                "id": "item-1",
+                "quote_id": "q1",
+                "brand": "Siemens",
+                "quantity": 2,
+                "assigned_procurement_user": "user-1",
+            },
+        ]
+
+        sb = MagicMock()
+
+        def table_side_effect(name: str):
+            tbl = MagicMock()
+            if name == "organization_members":
+                tbl.select.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
+                    {"organization_id": "org-1"}
+                ]
+            elif name == "user_roles":
+                tbl.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = [
+                    {"roles": {"slug": "head_of_procurement"}}
+                ]
+            elif name == "quote_brand_substates":
+                tbl.select.return_value.or_.return_value.eq.return_value.is_.return_value.execute.return_value.data = qbs_rows
+            elif name == "status_history":
+                tbl.select.return_value.in_.return_value.order.return_value.execute.return_value.data = []
+            elif name == "quote_items":
+                tbl.select.return_value.in_.return_value.execute.return_value.data = quote_items_rows
+            elif name == "invoices":
+                tbl.select.return_value.in_.return_value.execute.return_value.data = []
+            elif name == "invoice_items":
+                tbl.select.return_value.in_.return_value.execute.return_value.data = []
+            elif name == "user_profiles":
+                tbl.select.return_value.in_.return_value.execute.return_value.data = []
+            return tbl
+
+        sb.table.side_effect = table_side_effect
+        return sb
+
+    @patch("api.procurement.get_supabase")
+    def test_card_carries_trimmed_distribution_comment(self, mock_get_sb):
+        """Happy path: МОП left a comment → card.distribution_comment is the
+        trimmed string."""
+        sb = self._build_supabase(
+            sales_checklist={
+                "distribution_comment": "  Срочно к Алейне, клиент знакомый  ",
+                "is_estimate": False,
+            }
+        )
+        mock_get_sb.return_value = sb
+
+        req = _make_request(query={"status": "pending_procurement"})
+        resp = _run(get_kanban(req))
+        assert resp.status_code == 200
+
+        import json
+
+        payload = json.loads(resp.body)
+        card = payload["data"]["columns"]["searching_supplier"][0]
+        assert card["distribution_comment"] == "Срочно к Алейне, клиент знакомый"
+
+    @patch("api.procurement.get_supabase")
+    def test_null_sales_checklist_yields_null_comment(self, mock_get_sb):
+        """Legacy quote — sales_checklist is None on the parent quote; the
+        card must serialise distribution_comment as null (not omitted, not
+        crashing). The frontend's optional-field check covers the absence
+        case separately."""
+        sb = self._build_supabase(sales_checklist=None)
+        mock_get_sb.return_value = sb
+
+        req = _make_request(query={"status": "pending_procurement"})
+        resp = _run(get_kanban(req))
+        assert resp.status_code == 200
+
+        import json
+
+        payload = json.loads(resp.body)
+        card = payload["data"]["columns"]["searching_supplier"][0]
+        assert card["distribution_comment"] is None
+
+    @patch("api.procurement.get_supabase")
+    def test_empty_string_distribution_comment_yields_null(self, mock_get_sb):
+        """МОП skipped the field — sales_checklist exists but the comment
+        is empty / whitespace-only. Must serialise as null so the kanban
+        card doesn't render an empty amber block."""
+        sb = self._build_supabase(
+            sales_checklist={"distribution_comment": "   \n  "}
+        )
+        mock_get_sb.return_value = sb
+
+        req = _make_request(query={"status": "pending_procurement"})
+        resp = _run(get_kanban(req))
+        assert resp.status_code == 200
+
+        import json
+
+        payload = json.loads(resp.body)
+        card = payload["data"]["columns"]["searching_supplier"][0]
+        assert card["distribution_comment"] is None
+
+    @patch("api.procurement.get_supabase")
+    def test_missing_distribution_comment_key_yields_null(self, mock_get_sb):
+        """Partial checklist — МОП filled equipment_description but never
+        opened the distribution_comment field. Must serialise as null."""
+        sb = self._build_supabase(
+            sales_checklist={"equipment_description": "Сервер DL380"}
+        )
+        mock_get_sb.return_value = sb
+
+        req = _make_request(query={"status": "pending_procurement"})
+        resp = _run(get_kanban(req))
+        assert resp.status_code == 200
+
+        import json
+
+        payload = json.loads(resp.body)
+        card = payload["data"]["columns"]["searching_supplier"][0]
+        assert card["distribution_comment"] is None
+
+    @patch("api.procurement.get_supabase")
+    def test_non_dict_sales_checklist_does_not_crash(self, mock_get_sb):
+        """Defensive: if the JSONB column ever stored something other than
+        an object (e.g. a stray string from a buggy migration), the handler
+        must not crash; it serialises null and continues."""
+        sb = self._build_supabase(sales_checklist="not an object")
+        mock_get_sb.return_value = sb
+
+        req = _make_request(query={"status": "pending_procurement"})
+        resp = _run(get_kanban(req))
+        assert resp.status_code == 200
+
+        import json
+
+        payload = json.loads(resp.body)
+        card = payload["data"]["columns"]["searching_supplier"][0]
+        assert card["distribution_comment"] is None

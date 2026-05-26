@@ -178,6 +178,17 @@ export function KanbanCard({
   // completed work). Mark the card with a «Готово» badge so the user knows
   // the slice is no longer actionable from this screen.
   const isProcurementComplete = Boolean(card.procurement_completed_at);
+  // Testing 2 row 67 follow-up (FB-260525) — МОП distribution_comment from
+  // the sales→procurement hand-off. Promoted from the quote-detail context
+  // panel into the kanban card so РОЗ / СтМОЗ / МОЗ read the hint inline
+  // without opening the quote.
+  //
+  // Defensive trim: the backend already trims and nulls whitespace-only
+  // values, but the card may be re-rendered from a parent component that
+  // didn't go through the fetcher (optimistic updates, etc.). Mirrors the
+  // workspace-kanban guard at `kanban-card.tsx:109`.
+  const trimmedDistributionComment = card.distribution_comment?.trim() ?? "";
+  const showDistributionComment = trimmedDistributionComment.length > 0;
 
   return (
     <div
@@ -301,6 +312,24 @@ export function KanbanCard({
           )
         )}
       </div>
+      {/* Testing 2 row 67 follow-up — МОП distribution hint surfaced inline
+          on every procurement card. Visual treatment matches the workspace
+          kanban variant (amber-tinted card, italic, pre-wrap) so a tester
+          who toggles between /workspace and /procurement reads the same
+          comment with the same shape. Wrapped in pointer guards so the
+          comment text can be selected/copied without opening the substatus
+          history drawer or triggering a card drag. */}
+      {showDistributionComment && (
+        <div
+          data-testid="kanban-card-distribution-comment"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          className="mt-2 rounded-sm border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs italic text-amber-900 whitespace-pre-wrap break-words cursor-text"
+          title="Комментарий МОП для распределения"
+        >
+          {trimmedDistributionComment}
+        </div>
+      )}
       {canAssign && workload && orgId && (
         <AssignPopover
           card={card}

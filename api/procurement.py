@@ -158,6 +158,10 @@ async def get_kanban(request) -> JSONResponse:
               timestamp (Testing 2 row 83). Non-null cards represent slices
               whose workflow already moved past procurement but should remain
               visible to procurement roles.
+          - distribution_comment (str | None) — МОП hand-off note from
+              `quotes.sales_checklist.distribution_comment` (Testing 2 row 67
+              follow-up). Trimmed; null when empty / absent. Procurement card
+              renders it inline so МОЗ doesn't have to open the quote.
     Side Effects: none (read-only)
     Roles: procurement, admin, head_of_procurement
     """
@@ -203,7 +207,7 @@ async def get_kanban(request) -> JSONResponse:
         .select(
             "quote_id, brand, substatus, updated_at, "
             "quotes!inner(id, idn_quote, workflow_status, organization_id, created_by, tender_type, "
-            "procurement_completed_at, "
+            "procurement_completed_at, sales_checklist, "
             "customers!customer_id(id, name))"
         )
         .or_(
@@ -481,6 +485,27 @@ async def get_kanban(request) -> JSONResponse:
         # the frontend can render the «Тендер» badge (Testing 2 row 67).
         tender_type = parent.get("tender_type") or None
 
+        # Testing 2 row 67 follow-up (FB-260525): the МОП-authored
+        # «Контрольный список» distribution_comment is captured at hand-off
+        # to procurement (см. context-panel/sales-checklist-block.tsx) but
+        # was previously visible only on the quote detail page. Procurement
+        # leads complained that МОЗ had to open every card to read «Срочно
+        # / клиент знакомый / т.д.» hints. Mirroring the workspace-kanban
+        # pattern (`KanbanCard.distributionComment` — кросс-кванти линки в
+        # «Нераспределено»), we surface the trimmed comment on the
+        # procurement card. The field is null when the МОП left the
+        # checklist empty or skipped it entirely (legacy quotes).
+        sales_checklist = parent.get("sales_checklist") or {}
+        if isinstance(sales_checklist, dict):
+            raw_comment = sales_checklist.get("distribution_comment")
+            distribution_comment = (
+                raw_comment.strip()
+                if isinstance(raw_comment, str) and raw_comment.strip()
+                else None
+            )
+        else:
+            distribution_comment = None
+
         # Pause log (Testing 2 row 74): for paused cards we surface the latest
         # open pause row's reason + actor + timestamp inline so МОЗ doesn't
         # have to open the history drawer to learn why a card is on pause.
@@ -517,6 +542,12 @@ async def get_kanban(request) -> JSONResponse:
             # UI can mark post-procurement cards as «Готово» rather than
             # hiding them entirely.
             "procurement_completed_at": parent.get("procurement_completed_at"),
+            # Testing 2 row 67 follow-up: МОП distribution_comment captured at
+            # the sales→procurement hand-off (kvota.quotes.sales_checklist
+            # JSONB → distribution_comment). Null when the checklist is empty
+            # or absent. UI surfaces it inline on the card so МОЗ reads the
+            # hint without opening the quote.
+            "distribution_comment": distribution_comment,
         })
 
     return JSONResponse(
