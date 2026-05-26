@@ -32,6 +32,7 @@ from api.procurement import (
 from api.customs import (
     refresh_customs_snapshot_handler as _refresh_customs_snapshot,
 )
+from api.calc_step_info import get_calc_step_info as _get_calc_step_info
 from api.quotes import (
     calculate_quote as _calculate_quote,
     cancel_quote as _cancel_quote,
@@ -165,6 +166,18 @@ async def post_refresh_customs_snapshot(
     fallback (Q4): live → 30-day cache → 409 FREEZE_ABORTED. Customs roles only.
     """
     return await _refresh_customs_snapshot(request, quote_id, alta_client)
+
+
+@router.get("/{quote_id}/calc-step-info")
+async def get_calc_step_info_route(
+    request: Request, quote_id: str
+) -> JSONResponse:
+    """Return per-invoice logistics + per-item customs + certifications.
+
+    Powers the calc-step info card (Testing 2 rows 36 + 48). Read-only.
+    Dual auth: JWT (Next.js) first, then legacy session (FastHTML).
+    """
+    return await _get_calc_step_info(request, quote_id)
 
 
 @router.get("/{quote_id}/export/validation")

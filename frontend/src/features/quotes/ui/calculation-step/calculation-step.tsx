@@ -9,6 +9,7 @@ import {
   type CalculationResultsItem,
 } from "./calculation-results";
 import { CalculationActionBar } from "./calculation-action-bar";
+import { CalcStepInfoCard } from "./calc-step-info-card";
 import { CompositionPicker } from "./composition-picker";
 import { createClient } from "@/shared/lib/supabase/client";
 
@@ -158,6 +159,14 @@ export function CalculationStep({
         {/* Phase 5b — Multi-supplier composition picker (renders nothing
             when there is no multi-supplier choice to make). */}
         <CompositionPicker quoteId={quote.id} />
+        {/* Testing 2 rows 36 + 48 — info card above the items table showing
+            per-invoice logistics cost (auto-pulled), customs duties + ТН ВЭД,
+            and certifications. Warning state when logistics is missing
+            does NOT block calc — just informs the user. */}
+        <CalcStepInfoCard
+          quoteId={quote.id}
+          logisticsHref={`/quotes/${quote.id}?step=logistics`}
+        />
         <CalculationResults quote={quote} items={resultsItems} />
       </div>
       <AppToaster />
