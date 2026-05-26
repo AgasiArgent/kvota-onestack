@@ -29,6 +29,14 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 interface ProcurementItemRow {
   assigned_procurement_user: string | null;
   brand: string | null;
+  pickup_location_id?: string | null;
+}
+
+interface LocationRow {
+  id: string;
+  country: string;
+  city: string | null;
+  location_type: string | null;
 }
 
 interface InvoiceRow {
@@ -69,9 +77,14 @@ interface FakeSupabase {
   statusHistory: StatusHistoryRow[];
   workflowTransitions: WorkflowTransitionRow[];
   userProfiles: UserProfileRow[];
+  locations: LocationRow[];
   // Spy: tracks which tables were queried and with what filters so we can
   // assert that status_history is filtered correctly (reason + quote_id).
   statusHistoryFilters: Array<{ col: string; val: unknown }>;
+  // Spy: tracks the ids requested via `.in("id", [...])` against `locations`
+  // so we can assert that the resolver only fetches distinct pickup-location
+  // ids referenced by the quote's items (Testing 2 row 78).
+  locationsInArgs: string[][];
   from(table: string): unknown;
 }
 
@@ -95,7 +108,9 @@ function makeFake(): FakeSupabase {
     statusHistory: [],
     workflowTransitions: [],
     userProfiles: [],
+    locations: [],
     statusHistoryFilters: [],
+    locationsInArgs: [],
 
     from(table: string) {
       if (table === "quotes") {
@@ -169,6 +184,21 @@ function makeFake(): FakeSupabase {
               data: state.procurementItems,
               error: null,
             }),
+        };
+        return builder;
+      }
+
+      if (table === "locations") {
+        const builder = {
+          select: () => builder,
+          in: (col: string, values: unknown[]) => {
+            const ids = values as string[];
+            state.locationsInArgs.push([...ids]);
+            const rows = state.locations.filter(
+              (l) => col === "id" && ids.includes(l.id),
+            );
+            return Promise.resolve({ data: rows, error: null });
+          },
         };
         return builder;
       }
@@ -400,5 +430,175 @@ describe("fetchQuoteContextData — МОЗ assigned_at (Testing 2 row 79)", () =
 
     // One row per distinct user_id — never duplicated by item count.
     expect(data.procurementAssignees).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Testing 2 row 78 — pickup locations aggregation
+// ---------------------------------------------------------------------------
+//
+// User override: «78 на /quotes не на /locations!» — the quote ↔ location
+// relationship belongs on the quote detail surface. `fetchQuoteContextData`
+// aggregates distinct kvota.locations rows referenced by the quote's items
+// (via `quote_items.pickup_location_id`) so the info panel can render them
+// as chips. These tests pin: deduplication, country→city sorting, and the
+// «no items / no locations» fast paths.
+
+describe("fetchQuoteContextData — pickup locations (Testing 2 row 78)", () => {
+  const LOC_CN = "loc-cn-shanghai";
+  const LOC_DE = "loc-de-berlin";
+
+  it("returns distinct locations referenced by quote_items.pickup_location_id", async () => {
+    fake.quoteRow = {
+      sales_checklist: null,
+      created_by: null,
+      contact_person_id: null,
+    };
+    fake.procurementItems = [
+      // Two items share the same pickup location — one chip expected.
+      {
+        assigned_procurement_user: null,
+        brand: null,
+        pickup_location_id: LOC_CN,
+      },
+      {
+        assigned_procurement_user: null,
+        brand: null,
+        pickup_location_id: LOC_CN,
+      },
+      {
+        assigned_procurement_user: null,
+        brand: null,
+        pickup_location_id: LOC_DE,
+      },
+    ];
+    fake.locations = [
+      {
+        id: LOC_CN,
+        country: "Китай",
+        city: "Шанхай",
+        location_type: "supplier",
+      },
+      {
+        id: LOC_DE,
+        country: "Германия",
+        city: "Берлин",
+        location_type: "supplier",
+      },
+    ];
+
+    const { fetchQuoteContextData } = await import("../queries");
+    const data = await fetchQuoteContextData(QUOTE_ID);
+
+    expect(data.pickupLocations).toHaveLength(2);
+    // Sorted country → city (alphabetic, Cyrillic). Германия < Китай.
+    expect(data.pickupLocations[0]).toMatchObject({
+      id: LOC_DE,
+      country: "Германия",
+      city: "Берлин",
+      type: "supplier",
+    });
+    expect(data.pickupLocations[1]).toMatchObject({
+      id: LOC_CN,
+      country: "Китай",
+      city: "Шанхай",
+    });
+  });
+
+  it("batches the locations lookup with distinct ids only (no duplicate fetches)", async () => {
+    fake.quoteRow = {
+      sales_checklist: null,
+      created_by: null,
+      contact_person_id: null,
+    };
+    fake.procurementItems = [
+      {
+        assigned_procurement_user: null,
+        brand: null,
+        pickup_location_id: LOC_CN,
+      },
+      {
+        assigned_procurement_user: null,
+        brand: null,
+        pickup_location_id: LOC_CN,
+      },
+      {
+        assigned_procurement_user: null,
+        brand: null,
+        pickup_location_id: LOC_DE,
+      },
+    ];
+    fake.locations = [
+      {
+        id: LOC_CN,
+        country: "Китай",
+        city: "Шанхай",
+        location_type: "supplier",
+      },
+      {
+        id: LOC_DE,
+        country: "Германия",
+        city: "Берлин",
+        location_type: "supplier",
+      },
+    ];
+
+    const { fetchQuoteContextData } = await import("../queries");
+    await fetchQuoteContextData(QUOTE_ID);
+
+    // One batch call, two distinct ids passed in.
+    expect(fake.locationsInArgs).toHaveLength(1);
+    expect([...fake.locationsInArgs[0]].sort()).toEqual(
+      [LOC_CN, LOC_DE].sort(),
+    );
+  });
+
+  it("returns an empty list and skips the locations lookup when no items carry a pickup_location_id", async () => {
+    fake.quoteRow = {
+      sales_checklist: null,
+      created_by: null,
+      contact_person_id: null,
+    };
+    fake.procurementItems = [
+      // Items present but all missing pickup_location_id — legacy / unrouted.
+      {
+        assigned_procurement_user: null,
+        brand: null,
+        pickup_location_id: null,
+      },
+    ];
+
+    const { fetchQuoteContextData } = await import("../queries");
+    const data = await fetchQuoteContextData(QUOTE_ID);
+
+    expect(data.pickupLocations).toEqual([]);
+    // No round-trip to the locations table when nothing to resolve.
+    expect(fake.locationsInArgs).toHaveLength(0);
+  });
+
+  it("falls back to «supplier» for an unknown / null location_type (defensive)", async () => {
+    fake.quoteRow = {
+      sales_checklist: null,
+      created_by: null,
+      contact_person_id: null,
+    };
+    fake.procurementItems = [
+      {
+        assigned_procurement_user: null,
+        brand: null,
+        pickup_location_id: LOC_CN,
+      },
+    ];
+    fake.locations = [
+      // location_type rows can be NULL on legacy data — must not crash the
+      // panel. Falling back to «supplier» renders the factory icon which
+      // matches the quote_items semantic better than an empty chip.
+      { id: LOC_CN, country: "Китай", city: "Шанхай", location_type: null },
+    ];
+
+    const { fetchQuoteContextData } = await import("../queries");
+    const data = await fetchQuoteContextData(QUOTE_ID);
+
+    expect(data.pickupLocations[0].type).toBe("supplier");
   });
 });

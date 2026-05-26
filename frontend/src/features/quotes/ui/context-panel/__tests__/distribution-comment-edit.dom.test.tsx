@@ -100,6 +100,7 @@ function makeData(distributionComment: string | null): QuoteContextData {
     procurementAssignees: [],
     logisticsAssignees: [],
     customsAssignees: [],
+    pickupLocations: [],
   };
 }
 
@@ -309,6 +310,7 @@ describe("ContextPanel — distribution_comment edit affordance (row 61)", () =>
       procurementAssignees: [],
       logisticsAssignees: [],
       customsAssignees: [],
+      pickupLocations: [],
     };
 
     render(
@@ -336,6 +338,7 @@ describe("ContextPanel — distribution_comment edit affordance (row 61)", () =>
       procurementAssignees: [],
       logisticsAssignees: [],
       customsAssignees: [],
+      pickupLocations: [],
     };
 
     render(

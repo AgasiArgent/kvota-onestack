@@ -1,5 +1,21 @@
 import { createClient, createAdminClient } from "@/shared/lib/supabase/server";
+import type { LocationOption } from "@/entities/location/lib/format";
+import type { LocationType } from "@/entities/location/ui/location-chip";
 import type { SalesChecklist } from "./sales-checklist-block";
+
+const ALLOWED_LOCATION_TYPES: readonly LocationType[] = [
+  "supplier",
+  "hub",
+  "customs",
+  "own_warehouse",
+  "client",
+];
+
+function normaliseLocationType(raw: string | null): LocationType {
+  return ALLOWED_LOCATION_TYPES.includes(raw as LocationType)
+    ? (raw as LocationType)
+    : "supplier";
+}
 
 export interface ContextPanelParticipant {
   id: string;
@@ -73,6 +89,18 @@ export interface QuoteContextData {
   logisticsAssignees: ContextPanelDomainAssignee[];
   /** Distinct МОТ assignees on this quote's invoices (РОЛ Тест 07 / 4.1). */
   customsAssignees: ContextPanelDomainAssignee[];
+  /**
+   * Distinct pickup locations referenced by this quote's items.
+   *
+   * Testing 2 row 78 (user override: «78 на /quotes не на /locations!»): the
+   * quote ↔ location relationship must be VISIBLE on the quote detail page,
+   * so МОП / МОЛ / МОТ can see at a glance from which locations the goods
+   * will be picked up without drilling into each item. Sourced from
+   * `quote_items.pickup_location_id` (FK → `kvota.locations`), deduplicated
+   * by location id, sorted country → city to match the rest of the location
+   * pickers.
+   */
+  pickupLocations: LocationOption[];
 }
 
 /**
@@ -103,6 +131,7 @@ export async function fetchQuoteContextData(
       procurementAssignees: [],
       logisticsAssignees: [],
       customsAssignees: [],
+      pickupLocations: [],
     };
   }
 
@@ -150,7 +179,7 @@ export async function fetchQuoteContextData(
       .eq("quote_id", quoteId),
     supabase
       .from("quote_items")
-      .select("assigned_procurement_user, brand")
+      .select("assigned_procurement_user, brand, pickup_location_id")
       .eq("quote_id", quoteId),
     // status_history rows with reason='auto: all items routed' are inserted
     // by `maybeAdvanceBrandSlices` the moment every item of a (quote, brand)
@@ -331,6 +360,51 @@ export async function fetchQuoteContextData(
     created_at: t.created_at,
   }));
 
+  // 6. Resolve distinct pickup locations referenced by this quote's items.
+  //    Two-step fetch (items → locations by id batch) instead of a PostgREST
+  //    embed so we don't depend on FK auto-detection — kvota.quote_items has
+  //    several FKs to `locations`-shaped tables historically and the customs
+  //    refactor (Phase 5d) reshapes the embed surface again. A separate
+  //    `.in("id", [...])` round-trip is one extra request but is robust to
+  //    schema drift and matches the existing user_profiles batch pattern
+  //    above. The data is small (one quote rarely has more than a handful
+  //    of distinct pickup locations).
+  const distinctLocationIds = new Set<string>();
+  for (const it of items) {
+    const lid = it.pickup_location_id ?? null;
+    if (lid) distinctLocationIds.add(lid);
+  }
+  const pickupLocations: LocationOption[] = [];
+  if (distinctLocationIds.size > 0) {
+    const { data: locationRows } = await supabase
+      .from("locations")
+      .select("id, country, city, location_type")
+      .in("id", [...distinctLocationIds]);
+    const rows = (locationRows ?? []) as Array<{
+      id: string;
+      country: string;
+      city: string | null;
+      location_type: string | null;
+    }>;
+    pickupLocations.push(
+      ...rows.map((r) => ({
+        id: r.id,
+        country: r.country,
+        city: r.city ?? undefined,
+        type: normaliseLocationType(r.location_type),
+      })),
+    );
+    // Sort country → city (matches `fetchLocations` ordering so the info
+    // panel and the route-constructor pickers list locations in the same
+    // sequence — testers reading both surfaces in the same session don't
+    // have to mentally re-sort).
+    pickupLocations.sort((a, b) => {
+      const c = a.country.localeCompare(b.country);
+      if (c !== 0) return c;
+      return (a.city ?? "").localeCompare(b.city ?? "");
+    });
+  }
+
   const buildAssignees = (
     src: Map<string, string | null>
   ): ContextPanelDomainAssignee[] =>
@@ -358,5 +432,6 @@ export async function fetchQuoteContextData(
     procurementAssignees: buildAssignees(procurementAt),
     logisticsAssignees: buildAssignees(logisticsAt),
     customsAssignees: buildAssignees(customsAt),
+    pickupLocations,
   };
 }
