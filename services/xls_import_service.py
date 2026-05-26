@@ -4,8 +4,13 @@ Invoice XLS Import Service (Testing 2 row 70).
 Reverse of services.xls_export_service: clients download the КПП as XLS via
 «Скачать XLS», edit it offline, and re-upload through «Загрузить XLS». The
 service parses the file, matches rows back to ``kvota.invoice_items`` by
-``idn_sku`` (the article from МОП, joined via ``invoice_item_coverage`` →
-``quote_items``), and updates the supplier-side fields on each matched row.
+``product_code`` (the customer-side article from МОП, joined via
+``invoice_item_coverage`` → ``quote_items``), and updates the supplier-side
+fields on each matched row.
+
+Testing 2 row 88: the "Арт. запрошенный" column in the template now carries
+``quote_items.product_code`` (not ``idn_sku``) — suppliers identify parts by
+article, so the round-trip match key follows the visible column.
 
 Edge cases (docs/plans/2026-05-25-batch-24c-decisions.md, Q5):
   - new article in XLS (not in КПП)      → skip + return in ``skipped`` list
@@ -31,20 +36,23 @@ logger = logging.getLogger(__name__)
 
 # Index of each editable column in the «Скачать XLS» template. The order
 # MUST match services.xls_export_service.COLUMNS_RU. Header row is row 1;
-# data rows start at row 2. Column 13 ("Покрывает") is read-only metadata
-# generated on export and is intentionally ignored on import.
+# data rows start at row 2. The "Покрывает" column (last) is read-only
+# metadata generated on export and is intentionally ignored on import.
+# Columns 2 ("Арт. запрошенный" = product_code) and 7 ("Ед. изм." = unit)
+# come from the customer side (quote_items) and are not updated on import.
 _COL_BRAND = 1
-_COL_IDN_SKU = 2
+_COL_PRODUCT_CODE = 2
 _COL_SUPPLIER_SKU = 3
 _COL_MANUFACTURER_NAME = 4  # noqa: F841 — quote_items-side, not imported here
 _COL_PRODUCT_NAME = 5
 _COL_QUANTITY = 6
-_COL_MOQ = 7
-_COL_PRICE = 8
-_COL_LEAD_TIME = 9
-_COL_WEIGHT = 10
-_COL_DIMENSIONS = 11
-_COL_NOTES = 12
+_COL_UNIT = 7  # noqa: F841 — quote_items.unit, read-only on import
+_COL_MOQ = 8
+_COL_PRICE = 9
+_COL_LEAD_TIME = 10
+_COL_WEIGHT = 11
+_COL_DIMENSIONS = 12
+_COL_NOTES = 13
 
 
 class DuplicateArticlesError(Exception):
@@ -152,8 +160,8 @@ def _build_update_payload(row: dict[str, Any]) -> dict[str, Any]:
 def _parse_xlsx(file_bytes: bytes) -> list[dict[str, Any]]:
     """Read the template xlsx and return one dict per data row.
 
-    Rows with an empty `idn_sku` cell are dropped silently — pasting a few
-    blank rows at the bottom of the sheet is common and shouldn't be
+    Rows with an empty `product_code` cell are dropped silently — pasting a
+    few blank rows at the bottom of the sheet is common and shouldn't be
     surfaced as "skipped".
     """
     wb = load_workbook(BytesIO(file_bytes), data_only=True)
@@ -164,20 +172,21 @@ def _parse_xlsx(file_bytes: bytes) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     # Start at row 2 — row 1 is the header (we don't validate it; the column
     # ORDER is what the contract guarantees, same as «Скачать XLS»).
+    # Template has 13 data columns (last is read-only "Покрывает").
     for excel_row in ws.iter_rows(min_row=2, values_only=True):
         if excel_row is None:
             continue
         # Pad the tuple to the expected length so missing trailing cells
         # don't IndexError.
-        cells = list(excel_row) + [None] * (12 - len(excel_row))
-        idn = _parse_text(cells[_COL_IDN_SKU - 1])
-        if not idn:
+        cells = list(excel_row) + [None] * (13 - len(excel_row))
+        product_code = _parse_text(cells[_COL_PRODUCT_CODE - 1])
+        if not product_code:
             # Blank-article row → ignore silently
             continue
         rows.append(
             {
                 "brand": cells[_COL_BRAND - 1],
-                "idn_sku": idn,
+                "product_code": product_code,
                 "supplier_sku": cells[_COL_SUPPLIER_SKU - 1],
                 "product_name": cells[_COL_PRODUCT_NAME - 1],
                 "quantity": cells[_COL_QUANTITY - 1],
@@ -193,13 +202,13 @@ def _parse_xlsx(file_bytes: bytes) -> list[dict[str, Any]]:
 
 
 def _fetch_kpp_lookup(invoice_id: str) -> dict[str, str]:
-    """Build {idn_sku → invoice_item_id} for every row in the КПП.
+    """Build {product_code → invoice_item_id} for every row in the КПП.
 
     Single PostgREST query — same shape used by xls_export_service so the
     coverage embed comes back populated. Each invoice_item joins to one or
     more quote_items via ``invoice_item_coverage``; we index by the FIRST
-    coverage's ``idn_sku`` since merged rows (multiple coverages) share a
-    common identifier on the supplier КП (the template's "Арт. запрошенный"
+    coverage's ``product_code`` since merged rows (multiple coverages) share
+    a common identifier on the supplier КП (the template's "Арт. запрошенный"
     column likewise reads ``rows[0]``).
     """
     sb = get_supabase()
@@ -207,7 +216,7 @@ def _fetch_kpp_lookup(invoice_id: str) -> dict[str, str]:
         sb.table("invoice_items")
         .select(
             "id, invoice_item_coverage(quote_item_id, ratio, "
-            "quote_items(idn_sku))"
+            "quote_items(product_code))"
         )
         .eq("invoice_id", invoice_id)
         .order("position")
@@ -220,13 +229,12 @@ def _fetch_kpp_lookup(invoice_id: str) -> dict[str, str]:
         if not coverage:
             continue
         first_qi = coverage[0].get("quote_items") or {}
-        idn = first_qi.get("idn_sku")
-        if not idn:
+        product_code = first_qi.get("product_code")
+        if not product_code:
             continue
-        # Stringify defensively — ``idn_sku`` is text but might come back as
-        # int if the column ever shifts type. Trim too: trailing whitespace
-        # from data-entry should not block a match.
-        key = str(idn).strip()
+        # Stringify defensively + trim: trailing whitespace from data-entry
+        # should not block a match.
+        key = str(product_code).strip()
         if key:
             lookup[key] = str(item["id"])
     return lookup
@@ -255,10 +263,10 @@ def import_invoice_xls(invoice_id: str, file_bytes: bytes) -> dict[str, Any]:
     seen: set[str] = set()
     duplicates: list[str] = []
     for row in parsed:
-        idn = row["idn_sku"]
-        if idn in seen and idn not in duplicates:
-            duplicates.append(idn)
-        seen.add(idn)
+        product_code = row["product_code"]
+        if product_code in seen and product_code not in duplicates:
+            duplicates.append(product_code)
+        seen.add(product_code)
     if duplicates:
         raise DuplicateArticlesError(duplicates)
 
@@ -270,10 +278,10 @@ def import_invoice_xls(invoice_id: str, file_bytes: bytes) -> dict[str, Any]:
     updated = 0
     skipped: list[str] = []
     for row in parsed:
-        idn = row["idn_sku"]
-        invoice_item_id = lookup.get(idn)
+        product_code = row["product_code"]
+        invoice_item_id = lookup.get(product_code)
         if invoice_item_id is None:
-            skipped.append(idn)
+            skipped.append(product_code)
             continue
 
         payload = _build_update_payload(row)
@@ -285,12 +293,12 @@ def import_invoice_xls(invoice_id: str, file_bytes: bytes) -> dict[str, Any]:
             logger.error(
                 "XLS import: failed to update invoice_item %s for article %s: %s",
                 invoice_item_id,
-                idn,
+                product_code,
                 exc,
             )
             # Treat as skipped so the caller sees the article name surface in
             # the toast — the user can then retry from a fresh download.
-            skipped.append(idn)
+            skipped.append(product_code)
 
     return {
         "updated": updated,
