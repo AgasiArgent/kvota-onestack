@@ -192,6 +192,19 @@ export function RouteConstructor({
   }
 
   function handleApplyTemplate(template: LogisticsTemplate) {
+    // Testing 2 row 58 — preserve scroll position across the apply-template
+    // mutation. Applying a template fires `router.refresh()` plus the parent
+    // LogisticsStep's `onMutation` (which increments a refreshTick driving
+    // a Supabase reload). The reload toggles a loading spinner that briefly
+    // replaces the entire constructor with a small Loader2 icon — the
+    // resulting layout collapse causes the browser to reset scroll to the
+    // top of the page, so the user loses their place on long quotes.
+    //
+    // We snapshot scrollY before firing the mutation and restore it after
+    // the post-mutation render cycle (two rAF ticks — first lets React
+    // commit, second lets the browser paint after layout reflow).
+    const savedScrollY =
+      typeof window !== "undefined" ? window.scrollY : 0;
     startTransition(async () => {
       try {
         await applyLogisticsTemplate({
@@ -206,6 +219,17 @@ export function RouteConstructor({
         toast.error(
           err instanceof Error ? err.message : "Не удалось применить шаблон",
         );
+      }
+      if (typeof window !== "undefined" && savedScrollY > 0) {
+        // Two rAFs: the first waits for React to flush its post-mutation
+        // render, the second waits for the browser to lay out the new
+        // DOM. By the time we scroll, the page is back to its full
+        // height and the scroll target is reachable.
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => {
+            window.scrollTo({ top: savedScrollY, behavior: "instant" });
+          });
+        });
       }
     });
   }
