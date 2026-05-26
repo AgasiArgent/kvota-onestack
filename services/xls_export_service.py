@@ -35,11 +35,12 @@ logger = logging.getLogger(__name__)
 
 COLUMNS_RU: list[tuple[str, str]] = [
     ("Бренд", "brand"),
-    ("Арт. запрошенный", "_idn_sku"),
+    ("Арт. запрошенный", "_product_code"),
     ("Арт. производителя", "supplier_sku"),
     ("Наименование производителя", "_manufacturer_product_name"),
     ("Наименование", "_item_name"),
     ("Кол-во", "quantity"),
+    ("Ед. изм.", "_unit"),
     ("Мин. заказ", "minimum_order_quantity"),
     ("Цена", "purchase_price_original"),
     ("Срок (к.д.)", "production_time_days"),
@@ -51,11 +52,12 @@ COLUMNS_RU: list[tuple[str, str]] = [
 
 COLUMNS_EN: list[tuple[str, str]] = [
     ("Brand", "brand"),
-    ("Requested SKU", "_idn_sku"),
+    ("Requested SKU", "_product_code"),
     ("Manufacturer SKU", "supplier_sku"),
     ("Manufacturer Name", "_manufacturer_product_name"),
     ("Item Name", "_item_name"),
     ("Quantity", "quantity"),
+    ("Unit", "_unit"),
     ("MOQ", "minimum_order_quantity"),
     ("Price", "purchase_price_original"),
     ("Lead Time (days)", "production_time_days"),
@@ -149,8 +151,15 @@ def _get_cell_value(item: dict[str, Any], field_key: str, language: str) -> Any:
         return _get_item_name(item, language)
     if field_key == "_dimensions":
         return _format_dimensions(item)
-    if field_key == "_idn_sku":
-        return _get_quote_item_field(item, "idn_sku")
+    if field_key == "_product_code":
+        # Testing 2 row 88: "Арт. запрошенный" must show the customer-facing
+        # article (quote_items.product_code), not the internal idn_sku display
+        # number — suppliers identify parts by article.
+        return _get_quote_item_field(item, "product_code")
+    if field_key == "_unit":
+        # Testing 2 row 88: "Ед. изм." reads the customer-side unit of measure
+        # so suppliers see the same UOM the sales team requested.
+        return _get_quote_item_field(item, "unit")
     if field_key == "_manufacturer_product_name":
         return _get_quote_item_field(item, "manufacturer_product_name")
     if field_key == "_covers":
@@ -184,8 +193,8 @@ def _fetch_invoice_items(invoice_id: str) -> list[dict[str, Any]]:
         supabase.table("invoice_items")
         .select(
             "*, invoice_item_coverage(quote_item_id, ratio, "
-            "quote_items(product_name, quantity, idn_sku, "
-            "manufacturer_product_name, name_en))"
+            "quote_items(product_name, quantity, idn_sku, product_code, "
+            "unit, manufacturer_product_name, name_en))"
         )
         .eq("invoice_id", invoice_id)
         .order("position")

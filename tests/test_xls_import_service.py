@@ -1,11 +1,15 @@
 """
-Tests for XLS Import Service (Testing 2 row 70).
+Tests for XLS Import Service (Testing 2 row 70 + row 88).
 
 The service mirrors the «Скачать XLS» template column layout — clients edit
 the downloaded XLS and re-upload it; the service matches rows back to the
-КПП (invoice_items) by `idn_sku` (артикул from МОП, joined via
+КПП (invoice_items) by `product_code` (артикул from МОП, joined via
 invoice_item_coverage → quote_items) and updates the supplier-side fields
 on the matched invoice_items.
+
+Testing 2 row 88: the match key shifted from idn_sku to product_code along
+with the export's "Арт. запрошенный" column, and a new "Ед. изм." column
+was inserted after "Кол-во", bumping every subsequent column index by 1.
 
 Edge cases (locked decisions, docs/plans/2026-05-25-batch-24c-decisions.md):
   - new article in XLS, not in КПП       → skip + return in `skipped`
@@ -39,6 +43,7 @@ HEADERS_RU = [
     "Наименование производителя",
     "Наименование",
     "Кол-во",
+    "Ед. изм.",
     "Мин. заказ",
     "Цена",
     "Срок (к.д.)",
@@ -50,7 +55,12 @@ HEADERS_RU = [
 
 
 def make_xlsx(rows: list[dict[str, Any]]) -> bytes:
-    """Build a minimal xlsx with the template headers + the given rows."""
+    """Build a minimal xlsx with the template headers + the given rows.
+
+    Tests can supply ``product_code`` (the row 88 match key) and optionally
+    ``unit`` — that column is read-only on import and tests rarely care
+    about it.
+    """
     wb = Workbook()
     ws = wb.active
     ws.title = "Invoice Items"
@@ -58,18 +68,19 @@ def make_xlsx(rows: list[dict[str, Any]]) -> bytes:
         ws.cell(row=1, column=col_idx, value=header)
     for row_idx, row in enumerate(rows, 2):
         ws.cell(row=row_idx, column=1, value=row.get("brand"))
-        ws.cell(row=row_idx, column=2, value=row.get("idn_sku"))
+        ws.cell(row=row_idx, column=2, value=row.get("product_code"))
         ws.cell(row=row_idx, column=3, value=row.get("supplier_sku"))
         ws.cell(row=row_idx, column=4, value=row.get("manufacturer_product_name"))
         ws.cell(row=row_idx, column=5, value=row.get("product_name"))
         ws.cell(row=row_idx, column=6, value=row.get("quantity"))
-        ws.cell(row=row_idx, column=7, value=row.get("minimum_order_quantity"))
-        ws.cell(row=row_idx, column=8, value=row.get("purchase_price_original"))
-        ws.cell(row=row_idx, column=9, value=row.get("production_time_days"))
-        ws.cell(row=row_idx, column=10, value=row.get("weight_in_kg"))
-        ws.cell(row=row_idx, column=11, value=row.get("dimensions"))
-        ws.cell(row=row_idx, column=12, value=row.get("supplier_notes"))
-        # column 13 ("Покрывает") is read-only metadata — ignored on import
+        ws.cell(row=row_idx, column=7, value=row.get("unit"))
+        ws.cell(row=row_idx, column=8, value=row.get("minimum_order_quantity"))
+        ws.cell(row=row_idx, column=9, value=row.get("purchase_price_original"))
+        ws.cell(row=row_idx, column=10, value=row.get("production_time_days"))
+        ws.cell(row=row_idx, column=11, value=row.get("weight_in_kg"))
+        ws.cell(row=row_idx, column=12, value=row.get("dimensions"))
+        ws.cell(row=row_idx, column=13, value=row.get("supplier_notes"))
+        # column 14 ("Покрывает") is read-only metadata — ignored on import
     buf = BytesIO()
     wb.save(buf)
     return buf.getvalue()
@@ -137,13 +148,18 @@ def _build_mock_supabase(
 
 def _make_invoice_item(
     item_id: str,
-    idn_sku: str,
+    product_code: str,
     *,
     brand: str = "SKF",
     quantity: int = 10,
     price: float | None = None,
 ) -> dict[str, Any]:
-    """One invoice_items row with the coverage→quote_items embed populated."""
+    """One invoice_items row with the coverage→quote_items embed populated.
+
+    Testing 2 row 88: the import service matches by ``product_code`` (the
+    article suppliers see), so the embed exposes that field rather than the
+    legacy ``idn_sku``.
+    """
     return {
         "id": item_id,
         "invoice_id": "inv-001",
@@ -163,7 +179,7 @@ def _make_invoice_item(
             {
                 "quote_item_id": f"qi-{item_id}",
                 "ratio": 1,
-                "quote_items": {"idn_sku": idn_sku},
+                "quote_items": {"product_code": product_code},
             }
         ],
     }
@@ -183,18 +199,18 @@ class TestImportInvoiceXls:
         captured: list[dict[str, Any]] = []
         mock_get_sb.return_value = _build_mock_supabase(
             invoice_items=[
-                _make_invoice_item("ii-1", "SKU-A"),
-                _make_invoice_item("ii-2", "SKU-B"),
-                _make_invoice_item("ii-3", "SKU-C"),
+                _make_invoice_item("ii-1", "ART-A"),
+                _make_invoice_item("ii-2", "ART-B"),
+                _make_invoice_item("ii-3", "ART-C"),
             ],
             updates_capture=captured,
         )
 
         xlsx = make_xlsx(
             [
-                {"idn_sku": "SKU-A", "purchase_price_original": 100, "quantity": 5},
-                {"idn_sku": "SKU-B", "purchase_price_original": 200, "quantity": 8},
-                {"idn_sku": "SKU-C", "purchase_price_original": 300, "quantity": 12},
+                {"product_code": "ART-A", "purchase_price_original": 100, "quantity": 5},
+                {"product_code": "ART-B", "purchase_price_original": 200, "quantity": 8},
+                {"product_code": "ART-C", "purchase_price_original": 300, "quantity": 12},
             ]
         )
 
@@ -213,14 +229,14 @@ class TestImportInvoiceXls:
         """Article in XLS but not in КПП → skipped, never sent as UPDATE."""
         captured: list[dict[str, Any]] = []
         mock_get_sb.return_value = _build_mock_supabase(
-            invoice_items=[_make_invoice_item("ii-1", "SKU-A")],
+            invoice_items=[_make_invoice_item("ii-1", "ART-A")],
             updates_capture=captured,
         )
 
         xlsx = make_xlsx(
             [
-                {"idn_sku": "SKU-A", "purchase_price_original": 100, "quantity": 5},
-                {"idn_sku": "SKU-UNKNOWN", "purchase_price_original": 999, "quantity": 1},
+                {"product_code": "ART-A", "purchase_price_original": 100, "quantity": 5},
+                {"product_code": "ART-UNKNOWN", "purchase_price_original": 999, "quantity": 1},
             ]
         )
 
@@ -229,7 +245,7 @@ class TestImportInvoiceXls:
         result = import_invoice_xls(invoice_id="inv-001", file_bytes=xlsx)
 
         assert result["updated"] == 1
-        assert result["skipped"] == ["SKU-UNKNOWN"]
+        assert result["skipped"] == ["ART-UNKNOWN"]
         assert result["total_in_file"] == 2
         # The UNKNOWN row must not have triggered an UPDATE
         assert len(captured) == 1
@@ -241,15 +257,15 @@ class TestImportInvoiceXls:
         captured: list[dict[str, Any]] = []
         mock_get_sb.return_value = _build_mock_supabase(
             invoice_items=[
-                _make_invoice_item("ii-1", "SKU-A", price=50.0),
-                _make_invoice_item("ii-2", "SKU-B", price=60.0),
+                _make_invoice_item("ii-1", "ART-A", price=50.0),
+                _make_invoice_item("ii-2", "ART-B", price=60.0),
             ],
             updates_capture=captured,
         )
 
-        # Only SKU-A is in the file — SKU-B should be left untouched.
+        # Only ART-A is in the file — ART-B should be left untouched.
         xlsx = make_xlsx(
-            [{"idn_sku": "SKU-A", "purchase_price_original": 100, "quantity": 5}]
+            [{"product_code": "ART-A", "purchase_price_original": 100, "quantity": 5}]
         )
 
         from services.xls_import_service import import_invoice_xls
@@ -264,17 +280,17 @@ class TestImportInvoiceXls:
 
     @patch("services.xls_import_service.get_supabase")
     def test_duplicate_articles_in_xls_raises(self, mock_get_sb):
-        """Same idn_sku twice in XLS → DuplicateArticlesError with the list."""
+        """Same product_code twice in XLS → DuplicateArticlesError."""
         captured: list[dict[str, Any]] = []
         mock_get_sb.return_value = _build_mock_supabase(
-            invoice_items=[_make_invoice_item("ii-1", "SKU-A")],
+            invoice_items=[_make_invoice_item("ii-1", "ART-A")],
             updates_capture=captured,
         )
 
         xlsx = make_xlsx(
             [
-                {"idn_sku": "SKU-A", "purchase_price_original": 100, "quantity": 5},
-                {"idn_sku": "SKU-A", "purchase_price_original": 200, "quantity": 8},
+                {"product_code": "ART-A", "purchase_price_original": 100, "quantity": 5},
+                {"product_code": "ART-A", "purchase_price_original": 200, "quantity": 8},
             ]
         )
 
@@ -286,7 +302,7 @@ class TestImportInvoiceXls:
         with pytest.raises(DuplicateArticlesError) as exc_info:
             import_invoice_xls(invoice_id="inv-001", file_bytes=xlsx)
 
-        assert exc_info.value.duplicates == ["SKU-A"]
+        assert exc_info.value.duplicates == ["ART-A"]
         # No updates were issued for the rejected file
         assert captured == []
 
@@ -295,7 +311,7 @@ class TestImportInvoiceXls:
         """Verify every column from the template lands in the UPDATE payload."""
         captured: list[dict[str, Any]] = []
         mock_get_sb.return_value = _build_mock_supabase(
-            invoice_items=[_make_invoice_item("ii-1", "SKU-A")],
+            invoice_items=[_make_invoice_item("ii-1", "ART-A")],
             updates_capture=captured,
         )
 
@@ -303,10 +319,11 @@ class TestImportInvoiceXls:
             [
                 {
                     "brand": "FAG",
-                    "idn_sku": "SKU-A",
+                    "product_code": "ART-A",
                     "supplier_sku": "FAG-22220",
                     "product_name": "Подшипник роликовый",
                     "quantity": 7,
+                    "unit": "шт",  # read-only from quote_items.unit, not imported
                     "minimum_order_quantity": 3,
                     "purchase_price_original": 250.5,
                     "production_time_days": 45,
@@ -337,9 +354,12 @@ class TestImportInvoiceXls:
         assert payload["dimension_width_mm"] == 20
         assert payload["dimension_length_mm"] == 30
         assert payload["supplier_notes"] == "Доставка через 2 недели"
+        # The unit column is sourced from quote_items and must NOT round-trip
+        # back into the invoice_items payload.
+        assert "unit" not in payload
 
     @patch("services.xls_import_service.get_supabase")
-    def test_missing_idn_sku_in_row_is_skipped(self, mock_get_sb):
+    def test_missing_product_code_in_row_is_skipped(self, mock_get_sb):
         """Empty `Арт. запрошенный` cell → row is silently ignored.
 
         Defensive: users sometimes paste a half-empty row at the bottom of the
@@ -348,15 +368,15 @@ class TestImportInvoiceXls:
         """
         captured: list[dict[str, Any]] = []
         mock_get_sb.return_value = _build_mock_supabase(
-            invoice_items=[_make_invoice_item("ii-1", "SKU-A")],
+            invoice_items=[_make_invoice_item("ii-1", "ART-A")],
             updates_capture=captured,
         )
 
         xlsx = make_xlsx(
             [
-                {"idn_sku": "SKU-A", "purchase_price_original": 100, "quantity": 5},
+                {"product_code": "ART-A", "purchase_price_original": 100, "quantity": 5},
                 # Empty article cell — should be dropped silently
-                {"idn_sku": None, "purchase_price_original": 999, "quantity": 1},
+                {"product_code": None, "purchase_price_original": 999, "quantity": 1},
             ]
         )
 

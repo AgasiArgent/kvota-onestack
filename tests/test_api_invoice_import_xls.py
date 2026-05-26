@@ -30,6 +30,7 @@ HEADERS_RU = [
     "Наименование производителя",
     "Наименование",
     "Кол-во",
+    "Ед. изм.",
     "Мин. заказ",
     "Цена",
     "Срок (к.д.)",
@@ -41,14 +42,21 @@ HEADERS_RU = [
 
 
 def _make_xlsx(rows: list[dict[str, object]]) -> bytes:
+    """Build a minimal XLS file mirroring the export template column order.
+
+    Testing 2 row 88: the article column carries ``product_code`` (the match
+    key) and "Ед. изм." sits between "Кол-во" and "Мин. заказ", shifting
+    every subsequent column by 1.
+    """
     wb = Workbook()
     ws = wb.active
     for col_idx, header in enumerate(HEADERS_RU, 1):
         ws.cell(row=1, column=col_idx, value=header)
     for row_idx, row in enumerate(rows, 2):
-        ws.cell(row=row_idx, column=2, value=row.get("idn_sku"))
+        ws.cell(row=row_idx, column=2, value=row.get("product_code"))
         ws.cell(row=row_idx, column=6, value=row.get("quantity"))
-        ws.cell(row=row_idx, column=8, value=row.get("price"))
+        # Column 7 is "Ед. изм." (read-only on import); column 9 is "Цена".
+        ws.cell(row=row_idx, column=9, value=row.get("price"))
     buf = BytesIO()
     wb.save(buf)
     return buf.getvalue()
@@ -131,8 +139,8 @@ class TestImportXlsContract:
         invoice_id = "11111111-1111-1111-1111-111111111111"
         xlsx = _make_xlsx(
             [
-                {"idn_sku": "SKU-A", "quantity": 1, "price": 10},
-                {"idn_sku": "SKU-A", "quantity": 2, "price": 20},
+                {"product_code": "ART-A", "quantity": 1, "price": 10},
+                {"product_code": "ART-A", "quantity": 2, "price": 20},
             ]
         )
 
@@ -159,16 +167,16 @@ class TestImportXlsContract:
         assert body["success"] is False
         assert body["error"]["code"] == "DUPLICATES"
         # Duplicates list must surface in the error so the toast can render it
-        assert "SKU-A" in body["error"]["message"] or "SKU-A" in str(body)
+        assert "ART-A" in body["error"]["message"] or "ART-A" in str(body)
 
     def test_returns_200_on_happy_path(self, subapp_client: TestClient) -> None:
         """Happy path: matched article → updated count + structured summary."""
         invoice_id = "11111111-1111-1111-1111-111111111111"
         xlsx = _make_xlsx(
-            [{"idn_sku": "SKU-A", "quantity": 5, "price": 100}]
+            [{"product_code": "ART-A", "quantity": 5, "price": 100}]
         )
 
-        # Mock supabase to return one invoice_item that matches SKU-A.
+        # Mock supabase to return one invoice_item that matches ART-A.
         def make_mock_sb():
             mock = MagicMock()
 
@@ -183,7 +191,7 @@ class TestImportXlsContract:
                             {
                                 "quote_item_id": "qi-1",
                                 "ratio": 1,
-                                "quote_items": {"idn_sku": "SKU-A"},
+                                "quote_items": {"product_code": "ART-A"},
                             }
                         ],
                     }

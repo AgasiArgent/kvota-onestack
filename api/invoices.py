@@ -241,7 +241,7 @@ async def import_invoice_xls(request, id: str) -> JSONResponse:
         "Дубликаты артикулов: [list]"}}`` when the file has duplicates.
         400 ``MISSING_FILE`` / ``INVALID_FILE`` for upload / parse errors.
     Side Effects:
-        ``UPDATE kvota.invoice_items`` for every matched (idn_sku) row.
+        ``UPDATE kvota.invoice_items`` for every matched (product_code) row.
     Roles: procurement, procurement_senior, admin, head_of_procurement
     """
     user, err = _get_procurement_user(request)

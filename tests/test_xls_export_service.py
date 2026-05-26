@@ -58,6 +58,8 @@ MOCK_ITEMS = [
                     "product_name": "Подшипник шариковый",
                     "quantity": 100,
                     "idn_sku": "SKF-6205",
+                    "product_code": "6205-CUST",
+                    "unit": "шт",
                     "manufacturer_product_name": "SKF Group",
                     "name_en": "Ball Bearing",
                 },
@@ -86,6 +88,8 @@ MOCK_ITEMS = [
                     "product_name": "Подшипник роликовый",
                     "quantity": 20,
                     "idn_sku": "FAG-22220",
+                    "product_code": "22220-CUST",
+                    "unit": "компл",
                     "manufacturer_product_name": None,
                     "name_en": None,
                 },
@@ -134,6 +138,7 @@ RU_HEADERS = [
     "Наименование производителя",
     "Наименование",
     "Кол-во",
+    "Ед. изм.",
     "Мин. заказ",
     "Цена",
     "Срок (к.д.)",
@@ -150,6 +155,7 @@ EN_HEADERS = [
     "Manufacturer Name",
     "Item Name",
     "Quantity",
+    "Unit",
     "MOQ",
     "Price",
     "Lead Time (days)",
@@ -384,19 +390,22 @@ class TestGenerateInvoiceXls:
         wb = load_workbook(BytesIO(result))
         ws = wb.active
 
-        # Check first item row (row 2)
+        # Check first item row (row 2). Testing 2 row 88: column 2 now carries
+        # the customer-side article (product_code), not the internal idn_sku;
+        # column 7 is the new "Ед. изм." sourced from quote_items.unit.
         assert ws.cell(row=2, column=1).value == "SKF"                  # brand
-        assert ws.cell(row=2, column=2).value == "SKF-6205"             # idn_sku
+        assert ws.cell(row=2, column=2).value == "6205-CUST"            # product_code (артикул)
         assert ws.cell(row=2, column=3).value == "6205-2RS1"            # supplier_sku
         assert ws.cell(row=2, column=4).value == "SKF Group"            # manufacturer_product_name
         assert ws.cell(row=2, column=5).value == "Подшипник шариковый"  # product_name (RU)
         assert ws.cell(row=2, column=6).value == 100                    # quantity
-        assert ws.cell(row=2, column=7).value == 50                     # min_order_quantity
-        assert ws.cell(row=2, column=8).value == 12.50                  # purchase_price_original
-        assert ws.cell(row=2, column=9).value == 30                     # production_time_days
-        assert ws.cell(row=2, column=10).value == 0.15                  # weight_kg
-        assert ws.cell(row=2, column=11).value == "52×52×15"            # dimensions
-        assert ws.cell(row=2, column=12).value == "Срочная поставка"    # procurement_notes
+        assert ws.cell(row=2, column=7).value == "шт"                   # unit (Ед. изм.)
+        assert ws.cell(row=2, column=8).value == 50                     # min_order_quantity
+        assert ws.cell(row=2, column=9).value == 12.50                  # purchase_price_original
+        assert ws.cell(row=2, column=10).value == 30                    # production_time_days
+        assert ws.cell(row=2, column=11).value == 0.15                  # weight_kg
+        assert ws.cell(row=2, column=12).value == "52×52×15"            # dimensions
+        assert ws.cell(row=2, column=13).value == "Срочная поставка"    # procurement_notes
 
     @patch("services.xls_export_service.get_supabase")
     def test_dimensions_handles_null_values(self, mock_get_sb):
@@ -409,8 +418,10 @@ class TestGenerateInvoiceXls:
         wb = load_workbook(BytesIO(result))
         ws = wb.active
 
-        # Item 2 has all dimensions as None
-        assert ws.cell(row=3, column=11).value is None
+        # Item 2 has all dimensions as None.
+        # After Testing 2 row 88 added "Ед. изм." at column 7, dimensions
+        # shifted from column 11 to column 12.
+        assert ws.cell(row=3, column=12).value is None
 
     @patch("services.xls_export_service.get_supabase")
     def test_header_row_is_bold_with_gray_background(self, mock_get_sb):
@@ -428,6 +439,118 @@ class TestGenerateInvoiceXls:
             assert cell.font.bold is True, f"Column {col_idx} header should be bold"
             assert cell.fill.start_color.rgb is not None, f"Column {col_idx} should have fill"
             assert cell.fill.fill_type == "solid", f"Column {col_idx} should have solid fill"
+
+
+# --- Testing 2 row 88: article column + Ед. изм. column ---
+
+
+class TestRow88ArticleAndUnit:
+    """Tester (РОЗ, СтМОЗ, МОЗ) report:
+        «Арт. запрошенный — выводит IDN-SKU, а не артикул.
+         Ед. изм. — не выводит»
+
+    The export must (1) populate "Арт. запрошенный" from quote_items.product_code
+    (the customer-facing article suppliers identify parts by), not the internal
+    idn_sku display number; and (2) include a "Ед. изм." column sourced from
+    quote_items.unit. Both for RU and EN templates.
+    """
+
+    @patch("services.xls_export_service.get_supabase")
+    def test_arta_zapros_column_uses_product_code_not_idn_sku(self, mock_get_sb):
+        """Column "Арт. запрошенный" outputs product_code, never idn_sku."""
+        mock_get_sb.return_value = _build_mock_supabase(MOCK_INVOICE, MOCK_ITEMS)
+
+        from services.xls_export_service import generate_invoice_xls
+
+        result = generate_invoice_xls("inv-001", language="ru")
+        wb = load_workbook(BytesIO(result))
+        ws = wb.active
+
+        col = RU_HEADERS.index("Арт. запрошенный") + 1
+        # Both rows must show the article (product_code), not the idn_sku.
+        assert ws.cell(row=2, column=col).value == "6205-CUST"
+        assert ws.cell(row=3, column=col).value == "22220-CUST"
+        # And explicitly NOT the old (buggy) idn_sku values.
+        assert ws.cell(row=2, column=col).value != "SKF-6205"
+        assert ws.cell(row=3, column=col).value != "FAG-22220"
+
+    @patch("services.xls_export_service.get_supabase")
+    def test_unit_column_is_present_and_populated_ru(self, mock_get_sb):
+        """RU template includes "Ед. изм." with quote_items.unit values."""
+        mock_get_sb.return_value = _build_mock_supabase(MOCK_INVOICE, MOCK_ITEMS)
+
+        from services.xls_export_service import generate_invoice_xls
+
+        result = generate_invoice_xls("inv-001", language="ru")
+        wb = load_workbook(BytesIO(result))
+        ws = wb.active
+
+        assert "Ед. изм." in RU_HEADERS
+        col = RU_HEADERS.index("Ед. изм.") + 1
+        assert ws.cell(row=2, column=col).value == "шт"
+        assert ws.cell(row=3, column=col).value == "компл"
+
+    @patch("services.xls_export_service.get_supabase")
+    def test_unit_column_is_present_and_populated_en(self, mock_get_sb):
+        """EN template includes "Unit" with quote_items.unit values."""
+        mock_get_sb.return_value = _build_mock_supabase(MOCK_INVOICE, MOCK_ITEMS)
+
+        from services.xls_export_service import generate_invoice_xls
+
+        result = generate_invoice_xls("inv-001", language="en")
+        wb = load_workbook(BytesIO(result))
+        ws = wb.active
+
+        assert "Unit" in EN_HEADERS
+        col = EN_HEADERS.index("Unit") + 1
+        assert ws.cell(row=2, column=col).value == "шт"
+        assert ws.cell(row=3, column=col).value == "компл"
+
+    @patch("services.xls_export_service.get_supabase")
+    def test_unit_column_handles_missing_unit(self, mock_get_sb):
+        """When quote_items.unit is None, the cell is empty (not 'None')."""
+        items = [
+            {
+                "id": "item-x",
+                "brand": "X",
+                "supplier_sku": None,
+                "product_name": "x",
+                "quantity": 1,
+                "minimum_order_quantity": None,
+                "purchase_price_original": None,
+                "production_time_days": None,
+                "weight_in_kg": None,
+                "dimension_height_mm": None,
+                "dimension_width_mm": None,
+                "dimension_length_mm": None,
+                "supplier_notes": None,
+                "invoice_item_coverage": [
+                    {
+                        "quote_item_id": "qi-x",
+                        "ratio": 1,
+                        "quote_items": {
+                            "product_name": "x",
+                            "quantity": 1,
+                            "idn_sku": "IDN-X",
+                            "product_code": "ART-X",
+                            "unit": None,
+                            "manufacturer_product_name": None,
+                            "name_en": None,
+                        },
+                    }
+                ],
+            }
+        ]
+        mock_get_sb.return_value = _build_mock_supabase(MOCK_INVOICE, items)
+
+        from services.xls_export_service import generate_invoice_xls
+
+        result = generate_invoice_xls("inv-001", language="ru")
+        wb = load_workbook(BytesIO(result))
+        ws = wb.active
+
+        col = RU_HEADERS.index("Ед. изм.") + 1
+        assert ws.cell(row=2, column=col).value is None
 
 
 # --- Phase 5d: invoice_items + coverage "Покрывает" column ---
