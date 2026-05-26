@@ -58,6 +58,7 @@ export const kpProposalSchema = z.object({
   foot_phone: z.string().optional(),
   foot_site: z.string().optional(),
   foot_email: z.string().optional(),
+  currency: z.enum(["RUB", "USD", "EUR", "CNY", "AED", "TRY"]).optional(),
 });
 
 export type KpProposalInput = z.infer<typeof kpProposalSchema>;

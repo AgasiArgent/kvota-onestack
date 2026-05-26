@@ -84,4 +84,5 @@ export const DEFAULT_PROPOSAL: KpProposal = {
   foot_phone: "8-800-350-21-34",
   foot_site: "www.masterbearing.ru",
   foot_email: "order@masterbearing.ru",
+  currency: "RUB",
 };

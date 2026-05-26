@@ -1,8 +1,9 @@
 """Master Bearing КП branding constants.
 
 Single source of truth for every brand-specific value the KP renderer uses:
-palette, logo SVG, hero illustration paths, page-1 footer feature tiles,
-default footer phone/site/email, default subtitle, and the font directory.
+palette, logo HTML fragment, hero illustration paths, page-1 footer feature
+tiles, default footer phone/site/email, default subtitle, and the font
+directory.
 
 This iteration ships exactly one brand (Master Bearing). Adding a second
 brand later means adding one more ``KpBranding`` constant in this module
@@ -15,6 +16,7 @@ what isolates layout code from brand identity.
 
 from __future__ import annotations
 
+import base64
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Tuple
@@ -30,7 +32,25 @@ def _load_svg(name: str) -> str:
 
 
 def _load_logo() -> str:
-    return (_KP_STATIC / "master-bearing-logo.svg").read_text(encoding="utf-8")
+    """Return an ``<img>`` tag embedding the brand logo as a base64 data URI.
+
+    Inlined rather than referenced via ``file://`` for the same reason fonts
+    are inlined in ``kp_export`` — chromium-headless-shell drops ``file://``
+    asset URLs and renders an alt-text fallback (ADR-8). Base64 adds ~220 KB
+    to the in-memory HTML payload, acceptable for a single render pass.
+
+    The logo PNG is blue-on-transparent. The CSS ``.kp-logo`` rule applies
+    ``filter: brightness(0) invert(1)`` so it renders white on the blue
+    header bar — preserving the original layout's white-mark-on-blue look
+    without needing two separate logo assets.
+    """
+    png_bytes = (_KP_STATIC / "master-bearing-logo.png").read_bytes()
+    b64 = base64.b64encode(png_bytes).decode("ascii")
+    return (
+        f'<img class="kp-logo__img" '
+        f'src="data:image/png;base64,{b64}" '
+        f'alt="Master Bearing"/>'
+    )
 
 
 @dataclass(frozen=True)
@@ -59,7 +79,7 @@ class KpBranding:
     primary_blue: str
     primary_red: str
     accent_cream: str
-    logo_svg: str
+    logo_html: str
     hero_machinery_path: Path
     mountains_path: Path
     default_subtitle: str
@@ -76,7 +96,7 @@ MASTER_BEARING: KpBranding = KpBranding(
     primary_blue="#1c3e87",
     primary_red="#d6202a",
     accent_cream="#fbf6ec",
-    logo_svg=_load_logo(),
+    logo_html=_load_logo(),
     hero_machinery_path=_KP_STATIC / "hero-machinery.png",
     mountains_path=_KP_STATIC / "mountains.png",
     default_subtitle="на поставку крупной спецтехники",

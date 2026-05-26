@@ -92,8 +92,14 @@
   grid-template-columns: 1fr 1fr;
   gap: 10px 14px;
 }
+.row3 {
+  display: grid;
+  grid-template-columns: 1fr 100px 1fr;
+  gap: 10px 14px;
+}
 @media (max-width: 700px) {
-  .row2 {
+  .row2,
+  .row3 {
     grid-template-columns: 1fr;
   }
 }

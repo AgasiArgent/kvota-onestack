@@ -6,7 +6,11 @@
  * terms, and totals. Each input writes through to the parent setData.
  */
 
-import type { KpProposal } from "@/entities/kp-proposal";
+import {
+  CURRENCIES,
+  currencySymbol,
+} from "@/entities/kp-proposal";
+import type { CurrencyCode, KpProposal } from "@/entities/kp-proposal";
 
 import styles from "./kp-form.module.css";
 
@@ -105,7 +109,7 @@ export function SectionOffer({ data, setData }: SectionOfferProps) {
         </Field>
       </div>
 
-      <div className={styles.row2}>
+      <div className={styles.row3}>
         <Field label="Срок поставки">
           <input
             className={styles.input}
@@ -114,7 +118,25 @@ export function SectionOffer({ data, setData }: SectionOfferProps) {
             placeholder="60 рабочих дней"
           />
         </Field>
-        <Field label="Сумма КП, ₽">
+        <Field label="Валюта">
+          <select
+            className={styles.input}
+            value={data.currency}
+            onChange={(e) =>
+              setData((prev) => ({
+                ...prev,
+                currency: e.target.value as CurrencyCode,
+              }))
+            }
+          >
+            {CURRENCIES.map((c) => (
+              <option key={c.code} value={c.code}>
+                {c.code} {c.symbol !== c.code ? c.symbol : ""}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label={`Сумма КП, ${currencySymbol(data.currency)}`}>
           <input
             className={styles.input}
             value={data.amount}

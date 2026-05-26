@@ -14,7 +14,9 @@ import {
   BRANDING,
   calcGrandTotal,
   calcRowTotal,
+  currencySymbol,
   fmtRu,
+  headlineSuffix,
 } from "@/entities/kp-proposal";
 import type { KpProposal } from "@/entities/kp-proposal";
 
@@ -82,7 +84,8 @@ export function KpPage1({ data }: KpPage1Props) {
   }
 
   const grandTotal = calcGrandTotal(items);
-  const grandTotalText = grandTotal > 0 ? `${fmtRu(grandTotal)} ₽` : "";
+  const symbol = currencySymbol(data.currency);
+  const grandTotalText = grandTotal > 0 ? `${fmtRu(grandTotal)} ${symbol}` : "";
 
   return (
     <div className={styles.kpPage}>
@@ -131,7 +134,7 @@ export function KpPage1({ data }: KpPage1Props) {
             icon={<Ruble />}
             label="Сумма КП:"
             value={data.amount ? fmtRu(data.amount) : ""}
-            suffix="₽"
+            suffix={headlineSuffix(data.currency)}
           />
 
           <KpField icon={<Pin />} label="Адрес поставки:" value={data.address} />
@@ -153,8 +156,8 @@ export function KpPage1({ data }: KpPage1Props) {
             <div>Наименование техники</div>
             <div>Модель / Характеристики</div>
             <div className={styles.kpTableHeadRight}>Кол-во</div>
-            <div className={styles.kpTableHeadRight}>Цена за ед., ₽</div>
-            <div className={styles.kpTableHeadRight}>Сумма, ₽</div>
+            <div className={styles.kpTableHeadRight}>Цена за ед., {symbol}</div>
+            <div className={styles.kpTableHeadRight}>Сумма, {symbol}</div>
           </div>
           {padded.map((row, i) => {
             const rowTotal = row ? calcRowTotal(row) : null;
