@@ -75,6 +75,18 @@ export interface KanbanBrandCard {
    * The UI renders a «Готово» badge when this is set.
    */
   procurement_completed_at?: string | null;
+  /**
+   * МОП hand-off note from `quotes.sales_checklist.distribution_comment`
+   * (Testing 2 row 67 follow-up, FB-260525). The МОП fills this when
+   * передавая заявку в закупки («Срочно к Алейне, клиент знакомый», etc.)
+   * — until now it was only visible on the quote detail page (context
+   * panel sales-checklist block). Mirrors the workspace-kanban pattern
+   * (`workspace-kanban.KanbanCard.distributionComment`); rendered inline
+   * on every procurement card so МОЗ can read the hint without opening
+   * the quote. Null when the МОП left the checklist empty / absent on
+   * legacy quotes.
+   */
+  distribution_comment?: string | null;
 }
 
 /**
