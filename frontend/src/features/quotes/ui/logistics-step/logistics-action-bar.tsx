@@ -50,6 +50,13 @@ interface LogisticsActionBarProps {
   displayCurrency: string;
   /** foreign-currency → RUB rate map. RUB is implicit (1.0). */
   fxRates: FxRateMap;
+  /**
+   * Number of invoice_items on the parent quote that still lack a
+   * positive ``purchase_price_original``. Testing 2 row 80 — when > 0,
+   * the "Завершить логистику" button is disabled and the tooltip shows
+   * "Осталось проценить N КПП". Defaults to 0 (legacy callers).
+   */
+  unpricedInvoiceItemsCount?: number;
 }
 
 function findMissing(segments: LogisticsSegment[]): MissingItem[] {
@@ -100,6 +107,7 @@ export function LogisticsActionBar({
   onComplete,
   displayCurrency,
   fxRates,
+  unpricedInvoiceItemsCount = 0,
 }: LogisticsActionBarProps) {
   const missing = findMissing(segments);
   const { total: totalCost, missing: missingRates } = sumInCurrency(
@@ -121,16 +129,23 @@ export function LogisticsActionBar({
     ? `≈ ${totalFmt.format(totalCost)}`
     : totalFmt.format(totalCost);
 
-  // Why the button is disabled (in priority order)
+  // Why the button is disabled (in priority order). Pricing gate
+  // (Testing 2 row 80) sits above the segment-completeness gate because
+  // it's an upstream blocker: even a perfectly filled route cannot ship
+  // until procurement finishes scoring every КПП, and there's no point
+  // asking the logistician to fix segments when the real fix is in
+  // procurement.
   const disabledReason: string | null = !canEdit
     ? "Нет прав на завершение логистики."
     : alreadyCompleted
       ? "Логистика уже завершена для этого инвойса."
       : needsReview
         ? "Закупки изменили позиции после прошлого завершения. Пересмотрите маршрут и подтвердите изменения."
-        : missing.length > 0
-          ? formatMissingTooltip(missing)
-          : null;
+        : unpricedInvoiceItemsCount > 0
+          ? `Осталось проценить ${unpricedInvoiceItemsCount} КПП.`
+          : missing.length > 0
+            ? formatMissingTooltip(missing)
+            : null;
 
   const isReady = disabledReason === null;
   const buttonLabel = alreadyCompleted
