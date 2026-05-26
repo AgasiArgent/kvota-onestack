@@ -6,13 +6,20 @@ import {
   fetchBuyerCompanies,
 } from "@/features/companies/api/server-queries";
 import type { CompanyTab } from "@/features/companies/model/types";
+import { canManageBuyerCompany } from "@/shared/lib/roles";
 
 interface Props {
   searchParams: Promise<{ tab?: string }>;
 }
 
 const VALID_TABS: CompanyTab[] = ["seller", "buyer"];
-const ALLOWED_ROLES = ["admin", "finance", "procurement", "procurement_senior"];
+const ALLOWED_ROLES = [
+  "admin",
+  "finance",
+  "procurement",
+  "procurement_senior",
+  "head_of_procurement",
+];
 
 export default async function CompaniesPageRoute({ searchParams }: Props) {
   const user = await getSessionUser();
@@ -34,6 +41,8 @@ export default async function CompaniesPageRoute({ searchParams }: Props) {
   const buyerCompanies =
     activeTab === "buyer" ? await fetchBuyerCompanies(orgId) : undefined;
 
+  const canManageBuyer = canManageBuyerCompany(user.roles);
+
   return (
     <div>
       <h1 className="text-2xl font-bold mb-6">Юрлица</h1>
@@ -41,6 +50,8 @@ export default async function CompaniesPageRoute({ searchParams }: Props) {
         activeTab={activeTab}
         sellerCompanies={sellerCompanies}
         buyerCompanies={buyerCompanies}
+        orgId={orgId}
+        canManageBuyer={canManageBuyer}
       />
     </div>
   );

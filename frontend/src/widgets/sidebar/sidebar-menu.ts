@@ -213,7 +213,9 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
       href: "/positions",
     });
   }
-  if (hasRole("finance", "procurement", "procurement_senior")) {
+  if (
+    hasRole("finance", "procurement", "procurement_senior", "head_of_procurement")
+  ) {
     registries.push({
       icon: Building,
       label: "Юрлица",

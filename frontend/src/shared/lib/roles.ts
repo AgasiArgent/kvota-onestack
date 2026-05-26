@@ -344,3 +344,33 @@ const CUSTOMER_CREATE_ROLES = [
 export function canCreateCustomer(roles: string[]): boolean {
   return roles.some((r) => CUSTOMER_CREATE_ROLES.includes(r));
 }
+
+/**
+ * Roles allowed to create / edit buyer companies (our legal entities used for
+ * purchasing) via the /companies?tab=buyer page (Testing 2 row 82 follow-up).
+ * The complaint: РОЗ (head_of_procurement) reported no Создать/Редактировать
+ * buttons on the buyer tab.
+ *
+ * Authorized: admin, finance, procurement, procurement_senior,
+ * head_of_procurement — matches the page-level ALLOWED_ROLES set and the
+ * widened buyer_companies INSERT/UPDATE RLS policy (migration 331).
+ *
+ * Buyer companies are operational counterparties consumed by the procurement
+ * workflow; the procurement tier is the natural maintainer alongside admin
+ * and finance.
+ */
+const BUYER_COMPANY_MANAGE_ROLES = [
+  "admin",
+  "finance",
+  "procurement",
+  "procurement_senior",
+  "head_of_procurement",
+];
+
+/**
+ * Returns true if the user may create or edit buyer companies via the
+ * /companies?tab=buyer page.
+ */
+export function canManageBuyerCompany(roles: string[]): boolean {
+  return roles.some((r) => BUYER_COMPANY_MANAGE_ROLES.includes(r));
+}

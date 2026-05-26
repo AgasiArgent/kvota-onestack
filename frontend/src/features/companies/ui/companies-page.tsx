@@ -9,12 +9,22 @@ interface Props {
   activeTab: CompanyTab;
   sellerCompanies?: SellerCompany[];
   buyerCompanies?: BuyerCompany[];
+  /** Org of the current viewer — required by the buyer create dialog. */
+  orgId: string;
+  /**
+   * Whether the viewer may create / edit buyer companies. Gated by
+   * `canManageBuyerCompany(roles)` server-side and aligned with the
+   * widened buyer_companies RLS policy (migration 331).
+   */
+  canManageBuyer?: boolean;
 }
 
 export function CompaniesPage({
   activeTab,
   sellerCompanies,
   buyerCompanies,
+  orgId,
+  canManageBuyer = false,
 }: Props) {
   return (
     <CompaniesTabs activeTab={activeTab}>
@@ -22,7 +32,11 @@ export function CompaniesPage({
         <SellerTab companies={sellerCompanies} />
       )}
       {activeTab === "buyer" && buyerCompanies && (
-        <BuyerTab companies={buyerCompanies} />
+        <BuyerTab
+          companies={buyerCompanies}
+          orgId={orgId}
+          canManage={canManageBuyer}
+        />
       )}
     </CompaniesTabs>
   );
