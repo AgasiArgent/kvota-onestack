@@ -1593,6 +1593,8 @@ export type Database = {
           vat_rate: number | null
           pickup_address: string | null
           supplier_contact_id: string | null
+          advance_pct: number | null
+          payment_terms: string | null
         }
         Insert: {
           id?: string
@@ -1647,6 +1649,8 @@ export type Database = {
           vat_rate?: number | null
           pickup_address?: string | null
           supplier_contact_id?: string | null
+          advance_pct?: number | null
+          payment_terms?: string | null
         }
         Update: {
           id?: string
@@ -1701,6 +1705,8 @@ export type Database = {
           vat_rate?: number | null
           pickup_address?: string | null
           supplier_contact_id?: string | null
+          advance_pct?: number | null
+          payment_terms?: string | null
         }
         Relationships: []
       }
@@ -2096,8 +2102,8 @@ export type Database = {
           id: string
           invoice_id: string
           sequence_order: number
-          from_location_id: string
-          to_location_id: string
+          from_location_id: string | null
+          to_location_id: string | null
           label: string | null
           transit_days: number | null
           main_cost_rub: number
@@ -2112,8 +2118,8 @@ export type Database = {
           id?: string
           invoice_id: string
           sequence_order: number
-          from_location_id: string
-          to_location_id: string
+          from_location_id?: string | null
+          to_location_id?: string | null
           label?: string | null
           transit_days?: number | null
           main_cost_rub?: number
@@ -2128,8 +2134,8 @@ export type Database = {
           id?: string
           invoice_id?: string
           sequence_order?: number
-          from_location_id?: string
-          to_location_id?: string
+          from_location_id?: string | null
+          to_location_id?: string | null
           label?: string | null
           transit_days?: number | null
           main_cost_rub?: number
@@ -3378,6 +3384,39 @@ export type Database = {
         }
         Relationships: []
       }
+      procurement_pause_log: {
+        Row: {
+          id: string
+          quote_id: string
+          paused_at: string
+          paused_by: string
+          reason: string
+          unpaused_at: string | null
+          unpaused_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          quote_id: string
+          paused_at?: string
+          paused_by: string
+          reason: string
+          unpaused_at?: string | null
+          unpaused_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          quote_id?: string
+          paused_at?: string
+          paused_by?: string
+          reason?: string
+          unpaused_at?: string | null
+          unpaused_by?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
       purchasing_companies: {
         Row: {
           id: string
@@ -3914,13 +3953,13 @@ export type Database = {
           issued_at: string | null
           valid_until: string | null
           cost_original: number
-          cost_currency: string
           notes: string | null
           display_name: string | null
           is_custom_expense: boolean
           created_at: string
           updated_at: string
           created_by: string | null
+          cost_currency: string
         }
         Insert: {
           id?: string
@@ -3932,13 +3971,13 @@ export type Database = {
           issued_at?: string | null
           valid_until?: string | null
           cost_original?: number
-          cost_currency?: string
           notes?: string | null
           display_name?: string | null
           is_custom_expense?: boolean
           created_at?: string
           updated_at?: string
           created_by?: string | null
+          cost_currency?: string
         }
         Update: {
           id?: string
@@ -3950,13 +3989,13 @@ export type Database = {
           issued_at?: string | null
           valid_until?: string | null
           cost_original?: number
-          cost_currency?: string
           notes?: string | null
           display_name?: string | null
           is_custom_expense?: boolean
           created_at?: string
           updated_at?: string
           created_by?: string | null
+          cost_currency?: string
         }
         Relationships: []
       }
@@ -4108,9 +4147,7 @@ export type Database = {
           hs_code: string | null
           customs_duty: number | null
           customs_extra: number | null
-          supplier_payment_terms: string | null
           payer_company: string | null
-          advance_to_supplier_percent: number | null
           procurement_notes: string | null
           assigned_procurement_user: string | null
           supplier_city: string | null
@@ -4184,9 +4221,7 @@ export type Database = {
           hs_code?: string | null
           customs_duty?: number | null
           customs_extra?: number | null
-          supplier_payment_terms?: string | null
           payer_company?: string | null
-          advance_to_supplier_percent?: number | null
           procurement_notes?: string | null
           assigned_procurement_user?: string | null
           supplier_city?: string | null
@@ -4260,9 +4295,7 @@ export type Database = {
           hs_code?: string | null
           customs_duty?: number | null
           customs_extra?: number | null
-          supplier_payment_terms?: string | null
           payer_company?: string | null
-          advance_to_supplier_percent?: number | null
           procurement_notes?: string | null
           assigned_procurement_user?: string | null
           supplier_city?: string | null
