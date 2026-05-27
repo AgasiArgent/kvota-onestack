@@ -525,19 +525,19 @@ async def calculate_quote(
 
             item_result = {
                 "quote_id": quote_id,
-                "quote_item_id": item["id"],
+                "quote_item_id": item["quote_item_id"],
                 "phase_results": phase_results,
                 "phase_results_usd": phase_results_usd,
                 "calculated_at": datetime.now().isoformat()
             }
             existing_result = supabase.table("quote_calculation_results") \
                 .select("quote_item_id") \
-                .eq("quote_item_id", item["id"]) \
+                .eq("quote_item_id", item["quote_item_id"]) \
                 .execute()
             if existing_result.data:
                 supabase.table("quote_calculation_results") \
                     .update(item_result) \
-                    .eq("quote_item_id", item["id"]) \
+                    .eq("quote_item_id", item["quote_item_id"]) \
                     .execute()
             else:
                 supabase.table("quote_calculation_results") \
@@ -549,7 +549,7 @@ async def calculate_quote(
             base_price_vat_per_unit = float(result.sales_price_total_with_vat) / quantity if quantity > 0 else 0
             supabase.table("quote_items").update({
                 "base_price_vat": base_price_vat_per_unit
-            }).eq("id", item["id"]).execute()
+            }).eq("id", item["quote_item_id"]).execute()
 
         # Store calculation summary
         calc_summary = {
@@ -608,11 +608,16 @@ async def calculate_quote(
                 comment="Partial recalculation: price updated, returning to client negotiation"
             )
 
-        # Create or update quote version
+        # Create or update quote version.
+        # Use `included_items` (same filter as the per-item storage loop above)
+        # so the zip stays aligned with `results` — `results` is the same length
+        # and order as the included subset, not the full `items` list. Using
+        # `items` here would misalign whenever an item is excluded, same bug
+        # class PR #262 (Row 87) fixed for the first loop.
         all_results = []
-        for item, result in zip(items, results):
+        for item, result in zip(included_items, results):
             all_results.append({
-                "item_id": item["id"],
+                "item_id": item["quote_item_id"],
                 "N16": float(result.purchase_price_no_vat or 0),
                 "S16": float(result.purchase_price_total_quote_currency or 0),
                 "V16": float(result.logistics_total or 0),
