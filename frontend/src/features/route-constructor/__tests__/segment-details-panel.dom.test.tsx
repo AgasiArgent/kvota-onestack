@@ -351,4 +351,25 @@ describe("SegmentDetailsPanel (РОЛ Тест 07 #3.6)", () => {
     ) as HTMLInputElement;
     expect(labelInput.value).toBe("Морской фрахт");
   });
+
+  // -------------------------------------------------------------------------
+  // Testing 2 row 81 — "Добавить" extras button must be visibly prominent.
+  // Smoke test: button is present, accessible by name, and not disabled by
+  // default (so МОЛ can find and click it without hunting).
+  // -------------------------------------------------------------------------
+  describe("extras add button visibility (Testing 2 row 81)", () => {
+    it("renders the Добавить button with accessible name and enabled state", () => {
+      render(
+        <SegmentDetailsPanel
+          segment={makeSegment()}
+          locations={[LOC_A, LOC_B]}
+          revalidatePath="/quotes/x"
+        />,
+      );
+
+      const addButton = screen.getByRole("button", { name: /Добавить/i });
+      expect(addButton).toBeDefined();
+      expect(addButton.hasAttribute("disabled")).toBe(false);
+    });
+  });
 });
