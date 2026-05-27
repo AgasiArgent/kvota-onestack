@@ -12,14 +12,16 @@ FRONTEND_DIR="$(dirname "$SCRIPT_DIR")"
 OUTPUT="$FRONTEND_DIR/src/shared/types/database.types.ts"
 GEN_SCRIPT="$SCRIPT_DIR/gen-supabase-types.mjs"
 
-DB_HOST="172.21.0.3"
 DB_PORT="5432"
 LOCAL_PORT="54322"
 VPS_HOST="beget-kvota"
 DB_SCHEMA="kvota"
 
-# Read password from VPS
+# Read password + discover supabase-db container IP from VPS. The IP changes
+# whenever the docker network is recreated, so never hardcode it.
 DB_PASS=$(ssh "$VPS_HOST" "grep POSTGRES_PASSWORD /root/lisa/supabase/docker/.env | cut -d= -f2")
+DB_HOST=$(ssh "$VPS_HOST" "docker inspect supabase-db --format '{{range \$net,\$conf := .NetworkSettings.Networks}}{{\$conf.IPAddress}}{{end}}'")
+echo "supabase-db container IP: $DB_HOST"
 
 # Start SSH tunnel (if not already running)
 if ! lsof -i ":$LOCAL_PORT" &>/dev/null; then

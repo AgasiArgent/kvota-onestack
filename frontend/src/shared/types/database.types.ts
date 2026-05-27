@@ -4187,6 +4187,7 @@ export type Database = {
           has_fta_certificate: boolean
           customs_manual_override: boolean
           customs_manual_rate_payload: Json | null
+          included_in_calc: boolean
         }
         Insert: {
           id?: string
@@ -4261,6 +4262,7 @@ export type Database = {
           has_fta_certificate?: boolean
           customs_manual_override?: boolean
           customs_manual_rate_payload?: Json | null
+          included_in_calc?: boolean
         }
         Update: {
           id?: string
@@ -4335,6 +4337,7 @@ export type Database = {
           has_fta_certificate?: boolean
           customs_manual_override?: boolean
           customs_manual_rate_payload?: Json | null
+          included_in_calc?: boolean
         }
         Relationships: []
       }
@@ -4504,7 +4507,7 @@ export type Database = {
           subtotal: number
           tax_rate: number | null
           tax_amount: number | null
-          total_amount: number
+          total_amount: number | null
           notes: string | null
           terms_conditions: string | null
           created_by: string
@@ -4626,7 +4629,7 @@ export type Database = {
           subtotal?: number
           tax_rate?: number | null
           tax_amount?: number | null
-          total_amount?: number
+          total_amount?: number | null
           notes?: string | null
           terms_conditions?: string | null
           created_by: string
@@ -4748,7 +4751,7 @@ export type Database = {
           subtotal?: number
           tax_rate?: number | null
           tax_amount?: number | null
-          total_amount?: number
+          total_amount?: number | null
           notes?: string | null
           terms_conditions?: string | null
           created_by?: string
