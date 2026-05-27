@@ -667,11 +667,11 @@ function SegmentExpensesList({
         />
         <Button
           type="button"
-          variant="ghost"
+          variant="default"
           size="sm"
           onClick={handleAdd}
           disabled={disabled || isPending}
-          className="gap-1"
+          className="gap-1 font-semibold"
         >
           <Plus size={14} strokeWidth={2} aria-hidden />
           Добавить
