@@ -23,10 +23,7 @@ import {
 } from "@/components/ui/table";
 import { Pagination } from "@/shared/ui/pagination";
 import { useFilterNavigation } from "@/shared/lib/use-filter-navigation";
-import type {
-  SupplierListItem,
-  SupplierInvoiceTotal,
-} from "@/entities/supplier/types";
+import type { SupplierListItem } from "@/entities/supplier/types";
 
 interface Props {
   initialData: SupplierListItem[];
@@ -86,18 +83,14 @@ export function SuppliersTable({
     return dateFormatter.format(d);
   }
 
-  // Currencies differ across КПП so we render one chip per currency,
-  // sorted by amount desc (set in the query). "12 500 EUR · 800 USD".
-  function formatTotals(totals: SupplierInvoiceTotal[]): string {
-    if (totals.length === 0) return "—";
-    return totals
-      .map(
-        (t) =>
-          `${new Intl.NumberFormat("ru-RU", {
-            maximumFractionDigits: 2,
-          }).format(t.amount)} ${t.currency}`
-      )
-      .join(" · ");
+  // Per-КПП totals are converted to USD via historical FX (kvota.exchange_rates
+  // looked up by the КПП's created_at), then summed and rounded to integer USD.
+  // See entities/supplier/lib/historical-fx.ts for the conversion logic.
+  function formatTotalUsd(value: number | null): string {
+    if (value == null) return "—";
+    return `$${new Intl.NumberFormat("en-US", {
+      maximumFractionDigits: 0,
+    }).format(value)}`;
   }
 
   function handleSearchChange(value: string) {
@@ -204,7 +197,7 @@ export function SuppliersTable({
                 {formatDate(supplier.last_invoice_at)}
               </TableCell>
               <TableCell className="text-text-muted tabular-nums">
-                {formatTotals(supplier.invoice_totals)}
+                {formatTotalUsd(supplier.invoice_total_usd)}
               </TableCell>
               <TableCell>
                 <Badge variant={supplier.is_active ? "default" : "secondary"}>

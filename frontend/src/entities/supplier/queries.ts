@@ -3,9 +3,14 @@ import { escapePostgrestFilter } from "@/shared/lib/supabase/escape-filter";
 import { isProcurementOnly } from "@/shared/lib/roles";
 import { getAssignedSupplierIds } from "@/shared/lib/access";
 import { fetchActiveAuthUserIds } from "@/entities/user";
+import {
+  buildHistoricalRateMap,
+  sumInvoiceLinesInUsd,
+  type FxRateRow,
+  type InvoiceLineForUsd,
+} from "./lib/historical-fx";
 import type {
   SupplierListItem,
-  SupplierInvoiceTotal,
   SupplierDetail,
   SupplierContact,
   BrandAssignment,
@@ -95,41 +100,64 @@ interface InvoiceAggregateRow {
 }
 
 /**
- * Aggregate per-supplier totals from invoices + invoice_items:
+ * Per-supplier aggregate used by the /suppliers table:
  *   - last_invoice_at: MAX(invoices.created_at)
- *   - totals: per-currency SUM(invoice_items.purchase_price_original * quantity)
+ *   - invoice_total_usd: SUM(quantity * purchase_price_original) converted to
+ *     USD per-КПП via kvota.exchange_rates looked up by `invoices.created_at`,
+ *     rounded to integer USD. Null when nothing convertible exists.
  *
- * Currencies differ across КПП, so summing into a single number would be wrong.
- * Each currency gets its own bucket; the UI renders them as "12 500 EUR · 800 USD".
+ * Historical FX conversion: each КПП may be in RUB/USD/EUR/CNY/etc.; a
+ * naïve sum would mix currencies. Each invoice's lines are converted to
+ * USD using the FX rate effective on the invoice's `created_at` date
+ * (most recent rate with `fetched_at <= created_at`, falling back to the
+ * earliest available rate). See `lib/historical-fx.ts` for the helpers.
  */
 async function fetchInvoiceAggregatesForSuppliers(
-  supplierIds: string[]
+  supplierIds: string[],
 ): Promise<
   Map<
     string,
-    { last_invoice_at: string | null; totals: SupplierInvoiceTotal[] }
+    { last_invoice_at: string | null; invoice_total_usd: number | null }
   >
 > {
   if (supplierIds.length === 0) return new Map();
   const supabase = createAdminClient();
 
-  const { data } = await supabase
-    .from("invoices")
-    .select(
-      "supplier_id, created_at, invoice_items(quantity, purchase_price_original, purchase_currency)"
-    )
-    .in("supplier_id", supplierIds);
+  // exchange_rates is org-agnostic (CBR cache, see services/currency_service.py).
+  // We pull ALL `* → RUB` rows once and look up by date in memory. This avoids
+  // an N-queries-per-invoice round trip and stays correct regardless of insert
+  // order because buildHistoricalRateMap sorts each bucket by fetched_at DESC.
+  const [invoicesResult, ratesResult] = await Promise.all([
+    supabase
+      .from("invoices")
+      .select(
+        "supplier_id, created_at, invoice_items(quantity, purchase_price_original, purchase_currency)",
+      )
+      .in("supplier_id", supplierIds),
+    supabase
+      .from("exchange_rates")
+      .select("from_currency, rate, fetched_at")
+      .eq("to_currency", "RUB"),
+  ]);
 
-  const rows = (data ?? []) as unknown as InvoiceAggregateRow[];
-  const acc = new Map<
+  const rows = (invoicesResult.data ?? []) as unknown as InvoiceAggregateRow[];
+  const rateRows = (ratesResult.data ?? []) as unknown as FxRateRow[];
+  const rates = buildHistoricalRateMap(rateRows);
+
+  // Group lines by supplier with per-line asOf so historical-fx can look up
+  // the rate effective on each КПП's creation date.
+  const perSupplier = new Map<
     string,
-    { last_invoice_at: string | null; totals: Map<string, number> }
+    {
+      last_invoice_at: string | null;
+      lines: InvoiceLineForUsd[];
+    }
   >();
 
   for (const inv of rows) {
-    const bucket = acc.get(inv.supplier_id) ?? {
+    const bucket = perSupplier.get(inv.supplier_id) ?? {
       last_invoice_at: null,
-      totals: new Map<string, number>(),
+      lines: [] as InvoiceLineForUsd[],
     };
 
     if (inv.created_at) {
@@ -138,30 +166,44 @@ async function fetchInvoiceAggregatesForSuppliers(
       }
     }
 
+    // Use the invoice's created_at as the as-of date for FX. If absent,
+    // fall back to "now" so the line still contributes (rather than being
+    // silently dropped) — pickRateOnOrBefore will return the latest rate.
+    const asOf = inv.created_at ?? new Date().toISOString();
+
     for (const item of inv.invoice_items ?? []) {
       const qty = Number(item.quantity ?? 0);
       const price = Number(item.purchase_price_original ?? 0);
       const currency = (item.purchase_currency ?? "").trim().toUpperCase();
       if (!currency || !Number.isFinite(qty) || !Number.isFinite(price)) continue;
-      const line = qty * price;
-      if (line === 0) continue;
-      bucket.totals.set(currency, (bucket.totals.get(currency) ?? 0) + line);
+      const amount = qty * price;
+      if (amount === 0) continue;
+      bucket.lines.push({ amount, currency, asOf });
     }
 
-    acc.set(inv.supplier_id, bucket);
+    perSupplier.set(inv.supplier_id, bucket);
   }
 
   const result = new Map<
     string,
-    { last_invoice_at: string | null; totals: SupplierInvoiceTotal[] }
+    { last_invoice_at: string | null; invoice_total_usd: number | null }
   >();
-  for (const [supplierId, bucket] of acc) {
-    const totals: SupplierInvoiceTotal[] = [...bucket.totals.entries()]
-      .map(([currency, amount]) => ({ currency, amount }))
-      .sort((a, b) => b.amount - a.amount);
+  for (const [supplierId, bucket] of perSupplier) {
+    const { totalUsd, missing } = sumInvoiceLinesInUsd(bucket.lines, rates);
+    if (missing.length > 0) {
+      // Surface missing-rate cases so ops can investigate without breaking
+      // the table render. We never throw — the supplier just shows a smaller
+      // total or "—" when nothing could be converted.
+      console.warn(
+        `[suppliers] FX rate missing for supplier ${supplierId}: currencies=${missing.join(",")}`,
+      );
+    }
+    const hasLines = bucket.lines.length > 0;
+    const everythingMissing = hasLines && totalUsd === 0 && missing.length > 0;
     result.set(supplierId, {
       last_invoice_at: bucket.last_invoice_at,
-      totals,
+      invoice_total_usd:
+        !hasLines || everythingMissing ? null : Math.round(totalUsd),
     });
   }
   return result;
@@ -247,7 +289,7 @@ export async function fetchSuppliersList(
       is_active: row.is_active !== false,
       assignee_name: assigneeMap.get(row.id) ?? null,
       last_invoice_at: aggregate?.last_invoice_at ?? null,
-      invoice_totals: aggregate?.totals ?? [],
+      invoice_total_usd: aggregate?.invoice_total_usd ?? null,
     };
   });
 

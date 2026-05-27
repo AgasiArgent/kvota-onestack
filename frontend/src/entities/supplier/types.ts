@@ -1,20 +1,16 @@
 /**
- * Aggregated total of invoice_items for a supplier, bucketed by currency.
- * One bucket per distinct purchase_currency used across the supplier's КПП.
- */
-export interface SupplierInvoiceTotal {
-  currency: string;
-  amount: number;
-}
-
-/**
  * Suppliers table row (Testing 2 row 84). Columns:
  *   1. Наименование (name)
  *   2. Страна (country)
  *   3. МОЗ (assigned procurement manager — first supplier_assignees user)
  *   4. Дата последнего КПП (MAX(invoices.created_at) for this supplier)
- *   5. Сумма КПП (SUM(invoice_items.purchase_price_original * quantity), bucketed by currency)
+ *   5. Сумма КПП (SUM(invoice_items.purchase_price_original * quantity)
+ *                  per-КПП converted to USD via kvota.exchange_rates looked up
+ *                  by the КПП's created_at, then summed; rounded to integer USD)
  *   6. Статус (is_active)
+ *
+ * `invoice_total_usd` is null when the supplier has no priced КПП or every
+ * КПП currency lacks an FX rate. Otherwise it's an integer USD value.
  */
 export interface SupplierListItem {
   id: string;
@@ -23,7 +19,7 @@ export interface SupplierListItem {
   is_active: boolean;
   assignee_name: string | null;
   last_invoice_at: string | null;
-  invoice_totals: SupplierInvoiceTotal[];
+  invoice_total_usd: number | null;
 }
 
 export interface SupplierDetail {
