@@ -148,6 +148,16 @@ interface InvoiceCardProps {
    * by procurement-handsontable mutations.
    */
   externalRefreshKey?: number;
+  /**
+   * Testing 2 row 89 — absolute deadline timestamp for the КПП's parent
+   * procurement request (the procurement stage of its quote). Read-only:
+   * sourced from `quote.stage_entered_at + stage_deadlines.deadline_hours`
+   * (with `quote.stage_deadline_override_hours` as override). Null means
+   * the quote is not currently in `pending_procurement`, the org has no
+   * configured stage deadline, or the stage timer has not started — the
+   * card renders an em-dash placeholder so МОЗ/РОЗ still sees the slot.
+   */
+  procurementDeadlineAt?: string | null;
 }
 
 const numberFmtInline = new Intl.NumberFormat("ru-RU", {
@@ -167,6 +177,7 @@ export function InvoiceCard({
   defaultExpanded = false,
   userRoles = [],
   externalRefreshKey = 0,
+  procurementDeadlineAt = null,
 }: InvoiceCardProps) {
   const router = useRouter();
   const [expanded, setExpanded] = useState(defaultExpanded);
@@ -1083,6 +1094,31 @@ export function InvoiceCard({
                 day: "2-digit",
                 month: "2-digit",
               }).format(new Date(invoiceProcurementCompletedAt))}
+            </Badge>
+          )}
+
+          {/* Testing 2 row 89 — surface the parent procurement-request's
+              deadline inline so МОЗ/РОЗ sees it without leaving the КПП. The
+              deadline is canonical at the quote-stage level; this card just
+              mirrors the parent's value. Read-only: edit happens upstream on
+              the quote's stage timer. */}
+          {procurementDeadlineAt && (
+            <Badge
+              variant="outline"
+              data-testid="invoice-card-procurement-deadline"
+              className="shrink-0 text-xs"
+              title={`Дедлайн закупки: ${new Intl.DateTimeFormat("ru-RU", {
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric",
+              }).format(new Date(procurementDeadlineAt))}`}
+            >
+              Дедлайн{" "}
+              {new Intl.DateTimeFormat("ru-RU", {
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric",
+              }).format(new Date(procurementDeadlineAt))}
             </Badge>
           )}
 

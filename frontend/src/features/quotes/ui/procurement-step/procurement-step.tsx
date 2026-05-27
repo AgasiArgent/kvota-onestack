@@ -115,6 +115,13 @@ export function ProcurementStep({
   // Project the MOQ from the covering invoice_item (selected invoice wins).
   const [minOrderQuantityByQuoteItemId, setMinOrderQuantityByQuoteItemId] =
     useState<Record<string, number | null>>({});
+  // Testing 2 row 89 — fetched `pending_procurement` stage_deadline.hours
+  // for the quote's org. The card's display deadline is then derived via
+  // useMemo from this + the quote's stage_entered_at / override below. All
+  // КПП on the same quote share the same value — the deadline is canonical
+  // at the quote-stage level, КПП cards just mirror it for visibility.
+  const [orgProcurementDeadlineHours, setOrgProcurementDeadlineHours] =
+    useState<number | null>(null);
 
   // Load suppliers and buyer companies for the invoice creation modal.
   // Suppliers are role-scoped: procurement-only users (МОЗ + procurement_senior)
@@ -170,6 +177,71 @@ export function ProcurementStep({
       cancelled = true;
     };
   }, [quote.organization_id, userRoles]);
+
+  // Testing 2 row 89 — fetch the org's `pending_procurement` stage_deadline
+  // hours. Synchronous derivation of the absolute deadline date happens in
+  // the useMemo below, off of `quote.stage_entered_at`,
+  // `quote.stage_deadline_override_hours`, and this fetched org default.
+  const quoteRowForDeadline = quote as unknown as {
+    workflow_status?: string | null;
+    stage_entered_at?: string | null;
+    stage_deadline_override_hours?: number | null;
+  };
+  const stageEnteredAt = quoteRowForDeadline.stage_entered_at ?? null;
+  const overrideHours =
+    quoteRowForDeadline.stage_deadline_override_hours ?? null;
+  const workflowStatus = quoteRowForDeadline.workflow_status ?? null;
+  const isInPendingProcurement = workflowStatus === "pending_procurement";
+  // Skip the network fetch when the override already wins or the quote is
+  // not in procurement — both cases bypass the org default.
+  const needsOrgDefault =
+    isInPendingProcurement && stageEnteredAt != null && overrideHours == null;
+
+  useEffect(() => {
+    // Skip the fetch when an override or stage state already disqualifies
+    // the deadline — the useMemo below gates on `isInPendingProcurement` so
+    // a stale value here is never read by consumers.
+    if (!needsOrgDefault) return;
+
+    const supabase = createClient();
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const { data } = await supabase
+          .from("stage_deadlines")
+          .select("deadline_hours")
+          .eq("organization_id", quote.organization_id)
+          .eq("stage", "pending_procurement")
+          .maybeSingle();
+        if (cancelled) return;
+        const hours =
+          ((data as { deadline_hours?: number } | null)?.deadline_hours ??
+            null) as number | null;
+        setOrgProcurementDeadlineHours(hours);
+      } catch {
+        if (!cancelled) setOrgProcurementDeadlineHours(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [needsOrgDefault, quote.organization_id]);
+
+  const procurementDeadlineAt = useMemo<string | null>(() => {
+    if (!isInPendingProcurement || !stageEnteredAt) return null;
+    const hours = overrideHours ?? orgProcurementDeadlineHours;
+    if (hours == null) return null;
+    const enteredMs = new Date(stageEnteredAt).getTime();
+    if (!Number.isFinite(enteredMs)) return null;
+    return new Date(enteredMs + hours * 3_600_000).toISOString();
+  }, [
+    isInPendingProcurement,
+    stageEnteredAt,
+    overrideHours,
+    orgProcurementDeadlineHours,
+  ]);
 
   // Phase 5d: derive priceReady from invoice_item_coverage → invoice_items.
   useEffect(() => {
@@ -299,6 +371,7 @@ export function ProcurementStep({
             defaultExpanded={invoices.length === 1}
             userRoles={userRoles}
             externalRefreshKey={invoiceItemsRefreshKey}
+            procurementDeadlineAt={procurementDeadlineAt}
           />
         ))}
 
