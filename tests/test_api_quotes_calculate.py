@@ -244,7 +244,7 @@ class TestCalculateQuoteShape:
         )
         mock_composed.return_value = [
             {
-                "id": "item-1",
+                "quote_item_id": "item-1",
                 "is_unavailable": False,
                 "purchase_price_original": 0,
                 "base_price_vat": 0,
@@ -284,7 +284,7 @@ class TestCalculateMarkupHardStop:
         )
         mock_composed.return_value = [
             {
-                "id": "item-1",
+                "quote_item_id": "item-1",
                 "is_unavailable": False,
                 "purchase_price_original": 100,
                 "base_price_vat": 120,
@@ -318,7 +318,7 @@ class TestCalculateMarkupHardStop:
         )
         mock_composed.return_value = [
             {
-                "id": "item-1",
+                "quote_item_id": "item-1",
                 "is_unavailable": False,
                 "purchase_price_original": 100,
                 "base_price_vat": 120,
@@ -348,7 +348,7 @@ class TestCalculateMarkupHardStop:
         )
         mock_composed.return_value = [
             {
-                "id": "item-1",
+                "quote_item_id": "item-1",
                 "is_unavailable": False,
                 "purchase_price_original": 100,
                 "base_price_vat": 120,
@@ -391,7 +391,7 @@ class TestCalculateHappyPath:
         )
         mock_composed.return_value = [
             {
-                "id": "item-1",
+                "quote_item_id": "item-1",
                 "is_unavailable": False,
                 "purchase_price_original": 100,
                 "base_price_vat": 120,
@@ -450,7 +450,7 @@ class TestCalculateHappyPath:
         )
         mock_composed.return_value = [
             {
-                "id": "item-1",
+                "quote_item_id": "item-1",
                 "is_unavailable": False,
                 "purchase_price_original": 100,
                 "base_price_vat": 120,
@@ -489,7 +489,7 @@ class TestCalculateHappyPath:
         )
         mock_composed.return_value = [
             {
-                "id": "item-1",
+                "quote_item_id": "item-1",
                 "is_unavailable": False,
                 "purchase_price_original": 100,
                 "base_price_vat": 120,
@@ -551,7 +551,7 @@ class TestCalculateHappyPath:
         mock_get_sb.return_value = sb
         mock_composed.return_value = [
             {
-                "id": "item-1",
+                "quote_item_id": "item-1",
                 "is_unavailable": False,
                 "purchase_price_original": 100,
                 "base_price_vat": 120,
@@ -628,7 +628,7 @@ class TestCalculateExcludedItems:
         )
         mock_composed.return_value = [
             {
-                "id": "item-priced",
+                "quote_item_id": "item-priced",
                 "is_unavailable": False,
                 "import_banned": False,
                 "purchase_price_original": 100,
@@ -638,7 +638,7 @@ class TestCalculateExcludedItems:
                 "quantity": 1,
             },
             {
-                "id": "item-banned",
+                "quote_item_id": "item-banned",
                 "is_unavailable": False,
                 "import_banned": True,
                 "import_ban_reason": "В наличии в РФ",
@@ -674,7 +674,7 @@ class TestCalculateExcludedItems:
         )
         mock_composed.return_value = [
             {
-                "id": "item-banned-1",
+                "quote_item_id": "item-banned-1",
                 "is_unavailable": False,
                 "import_banned": True,
                 "purchase_price_original": None,
@@ -683,7 +683,7 @@ class TestCalculateExcludedItems:
                 "quantity": 1,
             },
             {
-                "id": "item-banned-2",
+                "quote_item_id": "item-banned-2",
                 "is_unavailable": True,
                 "import_banned": False,
                 "purchase_price_original": None,
@@ -726,7 +726,7 @@ class TestCalculateExcludedItems:
         )
         mock_composed.return_value = [
             {
-                "id": "item-priced",
+                "quote_item_id": "item-priced",
                 "is_unavailable": False,
                 "import_banned": False,
                 "purchase_price_original": 50,
@@ -736,7 +736,7 @@ class TestCalculateExcludedItems:
                 "quantity": 1,
             },
             {
-                "id": "item-na",
+                "quote_item_id": "item-na",
                 "is_unavailable": True,
                 "import_banned": False,
                 "purchase_price_original": None,
@@ -756,3 +756,154 @@ class TestCalculateExcludedItems:
             assert "Unavailable" not in json.dumps(body, ensure_ascii=False), (
                 f"is_unavailable item leaked into MISSING_PRICES: {body!r}"
             )
+
+
+# ----------------------------------------------------------------------------
+# Regression: per-item storage must read item["quote_item_id"], not item["id"]
+# ----------------------------------------------------------------------------
+#
+# 6-week silent regression since Phase 5d (#11, commit 9d7ef2b3, 2026-04-19):
+# composition_service.get_composed_items started emitting dicts keyed by
+# `quote_item_id`, never `id`. The calc storage block in api/quotes.py kept
+# reading `item["id"]` at 5 sites, raising KeyError('id') in production for
+# every multi-item priced quote since deployment. The existing tests masked
+# this by mocking composed items with the OLD shape (`"id": "item-1"`), so
+# the failure was invisible to CI for 6 weeks.
+#
+# Surfacing quote: Q-202605-0014 (01825ccb-6a91-4c9b-8218-d75f8b021d8a) —
+# first multi-item quote tester tried to calc post-deploy. Traceback:
+#
+#   File "/app/api/quotes.py", line 528, in calculate_quote
+#       "quote_item_id": item["id"],
+#   KeyError: 'id'
+#
+# This test pins the contract: composed items have `quote_item_id`, never
+# `id`. The storage block must use the same key.
+
+
+class TestCalcStorageUsesQuoteItemId:
+    """Guardrail against re-introducing item['id'] in the per-item storage block."""
+
+    @patch("api.quotes.list_quote_versions")
+    @patch("api.quotes.create_quote_version")
+    @patch("api.quotes.calculate_multiproduct_quote")
+    @patch("api.quotes.get_composed_items")
+    @patch("api.quotes.get_supabase")
+    def test_calc_storage_uses_quote_item_id_not_id(
+        self,
+        mock_get_sb,
+        mock_composed,
+        mock_calc,
+        mock_create_version,
+        mock_list_versions,
+    ):
+        """Calc storage must read item['quote_item_id'], not item['id'].
+
+        Mocks composed items in the production shape: every dict carries
+        `quote_item_id` and NO `id` key. The handler must:
+          1. Return 200 (not crash with KeyError),
+          2. Use `quote_item_id` as the value in calc-result writes.
+        """
+        # Record every table() call so we can introspect the writes.
+        recorded_inserts: list[dict] = []
+        recorded_updates: list[dict] = []
+        recorded_quote_item_eq: list[str] = []
+
+        def table_side_effect(name: str):
+            tbl = MagicMock()
+            if name == "organization_members":
+                tbl.select.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
+                    {"organization_id": "org-1"}
+                ]
+            elif name == "quotes":
+                (
+                    tbl.select.return_value.eq.return_value
+                    .eq.return_value.is_.return_value.execute.return_value.data
+                ) = [{"id": "q-1", "currency": "USD", "customer_id": "cust-1"}]
+                tbl.update.return_value.eq.return_value.execute.return_value = MagicMock()
+            elif name == "invoices":
+                tbl.select.return_value.eq.return_value.execute.return_value.data = []
+            elif name == "quote_calculation_results":
+                tbl.select.return_value.eq.return_value.execute.return_value.data = []
+
+                def capture_insert(payload):
+                    recorded_inserts.append(payload)
+                    chain = MagicMock()
+                    chain.execute.return_value = MagicMock()
+                    return chain
+
+                def capture_update(payload):
+                    recorded_updates.append(payload)
+                    chain = MagicMock()
+                    chain.eq.return_value.execute.return_value = MagicMock()
+                    return chain
+
+                tbl.insert.side_effect = capture_insert
+                tbl.update.side_effect = capture_update
+            elif name in ("quote_calculation_variables", "quote_calculation_summaries"):
+                tbl.select.return_value.eq.return_value.execute.return_value.data = []
+                tbl.insert.return_value.execute.return_value = MagicMock()
+                tbl.update.return_value.eq.return_value.execute.return_value = MagicMock()
+            elif name == "quote_items":
+                # Capture the .eq("id", <value>) argument so we can confirm
+                # the handler is passing the quote_item_id value (not a
+                # missing-key default).
+                def capture_eq(col, value):
+                    if col == "id":
+                        recorded_quote_item_eq.append(value)
+                    chain = MagicMock()
+                    chain.execute.return_value = MagicMock()
+                    return chain
+
+                tbl.update.return_value.eq.side_effect = capture_eq
+            return tbl
+
+        sb = MagicMock()
+        sb.table.side_effect = table_side_effect
+        mock_get_sb.return_value = sb
+
+        # CRITICAL: production-shaped composed items — quote_item_id only,
+        # NO "id" key. If the handler reads item["id"], it raises KeyError.
+        mock_composed.return_value = [
+            {
+                "quote_item_id": "qi-123",
+                "is_unavailable": False,
+                "import_banned": False,
+                "purchase_price_original": 100,
+                "base_price_vat": 120,
+                "product_name": "Widget",
+                "brand": "Acme",
+                "quantity": 2,
+            },
+        ]
+        mock_calc.return_value = [_fake_calc_result()]
+        mock_list_versions.return_value = []
+
+        req = _make_request(
+            api_user_id="u-1",
+            body={"currency": "USD", "markup": "15", "exchange_rate": "1.0"},
+        )
+        resp = _run(calculate_quote(req, "q-1"))
+
+        # Primary assertion: the handler completes without KeyError('id').
+        assert resp.status_code == 200, _body(resp)
+        payload = _body(resp)
+        assert payload["success"] is True
+
+        # The calc-result insert body must carry quote_item_id="qi-123".
+        assert len(recorded_inserts) == 1, (
+            f"Expected exactly one calc-result insert, got {len(recorded_inserts)}"
+        )
+        insert_body = recorded_inserts[0]
+        assert insert_body.get("quote_item_id") == "qi-123", (
+            f"quote_calculation_results.insert must carry quote_item_id from "
+            f"the composed item dict; got {insert_body!r}"
+        )
+
+        # The quote_items.update(...).eq("id", ...) call must filter by the
+        # quote_item_id value (the PK on quote_items IS `id`; only the dict
+        # lookup key changed).
+        assert recorded_quote_item_eq == ["qi-123"], (
+            f"quote_items.update must filter by .eq('id', item['quote_item_id']); "
+            f"got recorded eq values {recorded_quote_item_eq!r}"
+        )
