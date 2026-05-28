@@ -266,3 +266,159 @@ def test_create_validation_excel_raises_when_all_items_lack_calc():
 
     with pytest.raises(ValueError, match="No calculation results"):
         create_validation_excel(data)
+
+
+# ============================================================================
+# Adapter ⇄ calc-engine input parity — Phase 5c consumer-drift fix #3.
+#
+# Background:
+#   Q-202605-0014 (and ~145 other invoice_items rows) populated
+#   ``purchase_price_original`` but left ``base_price_vat`` NULL. The calc
+#   engine's input prep (``build_calculation_inputs`` in
+#   services/calculation_helpers.py:618) falls back through both fields, so it
+#   ran successfully. The export adapter did NOT — it passed raw NULL to
+#   Excel as K16, cascading 0s through every formula and producing 100% diff
+#   between API values and Excel-formula-evaluated values.
+#
+#   This class asserts the adapter mirrors the engine's fallback so the
+#   validation XLSM is meaningful for items where base_price_vat is unset.
+#   See PR body for the audit of which engine fields use fallback.
+# ============================================================================
+
+
+class TestAdapterMirrorsCalcEngineInputPrep:
+    """Adapter must mirror calc engine's fallback access for supplier fields.
+
+    Without parity, the validation XLSM produces zero outputs whenever
+    procurement filled ``purchase_price_original`` but not ``base_price_vat``.
+    """
+
+    @patch("services.export_validation_service.ExportValidationService.generate_validation_export")
+    @patch("services.export_validation_service._get_exchange_rate_to_quote", return_value=1.0)
+    @patch("services.export_validation_service._get_usd_to_quote_rate", return_value=1.0)
+    def test_base_price_vat_falls_back_to_purchase_price_original(
+        self, mock_usd_rate, mock_exchange, mock_generate
+    ):
+        """Bug reproducer: base_price_vat NULL + purchase_price_original set → use purchase_price_original.
+
+        This mirrors the Q-202605-0014 production shape that triggered the
+        100%-diff validation XLSM. The calc engine's ``or`` chain reads
+        180.0; the adapter must do the same so Excel computes the same N16.
+        """
+        mock_generate.return_value = b"XLSM"
+        items = [
+            {
+                "id": "ii-001",
+                "product_name": "Q-202605-0014 reproducer",
+                "brand": "ACME",
+                "quantity": 1,
+                # Q-202605-0014 shape: invoice_items has purchase_price_original
+                # populated, base_price_vat NULL.
+                "purchase_price_original": 180.0,
+                "base_price_vat": None,
+                "purchase_currency": "USD",
+                "weight_in_kg": None,
+                "supplier_country": None,
+                "customs_code": None,
+                "calc": {"S16": 0},
+            }
+        ]
+        data = _make_export_data(items)
+
+        create_validation_excel(data)
+
+        call_args = mock_generate.call_args
+        product_inputs = (
+            call_args.args[1] if len(call_args.args) > 1 else call_args.kwargs["product_inputs"]
+        )
+
+        assert product_inputs[0]["base_price_vat"] == 180.0, (
+            "Adapter must fall back to purchase_price_original when "
+            "base_price_vat is NULL, mirroring calc engine's input prep "
+            "(services/calculation_helpers.py:618). Without this fallback, "
+            "Excel sees K16=None and cascades 0s through every formula."
+        )
+
+    @patch("services.export_validation_service.ExportValidationService.generate_validation_export")
+    @patch("services.export_validation_service._get_exchange_rate_to_quote", return_value=1.0)
+    @patch("services.export_validation_service._get_usd_to_quote_rate", return_value=1.0)
+    def test_base_price_vat_preferred_when_both_present(
+        self, mock_usd_rate, mock_exchange, mock_generate
+    ):
+        """When both fields are set, prefer ``base_price_vat`` (canonical VAT-inclusive).
+
+        This is the Phase 5d design intent: ``invoice_items.base_price_vat``
+        is THE VAT-inclusive K16 value when populated. ``purchase_price_original``
+        is the raw supplier price and only used as a fallback when the
+        canonical column is NULL.
+        """
+        mock_generate.return_value = b"XLSM"
+        items = [
+            {
+                "id": "ii-001",
+                "product_name": "Both fields set",
+                "brand": "ACME",
+                "quantity": 1,
+                "purchase_price_original": 999.0,
+                "base_price_vat": 200.0,
+                "purchase_currency": "USD",
+                "weight_in_kg": 1.0,
+                "supplier_country": "CN",
+                "customs_code": "12345",
+                "calc": {"S16": 0},
+            }
+        ]
+        data = _make_export_data(items)
+
+        create_validation_excel(data)
+
+        call_args = mock_generate.call_args
+        product_inputs = (
+            call_args.args[1] if len(call_args.args) > 1 else call_args.kwargs["product_inputs"]
+        )
+
+        assert product_inputs[0]["base_price_vat"] == 200.0, (
+            "When both fields are populated, base_price_vat (canonical) wins "
+            "over purchase_price_original (fallback)."
+        )
+
+    @patch("services.export_validation_service.ExportValidationService.generate_validation_export")
+    @patch("services.export_validation_service._get_exchange_rate_to_quote", return_value=1.0)
+    @patch("services.export_validation_service._get_usd_to_quote_rate", return_value=1.0)
+    def test_zero_when_both_price_fields_missing(
+        self, mock_usd_rate, mock_exchange, mock_generate
+    ):
+        """When neither price field is set, adapter emits 0 (engine treats as 0).
+
+        Matches calc engine behaviour: ``safe_decimal(None or None) == 0``.
+        Engine then skips such items via the ``items_without_price`` validation
+        in ``api/quotes.py:251`` — they never reach the formula sheet.
+        """
+        mock_generate.return_value = b"XLSM"
+        items = [
+            {
+                "id": "ii-001",
+                "product_name": "No prices",
+                "brand": "ACME",
+                "quantity": 1,
+                "purchase_price_original": None,
+                "base_price_vat": None,
+                "purchase_currency": "USD",
+                "weight_in_kg": 1.0,
+                "supplier_country": "CN",
+                "customs_code": "12345",
+                "calc": {"S16": 0},
+            }
+        ]
+        data = _make_export_data(items)
+
+        create_validation_excel(data)
+
+        call_args = mock_generate.call_args
+        product_inputs = (
+            call_args.args[1] if len(call_args.args) > 1 else call_args.kwargs["product_inputs"]
+        )
+
+        # 0 (numeric) so Excel formulas don't crash; matches engine's
+        # safe_decimal(None) -> 0 behaviour.
+        assert product_inputs[0]["base_price_vat"] == 0
