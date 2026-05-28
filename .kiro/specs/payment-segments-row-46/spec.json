@@ -1,0 +1,54 @@
+{
+  "name": "payment-segments-row-46",
+  "title": "Multi-segment client payment terms (Testing 2 row 46)",
+  "type": "FEATURE",
+  "size": "BIG",
+  "created": "2026-05-24",
+  "status": "approved_for_implementation",
+  "source": {
+    "tester_row": 46,
+    "tester_sheet": "Testing 2",
+    "design_doc": "docs/plans/2026-05-24-batch-23c-2-payment-segments.md",
+    "product_decisions_doc": "docs/plans/2026-05-24-product-decisions.md"
+  },
+  "batch": "23C-2",
+  "scope": {
+    "in": [
+      "DB migration: 7 new columns on kvota.specifications",
+      "build_calculation_inputs() mapping extension",
+      "<PaymentSegmentsBlock> UI on calc-step",
+      "Server action updateSpecificationPayment",
+      "Golden master verification"
+    ],
+    "out": [
+      "Row 69 supplier-side refactor",
+      "ERPS view multi-segment migration",
+      "Email/PDF KP templates",
+      "Inline edit on context-panel",
+      "Auto-parse legacy client_payment_terms free text"
+    ]
+  },
+  "constraints": [
+    "NEVER modify calculation_engine.py / calculation_models.py / calculation_mapper.py (LOCKED)",
+    "Golden master suite must pass without new diffs",
+    "Migration via git pull + scripts/apply-migrations.sh (NOT scp)",
+    "gh pr create --head --base required"
+  ],
+  "risks": [
+    {
+      "id": "R1",
+      "desc": "time_to_advance_on_receiving source change may break golden fixtures",
+      "mitigation": "Migration backfills payment_on_receiving_days from client_payment_term_after_upd"
+    },
+    {
+      "id": "R2",
+      "desc": "Calc engine unintended behavior with new non-zero anchors 2/3/4",
+      "mitigation": "Existing fixtures have these = 0; golden master gates new fixtures"
+    },
+    {
+      "id": "R3",
+      "desc": "Float drift in sum validation (e.g. 33.33 + 33.33 + 33.34)",
+      "mitigation": "NUMERIC(5,2) precision + DB CHECK sum <= 100 tolerant"
+    }
+  ]
+}
