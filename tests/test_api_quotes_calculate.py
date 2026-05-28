@@ -900,10 +900,131 @@ class TestCalcStorageUsesQuoteItemId:
             f"the composed item dict; got {insert_body!r}"
         )
 
-        # The quote_items.update(...).eq("id", ...) call must filter by the
-        # quote_item_id value (the PK on quote_items IS `id`; only the dict
-        # lookup key changed).
-        assert recorded_quote_item_eq == ["qi-123"], (
-            f"quote_items.update must filter by .eq('id', item['quote_item_id']); "
+        # NOTE: We previously asserted that quote_items.update was called via
+        # .eq("id", "qi-123"). That writeback targeted the now-dropped
+        # base_price_vat column on quote_items (Phase 5c moved the column to
+        # invoice_items). The writeback has been removed; the dead-write
+        # guardrail lives in TestCalcStorageNoDeadBasePriceVatWrite below.
+        assert recorded_quote_item_eq == [], (
+            f"quote_items.update must NOT be called from calculate_quote — "
+            f"base_price_vat lives on invoice_items since Phase 5c; "
             f"got recorded eq values {recorded_quote_item_eq!r}"
+        )
+
+
+# ----------------------------------------------------------------------------
+# Regression: calc must NOT write to quote_items (Phase 5c dropped base_price_vat)
+# ----------------------------------------------------------------------------
+#
+# Phase 5c migration (#11, commit 9d7ef2b3, 2026-04-19) moved base_price_vat
+# from kvota.quote_items to kvota.invoice_items. api/quotes.py kept writing to
+# the old column. PR #271 unblocked the per-item loop earlier the same day
+# this surfaced, so the next PostgREST call in the loop blew up with PGRST204:
+#
+#   "Could not find the 'base_price_vat' column of 'quote_items' in the
+#    schema cache"
+#
+# Surfacing quote: Q-202605-0014 (01825ccb-6a91-4c9b-8218-d75f8b021d8a),
+# smoke 2026-05-27 ~14:00 UTC after PR #271 deploy.
+#
+# Fix: delete the writeback. No code path reads base_price_vat from
+# quote_items — every read goes through composed dicts (synthesized from
+# invoice_items) or directly from invoice_items rows.
+
+
+class TestCalcStorageNoDeadBasePriceVatWrite:
+    """Guardrail: api/quotes.py must NOT write quote_items.base_price_vat.
+
+    Phase 5c migration dropped the column. Any update targeted at
+    quote_items inside calculate_quote is by definition a dead-column write
+    that will 500 in prod with PGRST204.
+    """
+
+    @patch("api.quotes.list_quote_versions")
+    @patch("api.quotes.create_quote_version")
+    @patch("api.quotes.calculate_multiproduct_quote")
+    @patch("api.quotes.get_composed_items")
+    @patch("api.quotes.get_supabase")
+    def test_calc_does_not_write_to_quote_items(
+        self,
+        mock_get_sb,
+        mock_composed,
+        mock_calc,
+        mock_create_version,
+        mock_list_versions,
+    ):
+        """Calc handler must never call supabase.table('quote_items').update(...).
+
+        Today the quote_items table has no base_price_vat column on prod.
+        Any update targeted at quote_items inside calculate_quote will 500
+        with PostgREST PGRST204. This test pins the absence of that write.
+        """
+        quote_items_writes: list[dict] = []
+
+        def table_side_effect(name: str):
+            tbl = MagicMock()
+            if name == "organization_members":
+                tbl.select.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
+                    {"organization_id": "org-1"}
+                ]
+            elif name == "quotes":
+                (
+                    tbl.select.return_value.eq.return_value
+                    .eq.return_value.is_.return_value.execute.return_value.data
+                ) = [{"id": "q-1", "currency": "USD", "customer_id": "cust-1"}]
+                tbl.update.return_value.eq.return_value.execute.return_value = MagicMock()
+            elif name == "invoices":
+                tbl.select.return_value.eq.return_value.execute.return_value.data = []
+            elif name == "quote_calculation_results":
+                tbl.select.return_value.eq.return_value.execute.return_value.data = []
+                tbl.insert.return_value.execute.return_value = MagicMock()
+                tbl.update.return_value.eq.return_value.execute.return_value = MagicMock()
+            elif name in (
+                "quote_calculation_variables",
+                "quote_calculation_summaries",
+            ):
+                tbl.select.return_value.eq.return_value.execute.return_value.data = []
+                tbl.insert.return_value.execute.return_value = MagicMock()
+                tbl.update.return_value.eq.return_value.execute.return_value = MagicMock()
+            elif name == "quote_items":
+                # Record any write attempt — if the handler tries to update
+                # quote_items, this test must fail.
+                def capture_update(payload):
+                    quote_items_writes.append(payload)
+                    chain = MagicMock()
+                    chain.eq.return_value.execute.return_value = MagicMock()
+                    return chain
+
+                tbl.update.side_effect = capture_update
+            return tbl
+
+        sb = MagicMock()
+        sb.table.side_effect = table_side_effect
+        mock_get_sb.return_value = sb
+
+        mock_composed.return_value = [
+            {
+                "quote_item_id": "qi-123",
+                "is_unavailable": False,
+                "import_banned": False,
+                "purchase_price_original": 100,
+                "base_price_vat": 120,
+                "product_name": "Widget",
+                "brand": "Acme",
+                "quantity": 2,
+            },
+        ]
+        mock_calc.return_value = [_fake_calc_result()]
+        mock_list_versions.return_value = []
+
+        req = _make_request(
+            api_user_id="u-1",
+            body={"currency": "USD", "markup": "15", "exchange_rate": "1.0"},
+        )
+        resp = _run(calculate_quote(req, "q-1"))
+
+        assert resp.status_code == 200, _body(resp)
+        assert quote_items_writes == [], (
+            f"calculate_quote must not write to quote_items table — Phase 5c "
+            f"migration dropped base_price_vat. Got writes: {quote_items_writes!r}"
         )

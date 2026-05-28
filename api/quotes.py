@@ -99,7 +99,6 @@ async def calculate_quote(
         - Updates quotes totals + exchange-rate columns
         - Upserts quote_calculation_variables
         - Upserts quote_calculation_results (one row per item)
-        - Updates quote_items.base_price_vat
         - Upserts quote_calculation_summaries
         - Creates/updates quote_versions snapshot
         - Transitions workflow when partial_recalc == 'price'
@@ -543,13 +542,6 @@ async def calculate_quote(
                 supabase.table("quote_calculation_results") \
                     .insert(item_result) \
                     .execute()
-
-            # Update quote_items with calculated prices
-            quantity = item.get("quantity", 1)
-            base_price_vat_per_unit = float(result.sales_price_total_with_vat) / quantity if quantity > 0 else 0
-            supabase.table("quote_items").update({
-                "base_price_vat": base_price_vat_per_unit
-            }).eq("id", item["quote_item_id"]).execute()
 
         # Store calculation summary
         calc_summary = {
