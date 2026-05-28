@@ -1342,8 +1342,19 @@ def create_validation_excel(data) -> bytes:
             # Phase 5d: sourced from invoice_items.weight_in_kg (was quote_items.weight_kg legacy alias)
             "weight_in_kg": item.get("weight_in_kg", 0),
             "currency_of_base_price": purchase_currency,
-            # Phase 5d: sourced from invoice_items.base_price_vat (was legacy fallback chain on quote_items)
-            "base_price_vat": item.get("base_price_vat", 0),
+            # Phase 5d canonical source is invoice_items.base_price_vat (the
+            # VAT-inclusive K16 value). When procurement left it NULL but
+            # filled invoice_items.purchase_price_original instead, mirror the
+            # calc engine's fallback (services/calculation_helpers.py:618) so
+            # Excel sees the same K16 the engine consumed. Without this, K16
+            # is None and 0s cascade through every formula — producing 100%
+            # diff in the validation XLSM (Q-202605-0014 reproducer).
+            #
+            # Order rationale: prefer base_price_vat when set (it IS the
+            # canonical VAT-inclusive value per Phase 5d design), fall back to
+            # purchase_price_original only when base_price_vat is NULL. See
+            # PR body for the audit of which engine fields use fallback.
+            "base_price_vat": item.get("base_price_vat") or item.get("purchase_price_original") or 0,
             "supplier_country": item.get("supplier_country", ""),
             "supplier_discount": variables.get("supplier_discount", 0),
             # Exchange rate: from purchase currency to quote currency (4 decimal places, CBR)
