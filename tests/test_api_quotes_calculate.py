@@ -1028,3 +1028,234 @@ class TestCalcStorageNoDeadBasePriceVatWrite:
             f"calculate_quote must not write to quote_items table — Phase 5c "
             f"migration dropped base_price_vat. Got writes: {quote_items_writes!r}"
         )
+
+
+# ----------------------------------------------------------------------------
+# Regression: seller_company must be resolved from the quote's
+# seller_company_id (DB is source of truth), not blindly trusted from body.
+# ----------------------------------------------------------------------------
+#
+# Phase 5c/5d/6B consumer-drift family (4th bug):
+#
+# api/quotes.py:calculate_quote previously read seller_company from the request
+# body only. When the FE flow sent an empty seller_company (64% of prod
+# calc'd quotes — 14/22 — landed with empty `seller_company` in stored
+# variables), the engine's calculation_mapper fallback kicked in and silently
+# defaulted to "МАСТЕР БЭРИНГ ООО" (RU seller → applies VAT). The validation
+# Excel template, reading the SAME empty string from stored variables via
+# API_Inputs sheet D5, applied NO VAT — diverging from the engine by 22% on
+# BH2 (purchase price with VAT) and cascading 0.10% diff onto KP totals
+# (COGS, revenue, profit).
+#
+# Fix: resolve `seller_company` from `quotes.seller_company_id` →
+# `seller_companies.name` lookup before stuffing it into the `variables`
+# dict. Both the engine input AND the stored variables (which the Excel
+# template re-reads) now see the same canonical value.
+#
+# Experimental verification on Q-202605-0014: setting variables.seller_company
+# to "МАСТЕР БЭРИНГ ООО" by hand → KP totals diff engine vs Excel dropped
+# from 0.10% to 0.0003-0.0014% (300x improvement).
+
+
+class TestSellerCompanyResolvedFromQuote:
+    """Guardrail: seller_company must come from DB, not request body.
+
+    Phase 5c/5d/6B consumer-drift family. 64% of prod quotes had empty
+    seller_company in variables, causing 22% BH2 divergence between
+    engine and Excel formula chain. The fix at api/quotes.py:calculate_quote
+    resolves the value from quotes.seller_company_id → seller_companies.name
+    lookup before passing to the engine and the storage layer.
+    """
+
+    @patch("api.quotes.list_quote_versions")
+    @patch("api.quotes.create_quote_version")
+    @patch("api.quotes.calculate_multiproduct_quote")
+    @patch("api.quotes.get_composed_items")
+    @patch("api.quotes.get_supabase")
+    def test_seller_company_resolved_from_quote_when_body_empty(
+        self,
+        mock_get_sb,
+        mock_composed,
+        mock_calc,
+        mock_create_version,
+        mock_list_versions,
+    ):
+        """When request body has empty seller_company but quote has
+        seller_company_id, the resolved name is used in calc variables.
+        """
+        engine_inputs_captured: list = []
+
+        def calc_side_effect(inputs):
+            engine_inputs_captured.append(inputs)
+            return [_fake_calc_result()]
+
+        mock_calc.side_effect = calc_side_effect
+
+        recorded_seller_eq: list[str] = []
+
+        def table_side_effect(name: str):
+            tbl = MagicMock()
+            if name == "organization_members":
+                tbl.select.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
+                    {"organization_id": "org-1"}
+                ]
+            elif name == "quotes":
+                (
+                    tbl.select.return_value.eq.return_value
+                    .eq.return_value.is_.return_value.execute.return_value.data
+                ) = [{
+                    "id": "q-1",
+                    "currency": "USD",
+                    "customer_id": "cust-1",
+                    "seller_company_id": "seller-123",
+                }]
+                tbl.update.return_value.eq.return_value.execute.return_value = MagicMock()
+            elif name == "seller_companies":
+                def capture_eq(col, value):
+                    if col == "id":
+                        recorded_seller_eq.append(value)
+                    chain = MagicMock()
+                    chain.execute.return_value = SimpleNamespace(
+                        data=[{"name": "МАСТЕР БЭРИНГ ООО"}]
+                    )
+                    return chain
+
+                tbl.select.return_value.eq.side_effect = capture_eq
+            elif name == "invoices":
+                tbl.select.return_value.eq.return_value.execute.return_value.data = []
+            else:
+                tbl.select.return_value.eq.return_value.execute.return_value.data = []
+                tbl.insert.return_value.execute.return_value = MagicMock()
+                tbl.update.return_value.eq.return_value.execute.return_value = MagicMock()
+            return tbl
+
+        sb = MagicMock()
+        sb.table.side_effect = table_side_effect
+        mock_get_sb.return_value = sb
+
+        mock_composed.return_value = [
+            {
+                "quote_item_id": "qi-1",
+                "is_unavailable": False,
+                "import_banned": False,
+                "purchase_price_original": 100,
+                "base_price_vat": 120,
+                "product_name": "Widget",
+                "brand": "Acme",
+                "quantity": 1,
+            }
+        ]
+        mock_list_versions.return_value = []
+
+        req = _make_request(
+            api_user_id="u-1",
+            body={"currency": "USD", "markup": "15", "seller_company": ""},
+        )
+        resp = _run(calculate_quote(req, "q-1"))
+
+        assert resp.status_code == 200, _body(resp)
+        assert recorded_seller_eq == ["seller-123"], (
+            f"Expected seller_companies lookup by id='seller-123'; got "
+            f"{recorded_seller_eq!r}"
+        )
+        assert len(engine_inputs_captured) == 1, "Engine should be invoked exactly once"
+
+        first_input = engine_inputs_captured[0][0]
+        seller_value = getattr(
+            first_input.company.seller_company,
+            "value",
+            first_input.company.seller_company,
+        )
+        assert seller_value == "МАСТЕР БЭРИНГ ООО", (
+            f"Expected seller_company resolved from DB to 'МАСТЕР БЭРИНГ ООО', "
+            f"got: {first_input.company.seller_company!r}"
+        )
+
+    @patch("api.quotes.list_quote_versions")
+    @patch("api.quotes.create_quote_version")
+    @patch("api.quotes.calculate_multiproduct_quote")
+    @patch("api.quotes.get_composed_items")
+    @patch("api.quotes.get_supabase")
+    def test_seller_company_falls_back_to_body_when_quote_has_no_seller_id(
+        self,
+        mock_get_sb,
+        mock_composed,
+        mock_calc,
+        mock_create_version,
+        mock_list_versions,
+    ):
+        """Legacy fallback: if quote has no seller_company_id, use body's
+        seller_company (defensive for pre-Phase-5d data).
+        """
+        engine_inputs_captured: list = []
+
+        def calc_side_effect(inputs):
+            engine_inputs_captured.append(inputs)
+            return [_fake_calc_result()]
+
+        mock_calc.side_effect = calc_side_effect
+
+        def table_side_effect(name: str):
+            tbl = MagicMock()
+            if name == "organization_members":
+                tbl.select.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
+                    {"organization_id": "org-1"}
+                ]
+            elif name == "quotes":
+                (
+                    tbl.select.return_value.eq.return_value
+                    .eq.return_value.is_.return_value.execute.return_value.data
+                ) = [{
+                    "id": "q-1",
+                    "currency": "USD",
+                    "customer_id": "cust-1",
+                    "seller_company_id": None,
+                }]
+                tbl.update.return_value.eq.return_value.execute.return_value = MagicMock()
+            elif name == "invoices":
+                tbl.select.return_value.eq.return_value.execute.return_value.data = []
+            else:
+                tbl.select.return_value.eq.return_value.execute.return_value.data = []
+                tbl.insert.return_value.execute.return_value = MagicMock()
+                tbl.update.return_value.eq.return_value.execute.return_value = MagicMock()
+            return tbl
+
+        sb = MagicMock()
+        sb.table.side_effect = table_side_effect
+        mock_get_sb.return_value = sb
+
+        mock_composed.return_value = [
+            {
+                "quote_item_id": "qi-1",
+                "is_unavailable": False,
+                "import_banned": False,
+                "purchase_price_original": 100,
+                "base_price_vat": 120,
+                "product_name": "Widget",
+                "brand": "Acme",
+                "quantity": 1,
+            }
+        ]
+        mock_list_versions.return_value = []
+
+        req = _make_request(
+            api_user_id="u-1",
+            body={
+                "currency": "USD",
+                "markup": "15",
+                "seller_company": "МАСТЕР БЭРИНГ ООО",
+            },
+        )
+        resp = _run(calculate_quote(req, "q-1"))
+
+        assert resp.status_code == 200, _body(resp)
+        first_input = engine_inputs_captured[0][0]
+        seller_value = getattr(
+            first_input.company.seller_company,
+            "value",
+            first_input.company.seller_company,
+        )
+        assert seller_value == "МАСТЕР БЭРИНГ ООО", (
+            f"Fallback to body's seller_company failed; got: "
+            f"{first_input.company.seller_company!r}"
+        )
