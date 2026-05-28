@@ -177,7 +177,32 @@ async def calculate_quote(
     supplier_discount = body.get("supplier_discount", "0")
     exchange_rate = body.get("exchange_rate", "1.0")
     delivery_time = body.get("delivery_time", "30")
-    seller_company = body.get("seller_company", "")
+    # Resolve seller_company from the quote's seller_company_id (DB is
+    # source of truth). The FE doesn't always populate seller_company in
+    # the request body — 64% of prod calc'd quotes had empty
+    # `seller_company` in stored variables, which left the engine relying
+    # on its calculation_mapper fallback ("МАСТЕР БЭРИНГ ООО" → RU →
+    # applies VAT). The validation Excel template has NO matching
+    # fallback: empty seller_region → no VAT applied → 22% BH2 divergence
+    # cascading to a 0.10% diff on COGS/revenue/profit between the engine
+    # and Excel. Resolving here keeps engine input AND the stored
+    # `variables` dict (re-read by the Excel template via API_Inputs D5)
+    # in lockstep.
+    seller_company = ""
+    seller_company_id = quote.get("seller_company_id")
+    if seller_company_id:
+        seller_row = supabase.table("seller_companies") \
+            .select("name") \
+            .eq("id", seller_company_id) \
+            .execute()
+        if seller_row.data:
+            seller_company = seller_row.data[0].get("name") or ""
+
+    # Legacy fallback: respect the body's seller_company only when the
+    # quote has no seller_company_id (unusual for prod — 41/41 quotes
+    # today have it set, but defensive for pre-Phase-5d data).
+    if not seller_company:
+        seller_company = body.get("seller_company", "")
     offer_sale_type = body.get("offer_sale_type", "поставка")
     offer_incoterms = body.get("offer_incoterms", "DDP")
     version_action = body.get("version_action", "auto")
