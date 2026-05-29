@@ -18,6 +18,15 @@ export interface CompositionAlternative {
   version: number | null;
   frozen_at: string | null;
   /**
+   * Testing 2 row 36: the КПП (supplier КП) creation date —
+   * `invoices.created_at` for this alternative's invoice. Used as the
+   * as-of date for the historical FX tooltip on the Цена column. Optional
+   * so pre-row-36 test fixtures (and pre-deploy API responses) that omit
+   * the field still typecheck; the picker treats missing/null as "no
+   * historical date available" and renders the price without a tooltip.
+   */
+  kpp_date?: string | null;
+  /**
    * Structural context for this alternative (Phase 5c Task 14).
    * "" for 1:1, "→ name ×ratio + ..." for split, "← name, ... объединены" for merge.
    */
@@ -58,6 +67,13 @@ export interface CompositionView {
   items: CompositionItem[];
   composition_complete: boolean;
   can_edit: boolean;
+  /**
+   * Testing 2 row 36: the КП (quote) currency — the tooltip target for the
+   * picker's Цена column. Optional/nullable so pre-deploy API responses
+   * (and test fixtures) that omit it still typecheck; the picker falls back
+   * to showing only the supplier-local price when it is absent.
+   */
+  currency_of_quote?: string | null;
 }
 
 // ============================================================================

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildHistoricalRateMap,
+  convertOnDate,
   convertToUsdOnDate,
   pickRateOnOrBefore,
   sumInvoiceLinesInUsd,
@@ -71,6 +72,78 @@ describe("pickRateOnOrBefore", () => {
 
   it("returns null for currency with no rates", () => {
     expect(pickRateOnOrBefore(rates, "JPY", "2026-02-20T00:00:00Z")).toBeNull();
+  });
+});
+
+describe("convertOnDate", () => {
+  const rates = buildHistoricalRateMap(rateRows);
+
+  it("returns identity when from === to (case-insensitive)", () => {
+    expect(convertOnDate(123, "EUR", "EUR", "2026-02-20T00:00:00Z", rates)).toBe(
+      123,
+    );
+    expect(convertOnDate(123, "eur", "EUR", "2026-02-20T00:00:00Z", rates)).toBe(
+      123,
+    );
+  });
+
+  it("converts EUR to USD via RUB on the historical date", () => {
+    // On 2026-02-20: EUR=100 (Jan, no Feb update), USD=95. 10*100/95 ≈ 10.526
+    expect(
+      convertOnDate(10, "EUR", "USD", "2026-02-20T00:00:00Z", rates),
+    ).toBeCloseTo(10.5263, 3);
+  });
+
+  it("converts USD to EUR (inverse direction) on the historical date", () => {
+    // On 2026-03-20: USD=100, EUR=110. 11 USD * 100 / 110 = 10 EUR
+    expect(
+      convertOnDate(11, "USD", "EUR", "2026-03-20T00:00:00Z", rates),
+    ).toBeCloseTo(10, 6);
+  });
+
+  it("converts EUR to RUB using the source leg only (dst RUB = 1)", () => {
+    // On 2026-03-20: EUR=110. 10 EUR * 110 / 1 = 1100 RUB
+    expect(
+      convertOnDate(10, "EUR", "RUB", "2026-03-20T00:00:00Z", rates),
+    ).toBeCloseTo(1100, 6);
+  });
+
+  it("converts RUB to USD by dividing by the USD leg (src RUB = 1)", () => {
+    // On 2026-02-20: USD=95. 950 RUB / 95 = 10 USD
+    expect(
+      convertOnDate(950, "RUB", "USD", "2026-02-20T00:00:00Z", rates),
+    ).toBeCloseTo(10, 6);
+  });
+
+  it("uses the date-appropriate rate, not the latest", () => {
+    // On 2026-01-20: EUR=100, USD=90. 10*100/90 ≈ 11.111
+    expect(
+      convertOnDate(10, "EUR", "USD", "2026-01-20T00:00:00Z", rates),
+    ).toBeCloseTo(11.111, 2);
+  });
+
+  it("returns null when the source currency has no rates", () => {
+    expect(
+      convertOnDate(10, "JPY", "USD", "2026-02-20T00:00:00Z", rates),
+    ).toBeNull();
+  });
+
+  it("returns null when the destination currency has no rates", () => {
+    expect(
+      convertOnDate(10, "USD", "JPY", "2026-02-20T00:00:00Z", rates),
+    ).toBeNull();
+  });
+
+  it("returns 0 for zero amount regardless of rate availability", () => {
+    expect(convertOnDate(0, "JPY", "GBP", "2026-02-20T00:00:00Z", rates)).toBe(
+      0,
+    );
+  });
+
+  it("returns null for non-finite amounts", () => {
+    expect(
+      convertOnDate(Number.NaN, "EUR", "USD", "2026-02-20T00:00:00Z", rates),
+    ).toBeNull();
   });
 });
 

@@ -452,12 +452,17 @@ def get_composition_view(
             }
             composition_complete: bool — True iff every item has a non-null
                 selected_invoice_id and the quote has at least one item.
+            currency_of_quote: str | None — the КП (quote) currency. Tooltip
+                target for the picker's Цена column (Testing 2 row 36).
 
         Each alternative in ``alternatives`` has:
             invoice_id, supplier_id, supplier_name, supplier_country,
             purchase_price_original, purchase_currency, base_price_vat,
             price_includes_vat, production_time_days,
             version, frozen_at,
+            kpp_date: str | None — the КПП (supplier КП) creation date
+                (``invoices.created_at``), used as the as-of date for the
+                historical FX tooltip (Testing 2 row 36).
             coverage_summary: str ("" for 1:1, "→ ..." for split,
                 "← ... объединены" for merge)
             divergent_markups: bool — True when this is a merged alternative
@@ -465,6 +470,25 @@ def get_composition_view(
                 (UI warning: ``get_composed_items`` will use the first qi's
                 markup — see design.md §7.1).
     """
+    # Testing 2 row 36: the КП (quote) currency is the tooltip target for the
+    # picker's Цена column — convertOnDate(purchase_price, purchase_currency,
+    # currency_of_quote, kpp_date) renders the КП-currency equivalent. We emit
+    # it on the view payload so the picker has the target currency WITHOUT
+    # threading a new prop through calculation-step.tsx. Single extra read.
+    quote_resp = (
+        supabase.table("quotes")
+        .select("currency")
+        .eq("id", quote_id)
+        .execute()
+    )
+    quote_rows: list[dict] = quote_resp.data or []
+    # The КП currency is stored in quotes.currency; the calc engine reads it
+    # into variables['currency_of_quote'] (api/quotes.py). We surface it on the
+    # composition view under the same payload key the picker expects.
+    currency_of_quote = (
+        quote_rows[0].get("currency") if quote_rows else None
+    )
+
     # Testing 2 row 90: order by position so the picker renders items in
     # request order (same as fetchQuoteItems and get_composed_items above).
     items_resp = (
@@ -480,6 +504,7 @@ def get_composition_view(
             "quote_id": quote_id,
             "items": [],
             "composition_complete": False,
+            "currency_of_quote": currency_of_quote,
         }
 
     item_ids = [item["id"] for item in items]
@@ -625,6 +650,13 @@ def get_composition_view(
             "production_time_days": first_ii.get("production_time_days"),
             "version": first_ii.get("version"),
             "frozen_at": first_ii.get("frozen_at"),
+            # Testing 2 row 36: the КПП (КП поставщика) creation date — sourced
+            # from the supplier invoice row (`invoices.created_at`), NOT the
+            # invoice_item. The whole invoice IS the КП; the date the supplier's
+            # КП was created is the as-of date the picker uses to look up the
+            # historical FX rate for the Цена tooltip. Nullable when the invoice
+            # has no created_at (legacy/partial rows).
+            "kpp_date": inv.get("created_at"),
             "coverage_summary": coverage_summary,
             "divergent_markups": divergent_markups,
         }
@@ -658,6 +690,7 @@ def get_composition_view(
         "quote_id": quote_id,
         "items": view_items,
         "composition_complete": all_have_selection and bool(view_items),
+        "currency_of_quote": currency_of_quote,
     }
 
 

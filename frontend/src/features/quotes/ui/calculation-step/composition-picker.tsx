@@ -25,6 +25,17 @@ import type {
   CompositionItem,
   CompositionView,
 } from "@/entities/quote/types";
+// historical-fx is a pure, client-safe module. We import it directly rather
+// than via the supplier barrel because that barrel also re-exports server-only
+// `queries.ts` (createClient from supabase/server), which must not be pulled
+// into this client component's bundle.
+import {
+  buildHistoricalRateMap,
+  convertOnDate,
+  type FxRateRow,
+  type HistoricalRateMap,
+} from "@/entities/supplier/lib/historical-fx";
+import { currencySymbol, fmtRu } from "@/entities/kp-proposal";
 
 interface CompositionPickerProps {
   quoteId: string;
@@ -51,6 +62,29 @@ async function _fetchComposition(quoteId: string): Promise<CompositionView> {
     throw new Error(payload.error?.message || "Failed to load composition");
   }
   return payload.data as CompositionView;
+}
+
+/**
+ * Testing 2 row 36 — fetch the historical FX rate map client-side, reusing
+ * the same `* → RUB` shape the /suppliers aggregate consumes
+ * (entities/supplier/queries.ts). RUB is the implicit base; convertOnDate
+ * derives any cross-rate from the two `→ RUB` legs. Returns an empty map on
+ * error so the picker still renders (price shown, tooltip omitted).
+ */
+async function _fetchRates(): Promise<HistoricalRateMap> {
+  try {
+    const { createClient } = await import("@/shared/lib/supabase/client");
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("exchange_rates")
+      .select("from_currency, rate, fetched_at")
+      .eq("to_currency", "RUB");
+    if (error) throw error;
+    return buildHistoricalRateMap((data ?? []) as FxRateRow[]);
+  } catch (e) {
+    console.error("[composition-picker] failed to load exchange_rates", e);
+    return buildHistoricalRateMap([]);
+  }
 }
 
 async function _postSelection(
@@ -108,14 +142,24 @@ export function CompositionPicker({ quoteId }: CompositionPickerProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // Testing 2 row 36: historical FX rate map for the Цена tooltip. Loaded
+  // once alongside the composition; an empty map (load failure / no rates)
+  // just means the tooltip is omitted — the price still renders.
+  const [rates, setRates] = useState<HistoricalRateMap>(() =>
+    buildHistoricalRateMap([])
+  );
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    _fetchComposition(quoteId)
-      .then((data) => {
-        if (!cancelled) setView(data);
+    // Composition and FX rates are independent reads — fetch concurrently.
+    Promise.all([_fetchComposition(quoteId), _fetchRates()])
+      .then(([data, rateMap]) => {
+        if (!cancelled) {
+          setView(data);
+          setRates(rateMap);
+        }
       })
       .catch((e: unknown) => {
         if (!cancelled) {
@@ -278,6 +322,8 @@ export function CompositionPicker({ quoteId }: CompositionPickerProps) {
               <th className="py-2 pr-2 font-medium w-12 text-center">В&nbsp;расчёт</th>
               <th className="py-2 pr-4 font-medium">Позиция</th>
               <th className="py-2 px-2 font-medium w-20">Кол-во</th>
+              <th className="py-2 px-2 font-medium w-28">Цена</th>
+              <th className="py-2 px-2 font-medium w-28">Сумма</th>
               <th className="py-2 px-2 font-medium">Поставщики</th>
             </tr>
           </thead>
@@ -287,6 +333,8 @@ export function CompositionPicker({ quoteId }: CompositionPickerProps) {
                 key={item.quote_item_id}
                 item={item}
                 disabled={saving || !view.can_edit}
+                rates={rates}
+                kpCurrency={view.currency_of_quote ?? null}
                 onSelect={handleSelect}
                 onToggleInclusion={handleToggleInclusion}
               />
@@ -307,11 +355,21 @@ export function CompositionPicker({ quoteId }: CompositionPickerProps) {
 export function CompositionItemRow({
   item,
   disabled,
+  rates,
+  kpCurrency,
   onSelect,
   onToggleInclusion,
 }: {
   item: CompositionItem;
   disabled: boolean;
+  /**
+   * Testing 2 row 36 — historical FX rate map + КП currency for the Цена
+   * tooltip. Both optional so the picker-coverage tests (which render the
+   * row directly with renderToString) keep their pre-row-36 prop signature;
+   * when absent the tooltip is simply omitted and only the price shows.
+   */
+  rates?: HistoricalRateMap;
+  kpCurrency?: string | null;
   onSelect: (quoteItemId: string, invoiceId: string) => void;
   /**
    * Testing 2 row 90 — МОП toggle for including/excluding the row from the
@@ -327,6 +385,14 @@ export function CompositionItemRow({
   // without the new flag, and pre-migration rows from the API will eventually
   // surface as true once the migration runs.
   const included = item.included_in_calc !== false;
+
+  // Testing 2 row 36: the Цена/Сумма columns reflect the SELECTED КПП — the
+  // alternative whose invoice_id matches the item's composition pointer. When
+  // nothing is selected (or it has no price) both cells render "—".
+  const selectedAlt =
+    selected != null
+      ? alternatives.find((alt) => alt.invoice_id === selected) ?? null
+      : null;
 
   // Testing 2 row 90: when МОП excludes a row we grey it out and surface the
   // reason label. The toggle stays interactive so МОП can re-include it.
@@ -362,6 +428,8 @@ export function CompositionItemRow({
         )}
       </td>
       <td className="py-3 px-2 tabular-nums">{item.quantity ?? 1}</td>
+      <PriceCell alt={selectedAlt} rates={rates} kpCurrency={kpCurrency} />
+      <SumCell alt={selectedAlt} quantity={item.quantity} />
       <td className="py-3 px-2">
         {alternatives.length === 0 ? (
           <span className="text-xs text-muted-foreground italic">
@@ -407,15 +475,12 @@ export function CompositionItemRow({
 }
 
 function AlternativeLabel({ alt }: { alt: CompositionAlternative }) {
-  const price =
-    alt.purchase_price_original != null
-      ? formatPrice(alt.purchase_price_original, alt.purchase_currency)
-      : "—";
-
+  // Testing 2 row 36: the per-supplier price moved out of this label into the
+  // dedicated Цена column — keep only supplier name, country badge, and the
+  // divergent-markups warning here to avoid showing the price twice.
   return (
     <span className="inline-flex items-center gap-2 flex-wrap">
       <span>{alt.supplier_name ?? "Без поставщика"}</span>
-      <span className="tabular-nums text-xs font-medium">{price}</span>
       {alt.supplier_country && (
         <Badge
           variant="outline"
@@ -446,6 +511,102 @@ function AlternativeSubtext({ alt }: { alt: CompositionAlternative }) {
       {alt.coverage_summary}
     </span>
   );
+}
+
+/**
+ * Testing 2 row 36 — unit price of the SELECTED КПП in the supplier's local
+ * currency. When the historical FX map, the КП currency, and the КПП date are
+ * all available, the cell carries a `title` tooltip showing the КП-currency
+ * equivalent at the rate effective on the КПП date. Conversion failures (no
+ * rate, missing date) silently drop the tooltip — the original price always
+ * renders. Greyed when the row is excluded from the calc, consistent with the
+ * surrounding row (the parent <tr> sets opacity-50).
+ */
+function PriceCell({
+  alt,
+  rates,
+  kpCurrency,
+}: {
+  alt: CompositionAlternative | null;
+  rates?: HistoricalRateMap;
+  kpCurrency?: string | null;
+}) {
+  if (!alt || alt.purchase_price_original == null) {
+    return <td className="py-3 px-2 tabular-nums text-muted-foreground">—</td>;
+  }
+
+  const price = alt.purchase_price_original;
+  const tooltip = buildKpEquivalentTooltip(
+    price,
+    alt.purchase_currency,
+    kpCurrency,
+    alt.kpp_date,
+    rates
+  );
+
+  return (
+    <td
+      className="py-3 px-2 tabular-nums whitespace-nowrap"
+      title={tooltip ?? undefined}
+    >
+      {formatPrice(price, alt.purchase_currency)}
+    </td>
+  );
+}
+
+/**
+ * Testing 2 row 36 — line total for the SELECTED КПП:
+ * purchase_price_original × quantity, in the supplier's local currency.
+ * Uses item.quantity (the only quantity exposed to the picker — the
+ * per-invoice_item quantity the calc engine uses is not surfaced on the
+ * alternative payload). "—" when no priced КПП is selected.
+ */
+function SumCell({
+  alt,
+  quantity,
+}: {
+  alt: CompositionAlternative | null;
+  quantity: number | null;
+}) {
+  if (!alt || alt.purchase_price_original == null) {
+    return <td className="py-3 px-2 tabular-nums text-muted-foreground">—</td>;
+  }
+  const qty = quantity ?? 1;
+  return (
+    <td className="py-3 px-2 tabular-nums whitespace-nowrap">
+      {formatPrice(alt.purchase_price_original * qty, alt.purchase_currency)}
+    </td>
+  );
+}
+
+/**
+ * Build the КП-currency-equivalent tooltip string for a supplier-local price.
+ * Returns null when any required input is missing or the historical
+ * conversion is unavailable — callers then render no tooltip rather than a
+ * broken "0" or partial value.
+ */
+function buildKpEquivalentTooltip(
+  price: number,
+  fromCurrency: string | null,
+  kpCurrency: string | null | undefined,
+  kppDate: string | null | undefined,
+  rates: HistoricalRateMap | undefined
+): string | null {
+  if (!rates || !kpCurrency || !fromCurrency || !kppDate) return null;
+  const equivalent = convertOnDate(price, fromCurrency, kpCurrency, kppDate, rates);
+  if (equivalent == null) return null;
+  return `≈ ${fmtRu(equivalent)} ${currencySymbol(kpCurrency)} (по курсу на ${formatKppDate(kppDate)})`;
+}
+
+/** Format an ISO КПП timestamp as a DD.MM.YYYY date for the tooltip. */
+function formatKppDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(d);
 }
 
 function formatPrice(value: number, currency: string | null): string {

@@ -91,11 +91,50 @@ export function pickRateOnOrBefore(
 }
 
 /**
+ * Convert `amount` from `from` to `to` on the date `asOf` using the
+ * historical rate map. Both legs are resolved against `* → RUB` rates
+ * (RUB is the implicit base, rate = 1):
+ *
+ *   from_to_rub = rate(from, "RUB", on asOf)
+ *   to_to_rub   = rate(to,   "RUB", on asOf)
+ *   amount_to   = amount * from_to_rub / to_to_rub
+ *
+ * Identity when `from === to`. Returns 0 for zero amounts regardless of
+ * rate availability — callers don't need to special-case zero. Returns
+ * null when either leg's rate is missing entirely (the currency has no
+ * rows in the map) or the destination rate is zero.
+ */
+export function convertOnDate(
+  amount: number,
+  from: string,
+  to: string,
+  asOf: string,
+  rates: HistoricalRateMap,
+): number | null {
+  if (!Number.isFinite(amount)) return null;
+  if (amount === 0) return 0;
+  const src = from.toUpperCase();
+  const dst = to.toUpperCase();
+  if (src === dst) return amount;
+
+  const srcToRub = pickRateOnOrBefore(rates, src, asOf);
+  if (srcToRub == null) return null;
+
+  // RUB is the base — its rate is 1. pickRateOnOrBefore already returns 1
+  // for RUB, but we keep it explicit so a missing-USD-row case still
+  // resolves the RUB leg correctly.
+  const dstToRub = dst === "RUB" ? 1 : pickRateOnOrBefore(rates, dst, asOf);
+  if (dstToRub == null || dstToRub === 0) return null;
+
+  return (amount * srcToRub) / dstToRub;
+}
+
+/**
  * Convert `amount` from `currency` to USD on the date `asOf` using the
- * historical rate map. Returns null when either the source rate or the
- * USD rate is missing entirely (i.e., the currency has no rows in the
- * map at all). Returns 0 for zero amounts regardless of rate availability
- * — callers don't need to special-case zero.
+ * historical rate map. Thin wrapper over {@link convertOnDate} with the
+ * destination fixed to USD — kept for the /suppliers caller and existing
+ * historical-fx tests. Returns null when either the source rate or the
+ * USD rate is missing entirely; returns 0 for zero amounts.
  */
 export function convertToUsdOnDate(
   amount: number,
@@ -103,22 +142,7 @@ export function convertToUsdOnDate(
   asOf: string,
   rates: HistoricalRateMap,
 ): number | null {
-  if (!Number.isFinite(amount)) return null;
-  if (amount === 0) return 0;
-  const src = currency.toUpperCase();
-  if (src === "USD") return amount;
-
-  const srcToRub = pickRateOnOrBefore(rates, src, asOf);
-  if (srcToRub == null) return null;
-  if (src === "RUB") {
-    const usdToRub = pickRateOnOrBefore(rates, "USD", asOf);
-    if (usdToRub == null || usdToRub === 0) return null;
-    return amount / usdToRub;
-  }
-
-  const usdToRub = pickRateOnOrBefore(rates, "USD", asOf);
-  if (usdToRub == null || usdToRub === 0) return null;
-  return (amount * srcToRub) / usdToRub;
+  return convertOnDate(amount, currency, "USD", asOf, rates);
 }
 
 /**
