@@ -9,10 +9,12 @@
  *
  * Test contract:
  *   1. Renders three sections (logistics, customs, certifications)
- *   2. Warning badge appears for unfilled logistics; numbers render for
- *      filled ones (currency-aware)
- *   3. Customs row shows ТН ВЭД + duty %
- *   4. Certifications row shows type + cost + currency
+ *   2. Logistics is grouped per invoice with per-SEGMENT rows beneath
+ *      (Row 48a): each segment shows [label] [cost] [transit_days дн].
+ *      The "дн" chip hides when transit_days is null.
+ *   3. Warning badge + non-blocking amber hint appear for unfilled invoices
+ *   4. Customs row shows ТН ВЭД + duty %
+ *   5. Certifications row shows type + cost + currency
  *
  * Network is stubbed via vi.fn() on global fetch — no real Supabase or
  * Python API is touched.
@@ -42,11 +44,18 @@ interface MockShape {
   logistics_per_invoice?: Array<{
     invoice_id: string;
     invoice_number: string;
-    cost: number;
-    currency: string;
     segment_count: number;
     is_filled: boolean;
     missing_rates: string[];
+    segments: Array<{
+      segment_id: string;
+      invoice_id: string;
+      label: string;
+      cost: number;
+      currency: string;
+      transit_days: number | null;
+      missing_rate: boolean;
+    }>;
   }>;
   customs?: Array<{
     item_id: string;
@@ -77,20 +86,37 @@ describe("CalcStepInfoCard — happy path renders three sections", () => {
         {
           invoice_id: "inv-1",
           invoice_number: "INV-001",
-          cost: 15500,
-          currency: "RUB",
           segment_count: 2,
           is_filled: true,
           missing_rates: [],
+          segments: [
+            {
+              segment_id: "seg-1",
+              invoice_id: "inv-1",
+              label: "Китай · Шанхай → Россия · Москва",
+              cost: 12000,
+              currency: "RUB",
+              transit_days: 14,
+              missing_rate: false,
+            },
+            {
+              segment_id: "seg-2",
+              invoice_id: "inv-1",
+              label: "Доставка по РФ",
+              cost: 3500,
+              currency: "RUB",
+              transit_days: null,
+              missing_rate: false,
+            },
+          ],
         },
         {
           invoice_id: "inv-2",
           invoice_number: "INV-002",
-          cost: 0,
-          currency: "RUB",
           segment_count: 0,
           is_filled: false,
           missing_rates: [],
+          segments: [],
         },
       ],
       customs: [
@@ -124,18 +150,62 @@ describe("CalcStepInfoCard — happy path renders three sections", () => {
     expect(screen.getByText("Сертификация")).toBeInTheDocument();
   });
 
-  it("renders logistics cost for the filled invoice with currency symbol", async () => {
+  it("groups segment rows beneath the invoice with cost + days chip", async () => {
     render(<CalcStepInfoCard quoteId="q-1" />);
 
     await screen.findByText("Логистика по инвойсам");
-    // Filled invoice row shows cost
+    // Invoice sub-header present
     expect(screen.getByText("INV-001")).toBeInTheDocument();
-    // 15 500 ₽ formatted ru-RU (NBSP / narrow NBSP between digits)
-    const filledRow = screen.getByTestId(
-      "calc-step-info-logistics-row-inv-1",
-    );
-    expect(filledRow.textContent).toContain("INV-001");
-    expect(filledRow.textContent).toMatch(/15.500.*₽/);
+
+    // Segment 1: label + cost (12 000 ₽) + "14 дн" chip
+    const seg1 = screen.getByTestId("calc-step-info-logistics-segment-seg-1");
+    expect(seg1.textContent).toContain("Китай · Шанхай → Россия · Москва");
+    expect(seg1.textContent).toMatch(/12.000.*₽/);
+    expect(seg1.textContent).toMatch(/14\s*дн/);
+
+    // Segment 2: free-text label + cost; NO days chip (transit_days null)
+    const seg2 = screen.getByTestId("calc-step-info-logistics-segment-seg-2");
+    expect(seg2.textContent).toContain("Доставка по РФ");
+    expect(seg2.textContent).toMatch(/3.500.*₽/);
+    expect(seg2.textContent).not.toMatch(/дн/);
+
+    // Supplier name is hidden — no supplier label leaks into the section.
+    const section = screen.getByTestId("calc-step-info-logistics");
+    expect(section.textContent).not.toMatch(/sup-1|поставщик/i);
+  });
+
+  it("renders a dash for a segment whose FX rate is missing", async () => {
+    mockFetchOk({
+      logistics_per_invoice: [
+        {
+          invoice_id: "inv-x",
+          invoice_number: "INV-X",
+          segment_count: 1,
+          is_filled: false,
+          missing_rates: ["CNY"],
+          segments: [
+            {
+              segment_id: "seg-x",
+              invoice_id: "inv-x",
+              label: "Авто",
+              cost: 0,
+              currency: "EUR",
+              transit_days: null,
+              missing_rate: true,
+            },
+          ],
+        },
+      ],
+      customs: [],
+      certifications: [],
+    });
+
+    render(<CalcStepInfoCard quoteId="q-x" />);
+
+    await screen.findByText("Логистика по инвойсам");
+    const seg = screen.getByTestId("calc-step-info-logistics-segment-seg-x");
+    expect(seg.textContent).toContain("Авто");
+    expect(seg.textContent).toContain("—");
   });
 
   it("renders warning badge for unfilled invoice with helper text", async () => {

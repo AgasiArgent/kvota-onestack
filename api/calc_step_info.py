@@ -61,6 +61,33 @@ def _convert_to_rub(amount: float, currency: str, rates: dict[str, float]) -> fl
     return amount * rate
 
 
+def _build_segment_label(seg: dict) -> str:
+    """Derive a segment label, mirroring location-chip.tsx ``buildLabel``.
+
+    Order of precedence:
+        1. Free-text ``label`` when present.
+        2. ``from → to`` where each side is ``country · city`` (or just
+           ``country`` when city is null), joined with an arrow.
+
+    Locations are nullable since m317 — a null endpoint renders as
+    «Не выбрано» so the row stays informative rather than blank.
+    """
+    free = (seg.get("label") or "").strip()
+    if free:
+        return free
+
+    def _loc_label(loc: dict | None) -> str:
+        if not loc:
+            return "Не выбрано"
+        country = (loc.get("country") or "").strip()
+        city = (loc.get("city") or "").strip()
+        if country and city:
+            return f"{country} · {city}"
+        return country or "Не выбрано"
+
+    return f"{_loc_label(seg.get('from_location'))} → {_loc_label(seg.get('to_location'))}"
+
+
 def _resolve_auth(request: Request) -> tuple[dict | None, JSONResponse | None]:
     """Dual auth: JWT first, then legacy session.
 
@@ -116,11 +143,21 @@ async def get_calc_step_info(
               {
                 "invoice_id": str,
                 "invoice_number": str,
-                "cost": number,            # in display currency (quote.currency)
-                "currency": str,            # quote currency code
                 "segment_count": int,
-                "is_filled": bool,          # true iff at least one segment has cost > 0
-                "missing_rates": [str]      # FX rates we couldn't resolve (cost partial)
+                "is_filled": bool,          # true iff a segment has cost > 0
+                "missing_rates": [str],     # FX rates we couldn't resolve
+                "segments": [               # per-segment rows, ordered by sequence_order
+                  {
+                    "segment_id": str,
+                    "invoice_id": str,
+                    "label": str,           # free-text label or "from → to"
+                    "cost": number,         # main cost in quote currency
+                    "currency": str,        # quote currency code
+                    "transit_days": int | null,
+                    "missing_rate": bool    # cost unresolved (rate missing)
+                  },
+                  ...
+                ]
               },
               ...
             ],
@@ -180,7 +217,7 @@ async def get_calc_step_info(
     # 2. Invoices for this quote.
     invoices_res = (
         supabase.table("invoices")
-        .select("id, invoice_number, supplier_id, logistics_completed_at")
+        .select("id, invoice_number")
         .eq("quote_id", quote_id)
         .order("created_at", desc=False)
         .execute()
@@ -188,31 +225,34 @@ async def get_calc_step_info(
     invoices = invoices_res.data or []
     invoice_ids = [inv["id"] for inv in invoices]
 
-    # 3. Logistics segments + expenses for those invoices (only if any).
+    # 3. Logistics segments for those invoices (only if any). We show the
+    # segment MAIN cost only — logistics_segment_expenses are intentionally
+    # NOT folded in here (Row 48a: per-segment rows display main cost).
+    # Location joins reuse the FK names from
+    # frontend/src/entities/logistics-segment/queries.ts so the label can be
+    # derived without a second query.
     segments: list[dict] = []
-    expenses: list[dict] = []
     if invoice_ids:
         seg_res = (
             supabase.table("logistics_route_segments")
-            .select("id, invoice_id, main_cost_rub, currency_code")
+            .select(
+                "id, invoice_id, sequence_order, transit_days, label, "
+                "main_cost_rub, currency_code, "
+                "from_location_id, to_location_id, "
+                "from_location:locations!logistics_route_segments_from_location_id_fkey("
+                "id, country, city, location_type), "
+                "to_location:locations!logistics_route_segments_to_location_id_fkey("
+                "id, country, city, location_type)"
+            )
             .in_("invoice_id", invoice_ids)
+            .order("sequence_order", desc=False)
             .execute()
         )
         segments = seg_res.data or []
 
-        segment_ids = [s["id"] for s in segments]
-        if segment_ids:
-            exp_res = (
-                supabase.table("logistics_segment_expenses")
-                .select("id, segment_id, cost_rub, currency_code")
-                .in_("segment_id", segment_ids)
-                .execute()
-            )
-            expenses = exp_res.data or []
-
     # 4. FX rates (latest foreign→RUB for the four allowed segment currencies).
     rates_to_rub: dict[str, float] = {}
-    if segments or expenses:
+    if segments:
         fx_res = (
             supabase.table("exchange_rates")
             .select("from_currency, rate, fetched_at")
@@ -230,78 +270,77 @@ async def get_calc_step_info(
             if r > 0:
                 rates_to_rub[code] = r
 
-    # Aggregate per-invoice cost in RUB, convert to display currency.
-    # If display_currency != RUB, we additionally divide by display→RUB rate.
+    # Each segment's main cost is denominated in its own currency_code; we
+    # convert foreign → RUB → quote currency. RUB→quote needs the display
+    # rate (1.0 when the quote itself is in RUB).
     display_to_rub: float | None
     if display_currency == "RUB":
         display_to_rub = 1.0
     else:
         display_to_rub = rates_to_rub.get(display_currency)
 
-    cost_rub_by_invoice: dict[str, float] = {inv_id: 0.0 for inv_id in invoice_ids}
-    seg_count_by_invoice: dict[str, int] = {inv_id: 0 for inv_id in invoice_ids}
+    def _segment_cost_in_quote(
+        amount: float, currency: str
+    ) -> tuple[float, str | None]:
+        """Convert a segment's main cost to the quote currency.
+
+        Returns ``(cost, missing_currency)``. ``missing_currency`` is the
+        currency code whose rate could not be resolved (the segment's own
+        currency for the foreign→RUB leg, or the display currency for the
+        RUB→quote leg) — None when both legs converted cleanly. When a rate
+        is missing the returned cost is 0.0 and the gap is surfaced upward.
+        """
+        rub = _convert_to_rub(amount, currency, rates_to_rub)
+        if rub is None:
+            return 0.0, (currency or "RUB").upper()
+        if not display_to_rub or display_to_rub <= 0:
+            return 0.0, display_currency
+        return round(rub / display_to_rub, 2), None
+
+    # Group segments per invoice (already ordered by sequence_order from the
+    # query). Each row carries its converted quote-currency cost + flags.
+    segments_by_invoice: dict[str, list[dict]] = {inv_id: [] for inv_id in invoice_ids}
     missing_by_invoice: dict[str, set[str]] = {inv_id: set() for inv_id in invoice_ids}
-
-    # Map expenses by segment_id for the per-segment loop.
-    expenses_by_segment: dict[str, list[dict]] = {}
-    for e in expenses:
-        seg_id = e.get("segment_id")
-        if not seg_id:
-            continue
-        expenses_by_segment.setdefault(seg_id, []).append(e)
-
     for seg in segments:
         inv_id = seg.get("invoice_id")
-        if not inv_id or inv_id not in cost_rub_by_invoice:
+        if not inv_id or inv_id not in segments_by_invoice:
             continue
-        seg_count_by_invoice[inv_id] += 1
-
-        # Segment main cost.
         seg_amount = _safe_float(seg.get("main_cost_rub"))
         seg_currency = (seg.get("currency_code") or "RUB").upper()
-        rub_amount = _convert_to_rub(seg_amount, seg_currency, rates_to_rub)
-        if rub_amount is None:
-            missing_by_invoice[inv_id].add(seg_currency)
-        else:
-            cost_rub_by_invoice[inv_id] += rub_amount
+        cost, missing_currency = _segment_cost_in_quote(seg_amount, seg_currency)
+        if missing_currency:
+            missing_by_invoice[inv_id].add(missing_currency)
+        transit = seg.get("transit_days")
+        segments_by_invoice[inv_id].append({
+            "segment_id": seg["id"],
+            "invoice_id": inv_id,
+            "label": _build_segment_label(seg),
+            "cost": cost,
+            "currency": display_currency,
+            "transit_days": int(transit) if transit is not None else None,
+            "missing_rate": missing_currency is not None,
+        })
 
-        # Segment expenses.
-        for exp in expenses_by_segment.get(seg["id"], []):
-            exp_amount = _safe_float(exp.get("cost_rub"))
-            exp_currency = (exp.get("currency_code") or "RUB").upper()
-            rub_amount = _convert_to_rub(exp_amount, exp_currency, rates_to_rub)
-            if rub_amount is None:
-                missing_by_invoice[inv_id].add(exp_currency)
-            else:
-                cost_rub_by_invoice[inv_id] += rub_amount
-
-    # Build per-invoice rows in the original invoice order.
+    # Build per-invoice groups in the original invoice order. The per-invoice
+    # ``is_filled`` / ``missing_rates`` signals are retained so the FE hint +
+    # deep link still work.
     logistics_per_invoice: list[dict] = []
     for inv in invoices:
         inv_id = inv["id"]
-        cost_rub = cost_rub_by_invoice.get(inv_id, 0.0)
-        if display_to_rub and display_to_rub > 0:
-            cost = cost_rub / display_to_rub
-            cost_currency = display_currency
-        else:
-            # Can't convert RUB→display because we lack the rate.
-            # Surface in display currency with cost=0 and missing_rates noting it.
-            cost = 0.0
-            cost_currency = display_currency
-            missing_by_invoice[inv_id].add(display_currency)
-
-        seg_count = seg_count_by_invoice.get(inv_id, 0)
-        # Filled iff there is at least one segment AND cost > 0.
-        is_filled = seg_count > 0 and cost_rub > 0
+        inv_segments = segments_by_invoice.get(inv_id, [])
+        missing_rates = sorted(missing_by_invoice.get(inv_id, set()))
+        # Filled iff at least one segment has a resolved cost > 0.
+        is_filled = any(
+            (not s["missing_rate"]) and s["cost"] > 0 for s in inv_segments
+        )
 
         logistics_per_invoice.append({
             "invoice_id": inv_id,
             "invoice_number": inv.get("invoice_number"),
-            "cost": round(cost, 2),
-            "currency": cost_currency,
-            "segment_count": seg_count,
+            "segment_count": len(inv_segments),
             "is_filled": is_filled,
-            "missing_rates": sorted(missing_by_invoice[inv_id]),
+            "missing_rates": missing_rates,
+            "segments": inv_segments,
         })
 
     # 5. Customs per item — pull from quote_items for hs_code + customs_duty.

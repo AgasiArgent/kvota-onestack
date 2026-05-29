@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, Info, ExternalLink } from "lucide-react";
+import { AlertTriangle, Info, ExternalLink, Clock } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { createClient } from "@/shared/lib/supabase/client";
@@ -27,14 +27,23 @@ import { createClient } from "@/shared/lib/supabase/client";
  * exchange_rates. See api/calc_step_info.py.
  */
 
+interface LogisticsSegmentRow {
+  segment_id: string;
+  invoice_id: string;
+  label: string;
+  cost: number;
+  currency: string;
+  transit_days: number | null;
+  missing_rate: boolean;
+}
+
 interface LogisticsRow {
   invoice_id: string;
   invoice_number: string;
-  cost: number;
-  currency: string;
   segment_count: number;
   is_filled: boolean;
   missing_rates: string[];
+  segments: LogisticsSegmentRow[];
 }
 
 interface CustomsRow {
@@ -191,22 +200,19 @@ export function CalcStepInfoCard({ quoteId, logisticsHref }: CalcStepInfoCardPro
               Нет инвойсов в этом КП.
             </p>
           ) : (
-            <ul className="space-y-1.5">
+            <ul className="space-y-2.5">
               {data.logistics_per_invoice.map((row) => (
                 <li
                   key={row.invoice_id}
-                  className="flex flex-col gap-0.5"
+                  className="flex flex-col gap-1"
                   data-testid={`calc-step-info-logistics-row-${row.invoice_id}`}
                 >
+                  {/* Invoice sub-header */}
                   <div className="flex items-center justify-between gap-2 text-xs">
                     <span className="font-medium text-foreground truncate">
                       {row.invoice_number}
                     </span>
-                    {row.is_filled ? (
-                      <span className="tabular-nums text-foreground">
-                        {fmtMoney(row.cost, row.currency)}
-                      </span>
-                    ) : (
+                    {!row.is_filled && (
                       <Badge
                         variant="default"
                         className="bg-amber-50 text-amber-700 border border-amber-200 text-[10px] py-0 px-1.5 inline-flex items-center gap-1"
@@ -217,6 +223,38 @@ export function CalcStepInfoCard({ quoteId, logisticsHref }: CalcStepInfoCardPro
                       </Badge>
                     )}
                   </div>
+
+                  {/* Per-segment rows, grouped beneath the invoice */}
+                  {row.segments.length > 0 && (
+                    <ul className="space-y-0.5 pl-2 border-l border-border-light">
+                      {row.segments.map((seg) => (
+                        <li
+                          key={seg.segment_id}
+                          className="flex items-center justify-between gap-2 text-[11px]"
+                          data-testid={`calc-step-info-logistics-segment-${seg.segment_id}`}
+                        >
+                          <span className="text-muted-foreground truncate">
+                            {seg.label}
+                          </span>
+                          <span className="flex items-center gap-2 shrink-0">
+                            <span className="tabular-nums text-foreground">
+                              {seg.missing_rate
+                                ? "—"
+                                : fmtMoney(seg.cost, seg.currency)}
+                            </span>
+                            {seg.transit_days != null && (
+                              <span className="inline-flex items-center gap-1 text-muted-foreground tabular-nums">
+                                <Clock size={10} strokeWidth={2} aria-hidden />
+                                {seg.transit_days} дн
+                              </span>
+                            )}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  {/* Non-blocking hint + deep link when no filled segments */}
                   {!row.is_filled && (
                     <p className="text-[10px] text-muted-foreground leading-tight">
                       Стоимость логистики не указана — заполните на{" "}
