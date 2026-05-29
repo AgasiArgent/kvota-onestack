@@ -387,6 +387,64 @@ async def update_user_status(request, user_id: str) -> JSONResponse:
     )
 
 
+async def reset_user_password(request, user_id: str) -> JSONResponse:
+    """Set a new password for a user in the admin's organization.
+
+    Path: PATCH /api/admin/users/{user_id}/password
+    Params:
+        password: str (required) — New password (min 8 chars)
+    Returns:
+        user_id: str
+    Side Effects:
+        - Calls sb.auth.admin.update_user_by_id(user_id, {"password": ...})
+    Roles: admin
+    """
+    admin_user, auth_err = _get_admin_user(request)
+    if auth_err:
+        return auth_err
+    assert admin_user is not None
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(
+            {"success": False, "error": {"code": "BAD_REQUEST", "message": "Invalid JSON body"}},
+            status_code=400,
+        )
+
+    password = body.get("password") or ""
+    if not password:
+        return JSONResponse(
+            {"success": False, "error": {"code": "VALIDATION_ERROR", "message": "Password is required", "fields": {"password": "Password is required"}}},
+            status_code=400,
+        )
+    if len(password) < MIN_PASSWORD_LENGTH:
+        msg = f"Password must be at least {MIN_PASSWORD_LENGTH} characters"
+        return JSONResponse(
+            {"success": False, "error": {"code": "VALIDATION_ERROR", "message": msg, "fields": {"password": msg}}},
+            status_code=400,
+        )
+
+    org_id = admin_user["org_id"]
+
+    # Verify target user belongs to admin's org
+    _, member_err = _verify_user_in_org(user_id, org_id)
+    if member_err:
+        return member_err
+
+    sb = get_supabase()
+    try:
+        sb.auth.admin.update_user_by_id(user_id, {"password": password})
+    except Exception as e:
+        logger.error("Failed to reset password for user %s: %s", user_id, e)
+        return JSONResponse(
+            {"success": False, "error": {"code": "SERVER_ERROR", "message": "Failed to reset password"}},
+            status_code=500,
+        )
+
+    return JSONResponse({"success": True, "data": {"user_id": user_id}})
+
+
 async def update_user_roles(request, user_id: str) -> JSONResponse:
     """Atomically update user roles via Postgres function.
 
