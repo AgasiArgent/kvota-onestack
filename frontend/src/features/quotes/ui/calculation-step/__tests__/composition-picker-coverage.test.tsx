@@ -413,9 +413,10 @@ describe("CompositionItemRow — Кол-во MOQ round-up", () => {
     // amount appears in the explanatory title.
     expect(html).toContain("мин. заказ 10");
     expect(html).toContain("заказано 5");
-    // Сумма uses the displayed item.quantity (ordered) — unchanged contract,
-    // 10 × 5 = 50.00. The MOQ floor scales the calc engine, not this preview.
-    expect(html).toContain("50,00 USD");
+    // Сумма reflects the MOQ-floored quantity (row 85), consistent with the
+    // Кол-во cell and the COGS the engine computes: 10 (price) × 10 (effective)
+    // = 100.00, NOT 10 × 5 (ordered).
+    expect(html).toContain("100,00 USD");
   });
 
   it("shows the ordered quantity with no hint when MOQ is below ordered", () => {
