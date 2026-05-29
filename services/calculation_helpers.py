@@ -488,6 +488,32 @@ def _customs_value_in_rub(
     return safe_decimal(converted)
 
 
+def effective_calc_quantity(ordered, moq):
+    """Round the per-line calc quantity up to the supplier minimum order quantity.
+
+    Returns ``moq`` when it is a positive number strictly greater than
+    ``ordered``; otherwise returns ``ordered`` unchanged — i.e. ``max(ordered,
+    moq)`` with a positive MOQ. A MOQ of None / 0 / negative (or otherwise
+    non-numeric) is treated as "no floor" and leaves the ordered quantity
+    untouched.
+
+    Pure: no mutation, no shared state. The calc engine consumes the result as
+    ``product['quantity']`` (an ``int``, ``gt=0``), so a binding MOQ scales the
+    line value, customs duty and logistics for the whole line. The customs duty
+    *percent* is quantity-invariant for ad-valorem and '796' (per-unit) rates —
+    numerator and denominator both scale with quantity — so flooring only the
+    engine quantity keeps customs consistent without recomputing the percent
+    (Testing 2 row 85).
+    """
+    moq_dec = safe_decimal(moq)
+    if moq_dec > 0 and moq_dec > safe_decimal(ordered):
+        # Return a clean int — the engine model requires ``quantity: int, gt=0``.
+        # The live MOQ column is INTEGER, but coercing the validated Decimal
+        # guarantees the contract even if a caller ever passes a Decimal/float.
+        return int(moq_dec)
+    return ordered
+
+
 def build_calculation_inputs(items: List[Dict], variables: Dict[str, Any]) -> List[QuoteCalculationInput]:
     """Build calculation inputs for all quote items.
 
@@ -616,7 +642,13 @@ def build_calculation_inputs(items: List[Dict], variables: Dict[str, Any]) -> Li
         # Product fields (adapt new schema to calculation engine expectations)
         product = {
             'base_price_vat': safe_decimal(item.get('purchase_price_original') or item.get('base_price_vat')),
-            'quantity': item.get('quantity', 1),
+            # Testing 2 row 85: round the calc quantity up to the supplier's
+            # minimum order quantity. This is THE single seam — the locked
+            # engine reads only product['quantity'], so flooring here scales
+            # line value, customs and logistics for the whole line.
+            'quantity': effective_calc_quantity(
+                item.get('quantity', 1), item.get('minimum_order_quantity')
+            ),
             'weight_in_kg': safe_decimal(item.get('weight_in_kg')),
             'customs_code': item.get('customs_code', '0000000000'),
             'supplier_country': resolve_vat_zone(

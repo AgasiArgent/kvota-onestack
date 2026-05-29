@@ -15,6 +15,15 @@ export interface CompositionAlternative {
   base_price_vat: number | null;
   price_includes_vat: boolean | null;
   production_time_days: number | null;
+  /**
+   * Testing 2 row 85 — supplier minimum order quantity for this alternative's
+   * invoice_item. When set and greater than the ordered quantity, the calc
+   * engine rounds the line quantity up to this floor (max(ordered, MOQ)), so
+   * the picker surfaces the effective quantity. Optional/nullable so pre-row-85
+   * fixtures and pre-deploy API responses (which omit it) still typecheck; the
+   * picker treats missing/null/0 as "no MOQ floor".
+   */
+  minimum_order_quantity?: number | null;
   version: number | null;
   frozen_at: string | null;
   /**

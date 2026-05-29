@@ -36,6 +36,10 @@ import {
   type HistoricalRateMap,
 } from "@/entities/supplier/lib/historical-fx";
 import { currencySymbol, fmtRu } from "@/entities/kp-proposal";
+// Testing 2 row 85 — shared MOQ helper (same feature slice, ui segment). The
+// calc engine floors the line quantity to the supplier MOQ; the picker shows
+// that effective quantity so it is visible before the calc runs.
+import { effectiveQuantity } from "../procurement-step/moq-warning";
 
 interface CompositionPickerProps {
   quoteId: string;
@@ -427,7 +431,7 @@ export function CompositionItemRow({
           </div>
         )}
       </td>
-      <td className="py-3 px-2 tabular-nums">{item.quantity ?? 1}</td>
+      <QuantityCell quantity={item.quantity} alt={selectedAlt} />
       <PriceCell alt={selectedAlt} rates={rates} kpCurrency={kpCurrency} />
       <SumCell alt={selectedAlt} quantity={item.quantity} />
       <td className="py-3 px-2">
@@ -510,6 +514,46 @@ function AlternativeSubtext({ alt }: { alt: CompositionAlternative }) {
     <span className="text-xs text-muted-foreground italic">
       {alt.coverage_summary}
     </span>
+  );
+}
+
+/**
+ * Testing 2 row 85 — the per-line quantity the calc engine will use. When the
+ * SELECTED КПП declares a supplier minimum order quantity (MOQ) greater than
+ * the ordered quantity, the engine rounds the line up to that floor
+ * (max(ordered, MOQ)); this cell then shows the effective quantity plus a
+ * read-only "мин. заказ N" hint so МОП sees why price/customs/logistics reflect
+ * a larger amount than ordered. With no binding MOQ it renders the ordered
+ * quantity exactly as before.
+ */
+function QuantityCell({
+  quantity,
+  alt,
+}: {
+  quantity: number | null;
+  alt: CompositionAlternative | null;
+}) {
+  const ordered = quantity ?? 1;
+  const moq = alt?.minimum_order_quantity ?? null;
+  const effective = effectiveQuantity(ordered, moq);
+  const floored = moq != null && moq > 0 && effective > ordered;
+
+  if (!floored) {
+    return <td className="py-3 px-2 tabular-nums">{ordered}</td>;
+  }
+
+  return (
+    <td className="py-3 px-2 tabular-nums">
+      <span className="flex flex-col leading-tight">
+        <span>{effective}</span>
+        <span
+          className="text-[10px] text-amber-600 dark:text-amber-400"
+          title={`Округлено до минимального заказа поставщика (заказано ${ordered})`}
+        >
+          {`мин. заказ ${moq}`}
+        </span>
+      </span>
+    </td>
   );
 }
 
