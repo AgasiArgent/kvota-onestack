@@ -389,40 +389,64 @@ describe("CompositionItemRow — Цена / Сумма columns", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Testing 2 row 85 — MOQ round-up effective-quantity indicator (Кол-во cell)
+// Supplier-quantity override (2026-05-29) — «Кол-во поставщика» overrides the
+// ordered quantity in both directions (Кол-во cell)
 // ---------------------------------------------------------------------------
 
-describe("CompositionItemRow — Кол-во MOQ round-up", () => {
-  it("shows the MOQ-floored quantity + hint when the selected КПП MOQ exceeds ordered", () => {
+describe("CompositionItemRow — supplier-qty override", () => {
+  it("shows the supplier quantity + hint when it exceeds ordered (override up)", () => {
     const selectedAlt = makeAlt({
       invoice_id: "inv-sel",
-      purchase_price_original: 10,
+      purchase_price_original: 123,
       purchase_currency: "USD",
-      minimum_order_quantity: 10,
+      minimum_order_quantity: 123,
     });
     const item = makeItem([selectedAlt, makeAlt({ invoice_id: "inv-other" })], {
       selected_invoice_id: "inv-sel",
-      quantity: 5,
+      quantity: 10,
     });
 
     const html = renderRow(
       <CompositionItemRow item={item} disabled={false} onSelect={() => {}} />
     );
 
-    // Effective quantity (10) and the read-only hint render; the ordered
+    // Effective quantity (123) and the read-only hint render; the ordered
     // amount appears in the explanatory title.
-    expect(html).toContain("мин. заказ 10");
-    expect(html).toContain("заказано 5");
-    // Сумма reflects the MOQ-floored quantity (row 85), consistent with the
-    // Кол-во cell and the COGS the engine computes: 10 (price) × 10 (effective)
-    // = 100.00, NOT 10 × 5 (ordered).
-    expect(html).toContain("100,00 USD");
+    expect(html).toContain("кол-во поставщика: 123");
+    expect(html).toContain("заказано 10");
+    // Сумма reflects the overriding supplier quantity: 123 (price) × 123
+    // (effective) = 15 129.00, NOT 123 × 10 (ordered).
+    expect(html).toContain("15 129,00 USD");
   });
 
-  it("shows the ordered quantity with no hint when MOQ is below ordered", () => {
+  it("shows the supplier quantity + hint when it is below ordered (override down)", () => {
     const selectedAlt = makeAlt({
       invoice_id: "inv-sel",
-      minimum_order_quantity: 3,
+      purchase_price_original: 10,
+      purchase_currency: "USD",
+      minimum_order_quantity: 5,
+    });
+    const item = makeItem([selectedAlt, makeAlt({ invoice_id: "inv-other" })], {
+      selected_invoice_id: "inv-sel",
+      quantity: 10,
+    });
+
+    const html = renderRow(
+      <CompositionItemRow item={item} disabled={false} onSelect={() => {}} />
+    );
+
+    // Effective quantity (5) overrides the larger ordered amount (10).
+    expect(html).toContain("кол-во поставщика: 5");
+    expect(html).toContain("заказано 10");
+    // Сумма reflects the down-override: 10 (price) × 5 (effective) = 50.00,
+    // NOT 10 × 10 (ordered).
+    expect(html).toContain("50,00 USD");
+  });
+
+  it("shows the ordered quantity with no hint when supplier qty equals ordered", () => {
+    const selectedAlt = makeAlt({
+      invoice_id: "inv-sel",
+      minimum_order_quantity: 8,
     });
     const item = makeItem([selectedAlt, makeAlt({ invoice_id: "inv-other" })], {
       selected_invoice_id: "inv-sel",
@@ -433,11 +457,11 @@ describe("CompositionItemRow — Кол-во MOQ round-up", () => {
       <CompositionItemRow item={item} disabled={false} onSelect={() => {}} />
     );
 
-    expect(html).not.toContain("мин. заказ");
+    expect(html).not.toContain("кол-во поставщика");
   });
 
-  it("shows the ordered quantity with no hint when the selected КПП has no MOQ", () => {
-    const selectedAlt = makeAlt({ invoice_id: "inv-sel" }); // MOQ undefined
+  it("shows the ordered quantity with no hint when the selected КПП has no supplier qty", () => {
+    const selectedAlt = makeAlt({ invoice_id: "inv-sel" }); // supplier qty undefined
     const item = makeItem([selectedAlt, makeAlt({ invoice_id: "inv-other" })], {
       selected_invoice_id: "inv-sel",
       quantity: 5,
@@ -447,6 +471,6 @@ describe("CompositionItemRow — Кол-во MOQ round-up", () => {
       <CompositionItemRow item={item} disabled={false} onSelect={() => {}} />
     );
 
-    expect(html).not.toContain("мин. заказ");
+    expect(html).not.toContain("кол-во поставщика");
   });
 });

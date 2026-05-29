@@ -100,12 +100,6 @@ def _make_item(**overrides) -> dict:
     return item
 
 
-def _quantity_of(calc_inputs):
-    """Effective per-line quantity the engine will use, from the built input."""
-    assert len(calc_inputs) == 1
-    return calc_inputs[0].product.quantity
-
-
 # ---------------------------------------------------------------------------
 # Layer 1 — the pure helper
 # ---------------------------------------------------------------------------
@@ -113,48 +107,30 @@ def _quantity_of(calc_inputs):
 
 class TestEffectiveCalcQuantity:
     @pytest.mark.parametrize(
-        "ordered, moq, expected",
+        "ordered, supplier_qty, expected",
         [
-            (5, 10, 10),       # MOQ binds — round up
-            (10, 5, 10),       # MOQ below ordered — unchanged
-            (10, 10, 10),      # equal — unchanged
-            (5, None, 5),      # no MOQ — unchanged
-            (5, 0, 5),         # zero MOQ — unchanged
-            (5, -3, 5),        # negative MOQ — unchanged
-            (1, 1, 1),         # trivial equal
-            (5, 6, 6),         # MOQ one above — binds
+            (5, 10, 10),      # supplier higher → override up
+            (10, 5, 5),       # supplier lower → override DOWN (new behaviour)
+            (10, 10, 10),     # equal
+            (5, None, 5),     # unset → ordered
+            (5, 0, 5),        # zero treated as unset → ordered
+            (5, -3, 5),       # negative treated as unset → ordered
+            (10, None, 10),
         ],
     )
-    def test_returns_max_when_moq_positive(self, ordered, moq, expected):
-        assert effective_calc_quantity(ordered, moq) == expected
+    def test_supplier_qty_overrides_when_set(self, ordered, supplier_qty, expected):
+        assert effective_calc_quantity(ordered, supplier_qty) == expected
 
-    def test_returns_int_type_when_floored(self):
-        # The engine model requires ``quantity: int, gt=0`` — the helper must
-        # return an int, not a Decimal.
+    def test_returns_int_when_overridden(self):
         result = effective_calc_quantity(5, 10)
-        assert result == 10
-        assert isinstance(result, int)
+        assert result == 10 and isinstance(result, int)
 
-    def test_decimal_moq_coerced_to_int_when_floored(self):
-        # Defensive: even if a caller passes a Decimal MOQ, the binding branch
-        # must return a plain int so ProductInfo(quantity: int) validates on
-        # any Pydantic version.
+    def test_decimal_supplier_qty_coerced_to_int(self):
         result = effective_calc_quantity(5, Decimal("10"))
-        assert result == 10
-        assert isinstance(result, int)
+        assert result == 10 and isinstance(result, int)
 
-    def test_ordered_unchanged_object_when_not_floored(self):
-        # When no floor applies the ordered value is returned verbatim.
+    def test_unset_returns_ordered_verbatim(self):
         assert effective_calc_quantity(7, None) == 7
-        assert isinstance(effective_calc_quantity(7, None), int)
-
-    def test_none_ordered_with_binding_moq_returns_moq(self):
-        # Defensive: a missing ordered quantity (safe_decimal -> 0) with a
-        # positive MOQ floors to the MOQ rather than crashing downstream.
-        assert effective_calc_quantity(None, 10) == 10
-
-    def test_non_numeric_moq_is_no_op(self):
-        assert effective_calc_quantity(5, "not-a-number") == 5
 
 
 # ---------------------------------------------------------------------------
@@ -162,42 +138,35 @@ class TestEffectiveCalcQuantity:
 # ---------------------------------------------------------------------------
 
 
-class TestBuildCalculationInputsMoqRoundup:
-    def test_moq_above_ordered_floors_calc_quantity(self):
-        item = _make_item(quantity=5, minimum_order_quantity=10)
-        with patch(
-            "services.currency_service.convert_amount",
-            side_effect=lambda v, f, t: v,
-        ):
-            calc_inputs = build_calculation_inputs([item], _make_minimal_variables())
-        assert _quantity_of(calc_inputs) == 10
+class TestBuildCalculationInputsOverride:
+    """The seam resolves product['quantity'] via effective_calc_quantity
+    (supplier qty overrides ordered both ways when >0, else ordered)."""
 
-    def test_null_moq_leaves_quantity_unchanged(self):
-        item = _make_item(quantity=5, minimum_order_quantity=None)
+    def _run(self, **item_kw):
+        item = _make_item(**item_kw)
         with patch(
-            "services.currency_service.convert_amount",
-            side_effect=lambda v, f, t: v,
+            "services.currency_service.convert_amount", side_effect=lambda v, f, t: v
         ):
-            calc_inputs = build_calculation_inputs([item], _make_minimal_variables())
-        assert _quantity_of(calc_inputs) == 5
+            ci = build_calculation_inputs([item], _make_minimal_variables())
+        assert len(ci) == 1
+        return ci[0].product.quantity
 
-    def test_zero_moq_leaves_quantity_unchanged(self):
-        item = _make_item(quantity=5, minimum_order_quantity=0)
-        with patch(
-            "services.currency_service.convert_amount",
-            side_effect=lambda v, f, t: v,
-        ):
-            calc_inputs = build_calculation_inputs([item], _make_minimal_variables())
-        assert _quantity_of(calc_inputs) == 5
+    def test_override_up(self):
+        assert self._run(quantity=5, minimum_order_quantity=10) == 10
 
-    def test_moq_below_ordered_leaves_quantity_unchanged(self):
-        item = _make_item(quantity=10, minimum_order_quantity=3)
-        with patch(
-            "services.currency_service.convert_amount",
-            side_effect=lambda v, f, t: v,
-        ):
-            calc_inputs = build_calculation_inputs([item], _make_minimal_variables())
-        assert _quantity_of(calc_inputs) == 10
+    def test_override_down(self):
+        assert self._run(quantity=10, minimum_order_quantity=5) == 5
+
+    def test_unset_uses_ordered(self):
+        assert self._run(quantity=5, minimum_order_quantity=None) == 5
+
+    def test_zero_supplier_qty_uses_ordered(self):
+        assert self._run(quantity=5, minimum_order_quantity=0) == 5
+
+    def test_negative_supplier_qty_uses_ordered(self):
+        # A negative value must never reach the engine's gt=0 validator; it
+        # falls back to the ordered quantity (matches the DB column's >0 rule).
+        assert self._run(quantity=5, minimum_order_quantity=-3) == 5
 
 
 # ---------------------------------------------------------------------------
@@ -215,17 +184,26 @@ def _run_engine(item: dict):
 
 
 class TestMoqRoundupScalesTotals:
-    def test_floored_quote_equals_ordering_the_moq_amount(self):
-        """ordered=5 / MOQ=10 must produce IDENTICAL engine totals to
-        ordered=10 / no MOQ — proving the floor scales price, customs and
-        logistics for the whole line, not just the displayed quantity."""
-        floored = _run_engine(_make_item(quantity=5, minimum_order_quantity=10))
+    def test_override_quote_equals_ordering_that_amount(self):
+        """ordered=5 / supplier qty=10 must produce IDENTICAL engine totals to
+        ordered=10 / no override — proving the override scales price, customs
+        and logistics for the whole line, not just the displayed quantity."""
+        overridden = _run_engine(_make_item(quantity=5, minimum_order_quantity=10))
         ordered_ten = _run_engine(_make_item(quantity=10, minimum_order_quantity=None))
-        assert floored == ordered_ten
+        assert overridden == ordered_ten
 
-    def test_floor_changes_totals_versus_raw_ordered(self):
-        """The floor must actually move the numbers: ordered=5 / MOQ=10 differs
-        from ordered=5 / no MOQ (the pre-fix behaviour)."""
-        floored = _run_engine(_make_item(quantity=5, minimum_order_quantity=10))
+    def test_override_changes_totals_versus_raw_ordered(self):
+        """The override must actually move the numbers: ordered=5 / supplier qty=10
+        differs from ordered=5 / unset (the pre-override behaviour)."""
+        overridden = _run_engine(_make_item(quantity=5, minimum_order_quantity=10))
         raw_five = _run_engine(_make_item(quantity=5, minimum_order_quantity=None))
-        assert floored != raw_five
+        assert overridden != raw_five
+
+    def test_override_down_changes_totals(self):
+        """Override DOWN also moves totals: ordered=10 / supplier qty=5 equals
+        ordering 5 outright, and differs from ordered=10 unset."""
+        down = _run_engine(_make_item(quantity=10, minimum_order_quantity=5))
+        ordered_five = _run_engine(_make_item(quantity=5, minimum_order_quantity=None))
+        ordered_ten = _run_engine(_make_item(quantity=10, minimum_order_quantity=None))
+        assert down == ordered_five
+        assert down != ordered_ten
