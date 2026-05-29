@@ -448,10 +448,16 @@ export async function fetchQuoteDetail(quoteId: string) {
           .eq("id", quote.contact_person_id)
           .single()
       : null,
+    // Row 48b bug fix: seller_company_id is a FK to kvota.seller_companies,
+    // but this resolved it against buyer_companies — a different table whose
+    // ids never matched, so quote.seller_company was always null. Query the
+    // correct table. seller_companies has `supplier_code` where
+    // buyer_companies had `company_code`; alias it to `company_code` so the
+    // returned shape stays backward-compatible for every existing consumer.
     quote.seller_company_id
       ? supabase
-          .from("buyer_companies")
-          .select("id, name, company_code")
+          .from("seller_companies")
+          .select("id, name, company_code:supplier_code")
           .eq("id", quote.seller_company_id)
           .single()
       : null,

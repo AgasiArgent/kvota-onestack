@@ -1,8 +1,13 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
+import { toast } from "sonner";
 import { AppToaster } from "@/shared/ui/app-toaster";
 import type { QuoteDetailRow, QuoteItemRow } from "@/entities/quote/queries";
+import {
+  fetchSellerCompanies,
+  updateQuoteSellerCompany,
+} from "@/entities/quote/mutations";
 import { CalculationForm } from "./calculation-form";
 import {
   CalculationResults,
@@ -44,6 +49,56 @@ export function CalculationStep({
   const [hasCalcRows, setHasCalcRows] = useState<boolean>(
     () => (quote as Record<string, unknown>).total_quote_currency != null
   );
+
+  // Seller company (юр.лицо) picker — row 48b. The selection is persisted on
+  // change (no recalc); the engine only adopts the new VAT regime on the next
+  // «Пересчитать». `sellerChangedPending` drives the "press Пересчитать"
+  // banner and is cleared once a calculation succeeds.
+  const [sellerCompanies, setSellerCompanies] = useState<
+    Array<{ id: string; name: string }>
+  >([]);
+  const [sellerCompanyId, setSellerCompanyId] = useState<string | null>(
+    quote.seller_company_id ?? null
+  );
+  const [sellerChangedPending, setSellerChangedPending] = useState(false);
+
+  useEffect(() => {
+    const orgId = quote.organization_id;
+    if (!orgId) return;
+    let cancelled = false;
+    fetchSellerCompanies(orgId)
+      .then((companies) => {
+        if (!cancelled) setSellerCompanies(companies);
+      })
+      .catch(() => {
+        if (!cancelled) toast.error("Не удалось загрузить юрлица");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [quote.organization_id]);
+
+  const handleSellerCompanyChange = useCallback(
+    (next: string | null) => {
+      // Optimistic update with rollback on failure: show the new selection and
+      // the recalc banner immediately, but if the persist fails, revert both so
+      // the picker can never display a seller that differs from what a later
+      // Пересчитать will resolve from the (unchanged) persisted quote.seller_company_id.
+      const previous = sellerCompanyId;
+      setSellerCompanyId(next);
+      setSellerChangedPending(true);
+      updateQuoteSellerCompany(quote.id, next).catch(() => {
+        toast.error("Не удалось сохранить юрлицо");
+        setSellerCompanyId(previous);
+        setSellerChangedPending(false);
+      });
+    },
+    [quote.id, sellerCompanyId]
+  );
+
+  const handleCalculationApplied = useCallback(() => {
+    setSellerChangedPending(false);
+  }, []);
 
   useEffect(() => {
     const supabase = createClient();
@@ -153,13 +208,25 @@ export function CalculationStep({
         hasCalculation={hasCalculation}
         workflowStatus={quote.workflow_status ?? "draft"}
         isApproved={["approved", "sent_to_client", "accepted"].includes(quote.workflow_status ?? "")}
+        onApplied={handleCalculationApplied}
       />
+      {sellerChangedPending && (
+        <div
+          role="status"
+          className="mx-6 mt-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800"
+        >
+          Изменён продавец — нажмите Пересчитать чтобы применить новую ставку НДС
+        </div>
+      )}
       <div className="p-6 space-y-6">
         <CalculationForm
           quote={quote}
           savedVariables={savedVariables}
           formValues={formValues}
           onFieldChange={handleFieldChange}
+          sellerCompanies={sellerCompanies}
+          sellerCompanyId={sellerCompanyId}
+          onSellerCompanyChange={handleSellerCompanyChange}
         />
         {/* Phase 5b — Multi-supplier composition picker (renders nothing
             when there is no multi-supplier choice to make). */}
