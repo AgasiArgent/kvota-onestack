@@ -10,6 +10,7 @@ from starlette.responses import JSONResponse
 
 from api.cron import (
     cron_check_overdue as _cron_check_overdue,
+    cron_refresh_exchange_rates as _cron_refresh_exchange_rates,
     cron_revalidate_rates as _cron_revalidate_rates,
     cron_sla_check as _cron_sla_check,
 )
@@ -49,3 +50,18 @@ async def post_revalidate_rates(
     when packet_left drops below the floor.
     """
     return await _cron_revalidate_rates(request, alta_client)
+
+
+@router.post("/refresh-exchange-rates")
+async def post_refresh_exchange_rates(request: Request) -> JSONResponse:
+    """Refresh CBR (ЦБ РФ) FX rates into kvota.exchange_rates.
+
+    Called on a schedule with X-Cron-Secret. Fetches the full CBR
+    daily_json.js dump and upserts one ``<code> -> RUB`` row per currency
+    (plus RUB->RUB=1.0) with ``source='cbr'``. Re-runnable: the upsert
+    targets UNIQUE(from_currency, to_currency, fetched_at), so a same-day
+    re-run updates in place rather than duplicating.
+
+    Restores the feed the decommissioned lisa backend used to maintain.
+    """
+    return await _cron_refresh_exchange_rates(request)

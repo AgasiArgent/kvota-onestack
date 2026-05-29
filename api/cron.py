@@ -1,9 +1,10 @@
 """
 Cron API endpoints for scheduled background tasks.
 
-GET  /api/cron/check-overdue     — Find overdue quotes and send Telegram notifications
-POST /api/cron/sla-check         — Send invoice SLA reminders/overdue pings (Task 12)
-POST /api/cron/revalidate-rates  — Weekly customs rate revalidation (REQ-6 customs-phase-1)
+GET  /api/cron/check-overdue          — Find overdue quotes and send Telegram notifications
+POST /api/cron/sla-check              — Send invoice SLA reminders/overdue pings (Task 12)
+POST /api/cron/revalidate-rates       — Weekly customs rate revalidation (REQ-6 customs-phase-1)
+POST /api/cron/refresh-exchange-rates — Refresh CBR FX rates into kvota.exchange_rates
 
 Auth: X-Cron-Secret header validated against CRON_SECRET env var.
 These endpoints are in PUBLIC_API_PATHS (no JWT required).
@@ -12,8 +13,10 @@ These endpoints are in PUBLIC_API_PATHS (no JWT required).
 import logging
 import os
 from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
+import httpx
 from starlette.responses import JSONResponse
 
 from services.alta_client import AltaApiError, notify_admin
@@ -913,3 +916,214 @@ async def _maybe_alert_poison_pill_count(sb: Any) -> None:
     )
     logger.warning(message)
     await notify_admin(message)
+
+
+# ----------------------------------------------------------------------------
+# CBR (ЦБ РФ) exchange-rate feed refresh
+#
+# Restores the FX feed the decommissioned "lisa" backend used to keep current.
+# Source: https://www.cbr-xml-daily.ru/daily_json.js — the full ~56-currency
+# daily dump (CharCode-keyed Valute objects with Value + Nominal). Each Valute
+# becomes a `<code> -> RUB` row with rate = Value / Nominal. RUB->RUB=1.0 is
+# included to match the live data the lisa backend produced.
+#
+# The on-demand fallback (services.currency_service.ensure_rates_available,
+# cbr.ru XML_daily.asp) is intentionally left intact as a safety net — this
+# endpoint is the scheduled writer, the resolver is the lazy backstop.
+# ----------------------------------------------------------------------------
+
+CBR_DAILY_JSON_URL = "https://www.cbr-xml-daily.ru/daily_json.js"
+
+# Explicit per-request timeout for the CBR fetch (resilience: never hang the
+# cron worker on a slow upstream).
+CBR_FETCH_TIMEOUT_SECONDS = 10.0
+
+
+def _parse_cbr_date(raw: Any) -> datetime:
+    """Parse the CBR ``Date`` field to a naive datetime for the ``fetched_at``
+    column (``timestamp`` without time zone in the live schema).
+
+    The feed publishes ISO-8601 with an offset, e.g. ``2026-05-29T11:30:00+03:00``.
+    We keep the instant but drop the tzinfo so it maps cleanly onto the naive
+    column. Falls back to ``datetime.now()`` when the field is missing or
+    unparseable.
+    """
+    if isinstance(raw, str) and raw:
+        try:
+            dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            return dt.replace(tzinfo=None)
+        except ValueError:
+            logger.warning(
+                "cron_refresh_exchange_rates: unparseable CBR Date %r — "
+                "falling back to now()",
+                raw,
+            )
+    return datetime.now()
+
+
+def _build_exchange_rate_rows(
+    valutes: dict[str, Any], fetched_at: datetime
+) -> list[dict[str, Any]]:
+    """Map the CBR ``Valute`` dump to kvota.exchange_rates rows.
+
+    Each entry yields a ``<CharCode> -> RUB`` row with
+    ``rate = Decimal(Value) / Decimal(Nominal)``. The RUB identity row
+    (RUB->RUB=1.0) is appended to mirror the live (lisa-era) data.
+
+    Rows with a non-positive or malformed rate are skipped (the table's
+    CHECK (rate > 0) would reject them anyway) and logged.
+    """
+    fetched_iso = fetched_at.isoformat()
+    rows: list[dict[str, Any]] = []
+
+    for code, entry in valutes.items():
+        if not isinstance(entry, dict):
+            continue
+        char_code = entry.get("CharCode") or code
+        try:
+            value = Decimal(str(entry.get("Value")))
+            nominal = Decimal(str(entry.get("Nominal")))
+        except (InvalidOperation, TypeError):
+            logger.warning(
+                "cron_refresh_exchange_rates: bad Value/Nominal for %s: %r",
+                char_code, entry,
+            )
+            continue
+        if nominal == 0:
+            logger.warning(
+                "cron_refresh_exchange_rates: zero Nominal for %s — skipping",
+                char_code,
+            )
+            continue
+        rate = value / nominal
+        if rate <= 0:
+            logger.warning(
+                "cron_refresh_exchange_rates: non-positive rate for %s (%s) — skipping",
+                char_code, rate,
+            )
+            continue
+        rows.append({
+            "from_currency": char_code,
+            "to_currency": "RUB",
+            # float() so supabase-py JSON-serializes a numeric, not a string;
+            # PostgreSQL casts to numeric(10,6) on insert.
+            "rate": float(rate),
+            "source": "cbr",
+            "fetched_at": fetched_iso,
+        })
+
+    # RUB identity row — present in the live data the lisa backend wrote.
+    rows.append({
+        "from_currency": "RUB",
+        "to_currency": "RUB",
+        "rate": 1.0,
+        "source": "cbr",
+        "fetched_at": fetched_iso,
+    })
+    return rows
+
+
+async def cron_refresh_exchange_rates(request) -> JSONResponse:
+    """Refresh CBR (ЦБ РФ) FX rates into kvota.exchange_rates.
+
+    Path: POST /api/cron/refresh-exchange-rates
+    Params: none (X-Cron-Secret header is the only input)
+    Auth: X-Cron-Secret header (PUBLIC_API_PATHS, no JWT middleware)
+    Returns:
+        On success: {"success": true,
+                     "data": {"rows_written": <int>, "currencies": <int>}}
+        On failure: {"success": false,
+                     "error": {"code": <str>, "message": <str>}} with a non-2xx
+                     status (502 fetch/parse, 500 DB write).
+    Side Effects:
+        - UPSERT rows into kvota.exchange_rates with source='cbr', one
+          ``<code> -> RUB`` row per CBR Valute plus a RUB->RUB=1.0 identity
+          row. Re-runnable: ON CONFLICT (from_currency, to_currency,
+          fetched_at) targets idx_exchange_rates_unique, so a same-day re-run
+          updates in place instead of duplicating (never a plain insert).
+    Roles: cron-only (no user role check; X-Cron-Secret is the gate).
+
+    Restores the feed the decommissioned lisa backend maintained — the
+    in-process APScheduler writer is NOT resurrected. This is the scheduled
+    writer; services.currency_service.ensure_rates_available remains the
+    on-demand fallback.
+    """
+    err = _validate_cron_secret(request)
+    if err:
+        return err
+
+    # --- Fetch (explicit timeout; loud on failure) ---
+    try:
+        async with httpx.AsyncClient(timeout=CBR_FETCH_TIMEOUT_SECONDS) as client:
+            response = await client.get(CBR_DAILY_JSON_URL)
+            response.raise_for_status()
+            payload = response.json()
+    except Exception as exc:
+        logger.error(
+            "cron_refresh_exchange_rates: CBR fetch/parse failed for %s: %s",
+            CBR_DAILY_JSON_URL, exc,
+        )
+        return JSONResponse(
+            {
+                "success": False,
+                "error": {
+                    "code": "CBR_FETCH_FAILED",
+                    "message": f"Failed to fetch CBR rates: {exc}",
+                },
+            },
+            status_code=502,
+        )
+
+    valutes = payload.get("Valute") if isinstance(payload, dict) else None
+    if not isinstance(valutes, dict) or not valutes:
+        logger.error(
+            "cron_refresh_exchange_rates: CBR payload missing 'Valute' dict: "
+            "keys=%s",
+            list(payload.keys()) if isinstance(payload, dict) else type(payload),
+        )
+        return JSONResponse(
+            {
+                "success": False,
+                "error": {
+                    "code": "CBR_PARSE_FAILED",
+                    "message": "CBR payload missing 'Valute' data",
+                },
+            },
+            status_code=502,
+        )
+
+    fetched_at = _parse_cbr_date(payload.get("Date"))
+    rows = _build_exchange_rate_rows(valutes, fetched_at)
+
+    # --- UPSERT (race-safe; idx_exchange_rates_unique enforces dedupe) ---
+    try:
+        sb = get_supabase()
+        sb.table("exchange_rates").upsert(
+            rows, on_conflict="from_currency,to_currency,fetched_at"
+        ).execute()
+    except Exception as exc:
+        logger.error(
+            "cron_refresh_exchange_rates: upsert of %d rows failed (fetched_at=%s): %s",
+            len(rows), fetched_at.isoformat(), exc,
+        )
+        return JSONResponse(
+            {
+                "success": False,
+                "error": {
+                    "code": "EXCHANGE_RATES_WRITE_FAILED",
+                    "message": f"Failed to write exchange rates: {exc}",
+                },
+            },
+            status_code=500,
+        )
+
+    logger.info(
+        "cron_refresh_exchange_rates: wrote %d rows (%d currencies) fetched_at=%s",
+        len(rows), len(rows), fetched_at.isoformat(),
+    )
+    return JSONResponse(
+        {
+            "success": True,
+            "data": {"rows_written": len(rows), "currencies": len(rows)},
+        }
+    )

@@ -26,6 +26,7 @@ PUBLIC_API_PATHS = {
     "/api/cron/check-overdue",
     "/api/cron/revalidate-rates",
     "/api/cron/sla-check",
+    "/api/cron/refresh-exchange-rates",
 }
 
 # Paths that STRICTLY require JWT (no session fallback).
