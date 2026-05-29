@@ -78,6 +78,7 @@ vi.mock("@/shared/ui/app-toaster", () => ({
 }));
 
 import { CalculationStep } from "../calculation-step";
+import { toast } from "sonner";
 import type { QuoteDetailRow, QuoteItemRow } from "@/entities/quote/queries";
 
 const quote = {
@@ -199,5 +200,29 @@ describe("CalculationStep — seller_company persist + banner (row 48b)", () => 
         ),
       ).toBeNull(),
     );
+  });
+
+  it("rolls back the selection and banner when the persist fails", async () => {
+    vi.mocked(toast.error).mockClear();
+    updateQuoteSellerCompanyMock.mockRejectedValueOnce(new Error("persist failed"));
+    await renderStep();
+
+    selectSellerOption("ООО Альфа");
+
+    await waitFor(() =>
+      expect(updateQuoteSellerCompanyMock).toHaveBeenCalledWith("q-1", "sc-1"),
+    );
+
+    // Persist failed: the error is surfaced and the recalc banner is rolled
+    // back — the picker must never be left showing a seller that a later
+    // Пересчитать won't apply (it would resolve the unchanged persisted id).
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith("Не удалось сохранить юрлицо"),
+    );
+    expect(
+      screen.queryByText(
+        "Изменён продавец — нажмите Пересчитать чтобы применить новую ставку НДС",
+      ),
+    ).toBeNull();
   });
 });

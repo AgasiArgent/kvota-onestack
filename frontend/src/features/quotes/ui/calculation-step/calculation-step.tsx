@@ -80,13 +80,20 @@ export function CalculationStep({
 
   const handleSellerCompanyChange = useCallback(
     (next: string | null) => {
+      // Optimistic update with rollback on failure: show the new selection and
+      // the recalc banner immediately, but if the persist fails, revert both so
+      // the picker can never display a seller that differs from what a later
+      // Пересчитать will resolve from the (unchanged) persisted quote.seller_company_id.
+      const previous = sellerCompanyId;
       setSellerCompanyId(next);
       setSellerChangedPending(true);
       updateQuoteSellerCompany(quote.id, next).catch(() => {
         toast.error("Не удалось сохранить юрлицо");
+        setSellerCompanyId(previous);
+        setSellerChangedPending(false);
       });
     },
-    [quote.id]
+    [quote.id, sellerCompanyId]
   );
 
   const handleCalculationApplied = useCallback(() => {
