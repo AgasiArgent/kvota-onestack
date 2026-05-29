@@ -387,3 +387,65 @@ describe("CompositionItemRow — Цена / Сумма columns", () => {
     expect(html).not.toContain("≈");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Testing 2 row 85 — MOQ round-up effective-quantity indicator (Кол-во cell)
+// ---------------------------------------------------------------------------
+
+describe("CompositionItemRow — Кол-во MOQ round-up", () => {
+  it("shows the MOQ-floored quantity + hint when the selected КПП MOQ exceeds ordered", () => {
+    const selectedAlt = makeAlt({
+      invoice_id: "inv-sel",
+      purchase_price_original: 10,
+      purchase_currency: "USD",
+      minimum_order_quantity: 10,
+    });
+    const item = makeItem([selectedAlt, makeAlt({ invoice_id: "inv-other" })], {
+      selected_invoice_id: "inv-sel",
+      quantity: 5,
+    });
+
+    const html = renderRow(
+      <CompositionItemRow item={item} disabled={false} onSelect={() => {}} />
+    );
+
+    // Effective quantity (10) and the read-only hint render; the ordered
+    // amount appears in the explanatory title.
+    expect(html).toContain("мин. заказ 10");
+    expect(html).toContain("заказано 5");
+    // Сумма uses the displayed item.quantity (ordered) — unchanged contract,
+    // 10 × 5 = 50.00. The MOQ floor scales the calc engine, not this preview.
+    expect(html).toContain("50,00 USD");
+  });
+
+  it("shows the ordered quantity with no hint when MOQ is below ordered", () => {
+    const selectedAlt = makeAlt({
+      invoice_id: "inv-sel",
+      minimum_order_quantity: 3,
+    });
+    const item = makeItem([selectedAlt, makeAlt({ invoice_id: "inv-other" })], {
+      selected_invoice_id: "inv-sel",
+      quantity: 8,
+    });
+
+    const html = renderRow(
+      <CompositionItemRow item={item} disabled={false} onSelect={() => {}} />
+    );
+
+    expect(html).not.toContain("мин. заказ");
+  });
+
+  it("shows the ordered quantity with no hint when the selected КПП has no MOQ", () => {
+    const selectedAlt = makeAlt({ invoice_id: "inv-sel" }); // MOQ undefined
+    const item = makeItem([selectedAlt, makeAlt({ invoice_id: "inv-other" })], {
+      selected_invoice_id: "inv-sel",
+      quantity: 5,
+    });
+
+    const html = renderRow(
+      <CompositionItemRow item={item} disabled={false} onSelect={() => {}} />
+    );
+
+    expect(html).not.toContain("мин. заказ");
+  });
+});

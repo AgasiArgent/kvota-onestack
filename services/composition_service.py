@@ -129,6 +129,10 @@ def _legacy_shape(qi: dict) -> dict:
         "supplier_sku": qi.get("supplier_sku"),
         "brand": qi.get("brand"),
         "quantity": qi.get("quantity"),
+        # Testing 2 row 85: shape parity with _build_calc_item so the calc
+        # seam reads a consistent key set. Legacy/uncomposed rows have no
+        # supplier invoice, hence no MOQ — always None here (no floor).
+        "minimum_order_quantity": qi.get("minimum_order_quantity"),
 
         # Pricing — None because no invoice selected
         "purchase_price_original": None,
@@ -648,6 +652,11 @@ def get_composition_view(
             "base_price_vat": first_ii.get("base_price_vat"),
             "price_includes_vat": first_ii.get("price_includes_vat"),
             "production_time_days": first_ii.get("production_time_days"),
+            # Testing 2 row 85: supplier minimum order quantity for this
+            # alternative's invoice_item. The picker uses it to show the
+            # MOQ-floored (effective) quantity the calc engine will use when
+            # this КПП is selected. Nullable — most КПП have no MOQ.
+            "minimum_order_quantity": first_ii.get("minimum_order_quantity"),
             "version": first_ii.get("version"),
             "frozen_at": first_ii.get("frozen_at"),
             # Testing 2 row 36: the КПП (КП поставщика) creation date — sourced
