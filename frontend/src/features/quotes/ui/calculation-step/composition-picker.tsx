@@ -550,7 +550,7 @@ function QuantityCell({
           className="text-[10px] text-amber-600 dark:text-amber-400"
           title={`Округлено до минимального заказа поставщика (заказано ${ordered})`}
         >
-          мин. заказ {moq}
+          {`мин. заказ ${moq}`}
         </span>
       </span>
     </td>
