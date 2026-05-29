@@ -10,12 +10,19 @@ const schema = 'kvota';
 
 // Get all tables
 const { rows: tables } = await client.query(`
-  SELECT table_name FROM information_schema.tables 
+  SELECT table_name FROM information_schema.tables
   WHERE table_schema = $1 AND table_type = 'BASE TABLE'
   ORDER BY table_name
 `, [schema]);
 
-// Get columns for each table  
+// Get all views — emitted as read-only types (Row only, no Insert/Update).
+const { rows: views } = await client.query(`
+  SELECT table_name FROM information_schema.views
+  WHERE table_schema = $1
+  ORDER BY table_name
+`, [schema]);
+
+// Get columns for each table AND view (information_schema.columns covers both)
 const { rows: columns } = await client.query(`
   SELECT table_name, column_name, data_type, udt_name, is_nullable,
          column_default, character_maximum_length
@@ -119,8 +126,22 @@ for (const { table_name } of tables) {
 
 out += `    }
     Views: {
-      [_ in never]: never
-    }
+`;
+
+for (const { table_name } of views) {
+  const cols = tableColumns[table_name] || [];
+  // Views are read-only: Row only. Columns often nullable due to outer joins
+  // or expressions — trust information_schema.is_nullable.
+  out += `      ${table_name}: {\n        Row: {\n`;
+  for (const col of cols) {
+    const tsType = pgToTs(col.data_type, col.udt_name, col.is_nullable);
+    const nullable = col.is_nullable === 'YES' ? ' | null' : '';
+    out += `          ${col.column_name}: ${tsType}${nullable}\n`;
+  }
+  out += `        }\n        Relationships: []\n      }\n`;
+}
+
+out += `    }
     Functions: {
       [_ in never]: never
     }
