@@ -13,6 +13,7 @@ from starlette.responses import JSONResponse
 
 from api.admin_users import (
     create_user as _create_user,
+    reset_user_password as _reset_user_password,
     update_user_roles as _update_user_roles,
     update_user_status as _update_user_status,
 )
@@ -31,6 +32,12 @@ async def post_admin_users(request: Request) -> JSONResponse:
 async def patch_admin_user_roles(request: Request, user_id: str) -> JSONResponse:
     """Update a user's role assignments."""
     return await _update_user_roles(request, user_id)
+
+
+@router.patch("/users/{user_id}/password")
+async def patch_admin_user_password(request: Request, user_id: str) -> JSONResponse:
+    """Reset a user's password."""
+    return await _reset_user_password(request, user_id)
 
 
 @router.patch("/users/{user_id}")
