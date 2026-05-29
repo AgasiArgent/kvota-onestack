@@ -27,11 +27,20 @@ interface CalculationFormProps {
   savedVariables: Record<string, unknown> | null;
   formValues: Record<string, string>;
   onFieldChange: (key: string, value: string) => void;
+  /** Active seller companies (юр.лица) for the org — row 48b picker. */
+  sellerCompanies: Array<{ id: string; name: string }>;
+  /** Currently selected seller company id, or null when «Не указано». */
+  sellerCompanyId: string | null;
+  /** Persist-on-change callback; null clears the selection. */
+  onSellerCompanyChange: (next: string | null) => void;
 }
 
 export function CalculationForm({
   formValues,
   onFieldChange,
+  sellerCompanies,
+  sellerCompanyId,
+  onSellerCompanyChange,
 }: CalculationFormProps) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -43,6 +52,30 @@ export function CalculationForm({
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 pt-3">
+          {sellerCompanies.length > 0 && (
+            <FormRow label="Наше юрлицо">
+              <Select
+                value={sellerCompanyId}
+                onValueChange={(v) => onSellerCompanyChange(v ?? null)}
+                items={Object.fromEntries(
+                  sellerCompanies.map((c) => [c.id, c.name])
+                )}
+              >
+                <SelectTrigger className="w-48" aria-label="Наше юрлицо">
+                  <SelectValue placeholder="-- Не указано --" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={null}>-- Не указано --</SelectItem>
+                  {sellerCompanies.map((company) => (
+                    <SelectItem key={company.id} value={company.id}>
+                      {company.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormRow>
+          )}
+
           <FormRow label="Инкотермс">
             <Select
               value={formValues.offer_incoterms}

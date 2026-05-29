@@ -15,6 +15,12 @@ interface CalculationActionBarProps {
   hasCalculation: boolean;
   workflowStatus: string;
   isApproved: boolean;
+  /**
+   * Fired after a calculation succeeds (row 48b). The parent clears the
+   * "продавец изменён" banner here — the recalc has now applied the new
+   * seller's VAT regime.
+   */
+  onApplied?: () => void;
 }
 
 export function CalculationActionBar({
@@ -23,6 +29,7 @@ export function CalculationActionBar({
   hasCalculation,
   workflowStatus,
   isApproved,
+  onApplied,
 }: CalculationActionBarProps) {
   const router = useRouter();
   const [loading, setLoading] = useState<string | null>(null);
@@ -91,6 +98,7 @@ export function CalculationActionBar({
       }
 
       toast.success("Расчёт выполнен");
+      onApplied?.();
       router.refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Не удалось выполнить расчёт");

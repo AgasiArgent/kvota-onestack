@@ -35,6 +35,9 @@ function renderForm(markup: string) {
       savedVariables={null}
       formValues={makeFormValues(markup)}
       onFieldChange={noop}
+      sellerCompanies={[]}
+      sellerCompanyId={null}
+      onSellerCompanyChange={noop}
     />,
   );
 }
@@ -135,6 +138,9 @@ describe("CalculationForm — markup minimum 5%", () => {
         savedVariables={null}
         formValues={makeFormValues("4")}
         onFieldChange={noop}
+        sellerCompanies={[]}
+        sellerCompanyId={null}
+        onSellerCompanyChange={noop}
       />,
     );
     expect(screen.getByText("Минимальная наценка — 5%")).toBeInTheDocument();

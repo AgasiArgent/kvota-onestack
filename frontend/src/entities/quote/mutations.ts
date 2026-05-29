@@ -1606,6 +1606,33 @@ export async function updateQuoteWorkflowStatus(
   if (error) throw error;
 }
 
+/**
+ * Persist the chosen seller_company (юр.лицо) on a quote WITHOUT triggering a
+ * recalculation (Testing 2 row 48b). The calc-step picker calls this on
+ * change so the choice is durable; the engine only picks up the new VAT
+ * regime on the next «Пересчитать», where api/quotes.calculate_quote resolves
+ * the company name from this `seller_company_id` (DB is source of truth — see
+ * PR #274 / commit 86bbf379).
+ *
+ * `seller_company_id` is part of the generated `quotes` Update type, so the
+ * plain object below is type-checked by tsc — no `as` cast, no
+ * `Record<string, unknown>` (passes tools/check_supabase_write_types.py).
+ * A null id clears the selection («-- Не указано --»).
+ */
+export async function updateQuoteSellerCompany(
+  quoteId: string,
+  sellerCompanyId: string | null
+) {
+  const supabase = createClient();
+
+  const { error } = await supabase
+    .from("quotes")
+    .update({ seller_company_id: sellerCompanyId })
+    .eq("id", quoteId);
+
+  if (error) throw error;
+}
+
 export async function completeProcurement(quoteId: string) {
   const supabase = createClient();
   const {
