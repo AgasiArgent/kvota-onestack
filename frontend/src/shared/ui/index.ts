@@ -1,4 +1,5 @@
 export { CountryFlag } from "./country-flag";
+export { PasswordGenerateInput } from "./password-generate-input";
 export { CurrencySelect } from "./currency-select";
 export type { CurrencySelectProps } from "./currency-select";
 export { SlaTimerBadge } from "./sla-timer-badge";
