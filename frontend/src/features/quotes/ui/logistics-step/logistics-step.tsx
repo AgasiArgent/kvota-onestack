@@ -571,6 +571,10 @@ export function LogisticsStep({
             displayCurrency={quote.currency ?? "RUB"}
             fxRates={ratesToRub}
             unpricedInvoiceItemsCount={unpricedInvoiceItemsCount}
+            // Testing 2 row 44 — under supplier-delivers terms the first
+            // segment's cost is locked to 0; the completion gate must exempt
+            // it so logistics can still be completed.
+            supplierIncoterms={activeInvoice.supplier_incoterms ?? null}
           />
           {/* Cargo digest from procurement — РОЛ Тест 07 #3.3 + МОЛ Тест row 14. */}
           <InvoiceCargoSummary

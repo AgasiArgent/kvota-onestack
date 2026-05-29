@@ -146,6 +146,80 @@ describe("LogisticsActionBar — currency-aware totals (5c W1)", () => {
     expect(handleComplete).not.toHaveBeenCalled();
   });
 
+  it("enables completion when supplier delivers the first segment (cost locked to 0)", () => {
+    // Testing 2 row 44 follow-up: when supplier_incoterms is a D/C-term the
+    // route constructor locks the first segment's cost to 0 («Поставщик
+    // доставляет»). The completion gate must NOT treat that intentional 0
+    // as a missing cost — otherwise logistics can never be completed.
+    const segments = [
+      makeSegment({ id: "s1", sequenceOrder: 1, mainCostRub: 0, currencyCode: "RUB" }),
+      makeSegment({ id: "s2", sequenceOrder: 2, mainCostRub: 500, currencyCode: "RUB" }),
+    ];
+    render(
+      <LogisticsActionBar
+        segments={segments}
+        alreadyCompleted={false}
+        needsReview={false}
+        canEdit
+        onComplete={vi.fn()}
+        displayCurrency="RUB"
+        fxRates={{}}
+        supplierIncoterms="DAP"
+      />,
+    );
+
+    const button = screen.getByRole("button", { name: "Завершить логистику" });
+    expect((button as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("still requires the first-segment cost when the supplier does not deliver (EXW)", () => {
+    // Guard against over-relaxing the gate: under buyer-pays terms the first
+    // segment's cost is a real requirement, so a 0 must keep completion blocked.
+    const segments = [
+      makeSegment({ id: "s1", sequenceOrder: 1, mainCostRub: 0, currencyCode: "RUB" }),
+      makeSegment({ id: "s2", sequenceOrder: 2, mainCostRub: 500, currencyCode: "RUB" }),
+    ];
+    render(
+      <LogisticsActionBar
+        segments={segments}
+        alreadyCompleted={false}
+        needsReview={false}
+        canEdit
+        onComplete={vi.fn()}
+        displayCurrency="RUB"
+        fxRates={{}}
+        supplierIncoterms="EXW"
+      />,
+    );
+
+    const button = screen.getByRole("button", { name: "Завершить логистику" });
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("only exempts the first segment — a later 0-cost segment still blocks completion", () => {
+    // The supplier-delivers waiver applies to sequenceOrder 1 only. A
+    // downstream segment left at 0 is a genuine omission and must block.
+    const segments = [
+      makeSegment({ id: "s1", sequenceOrder: 1, mainCostRub: 0, currencyCode: "RUB" }),
+      makeSegment({ id: "s2", sequenceOrder: 2, mainCostRub: 0, currencyCode: "RUB" }),
+    ];
+    render(
+      <LogisticsActionBar
+        segments={segments}
+        alreadyCompleted={false}
+        needsReview={false}
+        canEdit
+        onComplete={vi.fn()}
+        displayCurrency="RUB"
+        fxRates={{}}
+        supplierIncoterms="DDP"
+      />,
+    );
+
+    const button = screen.getByRole("button", { name: "Завершить логистику" });
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it("shows AlertCircle and ≈ prefix when an FX rate is missing", () => {
     const segments = [
       makeSegment({ id: "s1", sequenceOrder: 1, mainCostRub: 100, currencyCode: "USD" }),

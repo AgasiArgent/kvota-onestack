@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { LogisticsSegment } from "@/entities/logistics-segment";
 import { sumInCurrency, type FxRateMap } from "@/shared/lib/fx-convert";
+import { supplierDeliversFirstSegment } from "@/shared/lib/incoterms";
 
 /**
  * LogisticsActionBar — sticky header with the per-invoice
@@ -57,13 +58,27 @@ interface LogisticsActionBarProps {
    * "Осталось проценить N КПП". Defaults to 0 (legacy callers).
    */
   unpricedInvoiceItemsCount?: number;
+  /**
+   * Parent invoice's `supplier_incoterms`. Testing 2 row 44 — under D/C-terms
+   * the route constructor locks the first segment's cost to 0 («Поставщик
+   * доставляет»). When that's the case the completion gate must exempt that
+   * segment from the "cost > 0" requirement; otherwise the locked 0 reads as
+   * a missing cost and logistics can never be completed.
+   */
+  supplierIncoterms?: string | null;
 }
 
-function findMissing(segments: LogisticsSegment[]): MissingItem[] {
+function findMissing(
+  segments: LogisticsSegment[],
+  supplierIncoterms?: string | null,
+): MissingItem[] {
   if (segments.length === 0) {
     // Sentinel: zero segments is a single "empty route" case
     return [{ segmentNumber: 0, field: "from" }];
   }
+  // Mirrors SegmentDetailsPanel's lock: under supplier-delivers terms the
+  // first segment (sequenceOrder === 1) carries a deliberate 0 cost.
+  const supplierCoversFirstSegment = supplierDeliversFirstSegment(supplierIncoterms);
   const missing: MissingItem[] = [];
   for (const seg of segments) {
     if (!seg.fromLocation) {
@@ -72,8 +87,9 @@ function findMissing(segments: LogisticsSegment[]): MissingItem[] {
     if (!seg.toLocation) {
       missing.push({ segmentNumber: seg.sequenceOrder, field: "to" });
     }
+    const costExempt = supplierCoversFirstSegment && seg.sequenceOrder === 1;
     // Currency-agnostic: > 0 holds for any currency, just not yet filled in.
-    if (!(seg.mainCostRub > 0)) {
+    if (!costExempt && !(seg.mainCostRub > 0)) {
       missing.push({ segmentNumber: seg.sequenceOrder, field: "cost" });
     }
   }
@@ -108,8 +124,9 @@ export function LogisticsActionBar({
   displayCurrency,
   fxRates,
   unpricedInvoiceItemsCount = 0,
+  supplierIncoterms,
 }: LogisticsActionBarProps) {
-  const missing = findMissing(segments);
+  const missing = findMissing(segments, supplierIncoterms);
   const { total: totalCost, missing: missingRates } = sumInCurrency(
     segments.map((s) => ({
       amount: s.mainCostRub ?? 0,
