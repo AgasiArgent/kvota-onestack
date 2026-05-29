@@ -964,7 +964,7 @@ class TestGetCompositionView:
         suppliers = [{"id": "sup-1", "name": "Supplier A", "country": "Germany"}]
 
         tables = {
-            "quotes": _chainable([{"currency_of_quote": "USD"}]),
+            "quotes": _chainable([{"currency": "USD"}]),
             "quote_items": _chainable(items),
             "invoice_item_coverage": _chainable(coverage_rows),
             "invoices": _chainable(invoices),
@@ -1029,7 +1029,7 @@ class TestGetCompositionView:
         suppliers = [{"id": "sup-1", "name": "Supplier A", "country": "Germany"}]
 
         tables = {
-            "quotes": _chainable([{"currency_of_quote": "USD"}]),
+            "quotes": _chainable([{"currency": "USD"}]),
             "quote_items": _chainable(items),
             "invoice_item_coverage": _chainable(coverage_rows),
             "invoices": _chainable(invoices),
@@ -1082,7 +1082,7 @@ class TestGetCompositionView:
         suppliers = [{"id": "sup-1", "name": "Supplier A", "country": "Germany"}]
 
         tables = {
-            "quotes": _chainable([{"currency_of_quote": "USD"}]),
+            "quotes": _chainable([{"currency": "USD"}]),
             "quote_items": _chainable(items),
             "invoice_item_coverage": _chainable(coverage_rows),
             "invoices": _chainable(invoices),
@@ -1188,7 +1188,7 @@ class TestGetCompositionViewDivergentMarkups:
         suppliers = [{"id": "sup-1", "name": "Supplier A", "country": "Germany"}]
 
         tables = {
-            "quotes": _chainable([{"currency_of_quote": "USD"}]),
+            "quotes": _chainable([{"currency": "USD"}]),
             "quote_items": _chainable(items),
             "invoice_item_coverage": _chainable(coverage_rows),
             "invoices": _chainable(invoices),
@@ -1232,7 +1232,7 @@ class TestGetCompositionViewDivergentMarkups:
         suppliers = [{"id": "sup-1", "name": "Supplier A", "country": "Germany"}]
 
         tables = {
-            "quotes": _chainable([{"currency_of_quote": "USD"}]),
+            "quotes": _chainable([{"currency": "USD"}]),
             "quote_items": _chainable(items),
             "invoice_item_coverage": _chainable(coverage_rows),
             "invoices": _chainable(invoices),
@@ -1274,7 +1274,7 @@ class TestGetCompositionViewDivergentMarkups:
         suppliers = [{"id": "sup-1", "name": "Supplier A", "country": "Germany"}]
 
         tables = {
-            "quotes": _chainable([{"currency_of_quote": "USD"}]),
+            "quotes": _chainable([{"currency": "USD"}]),
             "quote_items": _chainable(items),
             "invoice_item_coverage": _chainable(coverage_rows),
             "invoices": _chainable(invoices),

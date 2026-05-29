@@ -477,13 +477,16 @@ def get_composition_view(
     # threading a new prop through calculation-step.tsx. Single extra read.
     quote_resp = (
         supabase.table("quotes")
-        .select("currency_of_quote")
+        .select("currency")
         .eq("id", quote_id)
         .execute()
     )
     quote_rows: list[dict] = quote_resp.data or []
+    # The КП currency is stored in quotes.currency; the calc engine reads it
+    # into variables['currency_of_quote'] (api/quotes.py). We surface it on the
+    # composition view under the same payload key the picker expects.
     currency_of_quote = (
-        quote_rows[0].get("currency_of_quote") if quote_rows else None
+        quote_rows[0].get("currency") if quote_rows else None
     )
 
     # Testing 2 row 90: order by position so the picker renders items in
