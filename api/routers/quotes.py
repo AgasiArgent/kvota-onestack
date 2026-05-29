@@ -21,6 +21,7 @@ from api.composition import (
     apply_inclusion_endpoint as _apply_inclusion,
     get_composition as _get_composition,
 )
+from api.calc_step_info import get_calc_step_info as _get_calc_step_info
 from api.plan_fact import quotes_search as _quotes_search
 from api.procurement import (
     get_kanban as _get_kanban,
@@ -81,6 +82,18 @@ async def get_status_history(request: Request, quote_id: str) -> JSONResponse:
 async def get_composition(request: Request, quote_id: str) -> JSONResponse:
     """Fetch current multi-supplier composition for a quote."""
     return await _get_composition(request, quote_id)
+
+
+@router.get("/{quote_id}/calc-step-info")
+async def get_calc_step_info_route(
+    request: Request, quote_id: str
+) -> JSONResponse:
+    """Return per-invoice logistics + per-item customs + certifications.
+
+    Powers the calc-step info card (Testing 2 rows 36 + 48). Read-only.
+    Dual auth: JWT (Next.js) first, then legacy session (FastHTML).
+    """
+    return await _get_calc_step_info(request, quote_id)
 
 
 @router.post("/{quote_id}/composition")
