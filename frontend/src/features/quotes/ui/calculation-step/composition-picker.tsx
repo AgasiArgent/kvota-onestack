@@ -601,9 +601,13 @@ function PriceCell({
 /**
  * Testing 2 row 36 — line total for the SELECTED КПП:
  * purchase_price_original × quantity, in the supplier's local currency.
- * Uses item.quantity (the only quantity exposed to the picker — the
- * per-invoice_item quantity the calc engine uses is not surfaced on the
- * alternative payload). "—" when no priced КПП is selected.
+ * "—" when no priced КПП is selected.
+ *
+ * Testing 2 row 85 — uses the MOQ-floored (effective) quantity, matching the
+ * Кол-во cell and the quantity the calc engine actually computes COGS on. When
+ * the selected КПП declares a MOQ above the ordered amount we are forced to buy
+ * the MOQ, so the supplier line total reflects that floor (price × max(ordered,
+ * MOQ)) rather than price × ordered.
  */
 function SumCell({
   alt,
@@ -615,7 +619,7 @@ function SumCell({
   if (!alt || alt.purchase_price_original == null) {
     return <td className="py-3 px-2 tabular-nums text-muted-foreground">—</td>;
   }
-  const qty = quantity ?? 1;
+  const qty = effectiveQuantity(quantity ?? 1, alt.minimum_order_quantity ?? null);
   return (
     <td className="py-3 px-2 tabular-nums whitespace-nowrap">
       {formatPrice(alt.purchase_price_original * qty, alt.purchase_currency)}
