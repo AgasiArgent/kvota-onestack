@@ -35,6 +35,23 @@ export async function updateUserStatusAction(
   return res;
 }
 
+export async function resetUserPasswordAction(
+  userId: string,
+  password: string
+): Promise<ApiResponse<{ user_id: string }>> {
+  const res = await apiServerClient<{ user_id: string }>(
+    `/admin/users/${userId}/password`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ password }),
+    }
+  );
+  if (res.success) {
+    revalidatePath("/admin/users");
+  }
+  return res;
+}
+
 export async function updateUserRolesAction(
   userId: string,
   roleSlugs: string[]
