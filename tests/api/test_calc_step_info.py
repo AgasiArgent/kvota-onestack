@@ -11,11 +11,12 @@ Covers:
 - 403 when JWT user has no organization_members row.
 - 404 when the quote isn't visible to the caller's org.
 - Happy path: returns the three sections in the documented shape, with
-  per-invoice logistics cost aggregated from ``logistics_route_segments``
-  (sum of ``main_cost_rub`` + expense ``cost_rub`` in display currency),
-  is_filled flag false when no segments exist, ТН ВЭД (``hs_code``) +
-  duty % (``customs_duty``) per quote_item, and certifications with cost +
-  currency + type.
+  per-invoice logistics GROUPED into ``segments[]`` (Row 48a). Each segment
+  carries its main cost converted to the quote currency, a derived label
+  (free-text or ``from → to``), transit_days and a missing_rate flag.
+  is_filled is false when an invoice has no segment with a resolved cost > 0.
+  Customs surfaces ТН ВЭД (``hs_code``) + duty % (``customs_duty``) per
+  quote_item; certifications carry cost + currency + type.
 
 Supabase is mocked at ``api.calc_step_info.get_supabase`` so we never hit a
 real DB; the data shape mirrors the live schema (kvota.logistics_route_segments,
@@ -92,7 +93,6 @@ def _build_supabase_mock(
     invoices: list[dict] | None = None,
     items: list[dict] | None = None,
     segments: list[dict] | None = None,
-    expenses: list[dict] | None = None,
     certificates: list[dict] | None = None,
     fx_rates: list[dict] | None = None,
 ):
@@ -112,8 +112,6 @@ def _build_supabase_mock(
             return _FakeQueryChain(items or [])
         if name == "logistics_route_segments":
             return _FakeQueryChain(segments or [])
-        if name == "logistics_segment_expenses":
-            return _FakeQueryChain(expenses or [])
         if name == "quote_certificates":
             return _FakeQueryChain(certificates or [])
         if name == "exchange_rates":
@@ -208,24 +206,36 @@ class TestCalcStepInfoShape:
                 {
                     "id": "seg-1",
                     "invoice_id": "inv-1",
+                    "sequence_order": 0,
+                    "transit_days": 14,
+                    "label": None,
                     "main_cost_rub": 12000,
                     "currency_code": "RUB",
+                    "from_location": {
+                        "id": "loc-1",
+                        "country": "Китай",
+                        "city": "Шанхай",
+                        "location_type": "supplier",
+                    },
+                    "to_location": {
+                        "id": "loc-2",
+                        "country": "Россия",
+                        "city": "Москва",
+                        "location_type": "hub",
+                    },
                 },
                 {
                     "id": "seg-2",
                     "invoice_id": "inv-1",
+                    "sequence_order": 1,
+                    "transit_days": None,
+                    "label": "Доставка по РФ",
                     "main_cost_rub": 3000,
                     "currency_code": "RUB",
+                    "from_location": None,
+                    "to_location": None,
                 },
                 # inv-2 has no segments → not_filled
-            ],
-            expenses=[
-                {
-                    "id": "exp-1",
-                    "segment_id": "seg-1",
-                    "cost_rub": 500,
-                    "currency_code": "RUB",
-                }
             ],
             certificates=[
                 {
@@ -247,19 +257,36 @@ class TestCalcStepInfoShape:
         assert body["success"] is True
 
         data = body["data"]
-        # 1. logistics_per_invoice — both invoices included, inv-2 marked unfilled
+        # 1. logistics_per_invoice — both invoices included, grouped per-segment
         assert "logistics_per_invoice" in data
         assert len(data["logistics_per_invoice"]) == 2
         by_id = {row["invoice_id"]: row for row in data["logistics_per_invoice"]}
-        # inv-1: 12000 + 3000 (segment main) + 500 (expense) = 15500 RUB
-        assert by_id["inv-1"]["cost"] == 15500
-        assert by_id["inv-1"]["currency"] == "RUB"
-        assert by_id["inv-1"]["is_filled"] is True
-        assert by_id["inv-1"]["segment_count"] == 2
-        # inv-2: no segments → unfilled, cost = 0
+
+        # inv-1: two segments, both priced → is_filled, ordered by sequence_order
+        inv1 = by_id["inv-1"]
+        assert inv1["is_filled"] is True
+        assert inv1["segment_count"] == 2
+        assert inv1["missing_rates"] == []
+        segs = inv1["segments"]
+        assert len(segs) == 2
+        # seg-1: no free-text label → derived "from → to" with city
+        assert segs[0]["segment_id"] == "seg-1"
+        assert segs[0]["label"] == "Китай · Шанхай → Россия · Москва"
+        assert segs[0]["cost"] == 12000
+        assert segs[0]["currency"] == "RUB"
+        assert segs[0]["transit_days"] == 14
+        assert segs[0]["missing_rate"] is False
+        # seg-2: free-text label wins; null locations are irrelevant here;
+        # transit_days null → carried through as None for the "дн" chip.
+        assert segs[1]["segment_id"] == "seg-2"
+        assert segs[1]["label"] == "Доставка по РФ"
+        assert segs[1]["cost"] == 3000
+        assert segs[1]["transit_days"] is None
+
+        # inv-2: no segments → unfilled, empty group
         assert by_id["inv-2"]["is_filled"] is False
-        assert by_id["inv-2"]["cost"] == 0
         assert by_id["inv-2"]["segment_count"] == 0
+        assert by_id["inv-2"]["segments"] == []
 
         # 2. customs — list of items with hs_code + duty
         assert "customs" in data
@@ -300,23 +327,27 @@ class TestCalcStepInfoShape:
     @patch("api.calc_step_info.get_supabase")
     def test_invoice_with_zero_cost_segments_is_unfilled(self, mock_get_sb):
         """Segments exist but main_cost_rub = 0 → still not_filled (logistics
-        defaults to 0 when the route hasn't been priced yet)."""
+        defaults to 0 when the route hasn't been priced yet). The segment row
+        is still emitted so the label/days remain visible."""
         mock_get_sb.return_value = _build_supabase_mock(
             quote={"id": "q-1", "organization_id": "org-1", "currency": "RUB"},
-            invoices=[
-                {
-                    "id": "inv-1",
-                    "invoice_number": "INV-001",
-                    "supplier_id": None,
-                    "logistics_completed_at": None,
-                }
-            ],
+            invoices=[{"id": "inv-1", "invoice_number": "INV-001"}],
             segments=[
                 {
                     "id": "seg-1",
                     "invoice_id": "inv-1",
+                    "sequence_order": 0,
+                    "transit_days": 3,
+                    "label": None,
                     "main_cost_rub": 0,
                     "currency_code": "RUB",
+                    "from_location": None,
+                    "to_location": {
+                        "id": "loc-9",
+                        "country": "Россия",
+                        "city": None,
+                        "location_type": "client",
+                    },
                 }
             ],
         )
@@ -328,8 +359,69 @@ class TestCalcStepInfoShape:
         body = json.loads(resp.body)
         row = body["data"]["logistics_per_invoice"][0]
         assert row["is_filled"] is False
-        assert row["cost"] == 0
         assert row["segment_count"] == 1
+        seg = row["segments"][0]
+        assert seg["cost"] == 0
+        # Null from_location → "Не выбрано"; to_location has no city → country only.
+        assert seg["label"] == "Не выбрано → Россия"
+        assert seg["transit_days"] == 3
+
+    @patch("api.calc_step_info.get_supabase")
+    def test_foreign_segment_converted_to_quote_currency(self, mock_get_sb):
+        """A USD segment is converted foreign→RUB→quote currency. With a USD→RUB
+        rate of 90 and a EUR (quote) →RUB rate of 100, a $200 segment becomes
+        200·90/100 = 180 EUR. A segment whose currency has no rate is flagged
+        missing_rate and contributes cost 0."""
+        mock_get_sb.return_value = _build_supabase_mock(
+            quote={"id": "q-1", "organization_id": "org-1", "currency": "EUR"},
+            invoices=[{"id": "inv-1", "invoice_number": "INV-001"}],
+            segments=[
+                {
+                    "id": "seg-usd",
+                    "invoice_id": "inv-1",
+                    "sequence_order": 0,
+                    "transit_days": None,
+                    "label": "Море",
+                    "main_cost_rub": 200,
+                    "currency_code": "USD",
+                    "from_location": None,
+                    "to_location": None,
+                },
+                {
+                    "id": "seg-cny",
+                    "invoice_id": "inv-1",
+                    "sequence_order": 1,
+                    "transit_days": None,
+                    "label": "Авто",
+                    "main_cost_rub": 500,
+                    "currency_code": "CNY",  # no rate provided → missing
+                    "from_location": None,
+                    "to_location": None,
+                },
+            ],
+            fx_rates=[
+                {"from_currency": "USD", "rate": 90, "fetched_at": "2026-05-29"},
+                {"from_currency": "EUR", "rate": 100, "fetched_at": "2026-05-29"},
+            ],
+        )
+        req = _make_request(api_user_id="u-1")
+        resp = _run(get_calc_step_info(req, "q-1"))
+
+        assert resp.status_code == 200
+        import json
+        body = json.loads(resp.body)
+        row = body["data"]["logistics_per_invoice"][0]
+        segs = {s["segment_id"]: s for s in row["segments"]}
+        # USD → quote (EUR): 200 * 90 / 100 = 180
+        assert segs["seg-usd"]["cost"] == 180
+        assert segs["seg-usd"]["currency"] == "EUR"
+        assert segs["seg-usd"]["missing_rate"] is False
+        # CNY has no rate → flagged, cost 0
+        assert segs["seg-cny"]["missing_rate"] is True
+        assert segs["seg-cny"]["cost"] == 0
+        assert "CNY" in row["missing_rates"]
+        # is_filled true because USD segment resolved to > 0
+        assert row["is_filled"] is True
 
     @patch("api.calc_step_info.get_supabase")
     def test_items_without_hs_or_duty_still_returned(self, mock_get_sb):
