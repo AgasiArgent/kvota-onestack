@@ -1,0 +1,19 @@
+{
+  "skillName": "notify-testers",
+  "description": "Send a patch note / changelog / short update to the 'Project KVOTAFLOW' Telegram dev & testers group as the kvota_error_bot, via the Bot API from the VPS container (token never leaves the server). Always drafts in Russian and requires user approval before sending.",
+  "triggerPatterns": [
+    "уведоми тестеров",
+    "напиши тестеру",
+    "отправь записку тестеру",
+    "патчноут",
+    "patch note",
+    "отправь changelog в группу",
+    "сообщи в группу разработки",
+    "notify testers",
+    "ping the dev group",
+    "post to telegram dev group"
+  ],
+  "version": "1.0.0",
+  "author": "OneStack Team",
+  "tags": ["telegram", "bot", "kvota_error_bot", "notifications", "testers", "changelog", "patch-notes"]
+}
