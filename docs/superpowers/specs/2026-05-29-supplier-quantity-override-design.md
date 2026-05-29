@@ -72,7 +72,7 @@ Audit of `invoice_items` on prod (2026-05-29): **69** rows have a value set →
 - **19 flip down** (supplier qty < ordered) — **NEW**: these orders/calcs reduce. They were entered under "minimum order" semantics, so some may be stale true-minimums rather than intentional supplier-qty caps.
 - **2 zero** — treated as unset (`NULLIF`), no effect.
 
-**Action:** before/at rollout, list the 19 downward-flip rows for the team to confirm (keep as intentional supplier qty, or clear). Totals shift on every affected quote — flag PO/testers (consistent with the original Row 85 calc-impact note).
+**Resolved (user, 2026-05-29):** the override is the intended behaviour for **all** set rows, including the 19 downward flips — these are deliberate supplier-quantity adjustments, **no data cleanup**. Totals will shift on every affected quote (both directions); flag PO/testers (consistent with the original Row 85 calc-impact note). Migration approved.
 
 ## 7. Out of scope
 
