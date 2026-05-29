@@ -957,10 +957,14 @@ class TestGetCompositionView:
                 "purchase_currency": "EUR",
             },
         }]
-        invoices = [{"id": "inv-a", "supplier_id": "sup-1"}]
+        invoices = [
+            {"id": "inv-a", "supplier_id": "sup-1",
+             "created_at": "2026-02-01T00:00:00Z"},
+        ]
         suppliers = [{"id": "sup-1", "name": "Supplier A", "country": "Germany"}]
 
         tables = {
+            "quotes": _chainable([{"currency_of_quote": "USD"}]),
             "quote_items": _chainable(items),
             "invoice_item_coverage": _chainable(coverage_rows),
             "invoices": _chainable(invoices),
@@ -972,6 +976,8 @@ class TestGetCompositionView:
         view = get_composition_view("q-1", sb)
 
         assert view["quote_id"] == "q-1"
+        # Testing 2 row 36: КП currency surfaced on the view payload.
+        assert view["currency_of_quote"] == "USD"
         assert len(view["items"]) == 1
         item = view["items"][0]
         assert len(item["alternatives"]) == 1
@@ -979,6 +985,8 @@ class TestGetCompositionView:
         assert alt["invoice_id"] == "inv-a"
         assert alt["supplier_name"] == "Supplier A"
         assert alt["coverage_summary"] == ""  # 1:1 → empty
+        # Testing 2 row 36: КПП date sourced from invoices.created_at.
+        assert alt["kpp_date"] == "2026-02-01T00:00:00Z"
 
     def test_split_alternative_shows_coverage_summary(self):
         """Split: one invoice has 2 invoice_items for 1 quote_item →
@@ -1021,6 +1029,7 @@ class TestGetCompositionView:
         suppliers = [{"id": "sup-1", "name": "Supplier A", "country": "Germany"}]
 
         tables = {
+            "quotes": _chainable([{"currency_of_quote": "USD"}]),
             "quote_items": _chainable(items),
             "invoice_item_coverage": _chainable(coverage_rows),
             "invoices": _chainable(invoices),
@@ -1073,6 +1082,7 @@ class TestGetCompositionView:
         suppliers = [{"id": "sup-1", "name": "Supplier A", "country": "Germany"}]
 
         tables = {
+            "quotes": _chainable([{"currency_of_quote": "USD"}]),
             "quote_items": _chainable(items),
             "invoice_item_coverage": _chainable(coverage_rows),
             "invoices": _chainable(invoices),
@@ -1119,6 +1129,7 @@ class TestGetCompositionView:
             "invoices": _chainable([{"id": "inv-a", "supplier_id": "sup-1"}]),
             "suppliers": _chainable([{"id": "sup-1", "name": "A", "country": "US"}]),
         }
+        tables["quotes"] = _chainable([{"currency_of_quote": "USD"}])
         sb = MagicMock()
         sb.table.side_effect = lambda name: tables[name]
 
@@ -1177,6 +1188,7 @@ class TestGetCompositionViewDivergentMarkups:
         suppliers = [{"id": "sup-1", "name": "Supplier A", "country": "Germany"}]
 
         tables = {
+            "quotes": _chainable([{"currency_of_quote": "USD"}]),
             "quote_items": _chainable(items),
             "invoice_item_coverage": _chainable(coverage_rows),
             "invoices": _chainable(invoices),
@@ -1220,6 +1232,7 @@ class TestGetCompositionViewDivergentMarkups:
         suppliers = [{"id": "sup-1", "name": "Supplier A", "country": "Germany"}]
 
         tables = {
+            "quotes": _chainable([{"currency_of_quote": "USD"}]),
             "quote_items": _chainable(items),
             "invoice_item_coverage": _chainable(coverage_rows),
             "invoices": _chainable(invoices),
@@ -1261,6 +1274,7 @@ class TestGetCompositionViewDivergentMarkups:
         suppliers = [{"id": "sup-1", "name": "Supplier A", "country": "Germany"}]
 
         tables = {
+            "quotes": _chainable([{"currency_of_quote": "USD"}]),
             "quote_items": _chainable(items),
             "invoice_item_coverage": _chainable(coverage_rows),
             "invoices": _chainable(invoices),

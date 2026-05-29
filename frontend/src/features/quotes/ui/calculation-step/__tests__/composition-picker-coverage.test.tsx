@@ -40,6 +40,7 @@ import type {
   CompositionAlternative,
   CompositionItem,
 } from "@/entities/quote/types";
+import { buildHistoricalRateMap } from "@/entities/supplier/lib/historical-fx";
 
 function makeAlt(
   overrides: Partial<CompositionAlternative> = {}
@@ -222,5 +223,167 @@ describe("CompositionItemRow — divergent_markups warning", () => {
     );
 
     expect(html).not.toContain("разные наценки");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Testing 2 row 36 — Цена / Сумма columns + FX tooltip
+// ---------------------------------------------------------------------------
+
+describe("CompositionItemRow — Цена / Сумма columns", () => {
+  it("renders the SELECTED КПП price in the Цена column", () => {
+    const selectedAlt = makeAlt({
+      invoice_id: "inv-sel",
+      purchase_price_original: 12.5,
+      purchase_currency: "EUR",
+    });
+    const item = makeItem(
+      [selectedAlt, makeAlt({ invoice_id: "inv-other" })],
+      { selected_invoice_id: "inv-sel", quantity: 4 }
+    );
+
+    const html = renderRow(
+      <CompositionItemRow item={item} disabled={false} onSelect={() => {}} />
+    );
+
+    // ru-RU formats 12.50 as "12,50" — Цена cell shows the supplier-local price.
+    expect(html).toContain("12,50 EUR");
+  });
+
+  it("renders Сумма = price × quantity for the selected КПП", () => {
+    const selectedAlt = makeAlt({
+      invoice_id: "inv-sel",
+      purchase_price_original: 10,
+      purchase_currency: "USD",
+    });
+    const item = makeItem([selectedAlt, makeAlt({ invoice_id: "inv-other" })], {
+      selected_invoice_id: "inv-sel",
+      quantity: 3,
+    });
+
+    const html = renderRow(
+      <CompositionItemRow item={item} disabled={false} onSelect={() => {}} />
+    );
+
+    // 10 × 3 = 30.00 → "30,00 USD"
+    expect(html).toContain("30,00 USD");
+  });
+
+  it("shows '—' in Цена/Сумма when no supplier is selected", () => {
+    const item = makeItem(
+      [
+        makeAlt({ invoice_id: "inv-a", purchase_price_original: 99 }),
+        makeAlt({ invoice_id: "inv-b" }),
+      ],
+      { selected_invoice_id: null }
+    );
+
+    const html = renderRow(
+      <CompositionItemRow item={item} disabled={false} onSelect={() => {}} />
+    );
+
+    // Two em-dash cells (Цена + Сумма). The selected price (99) must NOT show.
+    expect(html).toContain("—");
+    expect(html).not.toContain("99,00");
+  });
+
+  it("shows '—' when the selected КПП has a null price", () => {
+    const selectedAlt = makeAlt({
+      invoice_id: "inv-sel",
+      purchase_price_original: null,
+      purchase_currency: "EUR",
+    });
+    const item = makeItem([selectedAlt, makeAlt({ invoice_id: "inv-other" })], {
+      selected_invoice_id: "inv-sel",
+    });
+
+    const html = renderRow(
+      <CompositionItemRow item={item} disabled={false} onSelect={() => {}} />
+    );
+
+    expect(html).toContain("—");
+  });
+
+  it("no longer renders the price inline in the Поставщики label (de-dup)", () => {
+    // The price used to live in the supplier label; it now lives only in the
+    // Цена column. With nothing selected it must appear zero or one time
+    // (Цена cell shows "—", supplier label shows no price).
+    const item = makeItem(
+      [
+        makeAlt({
+          invoice_id: "inv-a",
+          supplier_name: "ACME",
+          purchase_price_original: 42,
+          purchase_currency: "EUR",
+        }),
+        makeAlt({ invoice_id: "inv-b", supplier_name: "Other" }),
+      ],
+      { selected_invoice_id: null }
+    );
+
+    const html = renderRow(
+      <CompositionItemRow item={item} disabled={false} onSelect={() => {}} />
+    );
+
+    // Supplier name still renders; its old inline "42,00 EUR" price does not.
+    expect(html).toContain("ACME");
+    expect(html).not.toContain("42,00 EUR");
+  });
+
+  it("adds a КП-equivalent tooltip when rates + kpCurrency + kpp_date are present", () => {
+    const rates = buildHistoricalRateMap([
+      { from_currency: "USD", rate: 90, fetched_at: "2026-01-15T00:00:00Z" },
+      { from_currency: "EUR", rate: 100, fetched_at: "2026-01-15T00:00:00Z" },
+    ]);
+    const selectedAlt = makeAlt({
+      invoice_id: "inv-sel",
+      purchase_price_original: 9,
+      purchase_currency: "EUR",
+      kpp_date: "2026-02-01T00:00:00Z",
+    });
+    const item = makeItem([selectedAlt, makeAlt({ invoice_id: "inv-other" })], {
+      selected_invoice_id: "inv-sel",
+    });
+
+    const html = renderRow(
+      <CompositionItemRow
+        item={item}
+        disabled={false}
+        rates={rates}
+        kpCurrency="USD"
+        onSelect={() => {}}
+      />
+    );
+
+    // 9 EUR * 100 / 90 = 10 USD → tooltip "≈ 10 $ (по курсу на 01.02.2026)".
+    expect(html).toContain("≈ 10 $");
+    expect(html).toContain("по курсу на");
+  });
+
+  it("omits the tooltip when the historical rate is unavailable", () => {
+    const rates = buildHistoricalRateMap([]); // empty — no rates at all
+    const selectedAlt = makeAlt({
+      invoice_id: "inv-sel",
+      purchase_price_original: 9,
+      purchase_currency: "EUR",
+      kpp_date: "2026-02-01T00:00:00Z",
+    });
+    const item = makeItem([selectedAlt, makeAlt({ invoice_id: "inv-other" })], {
+      selected_invoice_id: "inv-sel",
+    });
+
+    const html = renderRow(
+      <CompositionItemRow
+        item={item}
+        disabled={false}
+        rates={rates}
+        kpCurrency="USD"
+        onSelect={() => {}}
+      />
+    );
+
+    // Price still renders, but no "≈" tooltip equivalent.
+    expect(html).toContain("9,00 EUR");
+    expect(html).not.toContain("≈");
   });
 });
