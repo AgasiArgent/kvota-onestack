@@ -40,7 +40,9 @@ import {
   filterAssignableRoles,
 } from "@/entities/user/types";
 import { updateUserProfile } from "@/entities/admin/mutations";
+import { PasswordGenerateInput } from "@/shared/ui/password-generate-input";
 import {
+  resetUserPasswordAction,
   updateUserRolesAction,
   updateUserStatusAction,
 } from "@/features/admin-users/actions";
@@ -104,6 +106,10 @@ export function UserEditSheet({
   // Status state
   const [confirmDeactivateOpen, setConfirmDeactivateOpen] = useState(false);
   const [savingStatus, setSavingStatus] = useState(false);
+
+  // Password reset state
+  const [newPassword, setNewPassword] = useState("");
+  const [resettingPassword, setResettingPassword] = useState(false);
 
   const isActive = member.status !== "suspended";
   const isLastAdmin =
@@ -229,6 +235,27 @@ export function UserEditSheet({
       toast.error("Ошибка изменения статуса");
     } finally {
       setSavingStatus(false);
+    }
+  }
+
+  async function handleResetPassword() {
+    if (newPassword.length < 8) {
+      toast.error("Пароль должен быть не короче 8 символов");
+      return;
+    }
+    setResettingPassword(true);
+    try {
+      const res = await resetUserPasswordAction(member.user_id, newPassword);
+      if (res.success) {
+        toast.success("Пароль сброшен");
+        setNewPassword("");
+      } else {
+        toast.error(res.error?.message ?? "Ошибка сброса пароля");
+      }
+    } catch {
+      toast.error("Ошибка сброса пароля");
+    } finally {
+      setResettingPassword(false);
     }
   }
 
@@ -453,6 +480,34 @@ export function UserEditSheet({
                   Невозможно деактивировать последнего администратора
                 </p>
               )}
+            </section>
+
+            <Separator />
+
+            {/* Section: Password reset */}
+            <section className="flex flex-col gap-4">
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                Сброс пароля
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                Передайте новый пароль пользователю. Он сможет сменить его в
+                своём профиле.
+              </p>
+              <PasswordGenerateInput
+                value={newPassword}
+                onChange={setNewPassword}
+              />
+              <Button
+                onClick={handleResetPassword}
+                disabled={resettingPassword || newPassword.length < 8}
+                size="sm"
+                className="self-end"
+              >
+                {resettingPassword && (
+                  <Loader2 size={14} className="animate-spin" />
+                )}
+                Сбросить пароль
+              </Button>
             </section>
           </div>
         </SheetContent>
