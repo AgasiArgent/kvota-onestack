@@ -60,6 +60,13 @@ class TestAdminRoutesRegistered:
         )
         assert response.status_code != 404
 
+    def test_patch_user_password_registered(self, subapp_client: TestClient) -> None:
+        """PATCH /admin/users/{user_id}/password must exist."""
+        response = subapp_client.patch(
+            "/admin/users/11111111-1111-1111-1111-111111111111/password", json={}
+        )
+        assert response.status_code != 404
+
     def test_put_vat_rates_registered(self, subapp_client: TestClient) -> None:
         """PUT /admin/vat-rates must exist."""
         response = subapp_client.put("/admin/vat-rates", json={})
@@ -98,6 +105,7 @@ class TestAdminOpenApiSchema:
         assert "post" in paths["/admin/users"]
         assert "patch" in paths["/admin/users/{user_id}"]
         assert "patch" in paths["/admin/users/{user_id}/roles"]
+        assert "patch" in paths["/admin/users/{user_id}/password"]
         assert "put" in paths["/admin/vat-rates"]
 
 

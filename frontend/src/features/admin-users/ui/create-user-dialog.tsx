@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Copy, RefreshCw } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -27,6 +27,7 @@ import type { RoleOption } from "@/entities/admin/types";
 import { ROLE_COLORS } from "@/entities/admin/types";
 import { ROLE_LABELS_RU, filterAssignableRoles } from "@/entities/user/types";
 import { createUserAction } from "@/features/admin-users/actions";
+import { PasswordGenerateInput } from "@/shared/ui/password-generate-input";
 
 const SALES_ROLE_SLUGS = new Set(["sales", "head_of_sales"]);
 
@@ -51,14 +52,6 @@ interface CreateUserDialogProps {
   callerRoles: string[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}
-
-function generatePassword(): string {
-  const chars =
-    "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%";
-  const array = new Uint8Array(12);
-  crypto.getRandomValues(array);
-  return Array.from(array, (byte) => chars[byte % chars.length]).join("");
 }
 
 function validateEmail(email: string): boolean {
@@ -138,24 +131,6 @@ export function CreateUserDialog({
     });
     if (errors.roles) {
       setErrors((prev) => ({ ...prev, roles: undefined }));
-    }
-  }
-
-  function handleGeneratePassword() {
-    const pwd = generatePassword();
-    setPassword(pwd);
-    if (errors.password) {
-      setErrors((prev) => ({ ...prev, password: undefined }));
-    }
-  }
-
-  async function handleCopyPassword() {
-    if (!password) return;
-    try {
-      await navigator.clipboard.writeText(password);
-      toast.success("Пароль скопирован");
-    } catch {
-      toast.error("Не удалось скопировать");
     }
   }
 
@@ -263,39 +238,16 @@ export function CreateUserDialog({
             >
               Пароль <span className="text-destructive">*</span>
             </Label>
-            <div className="flex gap-2">
-              <Input
-                id="create-user-password"
-                type="text"
-                value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  if (errors.password)
-                    setErrors((prev) => ({ ...prev, password: undefined }));
-                }}
-                placeholder="Минимум 8 символов"
-                className={`flex-1 ${errors.password ? "border-destructive" : ""}`}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="default"
-                onClick={handleGeneratePassword}
-                title="Сгенерировать пароль"
-              >
-                <RefreshCw size={14} />
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="default"
-                onClick={handleCopyPassword}
-                disabled={!password}
-                title="Скопировать пароль"
-              >
-                <Copy size={14} />
-              </Button>
-            </div>
+            <PasswordGenerateInput
+              id="create-user-password"
+              value={password}
+              error={!!errors.password}
+              onChange={(val) => {
+                setPassword(val);
+                if (errors.password)
+                  setErrors((prev) => ({ ...prev, password: undefined }));
+              }}
+            />
             {errors.password && (
               <p className="text-xs text-destructive">{errors.password}</p>
             )}

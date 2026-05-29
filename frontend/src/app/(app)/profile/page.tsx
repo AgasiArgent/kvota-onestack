@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getSessionUser, fetchUserDepartment } from "@/entities/user";
 import { fetchCurrentUserProfile } from "@/entities/profile/queries";
 import { createAdminClient } from "@/shared/lib/supabase/server";
-import { ProfileForm } from "@/features/profile";
+import { ProfileForm, ChangePasswordSection } from "@/features/profile";
 import { DepartmentSection } from "@/features/profile/ui/department-section";
 import { TelegramSection } from "@/features/profile/ui/telegram-section";
 
@@ -41,6 +41,7 @@ export default async function ProfilePage() {
         userId={user.id}
         botUsername={botUsername}
       />
+      <ChangePasswordSection email={user.email} />
     </div>
   );
 }
