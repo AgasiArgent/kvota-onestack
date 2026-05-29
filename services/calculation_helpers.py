@@ -488,29 +488,24 @@ def _customs_value_in_rub(
     return safe_decimal(converted)
 
 
-def effective_calc_quantity(ordered, moq):
-    """Round the per-line calc quantity up to the supplier minimum order quantity.
+def effective_calc_quantity(ordered, supplier_qty):
+    """Resolve the effective per-line quantity.
 
-    Returns ``moq`` when it is a positive number strictly greater than
-    ``ordered``; otherwise returns ``ordered`` unchanged — i.e. ``max(ordered,
-    moq)`` with a positive MOQ. A MOQ of None / 0 / negative (or otherwise
-    non-numeric) is treated as "no floor" and leaves the ordered quantity
-    untouched.
+    When ``supplier_qty`` is set (non-null, non-zero, numeric) it OVERRIDES the
+    ordered quantity in BOTH directions — the supplier ships exactly that many
+    (more when his minimum exceeds the order, fewer when he is short). A
+    null / 0 / negative / non-numeric supplier quantity falls back to the
+    ordered quantity. Returns a clean int when overriding (engine model
+    requires ``quantity: int, gt=0``); the ordered value passes through
+    unchanged otherwise (no truncation).
 
-    Pure: no mutation, no shared state. The calc engine consumes the result as
-    ``product['quantity']`` (an ``int``, ``gt=0``), so a binding MOQ scales the
-    line value, customs duty and logistics for the whole line. The customs duty
-    *percent* is quantity-invariant for ad-valorem and '796' (per-unit) rates —
-    numerator and denominator both scale with quantity — so flooring only the
-    engine quantity keeps customs consistent without recomputing the percent
-    (Testing 2 row 85).
+    Single in-app definition of the override rule (the TS ``effectiveQuantity``
+    mirror uses the same ``> 0`` test). Supersedes the Row 85 max() floor
+    (2026-05-29 supplier-quantity override).
     """
-    moq_dec = safe_decimal(moq)
-    if moq_dec > 0 and moq_dec > safe_decimal(ordered):
-        # Return a clean int — the engine model requires ``quantity: int, gt=0``.
-        # The live MOQ column is INTEGER, but coercing the validated Decimal
-        # guarantees the contract even if a caller ever passes a Decimal/float.
-        return int(moq_dec)
+    sq = safe_decimal(supplier_qty)
+    if sq > 0:
+        return int(sq)
     return ordered
 
 
@@ -642,10 +637,14 @@ def build_calculation_inputs(items: List[Dict], variables: Dict[str, Any]) -> Li
         # Product fields (adapt new schema to calculation engine expectations)
         product = {
             'base_price_vat': safe_decimal(item.get('purchase_price_original') or item.get('base_price_vat')),
-            # Testing 2 row 85: round the calc quantity up to the supplier's
-            # minimum order quantity. This is THE single seam — the locked
-            # engine reads only product['quantity'], so flooring here scales
-            # line value, customs and logistics for the whole line.
+            # Supplier-quantity override (2026-05-29): the supplier qty, when set
+            # (>0), replaces the ordered qty in both directions; otherwise the
+            # ordered qty passes through unchanged. The helper guards >0, so 0 /
+            # negative / null all fall back to ordered — identical to the DB
+            # generated column invoice_items.effective_quantity. We resolve here
+            # via the helper (not the NUMERIC column) so a fractional ordered qty
+            # is never silently int()-truncated and a negative value can never
+            # reach the engine's gt=0 validator.
             'quantity': effective_calc_quantity(
                 item.get('quantity', 1), item.get('minimum_order_quantity')
             ),

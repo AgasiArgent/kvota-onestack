@@ -518,13 +518,14 @@ function AlternativeSubtext({ alt }: { alt: CompositionAlternative }) {
 }
 
 /**
- * Testing 2 row 85 — the per-line quantity the calc engine will use. When the
- * SELECTED КПП declares a supplier minimum order quantity (MOQ) greater than
- * the ordered quantity, the engine rounds the line up to that floor
- * (max(ordered, MOQ)); this cell then shows the effective quantity plus a
- * read-only "мин. заказ N" hint so МОП sees why price/customs/logistics reflect
- * a larger amount than ordered. With no binding MOQ it renders the ordered
- * quantity exactly as before.
+ * Supplier-quantity override (2026-05-29) — the per-line quantity the calc
+ * engine will use. When the SELECTED КПП declares a supplier quantity
+ * («Кол-во поставщика», stored in minimum_order_quantity) it OVERRIDES the
+ * ordered quantity in BOTH directions (up = supplier minimum, down = limited
+ * stock). This cell then shows the effective quantity plus a read-only
+ * "кол-во поставщика: N" hint so МОП sees why price/customs/logistics reflect a
+ * different amount than ordered. With no supplier quantity it renders the
+ * ordered quantity exactly as before. Supersedes the Row 85 max() floor.
  */
 function QuantityCell({
   quantity,
@@ -534,23 +535,22 @@ function QuantityCell({
   alt: CompositionAlternative | null;
 }) {
   const ordered = quantity ?? 1;
-  const moq = alt?.minimum_order_quantity ?? null;
-  const effective = effectiveQuantity(ordered, moq);
-  const floored = moq != null && moq > 0 && effective > ordered;
+  const supplierQty = alt?.minimum_order_quantity ?? null;
+  const effective = effectiveQuantity(ordered, supplierQty);
+  const adjusted = supplierQty != null && supplierQty > 0 && effective !== ordered;
 
-  if (!floored) {
+  if (!adjusted) {
     return <td className="py-3 px-2 tabular-nums">{ordered}</td>;
   }
-
   return (
     <td className="py-3 px-2 tabular-nums">
       <span className="flex flex-col leading-tight">
         <span>{effective}</span>
         <span
           className="text-[10px] text-amber-600 dark:text-amber-400"
-          title={`Округлено до минимального заказа поставщика (заказано ${ordered})`}
+          title={`Кол-во поставщика переопределяет заказанное (заказано ${ordered})`}
         >
-          {`мин. заказ ${moq}`}
+          {`кол-во поставщика: ${supplierQty}`}
         </span>
       </span>
     </td>
@@ -603,11 +603,11 @@ function PriceCell({
  * purchase_price_original × quantity, in the supplier's local currency.
  * "—" when no priced КПП is selected.
  *
- * Testing 2 row 85 — uses the MOQ-floored (effective) quantity, matching the
- * Кол-во cell and the quantity the calc engine actually computes COGS on. When
- * the selected КПП declares a MOQ above the ordered amount we are forced to buy
- * the MOQ, so the supplier line total reflects that floor (price × max(ordered,
- * MOQ)) rather than price × ordered.
+ * Supplier-quantity override (2026-05-29) — uses the effective quantity,
+ * matching the Кол-во cell and the quantity the calc engine computes COGS on.
+ * When the selected КПП sets a supplier quantity it overrides the order in both
+ * directions, so the line total reflects price × effectiveQuantity(ordered,
+ * supplierQty) rather than price × ordered.
  */
 function SumCell({
   alt,

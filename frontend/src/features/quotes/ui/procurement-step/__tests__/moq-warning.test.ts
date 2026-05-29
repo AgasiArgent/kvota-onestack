@@ -40,35 +40,17 @@ describe("isMoqViolation", () => {
 });
 
 describe("effectiveQuantity", () => {
-  it("rounds ordered up to the MOQ when MOQ is higher", () => {
+  it("overrides up when supplier qty is higher", () => {
     expect(effectiveQuantity(5, 10)).toBe(10);
   });
-
-  it("returns ordered when MOQ is below ordered", () => {
-    expect(effectiveQuantity(10, 5)).toBe(10);
+  it("overrides DOWN when supplier qty is lower", () => {
+    expect(effectiveQuantity(10, 5)).toBe(5);
   });
-
-  it("returns ordered when MOQ equals ordered", () => {
-    expect(effectiveQuantity(10, 10)).toBe(10);
-  });
-
-  it("returns ordered when MOQ is null", () => {
-    expect(effectiveQuantity(5, null)).toBe(5);
-  });
-
-  it("returns ordered when MOQ is zero", () => {
-    expect(effectiveQuantity(5, 0)).toBe(5);
-  });
-
-  it("returns ordered when MOQ is negative", () => {
-    expect(effectiveQuantity(5, -3)).toBe(5);
-  });
-
-  it("treats null ordered as 0 and binds to a positive MOQ", () => {
+  it("equal", () => { expect(effectiveQuantity(10, 10)).toBe(10); });
+  it("unset → ordered", () => { expect(effectiveQuantity(5, null)).toBe(5); });
+  it("zero → ordered", () => { expect(effectiveQuantity(5, 0)).toBe(5); });
+  it("negative → ordered", () => { expect(effectiveQuantity(5, -3)).toBe(5); });
+  it("null ordered + set supplier qty → supplier qty", () => {
     expect(effectiveQuantity(null, 10)).toBe(10);
-  });
-
-  it("returns 0 when both are null/absent", () => {
-    expect(effectiveQuantity(null, null)).toBe(0);
   });
 });

@@ -20,25 +20,16 @@ export function isMoqViolation(row: MoqCheckable): boolean {
 }
 
 /**
- * Effective per-line quantity after applying the supplier MOQ floor
- * (Testing 2 row 85). Returns `max(quantity, minOrderQuantity)` when the MOQ
- * is a positive number strictly greater than the ordered quantity; otherwise
- * the ordered quantity unchanged. A null / 0 / negative MOQ is treated as "no
- * floor". Null `quantity` is treated as 0 for the comparison (so a positive
- * MOQ still binds). Mirrors the backend `effective_calc_quantity` helper so the
- * picker shows the same quantity the calc engine uses.
+ * Effective per-line quantity. When the supplier quantity is set (non-null,
+ * > 0) it OVERRIDES the ordered quantity in both directions; otherwise the
+ * ordered quantity stands (null → 0). Mirrors the backend
+ * `effective_calc_quantity` helper (same `> 0` rule).
+ * (Supplier-quantity override, 2026-05-29 — supersedes the Row 85 max floor.)
  */
 export function effectiveQuantity(
-  quantity: number | null,
-  minOrderQuantity: number | null
+  ordered: number | null,
+  supplierQty: number | null
 ): number {
-  const ordered = quantity ?? 0;
-  if (
-    minOrderQuantity != null &&
-    minOrderQuantity > 0 &&
-    minOrderQuantity > ordered
-  ) {
-    return minOrderQuantity;
-  }
-  return ordered;
+  if (supplierQty != null && supplierQty > 0) return supplierQty;
+  return ordered ?? 0;
 }
