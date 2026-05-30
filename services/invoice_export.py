@@ -137,7 +137,8 @@ def generate_invoice_html(data: ExportData, invoice_info: Dict[str, Any] = None)
     product_rows = ""
     for i, item in enumerate(items, 1):
         calc = item.get("calc", {})
-        qty = item.get("quantity", 1)
+        # Supplier-quantity override: effective qty enriched by export_data_mapper.
+        qty = item.get("effective_quantity") or item.get("quantity", 1)
         unit = item.get("unit", "шт.")
 
         # Prices from calculation results

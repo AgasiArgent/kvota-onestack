@@ -66,7 +66,9 @@ def generate_specification_html(data: ExportData, contract_info: Dict[str, Any] 
     product_rows = ""
     for i, item in enumerate(items, 1):
         calc = item.get("calc", {})
-        qty = item.get("quantity", 1)
+        # Supplier-quantity override: ExportData items are enriched with
+        # effective_quantity by export_data_mapper.fetch_export_data.
+        qty = item.get("effective_quantity") or item.get("quantity", 1)
         price_per_unit = calc.get("AJ16", 0)  # Sales price per unit (no VAT)
         total = calc.get("AL16", 0)  # Total with VAT
 

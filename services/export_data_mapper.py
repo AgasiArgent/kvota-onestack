@@ -13,6 +13,7 @@ from datetime import datetime
 import logging
 
 from services import composition_service
+from services.calculation_helpers import effective_calc_quantity
 from services.database import get_supabase
 from services.dadata_service import validate_inn, _call_dadata_api, normalize_dadata_result
 
@@ -138,6 +139,16 @@ def fetch_export_data(quote_id: str, org_id: str) -> ExportData:
     # legacy quote_items columns directly. See
     # .kiro/specs/phase-5d-legacy-refactor/design.md §2.1.7 and REQ-1.6.
     items = composition_service.get_composed_items(quote_id, supabase)
+
+    # 4a. Supplier-quantity override: the composed item's `quantity` is the
+    # selected invoice_item.quantity — the exact base the calc engine uses —
+    # and it carries `minimum_order_quantity`. Compute the effective qty here
+    # so every customer-facing export rendered from this ExportData shows the
+    # supplier-overridden quantity, consistent with the engine line totals.
+    for item in items:
+        item["effective_quantity"] = effective_calc_quantity(
+            item.get("quantity", 1), item.get("minimum_order_quantity")
+        )
 
     # 4b. Enrich composed items with customer-facing display fields
     # (product_code, unit, description) that the composed shape does not
