@@ -23,13 +23,16 @@
  * AC#9 — delete & refresh path).
  *
  * **Wave 4 Task 9 wiring:** mounts the sibling cards
- * (`CertificateCard`, `CustomExpenseCard`) plus three modals
+ * (`CertificateCard`, `CustomExpenseCard`) plus the create + edit modals
  * (`CertificateModal`, `ExpenseModal`, `CertificateDetailsModal`):
  *   - «+ Добавить сертификат» → `CertificateModal` (create flow).
  *   - «+ Добавить расход» → `ExpenseModal` (custom-expense create flow).
- *   - Card click / edit button → `CertificateDetailsModal` (read-only
- *     details for now; an explicit edit form is out of Phase B scope —
- *     REQ-9 AC#7).
+ *   - Certificate card edit button → `CertificateModal` in EDIT mode
+ *     (`editingCert`), which updates the cert FIELDS via PATCH (REQ-9 AC#7).
+ *     Positions stay on the bind popover / attach-detach endpoints
+ *     (fields-only scope — the multi-select is hidden in edit mode).
+ *   - Custom-expense card edit button → read-only `CertificateDetailsModal`
+ *     (expense editing is out of REQ-9 AC#7 scope — left unchanged).
  *   - Card delete button → confirm + `deleteCertificate` API + refresh.
  *
  * Compliance (LD-13):
@@ -111,10 +114,15 @@ export function CertificatesSection({
   const [loadError, setLoadError] = useState<string | null>(null);
 
   // ── Modal flags ────────────────────────────────────────────────────────
+  // `editingCert` drives the `CertificateModal` EDIT mode — open when not
+  // null, closed when null. The certificate card «Редактировать» button sets
+  // it (REQ-9 AC#7). Distinct from `createCertOpen` so the create flow
+  // («+ Добавить сертификат») stays independent.
   // `selectedCertForDetails` drives the read-only `CertificateDetailsModal`
-  // open state — open when not null, closed when null (REQ-9 AC#7).
+  // used by the custom-expense edit button (expense editing is out of scope).
   const [createCertOpen, setCreateCertOpen] = useState(false);
   const [createExpenseOpen, setCreateExpenseOpen] = useState(false);
+  const [editingCert, setEditingCert] = useState<Certificate | null>(null);
   const [selectedCertForDetails, setSelectedCertForDetails] =
     useState<Certificate | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -193,13 +201,38 @@ export function CertificatesSection({
   );
 
   /**
-   * Card edit click → open the read-only details modal. Phase B scope
-   * does not include an inline edit form (REQ-9 AC#7); when one ships we
-   * can swap this for an editable variant without changing the cards.
+   * Certificate card «Редактировать» click → open the `CertificateModal` in
+   * EDIT mode pre-filled with this cert (REQ-9 AC#7). Edits FIELDS only —
+   * positions stay on the bind popover / attach-detach endpoints.
    */
   const handleEditCert = useCallback((cert: Certificate) => {
+    setEditingCert(cert);
+  }, []);
+
+  /**
+   * Custom-expense card «Редактировать» click → open the read-only details
+   * modal. Editing custom-expense fields is out of REQ-9 AC#7 scope, so the
+   * prior behaviour (details view) is preserved for the expense path.
+   */
+  const handleViewExpense = useCallback((cert: Certificate) => {
     setSelectedCertForDetails(cert);
   }, []);
+
+  /**
+   * Replace the edited cert in the local list and trigger a server refresh
+   * (mirrors `handleCreated`). The PATCH returns the same row shape with
+   * recomputed `attached_items[]`, so the optimistic swap and the refresh
+   * converge.
+   */
+  const handleUpdated = useCallback(
+    (cert: Certificate) => {
+      setCerts((prev) =>
+        prev ? prev.map((c) => (c.id === cert.id ? cert : c)) : [cert],
+      );
+      void refreshCerts();
+    },
+    [refreshCerts],
+  );
 
   /**
    * Confirm + delete + refresh. The `confirm()` prompt is intentional —
@@ -243,6 +276,7 @@ export function CertificatesSection({
       className="flex flex-col gap-3"
       data-testid="customs-certificates-section"
       data-selected-cert-id={selectedCertForDetails?.id ?? ""}
+      data-editing-cert-id={editingCert?.id ?? ""}
       data-create-cert-open={createCertOpen ? "true" : "false"}
       data-create-expense-open={createExpenseOpen ? "true" : "false"}
       data-deleting-id={deletingId ?? ""}
@@ -318,7 +352,7 @@ export function CertificatesSection({
                 expense={cert}
                 totalQuoteItems={totalItemsInQuote}
                 canEdit={canEdit}
-                onEdit={() => handleEditCert(cert)}
+                onEdit={() => handleViewExpense(cert)}
                 onDelete={() => handleDeleteCert(cert)}
               />
             ) : (
@@ -337,6 +371,7 @@ export function CertificatesSection({
 
       {/* ── Modals ──────────────────────────────────────────────────────── */}
 
+      {/* Create-cert modal — independent of the edit modal below. */}
       <CertificateModal
         open={createCertOpen}
         onOpenChange={setCreateCertOpen}
@@ -345,6 +380,23 @@ export function CertificatesSection({
         quoteCurrency={quoteCurrency}
         onCreated={handleCreated}
       />
+
+      {/* Edit-cert modal — driven by `editingCert` (fields-only, REQ-9 AC#7).
+          Mounted only while a cert is being edited so the create instance
+          above is never accidentally put into edit mode. */}
+      {editingCert ? (
+        <CertificateModal
+          open={editingCert !== null}
+          onOpenChange={(open) => {
+            if (!open) setEditingCert(null);
+          }}
+          quoteId={quoteId}
+          items={items}
+          quoteCurrency={quoteCurrency}
+          editingCert={editingCert}
+          onUpdated={handleUpdated}
+        />
+      ) : null}
 
       <ExpenseModal
         open={createExpenseOpen}
@@ -355,6 +407,8 @@ export function CertificatesSection({
         onCreated={handleCreated}
       />
 
+      {/* Read-only details modal — opened from the custom-expense edit button
+          (expense editing is out of REQ-9 AC#7 scope). */}
       {selectedCertForDetails ? (
         <CertificateDetailsModal
           open={selectedCertForDetails !== null}

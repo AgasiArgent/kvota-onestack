@@ -772,6 +772,234 @@ class TestDetachItemHandler:
 
 
 # ===========================================================================
+# PATCH /certificates/{cert_id} — update_certificate_handler (REQ-9 AC#7)
+# ===========================================================================
+
+
+class TestUpdateCertificateHandler:
+    """PATCH /api/customs/certificates/{cert_id} — fields-only edit."""
+
+    @patch("api.customs.get_user_role_codes")
+    def test_happy_path_updates_fields(self, mock_roles):
+        from api.customs import update_certificate_handler
+
+        mock_roles.return_value = ["customs"]
+        stub = _Stub()
+        # _fetch_cert_in_org → cert select (org-scoped, joined quotes payload)
+        stub.stage(
+            "quote_certificates",
+            [{**_cert_row(), "quotes": {"organization_id": "org-1"}}],
+        )
+        # Capture the update() payload so we can assert which columns are written.
+        update_payloads: list[dict] = []
+        original_update = stub.update
+
+        def update_capture(payload):
+            update_payloads.append(payload)
+            return original_update(payload)
+
+        stub.update = update_capture
+        # The UPDATE .execute() pops this — the post-update cert row.
+        stub.stage(
+            "quote_certificates",
+            [_cert_row(cost_rub=20000.0, cert_type="СС")],
+        )
+        # No attachments — _fetch_attached_item_ids_ordered returns [].
+        stub.stage("quote_certificate_items", [])
+
+        with patch("api.customs.get_supabase", return_value=stub):
+            req = _make_request(body={
+                "type": "СС",
+                "number": "NEW-2026-999",
+                "issuer": "Новый орган",
+                "legal_doc": "ТР ТС 004/2011",
+                "issued_at": "2026-02-01",
+                "valid_until": "2028-02-01",
+                "cost_original": 20000.0,
+                "cost_currency": "RUB",
+                "notes": "обновлено",
+            })
+            resp = _run(update_certificate_handler(req, "cert-1"))
+
+        assert resp.status_code == 200
+        body = _body(resp)
+        assert body["success"] is True
+        cert = body["data"]
+        # Response is the projected envelope (same shape as create/list).
+        assert cert["id"] == "cert-1"
+        assert cert["type"] == "СС"
+        assert "attached_items" in cert
+        # Only editable columns were written — never quote_id / item_ids.
+        assert len(update_payloads) == 1
+        written = update_payloads[0]
+        assert written["type"] == "СС"
+        assert written["number"] == "NEW-2026-999"
+        assert written["issuer"] == "Новый орган"
+        assert written["legal_doc"] == "ТР ТС 004/2011"
+        assert written["issued_at"] == "2026-02-01"
+        assert written["valid_until"] == "2028-02-01"
+        assert written["cost_original"] == 20000.0
+        assert written["cost_currency"] == "RUB"
+        assert written["notes"] == "обновлено"
+        assert "quote_id" not in written
+        assert "item_ids" not in written
+
+    @patch("api.customs.get_user_role_codes")
+    def test_partial_update_only_writes_provided_keys(self, mock_roles):
+        """Only keys present in the body are written (cost untouched here)."""
+        from api.customs import update_certificate_handler
+
+        mock_roles.return_value = ["admin"]
+        stub = _Stub()
+        stub.stage(
+            "quote_certificates",
+            [{**_cert_row(), "quotes": {"organization_id": "org-1"}}],
+        )
+        update_payloads: list[dict] = []
+        original_update = stub.update
+
+        def update_capture(payload):
+            update_payloads.append(payload)
+            return original_update(payload)
+
+        stub.update = update_capture
+        stub.stage("quote_certificates", [_cert_row()])
+        stub.stage("quote_certificate_items", [])
+
+        with patch("api.customs.get_supabase", return_value=stub):
+            req = _make_request(body={"number": "ONLY-NUMBER"})
+            resp = _run(update_certificate_handler(req, "cert-1"))
+
+        assert resp.status_code == 200
+        written = update_payloads[0]
+        assert written == {"number": "ONLY-NUMBER"}
+        assert "cost_original" not in written
+        assert "type" not in written
+
+    @patch("api.customs.get_user_role_codes")
+    def test_empty_string_clears_optional_field(self, mock_roles):
+        """An explicit empty string for an optional field NULLs the column."""
+        from api.customs import update_certificate_handler
+
+        mock_roles.return_value = ["customs"]
+        stub = _Stub()
+        stub.stage(
+            "quote_certificates",
+            [{**_cert_row(), "quotes": {"organization_id": "org-1"}}],
+        )
+        update_payloads: list[dict] = []
+        original_update = stub.update
+
+        def update_capture(payload):
+            update_payloads.append(payload)
+            return original_update(payload)
+
+        stub.update = update_capture
+        stub.stage("quote_certificates", [_cert_row()])
+        stub.stage("quote_certificate_items", [])
+
+        with patch("api.customs.get_supabase", return_value=stub):
+            req = _make_request(body={"notes": ""})
+            resp = _run(update_certificate_handler(req, "cert-1"))
+
+        assert resp.status_code == 200
+        assert update_payloads[0] == {"notes": None}
+
+    @patch("api.customs.get_user_role_codes")
+    def test_unauthenticated_returns_401(self, mock_roles):
+        from api.customs import update_certificate_handler
+
+        req = _make_request(api_user_id=None)
+        resp = _run(update_certificate_handler(req, "cert-1"))
+        assert resp.status_code == 401
+        assert _body(resp)["error"]["code"] == "UNAUTHORIZED"
+
+    @patch("api.customs.get_user_role_codes")
+    def test_read_only_role_returns_403(self, mock_roles):
+        """Writes are gated by _CUSTOMS_ROLES — a read-only role is forbidden."""
+        from api.customs import update_certificate_handler
+
+        mock_roles.return_value = ["sales"]
+        req = _make_request(body={"type": "СС"})
+        resp = _run(update_certificate_handler(req, "cert-1"))
+        assert resp.status_code == 403
+        assert _body(resp)["error"]["code"] == "FORBIDDEN"
+
+    @patch("api.customs.get_user_role_codes")
+    def test_cert_not_found_returns_404(self, mock_roles):
+        from api.customs import update_certificate_handler
+
+        mock_roles.return_value = ["customs"]
+        stub = _Stub()
+        stub.stage("quote_certificates", [])  # cert missing / wrong org
+        with patch("api.customs.get_supabase", return_value=stub):
+            req = _make_request(body={"type": "СС"})
+            resp = _run(update_certificate_handler(req, "missing-cert"))
+        assert resp.status_code == 404
+        assert _body(resp)["error"]["code"] == "NOT_FOUND"
+
+    @patch("api.customs.get_user_role_codes")
+    def test_invalid_json_returns_400(self, mock_roles):
+        from api.customs import update_certificate_handler
+
+        mock_roles.return_value = ["customs"]
+        req = _make_request(raw_body_error=True)
+        resp = _run(update_certificate_handler(req, "cert-1"))
+        assert resp.status_code == 400
+        assert _body(resp)["error"]["code"] == "VALIDATION_ERROR"
+
+    @patch("api.customs.get_user_role_codes")
+    def test_empty_type_returns_400(self, mock_roles):
+        """type may be omitted, but if provided it must be non-empty."""
+        from api.customs import update_certificate_handler
+
+        mock_roles.return_value = ["customs"]
+        stub = _Stub()
+        stub.stage(
+            "quote_certificates",
+            [{**_cert_row(), "quotes": {"organization_id": "org-1"}}],
+        )
+        with patch("api.customs.get_supabase", return_value=stub):
+            req = _make_request(body={"type": "   "})
+            resp = _run(update_certificate_handler(req, "cert-1"))
+        assert resp.status_code == 400
+        assert _body(resp)["error"]["code"] == "VALIDATION_ERROR"
+
+    @patch("api.customs.get_user_role_codes")
+    def test_negative_cost_returns_400(self, mock_roles):
+        from api.customs import update_certificate_handler
+
+        mock_roles.return_value = ["customs"]
+        stub = _Stub()
+        stub.stage(
+            "quote_certificates",
+            [{**_cert_row(), "quotes": {"organization_id": "org-1"}}],
+        )
+        with patch("api.customs.get_supabase", return_value=stub):
+            req = _make_request(body={"cost_original": -1})
+            resp = _run(update_certificate_handler(req, "cert-1"))
+        assert resp.status_code == 400
+        assert _body(resp)["error"]["code"] == "VALIDATION_ERROR"
+
+    @patch("api.customs.get_user_role_codes")
+    def test_no_editable_fields_returns_400(self, mock_roles):
+        """A body with no recognised editable key is rejected."""
+        from api.customs import update_certificate_handler
+
+        mock_roles.return_value = ["customs"]
+        stub = _Stub()
+        stub.stage(
+            "quote_certificates",
+            [{**_cert_row(), "quotes": {"organization_id": "org-1"}}],
+        )
+        with patch("api.customs.get_supabase", return_value=stub):
+            req = _make_request(body={"item_ids": ["x"]})  # not editable here
+            resp = _run(update_certificate_handler(req, "cert-1"))
+        assert resp.status_code == 400
+        assert _body(resp)["error"]["code"] == "VALIDATION_ERROR"
+
+
+# ===========================================================================
 # DELETE /certificates/{cert_id} — delete_certificate_handler
 # ===========================================================================
 

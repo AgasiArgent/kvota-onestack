@@ -285,6 +285,31 @@ export interface CreateCertificateInput {
   item_ids: string[];
 }
 
+/**
+ * Body of `PATCH /api/customs/certificates/{cert_id}` — see
+ * `update_certificate_handler` in `api/customs.py`.
+ *
+ * Edits cert FIELDS only — positions are managed via the attach/detach
+ * endpoints and are NOT part of this payload (so `item_ids` is absent). All
+ * keys are optional; the server updates only the keys that are present.
+ *
+ * Server validates: `type` non-empty when provided, `cost_original >= 0`,
+ * `cost_currency` is a supported ISO 4217 code.
+ */
+export type UpdateCertificateInput = Pick<
+  CreateCertificateInput,
+  | "type"
+  | "number"
+  | "issuer"
+  | "legal_doc"
+  | "issued_at"
+  | "valid_until"
+  | "cost_original"
+  | "cost_currency"
+  | "cost_rub"
+  | "notes"
+>;
+
 // ---------------------------------------------------------------------------
 // Response envelopes
 // ---------------------------------------------------------------------------
