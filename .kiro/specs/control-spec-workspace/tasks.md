@@ -101,9 +101,11 @@
 
 ## PR 5 — Интеграция и верификация
 
-- [ ] 5. Сквозная проверка
-- [ ] 5.1 Браузер-проверка на localhost (Next.js) + prod-Supabase
+- [x] 5. Сквозная проверка
+- [x] 5.1 Браузер-проверка на localhost (Next.js) + prod-Supabase
   - Прогон обеих фаз контроля спеца + воркспейс с двумя канбанами + навигация карточка→таб; роли: `spec_controller`, `quote_controller`, `top_manager` (read-only), `admin`
   - _Requirements: 5.1, 6.1, 7.1, 9.1, 10.1, 11.1, 11.2_
-- [ ] 5.2 Контроль непролома: `control-step` (Контроль расчёта) не изменён; экспорт DOCX/PDF работает с FK-юрлицом (dual-write snapshot); калькулятор не затронут
+- [x] 5.2 Контроль непролома: `control-step` (Контроль расчёта) не изменён; экспорт DOCX/PDF работает с FK-юрлицом (dual-write snapshot); калькулятор не затронут
   - _Requirements: 10.3, 12.2, 12.4_
+
+> **PR5 verified 2026-05-30:** workspace (оба board + switcher) + экран (4 блока) рендерятся на проде-данных, 0 console-ошибок, controllerName резолвится в ФИО; непролом (calc/control-step не тронуты, export FK-совместим) — OK. Деструктивный signing-flow e2e (transition→deal, мутирует прод) — на одноразовой квоте по согласованию владельца.
