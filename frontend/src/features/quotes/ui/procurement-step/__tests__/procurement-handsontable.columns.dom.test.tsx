@@ -205,3 +205,47 @@ describe("procurement-handsontable — payment-terms moved to invoice level (m32
     expect(headers).not.toContain("Условия оплаты");
   });
 });
+
+describe("procurement-handsontable — supplier-quantity override rename (Row 85)", () => {
+  it("renames «Мин. заказ» → «Кол-во поставщика» with an explainer tooltip", () => {
+    hotTableCalls.length = 0;
+
+    renderToString(
+      createElement(ProcurementHandsontable, {
+        items: [sampleItem],
+        invoiceId: "inv-1",
+        procurementCompleted: false,
+      })
+    );
+
+    const props = hotTableCalls[hotTableCalls.length - 1];
+    const headers = (props.colHeaders as string[]).join(" ");
+    // New label present, old «Мин. заказ» retired.
+    expect(headers).toContain("Кол-во поставщика");
+    expect(headers).not.toContain("Мин. заказ");
+    // Explainer carried via the native-title HTML colHeader (override semantics).
+    expect(headers).toContain("переопределяет заказанное");
+  });
+
+  it("supplier-qty column drops the retired MOQ-violation renderer", () => {
+    hotTableCalls.length = 0;
+
+    renderToString(
+      createElement(ProcurementHandsontable, {
+        items: [sampleItem],
+        invoiceId: "inv-1",
+        procurementCompleted: false,
+      })
+    );
+
+    const moqCol = findColumn("minimum_order_quantity");
+    expect(moqCol).toBeDefined();
+    // The violation highlight is retired — a smaller supplier qty is an
+    // intentional override, not an error — so no custom renderer remains.
+    expect(
+      (moqCol as ColumnDef & { renderer?: unknown }).renderer
+    ).toBeUndefined();
+    // Still editable by procurement (no readOnly when КПП is open).
+    expect(moqCol?.readOnly).not.toBe(true);
+  });
+});

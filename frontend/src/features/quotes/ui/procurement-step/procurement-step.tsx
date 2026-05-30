@@ -111,10 +111,6 @@ export function ProcurementStep({
   const [invoiceIdByQuoteItemId, setInvoiceIdByQuoteItemId] = useState<
     Record<string, string | null>
   >({});
-  // Phase 5d: quote_items.min_order_quantity was dropped in migration 284.
-  // Project the MOQ from the covering invoice_item (selected invoice wins).
-  const [minOrderQuantityByQuoteItemId, setMinOrderQuantityByQuoteItemId] =
-    useState<Record<string, number | null>>({});
   // Testing 2 row 89 — fetched `pending_procurement` stage_deadline.hours
   // for the quote's org. The card's display deadline is then derived via
   // useMemo from this + the quote's stage_entered_at / override below. All
@@ -257,7 +253,7 @@ export function ProcurementStep({
       const { data } = await supabase
         .from("invoice_item_coverage")
         .select(
-          "quote_item_id, invoice_items!inner(invoice_id, purchase_price_original, minimum_order_quantity)"
+          "quote_item_id, invoice_items!inner(invoice_id, purchase_price_original)"
         )
         .in("quote_item_id", qiIds);
       if (cancelled) return;
@@ -271,13 +267,11 @@ export function ProcurementStep({
       }
       const ready: PriceReadyMap = {};
       const invoiceIdMap: Record<string, string | null> = {};
-      const moqMap: Record<string, number | null> = {};
       for (const row of (data ?? []) as unknown as Array<{
         quote_item_id: string;
         invoice_items: {
           invoice_id: string;
           purchase_price_original: number | null;
-          minimum_order_quantity: number | null;
         };
       }>) {
         const selected = selectedByQi.get(row.quote_item_id);
@@ -286,19 +280,16 @@ export function ProcurementStep({
         if (isSelectedRow && row.invoice_items?.purchase_price_original != null) {
           ready[row.quote_item_id] = true;
         }
-        // Pin invoice_id + MOQ from the selected row when it exists, else
+        // Pin invoice_id from the selected row when it exists, else
         // take the first covering row.
         const take = isSelectedRow || !selected;
         if (take && invoiceIdMap[row.quote_item_id] === undefined) {
           invoiceIdMap[row.quote_item_id] =
             row.invoice_items?.invoice_id ?? null;
-          moqMap[row.quote_item_id] =
-            row.invoice_items?.minimum_order_quantity ?? null;
         }
       }
       setPriceReadyByQuoteItemId(ready);
       setInvoiceIdByQuoteItemId(invoiceIdMap);
-      setMinOrderQuantityByQuoteItemId(moqMap);
     })();
     return () => {
       cancelled = true;
@@ -343,7 +334,6 @@ export function ProcurementStep({
         items={items}
         priceReadyByQuoteItemId={priceReadyByQuoteItemId}
         invoiceIdByQuoteItemId={invoiceIdByQuoteItemId}
-        minOrderQuantityByQuoteItemId={minOrderQuantityByQuoteItemId}
         invoiceProgress={invoices.map((inv) => ({
           procurement_completed_at:
             (inv as { procurement_completed_at?: string | null })

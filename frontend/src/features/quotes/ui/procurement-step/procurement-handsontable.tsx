@@ -11,7 +11,6 @@ import {
   updateInvoiceItem,
   unassignInvoiceItem,
 } from "@/entities/quote/mutations";
-import { isMoqViolation } from "./moq-warning";
 
 import "handsontable/styles/handsontable.css";
 import "handsontable/styles/ht-theme-main.css";
@@ -713,52 +712,6 @@ export function ProcurementHandsontable({
     [router]
   );
 
-  const moqWarningRenderer = useCallback(
-    (
-      instance: Handsontable,
-      td: HTMLTableCellElement,
-      row: number,
-      col: number,
-      prop: string | number,
-      value: unknown,
-      cellProperties: Handsontable.CellProperties
-    ) => {
-      // Delegate formatting to the default numeric renderer first
-      Handsontable.renderers.NumericRenderer(
-        instance,
-        td,
-        row,
-        col,
-        prop,
-        value,
-        cellProperties
-      );
-
-      const quantity = instance.getDataAtRowProp(row, "quantity") as
-        | number
-        | null
-        | undefined;
-      const violated = isMoqViolation({
-        quantity: quantity ?? null,
-        min_order_quantity:
-          typeof value === "number"
-            ? value
-            : value == null || value === ""
-              ? null
-              : Number(value),
-      });
-
-      if (violated) {
-        td.classList.add("moq-warning");
-        td.title = "Количество ниже минимального заказа поставщика";
-      } else {
-        td.classList.remove("moq-warning");
-        td.removeAttribute("title");
-      }
-    },
-    []
-  );
-
   const handleAfterChange = useCallback(
     (changes: Handsontable.CellChange[] | null, source: string) => {
       // `external` is the source tag used by the imperative items→HoT sync
@@ -921,17 +874,6 @@ export function ProcurementHandsontable({
     >
       <style>{`
         .locked-cell { background-color: var(--muted, #f4f4f5) !important; }
-        .moq-warning { background-color: #fef3c7 !important; position: relative; }
-        .moq-warning::after {
-          content: "⚠";
-          position: absolute;
-          top: 2px;
-          right: 4px;
-          color: #b45309;
-          font-size: 11px;
-          line-height: 1;
-          pointer-events: none;
-        }
       `}</style>
       <HotTable
         ref={hotRef}
@@ -971,7 +913,13 @@ export function ProcurementHandsontable({
           "Наименование производителя",
           "Кол",
           "Ед. Изм",
-          "Мин. заказ",
+          // Supplier-quantity override (Row 85): «Кол-во поставщика», when set,
+          // OVERRIDES the ordered quantity in the calc — both up (supplier
+          // minimum) and down (limited stock). Renamed from «Мин. заказ» and
+          // its sub-minimum «violation» highlight retired: a smaller supplier
+          // qty is now an intentional override, not an error. Native-title
+          // explainer (Handsontable renders colHeaders as HTML).
+          '<span title="Если задано, переопределяет заказанное кол-во в расчёте — укажите, сколько поставщик реально отгрузит.">Кол-во поставщика</span>',
           "Цена",
           "Срок, к.дн",
           "Вес, кг",
@@ -1002,8 +950,7 @@ export function ProcurementHandsontable({
           {
             data: "minimum_order_quantity",
             type: "numeric",
-            width: 45,
-            renderer: moqWarningRenderer,
+            width: 64,
           },
           { data: "purchase_price_original", type: "numeric", width: 55, readOnly: procurementCompleted },
           { data: "production_time_days", type: "numeric", width: 45, readOnly: procurementCompleted },

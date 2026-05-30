@@ -1,6 +1,5 @@
 "use client";
 
-import { useMemo } from "react";
 import { Plus, CheckCircle, Loader2, UserCheck, DollarSign } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,7 +8,6 @@ import {
   getProcurementProgress,
   type ProcurementProgressInvoice,
 } from "@/entities/quote/procurement-progress";
-import { isMoqViolation } from "./moq-warning";
 
 type ProcurementSubStage = "assignment" | "pricing" | "ready";
 
@@ -76,12 +74,6 @@ interface ProcurementActionBarProps {
    */
   invoiceIdByQuoteItemId?: Record<string, string | null>;
   /**
-   * Map: quote_item_id → minimum_order_quantity from the covering
-   * invoice_item (null when unpriced). Replaces the dropped
-   * quote_items.min_order_quantity column.
-   */
-  minOrderQuantityByQuoteItemId?: Record<string, number | null>;
-  /**
    * Per-invoice procurement-closure summary. Each entry corresponds to one
    * supplier-side КП on this quote. Empty invoices (`items_count === 0`)
    * are excluded from the displayed progress badge — they are drafts, not
@@ -95,7 +87,6 @@ export function ProcurementActionBar({
   items,
   priceReadyByQuoteItemId = {},
   invoiceIdByQuoteItemId = {},
-  minOrderQuantityByQuoteItemId = {},
   invoiceProgress = [],
   onCreateInvoice,
 }: ProcurementActionBarProps) {
@@ -106,16 +97,6 @@ export function ProcurementActionBar({
     (i) => invoiceIdByQuoteItemId[i.id] != null
   ).length;
   const readyCount = countPriceReady(items, priceReadyByQuoteItemId);
-  const moqViolationCount = useMemo(
-    () =>
-      items.filter((i) =>
-        isMoqViolation({
-          quantity: i.quantity,
-          min_order_quantity: minOrderQuantityByQuoteItemId[i.id] ?? null,
-        })
-      ).length,
-    [items, minOrderQuantityByQuoteItemId]
-  );
   const incomplete = totalItems > 0 && readyCount < totalItems;
   const subStage = getSubStage(items, priceReadyByQuoteItemId);
   const stageConfig = SUB_STAGE_CONFIG[subStage];
@@ -157,20 +138,8 @@ export function ProcurementActionBar({
         </Badge>
       )}
 
-      {moqViolationCount > 0 && (
-        <Badge
-          variant="outline"
-          className="ml-auto gap-1 bg-amber-100 text-amber-700 border-amber-200"
-          title="Количество ниже минимального заказа поставщика"
-        >
-          ⚠ MOQ: {moqViolationCount}
-        </Badge>
-      )}
-
       <span
-        className={`${
-          moqViolationCount > 0 ? "" : "ml-auto"
-        } text-sm tabular-nums ${
+        className={`ml-auto text-sm tabular-nums ${
           incomplete ? "text-warning font-medium" : "text-muted-foreground"
         }`}
       >
