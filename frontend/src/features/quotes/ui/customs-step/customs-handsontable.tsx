@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { updateQuoteItem } from "@/entities/quote/mutations";
 import type { QuoteItemRow } from "@/entities/quote/queries";
 import { normalizeHsCode } from "@/shared/lib/hs-code";
+import { effectiveQuantity } from "@/shared/lib/effective-quantity";
 import type { CustomsAutofillSuggestion } from "@/features/customs-autofill";
 import type { SystemView } from "@/features/customs-certificates";
 import { CustomsViewHintBanner } from "@/features/customs-certificates";
@@ -540,13 +541,21 @@ function resolveDutyMode(
   return dutyPerKg != null ? "perKg" : "pct";
 }
 
-function itemToRow(
+/**
+ * Per-quote_item supplier facts resolved from the selected invoice_item
+ * (via composition coverage in customs-step.tsx). `minimum_order_quantity`
+ * is the supplier-quantity override (effective qty when > 0).
+ */
+export interface SupplierByQuoteItem {
+  supplier_country: string | null;
+  invoice_id: string | null;
+  minimum_order_quantity: number | null;
+}
+
+export function itemToRow(
   item: QuoteItemRow,
   invoiceCountryMap: Map<string, string>,
-  supplierByQi: Map<
-    string,
-    { supplier_country: string | null; invoice_id: string | null }
-  >,
+  supplierByQi: Map<string, SupplierByQuoteItem>,
 ): RowData {
   const extras = ext<ItemExtras>(item);
   const supplier = supplierByQi.get(item.id) ?? null;
@@ -566,7 +575,12 @@ function itemToRow(
     brand: item.brand ?? "",
     product_code: item.product_code ?? "",
     product_name: item.product_name ?? "",
-    quantity: item.quantity,
+    // Supplier-quantity override: when the selected invoice_item declares a
+    // supplier qty (> 0) it replaces the ordered qty for customs display.
+    quantity: effectiveQuantity(
+      item.quantity,
+      supplier?.minimum_order_quantity ?? null
+    ),
     supplier_country: country,
     hs_code: extras.hs_code ?? "",
     country_of_origin_oksm: extras.country_of_origin_oksm ?? null,
@@ -1006,10 +1020,7 @@ const COLUMNS: Handsontable.ColumnSettings[] = [
 interface CustomsHandsontableProps {
   items: QuoteItemRow[];
   invoiceCountryMap: Map<string, string>;
-  supplierByQuoteItemId: Map<
-    string,
-    { supplier_country: string | null; invoice_id: string | null }
-  >;
+  supplierByQuoteItemId: Map<string, SupplierByQuoteItem>;
   userRoles: string[];
   /** Per-row autofill suggestions (keyed by quote_item_id). Optional. */
   autofillSuggestions?: CustomsAutofillSuggestion[];

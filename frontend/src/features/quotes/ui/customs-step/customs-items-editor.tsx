@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import type { QuoteItemRow } from "@/entities/quote/queries";
 import type { CustomsAutofillSuggestion } from "@/features/customs-autofill";
+import type { SupplierByQuoteItem } from "./customs-handsontable";
 
 const CustomsHandsontable = dynamic(
   () =>
@@ -22,10 +23,7 @@ const CustomsHandsontable = dynamic(
 interface CustomsItemsEditorProps {
   items: QuoteItemRow[];
   invoiceCountryMap: Map<string, string>;
-  supplierByQuoteItemId: Map<
-    string,
-    { supplier_country: string | null; invoice_id: string | null }
-  >;
+  supplierByQuoteItemId: Map<string, SupplierByQuoteItem>;
   userRoles: string[];
   autofillSuggestions?: CustomsAutofillSuggestion[];
   onSelectRow?: (rowId: string | null) => void;
