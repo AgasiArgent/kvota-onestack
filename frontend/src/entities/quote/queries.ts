@@ -7,6 +7,7 @@ import {
 } from "@/shared/lib/roles";
 import { getAssignedCustomerIds, getAssignedQuoteIds } from "@/shared/lib/access";
 import { getWorkflowStatusFilterOptions } from "@/shared/lib/workflow-statuses";
+import { effectiveQuantity } from "@/shared/lib/effective-quantity";
 import type { QuoteListItem, QuotesFilterParams, QuotesListResult } from "./types";
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -540,13 +541,14 @@ export async function fetchQuoteInvoices(quoteId: string) {
       ((await (supabase as any)
         .from("invoice_items")
         .select(
-          "invoice_id, quantity, purchase_price_original, purchase_currency, invoice_item_coverage!inner(quote_items!inner(unit))"
+          "invoice_id, quantity, minimum_order_quantity, purchase_price_original, purchase_currency, invoice_item_coverage!inner(quote_items!inner(unit))"
         )
         .in("invoice_id", invoiceIds)) as {
         data:
           | Array<{
               invoice_id: string;
               quantity: number | null;
+              minimum_order_quantity: number | null;
               purchase_price_original: number | null;
               purchase_currency: string | null;
               invoice_item_coverage: Array<{
@@ -598,37 +600,10 @@ export async function fetchQuoteInvoices(quoteId: string) {
   }
 
   // Roll up invoice_items into a per-invoice aggregate that the cargo
-  // summary panel reads as a single struct. We keep nulls when no row
-  // contributes a value so the UI can show "—" instead of "0" and the
-  // user can tell "no data" apart from "explicitly zero".
-  const aggregatesByInvoice = new Map<string, InvoiceItemsAggregate>();
-  for (const row of invoiceItemsRes.data ?? []) {
-    const prev = aggregatesByInvoice.get(row.invoice_id) ?? {
-      total_quantity: null,
-      total_amount_original: null,
-      currency: null,
-      units: new Set<string>(),
-    };
-    if (row.quantity != null) {
-      prev.total_quantity = (prev.total_quantity ?? 0) + row.quantity;
-    }
-    if (row.purchase_price_original != null && row.quantity != null) {
-      prev.total_amount_original =
-        (prev.total_amount_original ?? 0) +
-        row.purchase_price_original * row.quantity;
-    }
-    // Use the first non-null purchase_currency we see; mixed-currency КПП
-    // are rare and the supplier's amount in their own currency is what
-    // matters for the cargo panel.
-    if (!prev.currency && row.purchase_currency) {
-      prev.currency = row.purchase_currency;
-    }
-    for (const cov of row.invoice_item_coverage ?? []) {
-      const unit = cov.quote_items?.unit?.trim();
-      if (unit) prev.units.add(unit);
-    }
-    aggregatesByInvoice.set(row.invoice_id, prev);
-  }
+  // summary panel reads as a single struct (effective qty — see helper).
+  const aggregatesByInvoice = rollupInvoiceItemsByInvoice(
+    invoiceItemsRes.data ?? []
+  );
 
   return invoices.map((inv) => {
     const agg = aggregatesByInvoice.get(inv.id);
@@ -683,6 +658,56 @@ interface InvoiceItemsAggregate {
   total_amount_original: number | null;
   currency: string | null;
   units: Set<string>;
+}
+
+/** Input row shape for {@link rollupInvoiceItemsByInvoice}. */
+export interface InvoiceItemAggRow {
+  invoice_id: string;
+  quantity: number | null;
+  minimum_order_quantity: number | null;
+  purchase_price_original: number | null;
+  purchase_currency: string | null;
+  invoice_item_coverage: Array<{ quote_items: { unit: string | null } | null }>;
+}
+
+/**
+ * Roll up invoice_items into a per-invoice aggregate for the cargo summary.
+ * `total_quantity` / `total_amount_original` use the EFFECTIVE quantity
+ * (supplier override via {@link effectiveQuantity}), so a supplier minimum or
+ * short stock is reflected in the cargo «Кол-во» and «Стоимость». Nulls are
+ * preserved (no contributing row → total stays null) so the UI can show «—»
+ * vs «0». The first non-null `purchase_currency` wins (mixed-currency КПП are
+ * rare and the supplier's own-currency amount is what the cargo panel needs).
+ */
+export function rollupInvoiceItemsByInvoice(
+  rows: InvoiceItemAggRow[]
+): Map<string, InvoiceItemsAggregate> {
+  const aggregatesByInvoice = new Map<string, InvoiceItemsAggregate>();
+  for (const row of rows) {
+    const prev = aggregatesByInvoice.get(row.invoice_id) ?? {
+      total_quantity: null,
+      total_amount_original: null,
+      currency: null,
+      units: new Set<string>(),
+    };
+    if (row.quantity != null) {
+      const eff = effectiveQuantity(row.quantity, row.minimum_order_quantity);
+      prev.total_quantity = (prev.total_quantity ?? 0) + eff;
+      if (row.purchase_price_original != null) {
+        prev.total_amount_original =
+          (prev.total_amount_original ?? 0) + row.purchase_price_original * eff;
+      }
+    }
+    if (!prev.currency && row.purchase_currency) {
+      prev.currency = row.purchase_currency;
+    }
+    for (const cov of row.invoice_item_coverage ?? []) {
+      const unit = cov.quote_items?.unit?.trim();
+      if (unit) prev.units.add(unit);
+    }
+    aggregatesByInvoice.set(row.invoice_id, prev);
+  }
+  return aggregatesByInvoice;
 }
 
 /**
