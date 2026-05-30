@@ -21,6 +21,7 @@ from api.customs import (
     list_certificates_handler as _list_certificates_handler,
     non_tariff_measures_handler as _non_tariff_measures_handler,
     resolve_rates_handler as _resolve_rates_handler,
+    update_certificate_handler as _update_certificate_handler,
 )
 from services.alta_client import AltaClient, get_alta_client
 
@@ -80,6 +81,12 @@ async def delete_certificate_items(
 ) -> JSONResponse:
     """Detach an item — see detach_item_handler."""
     return await _detach_item_handler(request, cert_id, item_id)
+
+
+@router.patch("/certificates/{cert_id}")
+async def patch_certificate(request: Request, cert_id: str) -> JSONResponse:
+    """Update editable cert fields (not positions) — see update_certificate_handler."""
+    return await _update_certificate_handler(request, cert_id)
 
 
 @router.delete("/certificates/{cert_id}")

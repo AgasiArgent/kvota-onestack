@@ -9,6 +9,7 @@
  * Endpoint reference (`api/customs.py` + `api/routers/customs.py`):
  *   POST   /api/customs/certificates                          → create
  *   GET    /api/customs/certificates?quote_id={uuid}          → list
+ *   PATCH  /api/customs/certificates/{cert_id}                → update fields
  *   POST   /api/customs/certificates/{cert_id}/items          → attach item
  *   DELETE /api/customs/certificates/{cert_id}/items/{id}     → detach item
  *   DELETE /api/customs/certificates/{cert_id}                → cascade delete
@@ -24,6 +25,7 @@ import type {
   CreateCertificateInput,
   DeleteCertificateData,
   ListCertificatesData,
+  UpdateCertificateInput,
 } from "../model/types";
 
 /**
@@ -44,6 +46,31 @@ export function createCertificate(
 ): Promise<ApiResponse<Certificate>> {
   return apiClient<Certificate>("/customs/certificates", {
     method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+/**
+ * Update the editable FIELDS of an existing certificate (fields-only —
+ * positions are managed separately via attach/detach). Only the keys present
+ * in `input` are written; absent keys are left untouched server-side.
+ *
+ * Server-side error codes (per `update_certificate_handler`):
+ *   - 400 VALIDATION_ERROR — bad body / cost negative / bad currency
+ *   - 401 UNAUTHORIZED / 403 FORBIDDEN — auth / role gate
+ *   - 404 NOT_FOUND — cert missing or in a different org
+ *   - 500 INTERNAL — DB write failure
+ *
+ * Returns the updated `Certificate` with recomputed `attached_items[]`
+ * (shares are re-derived when the cost changes).
+ */
+export function updateCertificate(
+  certId: string,
+  input: UpdateCertificateInput,
+): Promise<ApiResponse<Certificate>> {
+  const path = `/customs/certificates/${encodeURIComponent(certId)}`;
+  return apiClient<Certificate>(path, {
+    method: "PATCH",
     body: JSON.stringify(input),
   });
 }

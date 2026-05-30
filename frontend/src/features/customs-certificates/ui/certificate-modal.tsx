@@ -54,8 +54,9 @@ import type {
   Certificate,
   CreateCertificateInput,
   QuoteItemForSelect,
+  UpdateCertificateInput,
 } from "../model/types";
-import { createCertificate } from "../api/certificates";
+import { createCertificate, updateCertificate } from "../api/certificates";
 import { LivePreviewPanel } from "./live-preview-panel";
 import { PositionsMultiSelect } from "./positions-multi-select";
 
@@ -364,6 +365,22 @@ export interface CertificateModalProps {
    * pre-selected so the user only needs to confirm.
    */
   preSelectedItemIds?: string[];
+  /**
+   * When set, the modal switches to EDIT mode (REQ-9 AC#7): the form
+   * pre-fills from this certificate on the rising edge of `open`, the title
+   * and submit label change to the «Редактирование» variants, the position
+   * multi-select is hidden (positions are managed via the bind popover /
+   * attach-detach endpoints — fields-only scope), and Submit calls
+   * `updateCertificate(editingCert.id, …)` instead of `createCertificate`.
+   * Leave `undefined` for the create flow (unchanged behaviour).
+   */
+  editingCert?: Certificate;
+  /**
+   * Optional callback fired with the updated certificate after a successful
+   * PATCH (edit mode only). Parents typically use this to optimistically
+   * replace the cert in a local list or trigger a re-fetch.
+   */
+  onUpdated?: (cert: Certificate) => void;
 }
 
 const TYPE_FIELD_NAME = "type";
@@ -378,12 +395,21 @@ export function CertificateModal({
   onCreated,
   preset,
   preSelectedItemIds,
+  editingCert,
+  onUpdated,
 }: CertificateModalProps) {
-  // Default to RUB so historical preset values (always RUB) line up with
-  // the displayed currency; otherwise default to the quote currency.
-  const defaultCurrency = preset?.cost_rub != null
-    ? "RUB"
-    : (quoteCurrency ?? "RUB").toUpperCase();
+  // EDIT mode is driven solely by `editingCert` presence (REQ-9 AC#7).
+  const isEditMode = editingCert != null;
+  // Default cost currency on the rising edge:
+  //  - edit: the cert's own currency (fall back to RUB for pre-322 rows);
+  //  - preset (historical RUB amounts): RUB so the value lines up;
+  //  - create: the parent quote's currency.
+  const defaultCurrency =
+    editingCert != null
+      ? (editingCert.cost_currency ?? "RUB").toUpperCase()
+      : preset?.cost_rub != null
+        ? "RUB"
+        : (quoteCurrency ?? "RUB").toUpperCase();
   const [type, setType] = useState("");
   const [number, setNumber] = useState("");
   const [issuer, setIssuer] = useState("");
@@ -413,27 +439,48 @@ export function CertificateModal({
   const wasOpenRef = useRef(false);
   useEffect(() => {
     if (open && !wasOpenRef.current) {
-      setType(preset?.type ?? "");
-      setNumber("");
-      setIssuer("");
-      setLegalDoc("");
-      setIssuedAt("");
-      setValidUntil("");
-      setCostRub(
-        preset?.cost_rub != null && Number.isFinite(preset.cost_rub)
-          ? String(preset.cost_rub)
-          : "",
-      );
-      // Preset values are historical RUB amounts; otherwise default to the
-      // parent quote's currency (Testing 2 row 73).
-      setCostCurrency(defaultCurrency);
-      setNotes("");
-      setSelectedIds(preSelectedItemIds ?? []);
+      if (editingCert != null) {
+        // EDIT mode — pre-fill every field from the cert (REQ-9 AC#7).
+        // Positions are NOT pre-selected: the multi-select is hidden in edit
+        // mode (fields-only scope), so `selectedIds` stays empty.
+        setType(editingCert.type ?? "");
+        setNumber(editingCert.number ?? "");
+        setIssuer(editingCert.issuer ?? "");
+        setLegalDoc(editingCert.legal_doc ?? "");
+        setIssuedAt(editingCert.issued_at ?? "");
+        setValidUntil(editingCert.valid_until ?? "");
+        setCostRub(
+          editingCert.cost_original != null
+            ? String(editingCert.cost_original)
+            : "",
+        );
+        setCostCurrency(defaultCurrency);
+        setNotes(editingCert.notes ?? "");
+        setSelectedIds([]);
+      } else {
+        // CREATE mode — fresh slate (optionally pre-filled from `preset`).
+        setType(preset?.type ?? "");
+        setNumber("");
+        setIssuer("");
+        setLegalDoc("");
+        setIssuedAt("");
+        setValidUntil("");
+        setCostRub(
+          preset?.cost_rub != null && Number.isFinite(preset.cost_rub)
+            ? String(preset.cost_rub)
+            : "",
+        );
+        // Preset values are historical RUB amounts; otherwise default to the
+        // parent quote's currency (Testing 2 row 73).
+        setCostCurrency(defaultCurrency);
+        setNotes("");
+        setSelectedIds(preSelectedItemIds ?? []);
+      }
       setSubmitting(false);
       setErrorField(null);
     }
     wasOpenRef.current = open;
-  }, [open, preset, preSelectedItemIds, defaultCurrency]);
+  }, [open, preset, preSelectedItemIds, defaultCurrency, editingCert]);
 
   const selectedItems = useMemo(
     () => items.filter((it) => selectedIds.includes(it.id)),
@@ -450,24 +497,64 @@ export function CertificateModal({
     setSubmitting(true);
     setErrorField(null);
 
-    const input: CreateCertificateInput = {
-      quote_id: quoteId,
-      type: type.trim(),
-      cost_original: Number(costRub),
-      cost_currency: costCurrency,
-      item_ids: selectedIds,
-    };
-    if (number.trim()) input.number = number.trim();
-    if (issuer.trim()) input.issuer = issuer.trim();
-    if (legalDoc.trim()) input.legal_doc = legalDoc.trim();
-    if (issuedAt) input.issued_at = issuedAt;
-    if (validUntil) input.valid_until = validUntil;
-    if (notes.trim()) input.notes = notes.trim();
+    const failureMessage = isEditMode
+      ? "Не удалось сохранить сертификат"
+      : "Не удалось создать сертификат";
 
     try {
+      if (isEditMode && editingCert != null) {
+        // EDIT — send the editable FIELDS (no positions). Optional fields are
+        // sent as empty strings (not omitted) when cleared so the server NULLs
+        // the column — the PATCH handler maps "" → NULL. This lets the user
+        // clear a previously-set field from the edit form.
+        const input: UpdateCertificateInput = {
+          type: type.trim(),
+          cost_original: Number(costRub),
+          cost_currency: costCurrency,
+          number: number.trim(),
+          issuer: issuer.trim(),
+          legal_doc: legalDoc.trim(),
+          issued_at: issuedAt,
+          valid_until: validUntil,
+          notes: notes.trim(),
+        };
+
+        const res = await updateCertificate(editingCert.id, input);
+        if (!res.success) {
+          const message = res.error?.message ?? failureMessage;
+          toast.error(message);
+          const field =
+            (res.error as { field?: string } | undefined)?.field ?? null;
+          setErrorField(field);
+          return;
+        }
+
+        const cert = res.data as Certificate | undefined;
+        if (cert) {
+          onUpdated?.(cert);
+        }
+        onOpenChange(false);
+        return;
+      }
+
+      // CREATE — fields + attached positions.
+      const input: CreateCertificateInput = {
+        quote_id: quoteId,
+        type: type.trim(),
+        cost_original: Number(costRub),
+        cost_currency: costCurrency,
+        item_ids: selectedIds,
+      };
+      if (number.trim()) input.number = number.trim();
+      if (issuer.trim()) input.issuer = issuer.trim();
+      if (legalDoc.trim()) input.legal_doc = legalDoc.trim();
+      if (issuedAt) input.issued_at = issuedAt;
+      if (validUntil) input.valid_until = validUntil;
+      if (notes.trim()) input.notes = notes.trim();
+
       const res = await createCertificate(input);
       if (!res.success) {
-        const message = res.error?.message ?? "Не удалось создать сертификат";
+        const message = res.error?.message ?? failureMessage;
         toast.error(message);
         // Server may include `field` on validation errors — record it so
         // the next render shows a destructive border on the offending input.
@@ -484,8 +571,7 @@ export function CertificateModal({
       onOpenChange(false);
     } catch (err) {
       console.error("[CertificateModal] submit failed", err);
-      const message =
-        err instanceof Error ? err.message : "Не удалось создать сертификат";
+      const message = err instanceof Error ? err.message : failureMessage;
       toast.error(message);
     } finally {
       setSubmitting(false);
@@ -504,17 +590,36 @@ export function CertificateModal({
         data-slot="certificate-modal"
       >
         <DialogHeader>
-          <DialogTitle>Новый сертификат</DialogTitle>
+          <DialogTitle>
+            {isEditMode ? "Редактирование сертификата" : "Новый сертификат"}
+          </DialogTitle>
         </DialogHeader>
 
         <form
           onSubmit={handleSubmit}
           className="flex flex-col gap-4"
-          aria-label="Форма создания сертификата"
+          aria-label={
+            isEditMode
+              ? "Форма редактирования сертификата"
+              : "Форма создания сертификата"
+          }
         >
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
-            {/* LEFT — form (60%) */}
-            <div className="flex flex-col gap-3 md:col-span-3">
+          {/* In edit mode the layout is single-column (fields only); in create
+              mode the positions multi-select + live preview occupy the right
+              column. */}
+          <div
+            className={cn(
+              "grid grid-cols-1 gap-4",
+              !isEditMode && "md:grid-cols-5",
+            )}
+          >
+            {/* LEFT — form (60% in create, full width in edit) */}
+            <div
+              className={cn(
+                "flex flex-col gap-3",
+                !isEditMode && "md:col-span-3",
+              )}
+            >
               {/* type */}
               <fieldset className="flex flex-col gap-1.5">
                 <Label
@@ -672,21 +777,25 @@ export function CertificateModal({
               </fieldset>
             </div>
 
-            {/* RIGHT — multi-select + live preview (40%) */}
-            <div className="flex flex-col gap-3 md:col-span-2">
-              <div className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-                Прикрепить к позициям
+            {/* RIGHT — multi-select + live preview (40%). Hidden in edit
+                mode: positions are managed via the bind popover / attach-detach
+                endpoints, so the edit form is fields-only (REQ-9 AC#7). */}
+            {!isEditMode && (
+              <div className="flex flex-col gap-3 md:col-span-2">
+                <div className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                  Прикрепить к позициям
+                </div>
+                <PositionsMultiSelect
+                  items={items}
+                  selectedIds={selectedIds}
+                  onChange={setSelectedIds}
+                />
+                <LivePreviewPanel
+                  selectedItems={selectedItems}
+                  certCost={certCost}
+                />
               </div>
-              <PositionsMultiSelect
-                items={items}
-                selectedIds={selectedIds}
-                onChange={setSelectedIds}
-              />
-              <LivePreviewPanel
-                selectedItems={selectedItems}
-                certCost={certCost}
-              />
-            </div>
+            )}
           </div>
 
           <DialogFooter>

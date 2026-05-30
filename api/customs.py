@@ -2293,6 +2293,130 @@ def _fetch_cert_in_org(supabase, cert_id: str, org_id: str) -> dict | None:
     return row
 
 
+async def update_certificate_handler(
+    request: Request, cert_id: str
+) -> JSONResponse:
+    """Update the editable fields of an existing certificate (fields-only).
+
+    Path: PATCH /api/customs/certificates/{cert_id}
+    Auth: dual — JWT (Next.js) or legacy session (FastHTML). Writes are gated
+        by ``_CUSTOMS_ROLES`` (customs/admin/head_of_customs/head_of_logistics).
+    Body (JSON, all optional — only provided keys are updated):
+        type: str — certificate type (e.g. "СС", "ДС ТР ТС")
+        number: str
+        issuer: str
+        legal_doc: str
+        issued_at: str (ISO date)
+        valid_until: str (ISO date)
+        cost_original: number (>= 0) — new field since migration 322;
+            legacy ``cost_rub`` still accepted as the RUB amount.
+        cost_currency: str (ISO 4217) — defaults to 'RUB' when omitted.
+        cost_rub: number (legacy alias for cost_original)
+        notes: str
+    Does NOT touch attached items — positions are managed via the
+    attach/detach endpoints. This handler edits cert FIELDS only.
+    Returns:
+        Success (200): {success: true, data: {...cert, attached_items}}
+        Errors:
+            - 400 VALIDATION_ERROR — bad body / cost negative / bad currency
+            - 401 UNAUTHORIZED / 403 FORBIDDEN
+            - 404 NOT_FOUND — cert missing (or different org)
+            - 500 INTERNAL — DB write failure
+    Side Effects:
+        - UPDATE 1 row in kvota.quote_certificates (editable columns only).
+        - Recomputes attached_items[] shares (read-only) so share_rub /
+          share_percent reflect any cost change.
+    Roles: customs, admin, head_of_customs, head_of_logistics.
+    """
+    user, err = _require_cert_write_auth(request)
+    if err:
+        return err
+
+    try:
+        body = await request.json()
+    except Exception:
+        return error_response("VALIDATION_ERROR", "Invalid JSON", 400)
+    if not isinstance(body, dict):
+        return error_response("VALIDATION_ERROR", "body must be a JSON object", 400)
+
+    supabase = get_supabase()
+
+    cert_row = _fetch_cert_in_org(supabase, cert_id, user["org_id"])
+    if not cert_row:
+        return error_response("NOT_FOUND", "Certificate not found", 404)
+
+    update_payload: dict = {}
+
+    # type must stay non-empty if the caller chooses to update it.
+    if "type" in body:
+        cert_type = (body.get("type") or "").strip()
+        if not cert_type:
+            return error_response("VALIDATION_ERROR", "type is required", 400)
+        update_payload["type"] = cert_type
+
+    # Cost — accept the new cost_original/cost_currency pair and the legacy
+    # cost_rub key (Postel's Law, mirrors create_certificate_handler).
+    if "cost_original" in body or "cost_rub" in body:
+        cost_raw = body.get("cost_original")
+        if cost_raw is None:
+            cost_raw = body.get("cost_rub")
+        cost_original, cost_err = _parse_cost_rub(cost_raw)
+        if cost_err:
+            return cost_err
+        update_payload["cost_original"] = cost_original
+
+    if "cost_currency" in body:
+        cost_currency, currency_err = _parse_cost_currency(
+            body.get("cost_currency")
+        )
+        if currency_err:
+            return currency_err
+        update_payload["cost_currency"] = cost_currency
+
+    # Optional text/date fields — empty string clears the column (NULL).
+    for key in ("number", "issuer", "legal_doc", "issued_at",
+                "valid_until", "notes"):
+        if key in body:
+            val = body.get(key)
+            update_payload[key] = val if val not in (None, "") else None
+
+    if not update_payload:
+        return error_response(
+            "VALIDATION_ERROR", "No editable fields provided", 400
+        )
+
+    try:
+        updated = (
+            supabase.table("quote_certificates")
+            .update(update_payload)
+            .eq("id", cert_id)
+            .execute()
+        )
+    except Exception as exc:
+        logger.error("update_certificate: update failed for cert=%s: %s",
+                     cert_id, exc)
+        return error_response("INTERNAL", "Failed to update certificate", 500)
+
+    # Treat a 0-row UPDATE as a hard failure (mirrors create_certificate_handler)
+    # instead of synthesising a phantom-success row — a concurrent delete or an
+    # asymmetric RLS write-block would otherwise report success while persisting
+    # nothing.
+    if not updated.data:
+        logger.error("update_certificate: 0 rows updated for cert=%s", cert_id)
+        return error_response("INTERNAL", "Failed to update certificate", 500)
+    new_cert_row = updated.data[0]
+
+    # Recompute attached_items shares — cost may have changed, so share_rub /
+    # share_percent must be re-derived (reuses the create/list share helper).
+    attached_item_ids = _fetch_attached_item_ids_ordered(supabase, cert_id)
+    attached_items = _compute_attached_items_payload(
+        supabase, new_cert_row, attached_item_ids
+    )
+    return JSONResponse(
+        {"success": True, "data": _serialize_cert(new_cert_row, attached_items)}
+    )
+
+
 async def attach_item_handler(request: Request, cert_id: str) -> JSONResponse:
     """Attach a quote_item to an existing certificate, returning recomputed shares.
 

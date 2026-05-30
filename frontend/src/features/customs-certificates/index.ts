@@ -14,6 +14,7 @@ export {
   deleteCertificate,
   detachCertificateItem,
   listCertificates,
+  updateCertificate,
 } from "./api/certificates";
 export { fetchCertificateHistory } from "./api/history";
 export type { FetchCertificateHistoryArgs } from "./api/history";
@@ -30,6 +31,7 @@ export type {
   ListCertificatesData,
   QuoteItemForSelect,
   SystemView,
+  UpdateCertificateInput,
 } from "./model/types";
 
 // Lib helpers — pure functions

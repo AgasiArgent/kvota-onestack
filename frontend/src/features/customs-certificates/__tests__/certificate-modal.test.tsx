@@ -33,8 +33,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // ---------------------------------------------------------------------------
 
 const createMock = vi.fn();
+const updateMock = vi.fn();
 vi.mock("../api/certificates", () => ({
   createCertificate: (...args: unknown[]) => createMock(...args),
+  updateCertificate: (...args: unknown[]) => updateMock(...args),
   // Minimal stubs for the wider import surface — tree-shaking is conservative
   // enough that vitest still resolves these named exports.
   listCertificates: vi.fn(),
@@ -57,7 +59,7 @@ import {
   filterTypeOptions,
   isFormValid,
 } from "../ui/certificate-modal";
-import type { QuoteItemForSelect } from "../model/types";
+import type { Certificate, QuoteItemForSelect } from "../model/types";
 
 const ITEM_A: QuoteItemForSelect = {
   id: "item-a",
@@ -74,6 +76,28 @@ const ITEM_B: QuoteItemForSelect = {
   rub_basis: 90_000,
 };
 const ITEMS: QuoteItemForSelect[] = [ITEM_A, ITEM_B];
+
+/** A fully-populated cert used by the EDIT-mode tests (REQ-9 AC#7). */
+const EDITING_CERT: Certificate = {
+  id: "cert-1",
+  quote_id: "quote-1",
+  type: "ДС ТР ТС",
+  number: "ЕАЭС N RU Д-CN.РА01.В.12345",
+  issuer: "Сертэксперт ЦСМ",
+  legal_doc: "ТР ТС 010/2011",
+  issued_at: "2026-01-15",
+  valid_until: "2027-01-14",
+  cost_original: 18500,
+  cost_currency: "RUB",
+  cost_rub: 18500,
+  notes: "Перевыпуск по сроку",
+  display_name: null,
+  is_custom_expense: false,
+  created_at: "2026-01-15T10:00:00Z",
+  updated_at: "2026-01-15T10:00:00Z",
+  created_by: "user-1",
+  attached_items: [],
+};
 
 // ---------------------------------------------------------------------------
 // SEEDED_TYPES — REQ-7 AC#3
@@ -390,12 +414,88 @@ describe("CertificateModal — preset + preSelectedItemIds props (Wave 5)", () =
 });
 
 // ---------------------------------------------------------------------------
-// API integration via mocked createCertificate
+// Phase B REQ-9 AC#7 — EDIT mode (editingCert + onUpdated props)
+// ---------------------------------------------------------------------------
+
+describe("CertificateModal — edit mode props (REQ-9 AC#7)", () => {
+  it("does not throw when rendered with editingCert (closed)", () => {
+    const html = renderToString(
+      <CertificateModal
+        open={false}
+        onOpenChange={() => {}}
+        quoteId="quote-1"
+        items={ITEMS}
+        editingCert={EDITING_CERT}
+        onUpdated={() => {}}
+      />,
+    );
+    expect(typeof html).toBe("string");
+    expect(html).toBe("");
+  });
+
+  it("does not throw when rendered with editingCert (open, Portal → empty)", () => {
+    const html = renderToString(
+      <CertificateModal
+        open
+        onOpenChange={() => {}}
+        quoteId="quote-1"
+        items={ITEMS}
+        editingCert={EDITING_CERT}
+        onUpdated={() => {}}
+      />,
+    );
+    expect(typeof html).toBe("string");
+  });
+
+  it("does not throw with a minimal editingCert (null optional fields)", () => {
+    const minimal: Certificate = {
+      ...EDITING_CERT,
+      number: null,
+      issuer: null,
+      legal_doc: null,
+      issued_at: null,
+      valid_until: null,
+      notes: null,
+      cost_currency: undefined,
+    };
+    const html = renderToString(
+      <CertificateModal
+        open={false}
+        onOpenChange={() => {}}
+        quoteId="quote-1"
+        items={ITEMS}
+        editingCert={minimal}
+        onUpdated={() => {}}
+      />,
+    );
+    expect(typeof html).toBe("string");
+  });
+
+  it("accepts the optional onUpdated callback without firing it on render", () => {
+    const onUpdated = vi.fn();
+    renderToString(
+      <CertificateModal
+        open={false}
+        onOpenChange={() => {}}
+        quoteId="quote-1"
+        items={ITEMS}
+        editingCert={EDITING_CERT}
+        onUpdated={onUpdated}
+      />,
+    );
+    // onUpdated only fires on a successful PATCH — never on render.
+    expect(onUpdated).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// API integration via mocked createCertificate / updateCertificate
 // ---------------------------------------------------------------------------
 
 describe("CertificateModal — submit payload contract", () => {
   beforeEach(() => {
     createMock.mockReset();
+    updateMock.mockReset();
   });
 
   afterEach(() => {
@@ -424,5 +524,16 @@ describe("CertificateModal — submit payload contract", () => {
     createMock("dummy-payload");
     expect(createMock).toHaveBeenCalledTimes(1);
     expect(createMock).toHaveBeenCalledWith("dummy-payload");
+  });
+
+  it("updateCertificate is mockable as the edit submit target", () => {
+    expect(typeof updateMock).toBe("function");
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it("updateCertificate mock can be called and inspected", () => {
+    updateMock("cert-1", { type: "СС" });
+    expect(updateMock).toHaveBeenCalledTimes(1);
+    expect(updateMock).toHaveBeenCalledWith("cert-1", { type: "СС" });
   });
 });
