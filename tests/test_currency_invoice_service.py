@@ -507,3 +507,128 @@ class TestCurrencyInvoiceServiceDocumentsPatternA:
             "from composition_service.get_composed_items (Pattern A, design.md §2.1.5). "
             f"Current docstring:\n{doc}"
         )
+
+
+# ============================================================================
+# SUPPLIER-QUANTITY OVERRIDE (Stage 6) — effective qty in the snapshot
+# ============================================================================
+#
+# When a composed item carries minimum_order_quantity > 0 (UI «Кол-во
+# поставщика»), the persisted currency-invoice snapshot must store the
+# EFFECTIVE quantity (supplier override, both directions) — NOT the raw
+# ordered quantity. The line total and the invoice total_amount follow from
+# the same effective quantity, so the stored snapshot is internally
+# consistent (qty × unit price == total) and matches the calc engine, which
+# bases its quantity on the same invoice_item.quantity + minimum_order_quantity.
+# Rule (shared with effective_calc_quantity): effective = supplier_qty if
+# supplier_qty > 0 else ordered.
+# ============================================================================
+
+
+class TestSupplierQuantityOverrideInSnapshot:
+    """Stage 6: currency-invoice item snapshots store effective qty."""
+
+    def _make_seller_company(self):
+        return {"id": "sc-ru", "name": "MB Rus", "entity_type": "seller_company"}
+
+    def _tr_buyer_companies(self):
+        return {"bc-tr": {"id": "bc-tr", "name": "MB TR", "region": "TR"}}
+
+    def _generate_single_tr_item(self, *, quantity, minimum_order_quantity):
+        items = [
+            {
+                "id": "item-1", "buyer_company_id": "bc-tr",
+                "product_name": "Bearing", "sku": "BRG-001", "idn_sku": "IDN-001",
+                "brand": "SKF", "quantity": quantity, "unit": "pcs",
+                "hs_code": "8482.10", "purchase_price_original": Decimal("50.00"),
+                "purchase_currency": "USD",
+                "minimum_order_quantity": minimum_order_quantity,
+            },
+        ]
+        result = generate_currency_invoices(
+            deal_id="deal-1",
+            quote_idn="Q202601-0004",
+            items=items,
+            buyer_companies=self._tr_buyer_companies(),
+            seller_company=self._make_seller_company(),
+            organization_id="org-1",
+        )
+        return result[0], result[0]["items"][0]
+
+    def test_override_up_uses_supplier_quantity(self):
+        """Ordered 100, supplier min 150 -> snapshot qty = 150 (override up)."""
+        invoice, item = self._generate_single_tr_item(
+            quantity=Decimal("100"), minimum_order_quantity=150,
+        )
+        # price = 50.00 * 1.02 = 51.00; total = 150 * 51.00 = 7650.00
+        assert item["quantity"] == Decimal("150")
+        assert item["price"] == Decimal("51.00")
+        assert item["total"] == Decimal("7650.00")
+        assert invoice["total_amount"] == Decimal("7650.00")
+
+    def test_override_down_uses_supplier_quantity(self):
+        """Ordered 200, supplier qty 50 -> snapshot qty = 50 (override down)."""
+        invoice, item = self._generate_single_tr_item(
+            quantity=Decimal("200"), minimum_order_quantity=50,
+        )
+        # total = 50 * 51.00 = 2550.00
+        assert item["quantity"] == Decimal("50")
+        assert item["total"] == Decimal("2550.00")
+        assert invoice["total_amount"] == Decimal("2550.00")
+
+    def test_zero_supplier_quantity_falls_back_to_ordered(self):
+        """minimum_order_quantity 0 -> no override, ordered qty preserved."""
+        _invoice, item = self._generate_single_tr_item(
+            quantity=Decimal("80"), minimum_order_quantity=0,
+        )
+        assert item["quantity"] == Decimal("80")
+        assert item["total"] == Decimal("4080.00")  # 80 * 51.00
+
+    def test_null_supplier_quantity_falls_back_to_ordered(self):
+        """minimum_order_quantity None -> no override, ordered qty preserved."""
+        _invoice, item = self._generate_single_tr_item(
+            quantity=Decimal("80"), minimum_order_quantity=None,
+        )
+        assert item["quantity"] == Decimal("80")
+        assert item["total"] == Decimal("4080.00")
+
+    def test_missing_quantity_field_with_supplier_override_uses_supplier_qty(self):
+        """Ordered quantity absent (None) but supplier override set -> the
+        override rescues the line. Guards against the ``or 0`` fallback silently
+        persisting a zero line whenever a composed item lacks ``quantity`` yet a
+        supplier qty is present, and pins the fallback at 0 (NOT 1) so a future
+        change to ``or 1`` would be caught.
+        """
+        invoice, item = self._generate_single_tr_item(
+            quantity=None, minimum_order_quantity=20,
+        )
+        # item.get("quantity") is None -> or 0 -> effective_calc_quantity(0, 20) -> 20
+        # price = 50.00 * 1.02 = 51.00; total = 20 * 51.00 = 1020.00
+        assert item["quantity"] == Decimal("20")
+        assert item["total"] == Decimal("1020.00")
+        assert invoice["total_amount"] == Decimal("1020.00")
+
+    def test_eu_chain_eurtr_and_trru_both_use_effective(self):
+        """Override applies on BOTH segments for an EU-chain item."""
+        items = [
+            {
+                "id": "item-1", "buyer_company_id": "bc-eu",
+                "product_name": "EU Item", "sku": "EU-001", "idn_sku": "IDN-001",
+                "brand": "SKF", "quantity": Decimal("10"), "unit": "pcs",
+                "hs_code": "8482.10", "purchase_price_original": Decimal("100.00"),
+                "purchase_currency": "EUR",
+                "minimum_order_quantity": 30,
+            },
+        ]
+        result = generate_currency_invoices(
+            deal_id="deal-1",
+            quote_idn="Q202601-0004",
+            items=items,
+            buyer_companies={"bc-eu": {"id": "bc-eu", "name": "EuroInvest", "region": "EU"}},
+            seller_company=self._make_seller_company(),
+            organization_id="org-1",
+        )
+        eurtr = [inv for inv in result if inv["segment"] == "EURTR"][0]
+        trru = [inv for inv in result if inv["segment"] == "TRRU"][0]
+        assert eurtr["items"][0]["quantity"] == Decimal("30")
+        assert trru["items"][0]["quantity"] == Decimal("30")
