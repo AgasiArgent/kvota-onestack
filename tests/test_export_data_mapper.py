@@ -208,6 +208,45 @@ def test_fetch_export_data_sources_items_via_composition_service(
 
 @patch("services.export_data_mapper.composition_service")
 @patch("services.export_data_mapper.get_supabase")
+def test_fetch_export_data_enriches_effective_quantity(
+    mock_get_supabase, mock_composition_service
+):
+    """Supplier-quantity override: each composed item gets `effective_quantity`
+    = effective_calc_quantity(invoice_item.quantity, minimum_order_quantity) —
+    so invoice/other ExportData exports show the supplier-overridden qty,
+    consistent with the engine line totals.
+    """
+    quote = {
+        "id": "q-001",
+        "customer_id": "c-001",
+        "organization_id": "org-001",
+        "currency": "USD",
+    }
+    composed = [
+        _composed_item(
+            quote_item_id="qi-up", product_name="A", quantity=5,
+            weight_in_kg=1.0, base_price_vat=10.0,
+        ),
+        _composed_item(
+            quote_item_id="qi-unset", product_name="B", quantity=7,
+            weight_in_kg=1.0, base_price_vat=10.0,
+        ),
+    ]
+    composed[0]["minimum_order_quantity"] = 738  # override up → 738
+    composed[1]["minimum_order_quantity"] = None  # unset → ordered (invoice qty) 7
+    mock_sb = _make_mock_supabase(quote=quote)
+    mock_get_supabase.return_value = mock_sb
+    mock_composition_service.get_composed_items.return_value = composed
+
+    data = fetch_export_data("q-001", "org-001")
+
+    eff = {it["quote_item_id"]: it["effective_quantity"] for it in data.items}
+    assert eff["qi-up"] == 738
+    assert eff["qi-unset"] == 7
+
+
+@patch("services.export_data_mapper.composition_service")
+@patch("services.export_data_mapper.get_supabase")
 def test_fetch_export_data_supplier_fields_come_from_composition_service(
     mock_get_supabase, mock_composition_service
 ):
