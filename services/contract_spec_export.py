@@ -20,6 +20,7 @@ from typing import Dict, Any, List, Tuple, Optional
 from datetime import datetime
 
 from services.database import get_supabase
+from services.composition_service import get_effective_quantities
 from services.export_data_mapper import (
     enrich_with_legal_names,
     format_date_russian,
@@ -174,6 +175,15 @@ def fetch_contract_spec_data(spec_id: str, org_id: str) -> Dict[str, Any]:
         for item in items:
             item["calc"] = calc_lookup.get(item["id"], {})
 
+        # Supplier-quantity override: display the effective qty the engine used
+        # (invoice_item.quantity base) so the contract per-unit price
+        # (= line total / qty) and total qty stay correct.
+        effective_qtys = get_effective_quantities(quote_id, supabase)
+        for item in items:
+            item["effective_quantity"] = effective_qtys.get(
+                item["id"], item.get("quantity")
+            )
+
     # 5. Fetch calculation summary
     summary_result = supabase.table("quote_calculation_summaries") \
         .select("*") \
@@ -231,6 +241,20 @@ def fetch_contract_spec_data(spec_id: str, org_id: str) -> Dict[str, Any]:
     }
 
 
+def _effective_qty(item: Dict) -> int:
+    """Effective (supplier-override) line quantity for display.
+
+    Reads the ``effective_quantity`` enrichment (set by
+    ``fetch_contract_spec_data`` from ``get_effective_quantities``) when
+    present, else the ordered quantity. Floored to >= 1 so the per-unit price
+    (line total / qty) never divides by zero — preserves the prior
+    ``max(... or 1, 1)`` behaviour.
+    """
+    eq = item.get("effective_quantity")
+    qty = eq if eq is not None else item.get("quantity")
+    return max(qty or 1, 1)
+
+
 def _calculate_totals(items: List[Dict], currency: str) -> Dict[str, float]:
     """Calculate totals from item calculation results."""
     totals = {
@@ -242,7 +266,7 @@ def _calculate_totals(items: List[Dict], currency: str) -> Dict[str, float]:
 
     for item in items:
         calc = item.get("calc", {})
-        qty = max(item.get("quantity") or 1, 1)
+        qty = _effective_qty(item)
         totals["total_qty"] += qty
         totals["total_no_vat"] += Decimal(str(calc.get(CALC_FIELDS["TOTAL_NO_VAT"], 0)))
         totals["total_with_vat"] += Decimal(str(calc.get(CALC_FIELDS["TOTAL_WITH_VAT"], 0)))
@@ -442,7 +466,7 @@ def generate_contract_spec_html(data: Dict[str, Any]) -> str:
         # Only use summaries if they have non-zero values
         if total_with_vat:
             totals = {
-                "total_qty": sum(item.get("quantity", 1) for item in items),
+                "total_qty": sum(_effective_qty(item) for item in items),
                 "total_no_vat": float(total_no_vat) if total_no_vat else 0,
                 "total_with_vat": float(total_with_vat) if total_with_vat else 0,
                 "vat_amount": (float(total_with_vat) if total_with_vat else 0) - (float(total_no_vat) if total_no_vat else 0),
@@ -456,7 +480,7 @@ def generate_contract_spec_html(data: Dict[str, Any]) -> str:
     product_rows = ""
     for i, item in enumerate(items, 1):
         calc = item.get("calc", {})
-        qty = max(item.get("quantity") or 1, 1)
+        qty = _effective_qty(item)
 
         # Price with VAT per unit = TOTAL_WITH_VAT / quantity
         item_total_vat = float(calc.get(CALC_FIELDS["TOTAL_WITH_VAT"], 0))
