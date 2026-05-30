@@ -121,7 +121,7 @@ export function CalculationStep({
         supabase
           .from("invoice_item_coverage")
           .select(
-            "quote_item_id, invoice_items!inner(invoice_id, base_price_vat)"
+            "quote_item_id, invoice_items!inner(invoice_id, base_price_vat, minimum_order_quantity)"
           )
           .in("quote_item_id", qiIds),
         supabase
@@ -147,9 +147,14 @@ export function CalculationStep({
       // composition_selected_invoice_id (null-case: first coverage row wins,
       // so the renderer still shows a value even when selection is implicit).
       const priceByQi = new Map<string, number | null>();
+      const supplierQtyByQi = new Map<string, number | null>();
       for (const row of (cov ?? []) as unknown as Array<{
         quote_item_id: string;
-        invoice_items: { invoice_id: string; base_price_vat: number | null };
+        invoice_items: {
+          invoice_id: string;
+          base_price_vat: number | null;
+          minimum_order_quantity: number | null;
+        };
       }>) {
         const qi = items.find((it) => it.id === row.quote_item_id);
         if (!qi) continue;
@@ -161,6 +166,10 @@ export function CalculationStep({
             row.quote_item_id,
             row.invoice_items.base_price_vat ?? null
           );
+          supplierQtyByQi.set(
+            row.quote_item_id,
+            row.invoice_items.minimum_order_quantity ?? null
+          );
         }
       }
 
@@ -170,6 +179,7 @@ export function CalculationStep({
           product_name: it.product_name,
           brand: it.brand,
           quantity: it.quantity ?? null,
+          minimum_order_quantity: supplierQtyByQi.get(it.id) ?? null,
           base_price_vat: priceByQi.get(it.id) ?? null,
           // Testing 2 row 87 — surface exclusion flags so the table can grey
           // out rows refused by procurement / banned by customs.
@@ -257,6 +267,7 @@ function toPlaceholderResultItem(item: QuoteItemRow): CalculationResultsItem {
     product_name: item.product_name,
     brand: item.brand,
     quantity: item.quantity ?? null,
+    minimum_order_quantity: null,
     base_price_vat: null,
     is_unavailable: item.is_unavailable ?? false,
     import_banned: item.import_banned ?? false,
