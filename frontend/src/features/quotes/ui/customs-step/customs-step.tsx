@@ -29,6 +29,7 @@ import {
 } from "@/features/table-views";
 import { CustomsActionBar } from "./customs-action-bar";
 import { CustomsItemsEditor } from "./customs-items-editor";
+import type { SupplierByQuoteItem } from "./customs-handsontable";
 import {
   CUSTOMS_AVAILABLE_COLUMNS,
   CUSTOMS_TABLE_KEY,
@@ -45,16 +46,8 @@ function ext<T>(row: unknown): T {
 
 function useSupplierByQuoteItemId(
   items: QuoteItemRow[]
-): Map<
-  string,
-  { supplier_country: string | null; invoice_id: string | null }
-> {
-  const [map, setMap] = useState<
-    Map<
-      string,
-      { supplier_country: string | null; invoice_id: string | null }
-    >
-  >(new Map());
+): Map<string, SupplierByQuoteItem> {
+  const [map, setMap] = useState<Map<string, SupplierByQuoteItem>>(new Map());
 
   useEffect(() => {
     if (items.length === 0) {
@@ -69,7 +62,7 @@ function useSupplierByQuoteItemId(
       const { data, error } = await supabase
         .from("invoice_item_coverage")
         .select(
-          "quote_item_id, invoice_items!inner(invoice_id, supplier_country)"
+          "quote_item_id, invoice_items!inner(invoice_id, supplier_country, minimum_order_quantity)"
         )
         .in("quote_item_id", qiIds);
 
@@ -86,13 +79,18 @@ function useSupplierByQuoteItemId(
 
       const rowsByQi = new Map<
         string,
-        Array<{ invoice_id: string; supplier_country: string | null }>
+        Array<{
+          invoice_id: string;
+          supplier_country: string | null;
+          minimum_order_quantity: number | null;
+        }>
       >();
       for (const row of (data ?? []) as unknown as Array<{
         quote_item_id: string;
         invoice_items: {
           invoice_id: string;
           supplier_country: string | null;
+          minimum_order_quantity: number | null;
         };
       }>) {
         const list = rowsByQi.get(row.quote_item_id) ?? [];
@@ -100,10 +98,7 @@ function useSupplierByQuoteItemId(
         rowsByQi.set(row.quote_item_id, list);
       }
 
-      const result = new Map<
-        string,
-        { supplier_country: string | null; invoice_id: string | null }
-      >();
+      const result = new Map<string, SupplierByQuoteItem>();
       for (const qi of items) {
         const selected = qi.composition_selected_invoice_id ?? null;
         const candidates = rowsByQi.get(qi.id) ?? [];
@@ -114,6 +109,7 @@ function useSupplierByQuoteItemId(
         result.set(qi.id, {
           supplier_country: match?.supplier_country ?? null,
           invoice_id: match?.invoice_id ?? null,
+          minimum_order_quantity: match?.minimum_order_quantity ?? null,
         });
       }
       setMap(result);
