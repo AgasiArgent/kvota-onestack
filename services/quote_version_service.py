@@ -20,6 +20,7 @@ from decimal import Decimal
 from typing import Dict, Any, List, Optional
 from services.database import get_supabase
 from services import composition_service
+from services.calculation_helpers import effective_calc_quantity, safe_decimal
 
 
 # ============================================================================
@@ -41,7 +42,23 @@ def _build_products_snapshot(composed_items: List[Dict]) -> List[Dict]:
             "product_name": item.get("product_name"),
             "supplier_sku": item.get("supplier_sku"),
             "brand": item.get("brand"),
-            "quantity": item.get("quantity"),
+            # Supplier-quantity override (Row 85): preserve the ordered base
+            # (quantity) AND the supplier override (minimum_order_quantity, UI
+            # «Кол-во поставщика») AND the effective qty the calc engine
+            # actually used — so the immutable snapshot faithfully reproduces
+            # "what the quote was", consistent with the totals snapshotted
+            # alongside. effective = supplier_qty if >0 else ordered.
+            # NUMERIC `quantity` arrives from PostgREST as a string; normalise
+            # both numeric qty fields to float (per this module's docstring +
+            # the float()-normalized siblings below) so the JSONB stores a
+            # uniform numeric type regardless of whether an override is active.
+            "quantity": float(safe_decimal(item.get("quantity"))),
+            "minimum_order_quantity": item.get("minimum_order_quantity"),
+            "effective_quantity": float(safe_decimal(
+                effective_calc_quantity(
+                    item.get("quantity"), item.get("minimum_order_quantity")
+                )
+            )),
 
             # Pricing — from invoice_item
             "purchase_price_original": (
