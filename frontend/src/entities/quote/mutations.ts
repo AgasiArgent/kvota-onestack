@@ -1672,6 +1672,22 @@ export async function skipCustoms(quoteId: string) {
   });
 }
 
+/**
+ * control-spec-workspace Req 5 — «Отправить на подписание».
+ *
+ * Reactivates the previously dead `pending_signature` status. Routes through
+ * the Python workflow endpoint (via `callWorkflowTransition`) so the control
+ * stamp — responsible controller + control date — and the audit log / role
+ * check are recorded server-side. The spec-control screen calls this after it
+ * has validated the required requisites (contract + наше юрлицо) and refreshes
+ * itself on success.
+ */
+export async function sendSpecToSignature(quoteId: string) {
+  await callWorkflowTransition(quoteId, {
+    to_status: "pending_signature",
+  });
+}
+
 export async function sendToClient(quoteId: string) {
   return updateQuoteWorkflowStatus(quoteId, "sent_to_client", {
     sent_at: new Date().toISOString(),

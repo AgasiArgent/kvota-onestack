@@ -22,6 +22,8 @@ export interface RequisitesBlockProps {
   sellerCompanies: readonly SellerCompanyItem[];
   sellerCompanyId: string | null;
   onSellerCompanyChange: (id: string | null) => void;
+  /** Highlights the «Наше юрлицо» picker as a validation error (Req 5.2). */
+  sellerCompanyInvalid?: boolean;
 
   // Договор (FK contract_id) — inline-create handled by parent slot
   contracts: readonly CustomerContractRow[];
@@ -29,6 +31,8 @@ export interface RequisitesBlockProps {
   onContractChange: (id: string | null) => void;
   /** Inline-create affordance + form, rendered by the parent. */
   contractCreateSlot?: React.ReactNode;
+  /** Highlights the «Договор» picker as a validation error (Req 5.2). */
+  contractInvalid?: boolean;
 
   // Страны (string columns)
   countries: readonly CountryItem[];
@@ -67,10 +71,12 @@ export function RequisitesBlock({
   sellerCompanies,
   sellerCompanyId,
   onSellerCompanyChange,
+  sellerCompanyInvalid = false,
   contracts,
   contractId,
   onContractChange,
   contractCreateSlot,
+  contractInvalid = false,
   countries,
   cargoPickupCountry,
   onCargoPickupCountryChange,
@@ -101,6 +107,7 @@ export function RequisitesBlock({
               emptyMessage="Нет юрлиц"
               className="mt-1"
               popoverWidthClass="w-80"
+              invalid={sellerCompanyInvalid}
             />
           ) : (
             <p className="text-sm mt-1">{selectedSeller?.name ?? "—"}</p>
@@ -123,6 +130,7 @@ export function RequisitesBlock({
               emptyMessage="Нет договоров"
               className="mt-1"
               popoverWidthClass="w-80"
+              invalid={contractInvalid}
             />
           ) : (
             <p className="text-sm mt-1">

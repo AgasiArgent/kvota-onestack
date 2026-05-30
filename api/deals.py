@@ -16,6 +16,8 @@ from starlette.responses import JSONResponse
 from services.database import get_supabase
 from services.deal_data_service import fetch_items_with_buyer_companies, fetch_enrichment_data
 from services.logistics_service import initialize_logistics_stages
+from services.role_service import get_user_role_codes
+from services.workflow_service import transition_quote_status
 from services.currency_invoice_service import generate_currency_invoices, save_currency_invoices
 
 logger = logging.getLogger(__name__)
@@ -173,7 +175,7 @@ async def create_deal(request) -> JSONResponse:
 
     # --- Step 2: Fetch quote data ---
     quote_resp = sb.table("quotes").select(
-        "id, total_amount, currency, idn_quote, seller_company_id, "
+        "id, total_quote_currency, currency, idn_quote, seller_company_id, "
         "seller_companies!seller_company_id(id, name)"
     ).eq("id", quote_id).single().execute()
 
@@ -184,7 +186,9 @@ async def create_deal(request) -> JSONResponse:
         )
 
     quote = quote_resp.data
-    total_amount = quote.get("total_amount")
+    # Flag 19: source the deal amount from the canonical total_quote_currency
+    # (quotes.total_amount was cleared/deprecated by migration 329).
+    total_amount = quote.get("total_quote_currency")
     currency = quote.get("currency")
     quote_idn = quote.get("idn_quote", "")
     sc = (quote.get("seller_companies") or {})
@@ -246,14 +250,26 @@ async def create_deal(request) -> JSONResponse:
 
     deal_id = deal_result.data[0]["id"]
 
-    # --- Step 6: Update quote workflow_status to 'deal' ---
+    # --- Step 6: Transition quote workflow_status → 'deal' via workflow_service ---
+    # Routes the handoff through the state machine (pending_signature → deal) so it
+    # is audited in workflow_transitions and role-validated, instead of a blind
+    # status write. On failure the quote stays in pending_signature (no advance);
+    # the deal record already exists (pre-existing ordering) so we log non-fatally.
     try:
-        sb.table("quotes").update({
-            "workflow_status": "deal",
-            "updated_at": datetime.now().isoformat(),
-        }).eq("id", quote_id).execute()
+        actor_roles = get_user_role_codes(user_id, org_id)
+        transition_result = transition_quote_status(
+            quote_id=quote_id,
+            to_status="deal",
+            actor_id=user_id,
+            actor_roles=actor_roles,
+        )
+        if not transition_result.success:
+            logger.error(
+                "Quote %s deal-handoff transition rejected: %s",
+                quote_id, transition_result.error_message,
+            )
     except Exception as e:
-        logger.error("Failed to update quote %s workflow_status: %s", quote_id, e)
+        logger.error("Failed to transition quote %s to deal: %s", quote_id, e)
         # Non-fatal: deal exists, log for manual repair
 
     # --- Step 7: Initialize logistics stages ---

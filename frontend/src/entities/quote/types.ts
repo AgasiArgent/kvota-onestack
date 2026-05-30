@@ -166,14 +166,17 @@ const ROLE_ACTION_STATUSES: Record<string, string[]> = {
     "pending_logistics",
   ],
   quote_controller: ["pending_quote_control"],
-  spec_controller: ["pending_spec_control"],
+  // pending_signature added for the two-phase spec-control flow
+  // (control-spec-workspace Req 5–7): the spec controller still acts on the
+  // quote while it is «На подписании» (upload scan, mark signed → deal).
+  spec_controller: ["pending_spec_control", "pending_signature"],
   top_manager: ["pending_approval"],
   admin: [
     "pending_sales_review", "approved",
     "pending_procurement",
     "pending_logistics", "pending_logistics_and_customs",
     "pending_customs",
-    "pending_quote_control", "pending_spec_control",
+    "pending_quote_control", "pending_spec_control", "pending_signature",
     "pending_approval",
   ],
 };
@@ -437,6 +440,7 @@ export const STATUS_TO_STEP: Record<string, QuoteStep> = {
   accepted: "negotiation",
   rejected: "negotiation",
   pending_spec_control: "specification",
+  pending_signature: "specification",
   spec_draft: "specification",
   spec_signed: "specification",
   cancelled: "sales",

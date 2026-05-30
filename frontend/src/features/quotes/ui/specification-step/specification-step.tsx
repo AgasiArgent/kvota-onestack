@@ -4,14 +4,11 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   FileText,
-  Upload,
   Check,
   X,
-  Download,
   Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -19,12 +16,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/shared/lib/supabase/client";
 import { canEditSpecControl } from "@/shared/lib/roles";
+import { sendSpecToSignature } from "@/entities/quote/mutations";
 import { confirmSignatureAndCreateDeal } from "./mutations";
 import { SPECIFICATION_SELECT } from "./columns";
 import { FromCalcBlock } from "./blocks/from-calc-block";
 import { RequisitesBlock, type SellerCompanyItem, type CountryItem } from "./blocks/requisites-block";
 import { ConditionsBlock } from "./blocks/conditions-block";
 import { ControlBlock, type SigningFxMode } from "./blocks/control-block";
+import { SigningPhase } from "./signing-phase";
 import type { QuoteDetailRow, QuoteItemRow } from "@/entities/quote/queries";
 import type {
   SpecificationRow,
@@ -41,8 +40,24 @@ const SPEC_STATUS_LABELS: Record<string, { label: string; variant: "default" | "
 
 const DEFAULT_FX_MODE: SigningFxMode = "cbr_on_payment_day";
 
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: "$",
+  EUR: "€",
+  RUB: "₽",
+  CNY: "¥",
+};
+
 function isFxMode(value: string | null): value is SigningFxMode {
   return value === "cbr_on_payment_day" || value === "fixed";
+}
+
+function formatQuoteMoney(value: number | null, currency: string): string {
+  if (value == null) return "—";
+  const formatted = new Intl.NumberFormat("ru-RU", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+  return `${formatted} ${CURRENCY_SYMBOLS[currency] ?? currency}`;
 }
 
 interface SpecificationStepProps {
@@ -70,6 +85,12 @@ export function SpecificationStep({
   const [creating, setCreating] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [creatingDeal, setCreatingDeal] = useState(false);
+  const [sending, setSending] = useState(false);
+
+  // Validation highlight for «Отправить на подписание» (Req 5.2 — name +
+  // visually mark the missing required requisites; never fail silently).
+  const [contractMissing, setContractMissing] = useState(false);
+  const [sellerMissing, setSellerMissing] = useState(false);
 
   // Form state — requisites
   const [contractId, setContractId] = useState<string | null>(null);
@@ -293,6 +314,53 @@ export function SpecificationStep({
     }
   }
 
+  // «Отправить на подписание» — Req 5. Validate the required requisites
+  // (contract + наше юрлицо) BEFORE the transition; on a gap, block, name the
+  // missing fields, and highlight their comboboxes (no silent failure). On
+  // success persist the latest form edits, then transition the quote to
+  // `pending_signature` via the Python workflow endpoint (records the control
+  // stamp + audit), and refresh.
+  async function handleSendToSignature() {
+    if (!spec) return;
+
+    const missingContract = !contractId;
+    const missingSeller = !sellerCompanyId;
+    setContractMissing(missingContract);
+    setSellerMissing(missingSeller);
+
+    if (missingContract || missingSeller) {
+      const missing: string[] = [];
+      if (missingContract) missing.push("Договор");
+      if (missingSeller) missing.push("Наше юрлицо");
+      toast.error(`Заполните обязательные реквизиты: ${missing.join(", ")}`);
+      return;
+    }
+
+    setSending(true);
+    try {
+      const supabase = createClient();
+      // Persist the current form so the requisites are durable before signing.
+      const { error: saveError } = await supabase
+        .from("specifications")
+        .update({
+          ...buildRequisitesPayload(),
+          updated_at: new Date().toISOString(),
+        } as never)
+        .eq("id", spec.id);
+      if (saveError) throw saveError;
+
+      await sendSpecToSignature(quote.id);
+      toast.success("Спецификация отправлена на подписание");
+      router.refresh();
+      loadData();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "unknown";
+      toast.error(`Не удалось отправить на подписание: ${msg}`);
+    } finally {
+      setSending(false);
+    }
+  }
+
   // Upload signed scan
   async function handleUploadScan(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -330,6 +398,7 @@ export function SpecificationStep({
         mime_type: file.type || "application/pdf",
         document_type: "specification_signed_scan",
         description: "Подписанный скан спецификации",
+        uploaded_by: userId,
       });
 
       toast.success("Скан загружен");
@@ -437,9 +506,22 @@ export function SpecificationStep({
     );
   }
 
-  const isReadOnly = spec?.status === "signed" || spec?.status === "approved";
-  // Edit-gate (Req 11.3): role grant AND not locked by status.
-  const canEdit = canEditSpecControl(userRoles) && !isReadOnly;
+  // Two-phase model — drive off quote.workflow_status (single source of truth).
+  // `spec_draft` is treated as still-editing alongside `pending_spec_control`.
+  // An absent status (new quote not yet at control) also lands on the control
+  // phase so the screen stays editable for a fresh spec.
+  const workflowStatus = quote.workflow_status ?? "";
+  const isSigningPhase = workflowStatus === "pending_signature";
+  const isCompletedPhase =
+    workflowStatus === "spec_signed" || workflowStatus === "deal";
+  const isControlPhase = !isSigningPhase && !isCompletedPhase;
+
+  // Edit-gate (Req 11.3 + phase): role grant AND we are in the «На контроле»
+  // phase. Once sent to signing the requisites lock; completed specs are
+  // read-only too.
+  const canEdit = canEditSpecControl(userRoles) && isControlPhase;
+  // Acting role for the signing-phase affordances (upload scan / mark signed).
+  const canActOnSigning = canEditSpecControl(userRoles);
   const canExportAndUpload = canEditSpecControl(userRoles) || isSalesManager;
   const signatories = contacts.filter((c) => c.is_signatory);
   const hasSignatory = signatories.length > 0;
@@ -447,6 +529,48 @@ export function SpecificationStep({
 
   const readinessDisplay = spec?.readiness_period ?? null;
   const clientLegalEntity = spec?.client_legal_entity ?? customerName;
+
+  // Control stamp shown once the spec has been sent on (Req 4.4): the control
+  // date is when the quote entered `pending_signature` (`stage_entered_at`),
+  // and the responsible controller is the acting user.
+  const stageEnteredAt =
+    (quoteAny.stage_entered_at as string | null | undefined) ?? null;
+  const controlDate = isControlPhase ? null : stageEnteredAt;
+
+  // System values the controller reconciles against the signed scan (Req 6.2).
+  const selectedContractRow = contracts.find((c) => c.id === contractId);
+  const selectedSellerName =
+    sellerCompanies.find((s) => s.id === sellerCompanyId)?.name ??
+    spec?.our_legal_entity ??
+    null;
+  const reconciliationValues = {
+    specNumber: spec?.specification_number ?? "—",
+    contract: selectedContractRow
+      ? `${selectedContractRow.contract_number} от ${selectedContractRow.contract_date}`
+      : "—",
+    parties:
+      selectedSellerName && clientLegalEntity
+        ? `${selectedSellerName} ↔ ${clientLegalEntity}`
+        : selectedSellerName ?? clientLegalEntity ?? "—",
+    totals: formatQuoteMoney(quote.total_with_vat_quote, quote.currency),
+    dates: spec?.sign_date
+      ? new Date(spec.sign_date).toLocaleDateString("ru-RU", {
+          timeZone: "Europe/Moscow",
+        })
+      : "—",
+    signatory: signatories.length
+      ? signatories
+          .map((s) => `${s.name}${s.position ? ` — ${s.position}` : ""}`)
+          .join(", ")
+      : "—",
+  };
+
+  const exportPdfUrl = spec
+    ? `https://kvotaflow.ru/spec-control/${spec.id}/export-pdf`
+    : "";
+  const exportDocxUrl = spec
+    ? `https://kvotaflow.ru/spec-control/${spec.id}/export-docx`
+    : "";
 
   // Inline contract-create affordance + form, threaded into the requisites block.
   const contractCreateSlot = (
@@ -541,11 +665,19 @@ export function SpecificationStep({
           canEdit={canEdit}
           sellerCompanies={sellerCompanies}
           sellerCompanyId={sellerCompanyId}
-          onSellerCompanyChange={setSellerCompanyId}
+          onSellerCompanyChange={(id) => {
+            setSellerCompanyId(id);
+            if (id) setSellerMissing(false);
+          }}
+          sellerCompanyInvalid={sellerMissing}
           contracts={contracts}
           contractId={contractId}
-          onContractChange={setContractId}
+          onContractChange={(id) => {
+            setContractId(id);
+            if (id) setContractMissing(false);
+          }}
           contractCreateSlot={contractCreateSlot}
+          contractInvalid={contractMissing}
           countries={countries}
           cargoPickupCountry={cargoPickupCountry}
           onCargoPickupCountryChange={setCargoPickupCountry}
@@ -584,7 +716,7 @@ export function SpecificationStep({
           signingFxRate={signingFxRate}
           onSigningFxRateChange={setSigningFxRate}
           controllerLabel={controllerName ?? "Вы"}
-          controlDate={null}
+          controlDate={controlDate}
         />
 
         {/* Signatory (client) — kept from prerequisites */}
@@ -655,8 +787,6 @@ export function SpecificationStep({
           )}
         </Card>
 
-        {/* ====== Existing scan → deal flow (restructured in PR3) ====== */}
-
         {/* Items count */}
         <Card className="p-4">
           <div className="flex items-center gap-3">
@@ -670,97 +800,24 @@ export function SpecificationStep({
           </div>
         </Card>
 
-        {/* Workflow guidance + Documents */}
-        {spec && canExportAndUpload && (
-          <Card className="p-5 space-y-4">
-            <h4 className="text-sm font-semibold">Оформление спецификации</h4>
-
-            {/* Step 1: Export */}
-            <div className="flex items-start gap-3">
-              <span className={cn(
-                "flex items-center justify-center w-6 h-6 rounded-full text-xs font-semibold shrink-0",
-                hasScan ? "bg-green-100 text-green-700" : "bg-accent/10 text-accent"
-              )}>1</span>
-              <div className="flex-1">
-                <p className="text-sm font-medium">Скачать и отправить клиенту</p>
-                <p className="text-xs text-muted-foreground mb-2">Экспортируйте спецификацию и отправьте на подпись</p>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => window.open(`https://kvotaflow.ru/spec-control/${spec.id}/export-pdf`, "_blank")}
-                  >
-                    <Download size={14} />
-                    Скачать PDF
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => window.open(`https://kvotaflow.ru/spec-control/${spec.id}/export-docx`, "_blank")}
-                  >
-                    <Download size={14} />
-                    Скачать DOCX
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            <div className="border-t border-border" />
-
-            {/* Step 2: Upload signed scan */}
-            <div className="flex items-start gap-3">
-              <span className={cn(
-                "flex items-center justify-center w-6 h-6 rounded-full text-xs font-semibold shrink-0",
-                hasScan ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"
-              )}>2</span>
-              <div className="flex-1">
-                <p className="text-sm font-medium">Загрузить подписанный скан</p>
-                <p className="text-xs text-muted-foreground mb-2">После подписания клиентом загрузите скан</p>
-                <div
-                  className={cn(
-                    "border-2 border-dashed rounded-lg p-4 text-center transition-colors",
-                    hasScan ? "border-green-200 bg-green-50" : "border-border hover:border-accent/50"
-                  )}
-                >
-                  {hasScan ? (
-                    <div className="flex items-center justify-center gap-2 text-green-700">
-                      <Check size={16} />
-                      <span className="text-sm font-medium">Скан загружен</span>
-                    </div>
-                  ) : (
-                    <label className="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-sm hover:bg-muted transition-colors">
-                      {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-                      Выбрать файл (PDF, JPG, PNG)
-                      <input
-                        type="file"
-                        accept=".pdf,.jpg,.jpeg,.png"
-                        className="hidden"
-                        onChange={handleUploadScan}
-                      />
-                    </label>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="border-t border-border" />
-
-            {/* Step 3: Create deal */}
-            <div className="flex items-start gap-3">
-              <span className={cn(
-                "flex items-center justify-center w-6 h-6 rounded-full text-xs font-semibold shrink-0",
-                spec.status === "signed" ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"
-              )}>3</span>
-              <div className="flex-1">
-                <p className="text-sm font-medium">Подтвердить и создать сделку</p>
-                <p className="text-xs text-muted-foreground">Проверьте скан и переведите в сделку</p>
-              </div>
-            </div>
-          </Card>
+        {/* ====== Фаза «На подписании» (Req 6–7) ====== */}
+        {isSigningPhase && spec && canExportAndUpload && (
+          <SigningPhase
+            specId={spec.id}
+            canAct={canActOnSigning}
+            hasScan={hasScan}
+            uploading={uploading}
+            creatingDeal={creatingDeal}
+            onUploadScan={handleUploadScan}
+            onCreateDeal={handleCreateDeal}
+            exportPdfUrl={exportPdfUrl}
+            exportDocxUrl={exportDocxUrl}
+            reconciliationValues={reconciliationValues}
+          />
         )}
 
-        {/* Success banner for signed specs */}
-        {spec?.status === "signed" && (
+        {/* Success banner for completed specs */}
+        {isCompletedPhase && (
           <Card className="p-4 bg-green-50 border-green-200">
             <div className="flex items-center gap-2 text-green-800">
               <Check size={16} />
@@ -770,49 +827,51 @@ export function SpecificationStep({
         )}
       </div>
 
-      {/* Sticky action bar */}
-      <div className="border-t border-border px-6 py-3 flex items-center justify-between bg-background">
-        {/* Left side */}
-        <div>
-          {!spec && canEdit && (
-            <Button
-              onClick={handleCreate}
-              disabled={creating}
-              className="bg-accent text-white hover:bg-accent-hover"
-            >
-              {creating ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
-              Создать спецификацию
-            </Button>
-          )}
+      {/* Sticky action bar — «На контроле» phase only */}
+      {isControlPhase && (
+        <div className="border-t border-border px-6 py-3 flex items-center justify-between bg-background">
+          {/* Left side */}
+          <div>
+            {!spec && canEdit && (
+              <Button
+                onClick={handleCreate}
+                disabled={creating}
+                className="bg-accent text-white hover:bg-accent-hover"
+              >
+                {creating ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
+                Создать спецификацию
+              </Button>
+            )}
 
-          {spec && canEdit && (
-            <Button onClick={handleSave} disabled={saving} variant="outline">
-              {saving ? <Loader2 size={14} className="animate-spin" /> : null}
-              Сохранить черновик
-            </Button>
-          )}
+            {spec && canEdit && (
+              <Button onClick={handleSave} disabled={saving} variant="outline">
+                {saving ? <Loader2 size={14} className="animate-spin" /> : null}
+                Сохранить черновик
+              </Button>
+            )}
 
-          {!canEditSpecControl(userRoles) && !canExportAndUpload && (
-            <span className="text-sm text-muted-foreground">
-              Нет прав для работы со спецификацией
-            </span>
-          )}
+            {!canEditSpecControl(userRoles) && (
+              <span className="text-sm text-muted-foreground">
+                Нет прав для работы со спецификацией
+              </span>
+            )}
+          </div>
+
+          {/* Right side — «Отправить на подписание» (Req 5) */}
+          <div>
+            {spec && canEdit && (
+              <Button
+                onClick={handleSendToSignature}
+                disabled={sending}
+                className="bg-accent text-white hover:bg-accent-hover"
+              >
+                {sending ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
+                Отправить на подписание
+              </Button>
+            )}
+          </div>
         </div>
-
-        {/* Right side */}
-        <div>
-          {spec && hasScan && spec.status !== "signed" && canEditSpecControl(userRoles) && (
-            <Button
-              onClick={handleCreateDeal}
-              disabled={creatingDeal}
-              className="bg-green-600 text-white hover:bg-green-700"
-            >
-              {creatingDeal ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-              Подтвердить и создать сделку
-            </Button>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   );
 }

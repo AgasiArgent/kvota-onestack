@@ -64,18 +64,18 @@
 
 ## PR 3 — Workflow «Отправить на подписание» + сверка + handoff
 
-- [ ] 3. Двухфазный переход контроля спеца
-- [ ] 3.1 Действие «Отправить на подписание» (реактивация `pending_signature`)
+- [x] 3. Двухфазный переход контроля спеца
+- [x] 3.1 Действие «Отправить на подписание» (реактивация `pending_signature`)
   - Кнопка → `callWorkflowTransition(quoteId, { to_status: 'pending_signature' })`; валидация обязательных реквизитов (договор, наше юрлицо) — блок + назвать/подсветить недостающие; проставить Дату контроля + ответственного
   - _Requirements: 4.1, 4.2, 5.1, 5.2, 5.3, 5.4_
-- [ ] 3.2 `ReconciliationStrip` — структурная сверка (ручной чек-лист)
+- [x] 3.2 `ReconciliationStrip` — структурная сверка (ручной чек-лист)
   - Клон shape `useControlChecks` → `ReconCheck[]`; сайд-бай-сайд (скан слева / система справа); пункты: scan_uploaded, spec_number, contract, parties, totals, dates, signatory; контролёр подтверждает; ПОКА не все + нет скана — «Пометить подписанной» disabled; фиксировать кто/когда
   - дописать `uploaded_by` на documents-строку скана
   - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5_
-- [ ] 3.3 «Пометить подписанной» → создание сделки + handoff через workflow_service
+- [x] 3.3 «Пометить подписанной» → создание сделки + handoff через workflow_service
   - Вызов существующего `confirmSignatureAndCreateDeal`; роутить `quote → 'deal'` через `workflow_service.transition_quote_status(pending_signature → deal)` вместо прямой записи `api/deals.py:251`; читать `total_quote_currency` (флаг 19); при ошибке — остаться в `pending_signature`
   - _Requirements: 7.1, 7.2, 7.3, 7.4_
-- [ ]* 3.4 Тесты перехода + гейта сверки
+- [x]* 3.4 Тесты перехода + гейта сверки
   - _Requirements: 5.3, 6.3, 7.4_
 
 ## PR 4 — Воркспейс /workspace/control (два канбана)
