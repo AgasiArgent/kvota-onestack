@@ -19,7 +19,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/shared/lib/supabase/client";
 import { canEditSpecControl } from "@/shared/lib/roles";
-import { fetchSellerCompanies } from "@/entities/quote";
 import { confirmSignatureAndCreateDeal } from "./mutations";
 import { SPECIFICATION_SELECT } from "./columns";
 import { FromCalcBlock } from "./blocks/from-calc-block";
@@ -120,7 +119,7 @@ export function SpecificationStep({
     setLoading(true);
     const supabase = createClient();
 
-    const [specRes, contractsRes, contactsRes, countriesRes, sellerCompaniesData, profileRes] =
+    const [specRes, contractsRes, contactsRes, countriesRes, sellerCompaniesRes, profileRes] =
       await Promise.all([
         supabase
           .from("specifications")
@@ -149,7 +148,15 @@ export function SpecificationStep({
           .from("locations")
           .select("country")
           .eq("organization_id", orgId),
-        fetchSellerCompanies(orgId).catch(() => [] as SellerCompanyItem[]),
+        // Наше юрлицо source — fetched inline (same browser-client pattern as the
+        // other reads here) rather than importing the entities/quote barrel, which
+        // re-exports server-only queries and would break the client bundle build.
+        supabase
+          .from("seller_companies")
+          .select("id, name")
+          .eq("organization_id", orgId)
+          .eq("is_active", true)
+          .order("name"),
         supabase
           .from("user_profiles")
           .select("full_name")
@@ -161,7 +168,7 @@ export function SpecificationStep({
     setSpec(specData);
     setContracts((contractsRes.data as CustomerContractRow[]) ?? []);
     setContacts((contactsRes.data as CustomerContactRow[]) ?? []);
-    setSellerCompanies(sellerCompaniesData);
+    setSellerCompanies((sellerCompaniesRes.data as SellerCompanyItem[]) ?? []);
     setControllerName((profileRes.data as { full_name: string } | null)?.full_name ?? null);
 
     // Distinct, sorted countries from locations
