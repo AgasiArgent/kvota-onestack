@@ -396,8 +396,25 @@ export const ROLE_ALLOWED_STEPS: Record<string, QuoteStep[]> = {
 
 // Roles that can view all steps but only edit specific ones.
 // If a role is NOT listed here, it can edit all its allowed steps.
+//
+// Resolution (quotes/[id]/page.tsx): editableSteps is the UNION across the
+// user's roles of `ROLE_EDITABLE_STEPS[r] ?? ROLE_ALLOWED_STEPS[r]`. So an
+// empty list contributes nothing (a user who ALSO holds an editing role still
+// edits via that role); admin bypasses this map entirely.
+//
+// control-spec-workspace (Req 11.2/11.3):
+//   - top_manager → [] : views the whole rail but edits nothing (read-only).
+//   - quote_controller → ["control"] : edits only its Контроль расчёта gate.
+//   - spec_controller → ["specification"] : edits only its Контроль спецификации
+//     gate (it can still VIEW "control"/"cost-analysis"/"documents", but the
+//     calc gate belongs to quote_controller). NOTE: this also makes
+//     "documents"/"cost-analysis" view-only for a pure controller — deliberate
+//     (controllers verify correctness, they don't author upstream data).
 export const ROLE_EDITABLE_STEPS: Record<string, QuoteStep[]> = {
   procurement_senior: ["procurement", "documents"],
+  top_manager: [],
+  quote_controller: ["control"],
+  spec_controller: ["specification"],
 };
 
 /**

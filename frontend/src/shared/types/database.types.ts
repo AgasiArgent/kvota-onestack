@@ -5246,6 +5246,9 @@ export type Database = {
           payment_on_customs_clearance_pct: number
           payment_on_customs_clearance_days: number
           payment_on_receiving_days: number
+          signing_fx_mode: string | null
+          signing_fx_rate: number | null
+          seller_company_id: string | null
         }
         Insert: {
           id?: string
@@ -5299,6 +5302,9 @@ export type Database = {
           payment_on_customs_clearance_pct?: number
           payment_on_customs_clearance_days?: number
           payment_on_receiving_days?: number
+          signing_fx_mode?: string | null
+          signing_fx_rate?: number | null
+          seller_company_id?: string | null
         }
         Update: {
           id?: string
@@ -5352,6 +5358,9 @@ export type Database = {
           payment_on_customs_clearance_pct?: number
           payment_on_customs_clearance_days?: number
           payment_on_receiving_days?: number
+          signing_fx_mode?: string | null
+          signing_fx_rate?: number | null
+          seller_company_id?: string | null
         }
         Relationships: []
       }

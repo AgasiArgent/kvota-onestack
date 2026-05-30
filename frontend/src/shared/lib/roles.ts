@@ -374,3 +374,57 @@ const BUYER_COMPANY_MANAGE_ROLES = [
 export function canManageBuyerCompany(roles: string[]): boolean {
   return roles.some((r) => BUYER_COMPANY_MANAGE_ROLES.includes(r));
 }
+
+// ===========================================================================
+// control-spec-workspace — Контроль расчёта / Контроль спецификации gates
+// ===========================================================================
+// Two control gates already exist in the quote rail:
+//   - pending_quote_control → "Контроль расчёта", owned by quote_controller
+//   - pending_spec_control  → "Контроль спецификации", owned by spec_controller
+// These helpers gate the /workspace/control board visibility and the spec-control
+// screen edit permissions. admin and top_manager are full-visibility roles and see
+// both boards; top_manager is read-only (enforced via ROLE_EDITABLE_STEPS), so its
+// board visibility is observe-only. All checks are plain membership → unknown roles
+// fail closed (return false / { calc: false, spec: false }).
+
+/** Roles that see every control board regardless of which gate they own. */
+const CONTROL_BOARD_FULL_VISIBILITY_ROLES = ["admin", "top_manager"];
+
+/** Returns true if the user holds the quote_controller (Контроль расчёта) role. */
+export function isQuoteController(roles: string[]): boolean {
+  return roles.includes("quote_controller");
+}
+
+/** Returns true if the user holds the spec_controller (Контроль спецификации) role. */
+export function isSpecController(roles: string[]): boolean {
+  return roles.includes("spec_controller");
+}
+
+/**
+ * Which control kanban boards the user may see on /workspace/control.
+ *   - quote_controller → calc board (Контроль расчёта)
+ *   - spec_controller  → spec board (Контроль спецификации)
+ *   - admin / top_manager → both
+ * Anyone else sees neither (fail-closed) — the page guard redirects them.
+ */
+export function canSeeControlBoard(roles: string[]): {
+  calc: boolean;
+  spec: boolean;
+} {
+  const full = roles.some((r) => CONTROL_BOARD_FULL_VISIBILITY_ROLES.includes(r));
+  return {
+    calc: full || isQuoteController(roles),
+    spec: full || isSpecController(roles),
+  };
+}
+
+/**
+ * Returns true if the user may edit the spec-control screen fields
+ * (requisites, conditions, control stamp). The spec_controller is the
+ * responsible-for-correctness party; admin may also edit. top_manager is
+ * explicitly excluded (read-only); quote_controller owns the calc gate, not
+ * spec editing. Mirrors the field-scope check on the Python API side.
+ */
+export function canEditSpecControl(roles: string[]): boolean {
+  return roles.includes("admin") || isSpecController(roles);
+}

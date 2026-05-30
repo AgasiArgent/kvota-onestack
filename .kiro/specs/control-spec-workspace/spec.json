@@ -1,0 +1,49 @@
+{
+  "feature_name": "control-spec-workspace",
+  "created_at": "2026-05-29T22:30:48Z",
+  "updated_at": "2026-05-29T23:05:00Z",
+  "language": "ru",
+  "phase": "tasks-generated",
+  "approvals": {
+    "requirements": { "generated": true, "approved": true },
+    "design": { "generated": true, "approved": true },
+    "tasks": { "generated": true, "approved": false }
+  },
+  "ready_for_implementation": true,
+  "type": "FEATURE",
+  "size": "BIG",
+  "source": {
+    "origin": "tester mockup — Google Sheet \"Контроль\" tab (data-model + process map)",
+    "design_docs": [
+      "docs/plans/2026-05-29-control-arch.png",
+      "docs/plans/2026-05-29-control-spec-workspace-design.png"
+    ]
+  },
+  "scope": {
+    "in": [
+      "Tab «Спецификация» = spec-control screen, phase «На контроле»: surface existing rich specifications fields in 4 blocks (from-calc read-only / requisites searchable dropdowns / spec conditions input / control stamp). Controller = responsible-for-correctness, not creator.",
+      "Phase «На подписании»: structural reconciliation «signed scan ↔ system data» (checklist / side-by-side) gating the EXISTING «Пометить подписанной» → confirmSignatureAndCreateDeal.",
+      "FK migration (expand-contract, additive): our_legal_entity / client_legal_entity / countries free-text → FK on seller_companies + country/locations reference, with backfill.",
+      "Workspace /workspace/control (logistics pattern): two kanbans — Контроль расчёта (pending_quote_control/pending_approval → control tab) and Контроль спецификации (pending_spec_control, columns «На контроле / На подписании» → specification tab). Sidebar entry. RLS: quote_controller→calc, spec_controller→spec, admin/top_manager→both.",
+      "Searchable dropdowns everywhere (project-wide standard)."
+    ],
+    "out": [
+      "Deal workflow after signing (separate, partially implemented — we only hand off via existing confirmSignatureAndCreateDeal).",
+      "Standalone Contracts registry (contracts stay on the customer card / tab-documents).",
+      "Any change to the calculation engine (LOCKED).",
+      "Restructuring the quote step rail (both control gates are already tabs).",
+      "Rebuilding scan upload / export / deal creation (already exist in specification-step.tsx)."
+    ]
+  },
+  "constraints": [
+    "NEVER modify calculation_engine.py / calculation_models.py / calculation_mapper.py (LOCKED).",
+    "Schema kvota.*; RLS uses r.slug (never r.code).",
+    "Migrations sequential (latest applied = 283); apply on prod via git pull + scripts/apply-migrations.sh (NEVER scp); wrap multi-statement in BEGIN/COMMIT.",
+    "Schema-additive (FK) migration applied to prod BEFORE merging the PR that reads the new FK (reference_expand_contract_migration_workflow).",
+    "After migrations: cd frontend && npm run db:types; tsc green before any column-drop.",
+    "FSD architecture (frontend); api-first (business logic in Python /api/*, thin Server Action wrappers).",
+    "gh pr create --head <branch> --base main required.",
+    "No second source of truth: from-calc fields are read-only on the control screen; spec stores only spec-authoritative values (e.g. at-signing FX with provenance)."
+  ],
+  "project_description": "Экран контроля спецификации + воркспейс контроля с двумя канбанами. В OneStack у квоты (КП) есть рельс табов: Заявка → Закупки → Логистика → Таможня → Расчёт → Контроль → Переговоры → Спецификация. Два гейта контроля уже существуют (workflow_service.py): pending_quote_control (Контроль расчёта, владелец quote_controller, экран control-step.tsx — дашборд 7 проверок) и pending_spec_control (Контроль спецификации, владелец spec_controller, отдельного экрана НЕТ — обслуживается табом specification-step.tsx). Таблица specifications (m006) уже содержит ~25 рич-полей, но UI пишет только 4 (contract_id, sign_date, readiness_period, status). Договоры — customer_contracts (m022, customer→many, атомарный next_specification_number), управляются на карточке клиента. Воркспейс-канбан паттерн есть (/workspace/logistics, /workspace/customs). ЦЕЛЬ: дать контролёру спецификаций нормальный рабочий процесс, НЕ создавая новой модели данных и НЕ трогая калькулятор. Контроль спецификации двухфазный: «На контроле» (проверка рич-данных спеца контролёром) → «На подписании» (загрузка подписанного скана + структурная сверка скан↔система → пометить подписанной → воркфлоу сделки). В specification-step.tsx УЖЕ есть экспорт PDF/DOCX, загрузка скана, создание сделки (confirmSignatureAndCreateDeal → POST /api/deals); добавляем экран проверки рич-данных и структурную сверку. Спец инициирует МОП (как сейчас); контролёр = ответственное лицо за корректность."
+}
