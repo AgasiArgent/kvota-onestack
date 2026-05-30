@@ -11,13 +11,13 @@
 
 ## PR 1 — Миграция + проводка типов + роли (foundation)
 
-- [ ] 1. Foundation: схема, типы, роли
+- [x] 1. Foundation: схема, типы, роли
 - [x] 1.1 Подтвердить номер миграции на VPS и написать аддитивную миграцию
   - На VPS свериться с `kvota.schema_migrations` (CLAUDE.md=283 vs `migrations/`=318/319) — взять истинный следующий номер
   - `migrations/<NEXT>_control_spec_signing_fx_and_seller_fk.sql`: `BEGIN; ALTER TABLE kvota.specifications ADD signing_fx_mode VARCHAR(32) CHECK(...), ADD signing_fx_rate DECIMAL(15,6), ADD seller_company_id UUID REFERENCES kvota.seller_companies(id) ON DELETE SET NULL; COMMIT;`
   - Идемпотентность (`IF NOT EXISTS`), `information_schema` guard (если есть) фильтрует `table_schema='kvota'`
   - _Requirements: 4.5, 8.1, 8.2, 8.3, 8.5_
-- [ ] 1.2 Применить миграцию на VPS и перегенерировать типы
+- [x] 1.2 Применить миграцию на VPS и перегенерировать типы
   - `git pull` + `scripts/apply-migrations.sh` (НЕ scp); проверить схему пост-факт
   - `cd frontend && npm run db:types`; `tsc` зелёный; `tools/check_select_columns.py`
   - Reset `/root/onestack` на main после применения с ветки
