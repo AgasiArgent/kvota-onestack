@@ -18,6 +18,8 @@ Price markup is applied cumulatively:
 from decimal import Decimal
 from collections import defaultdict
 
+from services.calculation_helpers import effective_calc_quantity
+
 
 # ---------------------------------------------------------------------------
 # Payment & Delivery Terms Constants
@@ -182,7 +184,16 @@ def _build_item_snapshot(
     base_price = Decimal(str(item.get("purchase_price_original") or 0))
     price = calculate_segment_price(base_price, segment, markup_percent, prior_markup_percent)
     price = price.quantize(Decimal("0.0001"))
-    quantity = Decimal(str(item.get("quantity") or 0))
+    # Supplier-quantity override (Stage 6): when ``minimum_order_quantity`` is
+    # set (>0, UI «Кол-во поставщика») it OVERRIDES the ordered quantity in
+    # both directions. ``item["quantity"]`` is the engine's base
+    # (invoice_item.quantity via composition_service.get_composed_items), so the
+    # stored snapshot, the line total, and the invoice total_amount all match
+    # the calc engine and stay internally consistent (qty × unit price == total).
+    effective_qty = effective_calc_quantity(
+        item.get("quantity") or 0, item.get("minimum_order_quantity")
+    )
+    quantity = Decimal(str(effective_qty))
     total = (quantity * price).quantize(Decimal("0.01"))
 
     return {
