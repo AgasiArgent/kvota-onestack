@@ -80,23 +80,23 @@
 
 ## PR 4 — Воркспейс /workspace/control (два канбана)
 
-- [ ] 4. Воркспейс контроля
-- [ ] 4.1 Параметризовать `KANBAN_COLUMNS` → column-config prop
+- [x] 4. Воркспейс контроля
+- [x] 4.1 Параметризовать `KANBAN_COLUMNS` → column-config prop
   - Вынести hard-coded const (`kanban-board.tsx`, `model/types.ts`) в prop; **regress-тест logistics/customs** (не сломать существующие board)
   - _Requirements: 9.1_
-- [ ] 4.2 (P) `ControlKanbanCard` type + `fetchControlBoard(domain, user)` в `entities`
+- [x] 4.2 (P) `ControlKanbanCard` type + `fetchControlBoard(domain, user)` в `entities`
   - calc: quotes в `pending_quote_control`/`pending_approval`; spec: quotes в `pending_spec_control` (На контроле) / `pending_signature` (На подписании); org-scoped
   - _Requirements: 9.2, 9.3, 9.5, 9.6_
-- [ ] 4.3 `ControlCard` renderer + two-board shell + переключатель
+- [x] 4.3 `ControlCard` renderer + two-board shell + переключатель
   - Кликабельные карточки (без drag); клик → `/quotes/{id}?step=control` (calc) / `?step=specification` (spec)
   - _Requirements: 9.1, 10.1, 10.2_
-- [ ] 4.4 Страница `app/(app)/workspace/control/page.tsx` (server) + fail-closed гард
+- [x] 4.4 Страница `app/(app)/workspace/control/page.tsx` (server) + fail-closed гард
   - Зеркало `workspace/logistics/page.tsx`: orgId redirect, role-guard по `canSeeControlBoard`, `Promise.all` двух board; **fail-closed** (redirect/notFound для неавторизованных)
   - _Requirements: 9.1, 11.1, 11.4, 11.5_
-- [ ] 4.5 (P) Пункт «Контроль» в сайдбаре
+- [x] 4.5 (P) Пункт «Контроль» в сайдбаре
   - `widgets/sidebar/sidebar-menu.ts` → `/workspace/control`, гейт `hasRole('quote_controller','spec_controller','top_manager')` + isAdmin
   - _Requirements: 9.4_
-- [ ]* 4.6 Тесты column-config (logistics/customs regress) + control-board фетчера
+- [x]* 4.6 Тесты column-config (logistics/customs regress) + control-board фетчера
   - _Requirements: 9.1, 9.2, 9.3_
 
 ## PR 5 — Интеграция и верификация

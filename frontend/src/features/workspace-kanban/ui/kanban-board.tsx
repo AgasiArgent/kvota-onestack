@@ -18,11 +18,11 @@ import { preserveScroll } from "@/shared/lib/scroll";
 import { KanbanCard } from "./kanban-card";
 import { selfPullInvoice } from "../server-actions";
 import {
-  KANBAN_COLUMNS,
-  KANBAN_COLUMN_LABELS,
+  DEFAULT_KANBAN_COLUMNS,
   cardKey,
   isKanbanColumnKey,
   resolveDragAction,
+  type ColumnConfig,
   type WorkspaceKanbanBoard,
   type WorkspaceKanbanCard,
   type WorkspaceKanbanColumnKey,
@@ -35,15 +35,22 @@ export interface KanbanBoardProps {
   isHead: boolean;
   /** Team roster for the head assignee picker; empty for members. */
   teamUsers: UserAvatarChipUser[];
+  /**
+   * Left-to-right column layout. Defaults to the logistics/customs layout
+   * (`DEFAULT_KANBAN_COLUMNS`) so existing callers are unaffected — the prop
+   * is the parameterization seam introduced in control-spec-workspace task 4.1.
+   */
+  columns?: ColumnConfig<WorkspaceKanbanColumnKey>[];
 }
 
 /** Which column a card currently sits in within the local board state. */
 function findColumn(
   board: WorkspaceKanbanBoard,
   id: string,
+  columns: ColumnConfig<WorkspaceKanbanColumnKey>[],
 ): WorkspaceKanbanColumnKey | null {
-  for (const col of KANBAN_COLUMNS) {
-    if (board[col].some((c) => c.id === id)) return col;
+  for (const col of columns) {
+    if (board[col.key].some((c) => c.id === id)) return col.key;
   }
   return null;
 }
@@ -66,6 +73,7 @@ export function KanbanBoard({
   initialBoard,
   isHead,
   teamUsers,
+  columns = DEFAULT_KANBAN_COLUMNS,
 }: KanbanBoardProps) {
   const router = useRouter();
   const [board, setBoard] = useState<WorkspaceKanbanBoard>(initialBoard);
@@ -155,7 +163,7 @@ export function KanbanBoard({
 
     const card = active.data.current?.card as WorkspaceKanbanCard | undefined;
     if (!card) return;
-    const from = findColumn(board, card.id);
+    const from = findColumn(board, card.id, columns);
     if (!from || from === to) return;
 
     const action = resolveDragAction(from, to, isHead);
@@ -224,17 +232,18 @@ export function KanbanBoard({
       onDragEnd={handleDragEnd}
     >
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        {KANBAN_COLUMNS.map((col) => (
+        {columns.map((col) => (
           <KanbanColumn
-            key={col}
-            column={col}
+            key={col.key}
+            column={col.key}
+            label={col.label}
             domain={domain}
-            cards={board[col]}
+            cards={board[col.key]}
             isHead={isHead}
             teamUsers={teamUsers}
             pendingIds={pendingIds}
             activeFrom={
-              activeCard ? findColumn(board, activeCard.id) : null
+              activeCard ? findColumn(board, activeCard.id, columns) : null
             }
             openAssignId={openAssignId}
             onAssignOpenChange={(id, open) =>
@@ -256,6 +265,7 @@ export function KanbanBoard({
 
 interface KanbanColumnProps {
   column: WorkspaceKanbanColumnKey;
+  label: string;
   domain: "logistics" | "customs";
   cards: WorkspaceKanbanCard[];
   isHead: boolean;
@@ -270,6 +280,7 @@ interface KanbanColumnProps {
 
 function KanbanColumn({
   column,
+  label,
   domain,
   cards,
   isHead,
@@ -301,11 +312,11 @@ function KanbanColumn({
           ? "border-primary ring-2 ring-primary/30"
           : "",
       ].join(" ")}
-      aria-label={KANBAN_COLUMN_LABELS[column]}
+      aria-label={label}
     >
       <header className="flex items-center justify-between pb-1">
         <h2 className="text-sm font-semibold text-foreground">
-          {KANBAN_COLUMN_LABELS[column]}
+          {label}
         </h2>
         <span className="rounded-full bg-background px-2 py-0.5 text-xs text-muted-foreground">
           {cards.length}

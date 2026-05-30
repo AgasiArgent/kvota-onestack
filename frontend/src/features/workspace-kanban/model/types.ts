@@ -19,6 +19,17 @@ export type {
   WorkspaceKanbanColumnKey,
 };
 
+/**
+ * A single kanban column: its stable key and its display label. Generic over
+ * the column-key type so any board (logistics/customs invoice columns, the
+ * control-board status columns) can describe its own left-to-right layout
+ * through one shared contract (control-spec-workspace task 4.1).
+ */
+export interface ColumnConfig<K extends string = string> {
+  key: K;
+  label: string;
+}
+
 /** Fixed left-to-right column order. */
 export const KANBAN_COLUMNS: readonly WorkspaceKanbanColumnKey[] = [
   "unassigned",
@@ -32,6 +43,17 @@ export const KANBAN_COLUMN_LABELS: Record<WorkspaceKanbanColumnKey, string> = {
   in_progress: "В работе",
   completed: "Завершено",
 };
+
+/**
+ * Default logistics/customs column layout as `ColumnConfig[]` — the value the
+ * dnd `KanbanBoard` falls back to when no `columns` prop is passed. Keeping it
+ * derived from `KANBAN_COLUMNS` + `KANBAN_COLUMN_LABELS` means the existing
+ * single-source-of-truth constants stay authoritative; the prop is purely a
+ * parameterization seam so other boards can supply their own columns without
+ * changing logistics/customs behaviour.
+ */
+export const DEFAULT_KANBAN_COLUMNS: ColumnConfig<WorkspaceKanbanColumnKey>[] =
+  KANBAN_COLUMNS.map((key) => ({ key, label: KANBAN_COLUMN_LABELS[key] }));
 
 /** Stable draggable id / React key for a kanban card. */
 export function cardKey(card: WorkspaceKanbanCard): string {

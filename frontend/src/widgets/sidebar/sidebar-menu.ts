@@ -23,6 +23,7 @@ import {
   Trash2,
   Truck,
   Anchor,
+  ShieldCheck,
 } from "lucide-react";
 import { isNewbieOnly } from "@/entities/user/types";
 
@@ -160,6 +161,17 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
       icon: Anchor,
       label: "Очередь таможни",
       href: "/workspace/customs",
+    });
+  }
+  // Контроль queue — quote_controller (Контроль расчёта) / spec_controller
+  // (Контроль спецификации) own their respective boards; top_manager + admin
+  // see both. Gate mirrors `canSeeControlBoard` so the nav and the page guard
+  // stay in sync.
+  if (hasRole("quote_controller", "spec_controller", "top_manager")) {
+    mainItems.push({
+      icon: ShieldCheck,
+      label: "Контроль",
+      href: "/workspace/control",
     });
   }
   if (hasRole("top_manager")) {
