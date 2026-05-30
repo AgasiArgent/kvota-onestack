@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/table";
 import { Info } from "lucide-react";
 import type { QuoteDetailRow } from "@/entities/quote/queries";
-import { effectiveQuantity } from "../procurement-step/moq-warning";
+import { effectiveQuantity } from "@/shared/lib/effective-quantity";
 
 /**
  * Phase 5d Task 12 — narrow composed-item shape for the calc-results table.

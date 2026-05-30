@@ -18,18 +18,3 @@ export function isMoqViolation(row: MoqCheckable): boolean {
   if (row.quantity == null) return false;
   return row.quantity < row.min_order_quantity;
 }
-
-/**
- * Effective per-line quantity. When the supplier quantity is set (non-null,
- * > 0) it OVERRIDES the ordered quantity in both directions; otherwise the
- * ordered quantity stands (null → 0). Mirrors the backend
- * `effective_calc_quantity` helper (same `> 0` rule).
- * (Supplier-quantity override, 2026-05-29 — supersedes the Row 85 max floor.)
- */
-export function effectiveQuantity(
-  ordered: number | null,
-  supplierQty: number | null
-): number {
-  if (supplierQty != null && supplierQty > 0) return supplierQty;
-  return ordered ?? 0;
-}
