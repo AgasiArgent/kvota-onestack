@@ -26,7 +26,9 @@ export const STATUS_LABELS: Record<string, string> = {
   approved: "Одобрено",
   sent_to_client: "Отправлено клиенту",
   accepted: "Принято",
+  pending_signature: "Подписание",
   spec_signed: "Сделка",
+  deal: "Сделка",
   rejected: "Отклонено",
   cancelled: "Отменено",
 };
@@ -47,7 +49,9 @@ export const STATUS_BADGE_STYLES: Record<string, string> = {
   approved: "bg-green-100 text-green-700",
   sent_to_client: "bg-green-100 text-green-700",
   accepted: "bg-green-200 text-green-800 font-semibold",
+  pending_signature: "bg-blue-100 text-blue-700",
   spec_signed: "bg-green-200 text-green-800 font-semibold",
+  deal: "bg-green-200 text-green-800 font-semibold",
   rejected: "bg-red-100 text-red-700",
   cancelled: "bg-red-100 text-red-700",
 };
