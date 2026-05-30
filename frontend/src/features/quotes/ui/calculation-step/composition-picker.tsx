@@ -36,10 +36,10 @@ import {
   type HistoricalRateMap,
 } from "@/entities/supplier/lib/historical-fx";
 import { currencySymbol, fmtRu } from "@/entities/kp-proposal";
-// Testing 2 row 85 — shared MOQ helper (same feature slice, ui segment). The
-// calc engine floors the line quantity to the supplier MOQ; the picker shows
-// that effective quantity so it is visible before the calc runs.
-import { effectiveQuantity } from "../procurement-step/moq-warning";
+// Shared supplier-quantity override helper. The calc engine applies the
+// override to the line quantity; the picker shows that effective quantity so
+// it is visible before the calc runs.
+import { effectiveQuantity } from "@/shared/lib/effective-quantity";
 
 interface CompositionPickerProps {
   quoteId: string;
