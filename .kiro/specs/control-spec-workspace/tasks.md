@@ -37,29 +37,29 @@
 
 ## PR 2 — Экран контроля спецификации (4 блока)
 
-- [ ] 2. Экран контроля спеца, фаза «На контроле»
-- [ ] 2.1 (P) Блок «Из расчёта» (read-only)
+- [x] 2. Экран контроля спеца, фаза «На контроле»
+- [x] 2.1 (P) Блок «Из расчёта» (read-only)
   - Читать из prop `quote`: `total_quote_currency`, `total_with_vat_quote`, `total_profit_usd`, `currency`, `exchange_rate_to_usd` (НЕ `total_amount_quote` — удалён); markup из calc-summary; пометка «нет данных расчёта» при отсутствии
   - _Requirements: 1.1, 1.2, 1.3, 1.4_
-- [ ] 2.2 (P) Promote `entities/seller-company` (тип + `fetchSellerCompanies(orgId)`)
+- [x] 2.2 (P) Promote `entities/seller-company` (тип + `fetchSellerCompanies(orgId)`)
   - Вынести из `features/companies` в `entities/`, чтобы spec-step не cross-import-ил соседнюю feature
   - _Requirements: 2.3_
-- [ ] 2.3 Блок «Реквизиты» (searchable-дропдауны)
+- [x] 2.3 Блок «Реквизиты» (searchable-дропдауны)
   - Наше юрлицо → `SearchableCombobox<SellerCompany>`, persist FK `seller_company_id` + dual-write имени в `our_legal_entity` (совместимость экспорта)
   - Договор → `SearchableCombobox` из `customer_contracts` клиента; заменить plain `<Select>`; сохранить inline-create
   - Страны → `SearchableCombobox` из distinct `locations.country`, persist строкой в `*_country`
   - Юрлицо клиента → read-only (один набор)
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7_
-- [ ] 2.4 (P) Блок «Условия спецификации» (ввод)
+- [x] 2.4 (P) Блок «Условия спецификации» (ввод)
   - `sign_date`, `validity_period`, `readiness_period`, `logistics_period`, `cargo_type`, `delivery_city_russia`; read-only при отсутствии edit-права
   - _Requirements: 3.1, 3.2, 3.3, 3.4_
-- [ ] 2.5 Блок «Контроль» + selector курса на подписание
+- [x] 2.5 Блок «Контроль» + selector курса на подписание
   - Режим `cbr_on_payment_day` (default) | `fixed` + ввод значения; ответственный = текущий юзер (показ); Дата контроля — при «Отправить на подписание»
   - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
-- [ ] 2.6 Расширить insert/update payload + `created_by` + edit-gate
+- [x] 2.6 Расширить insert/update payload + `created_by` + edit-gate
   - `handleCreate`/`handleSave`: писать новые + реквизитные колонки + `created_by`; обернуть блоки `canEditSpecControl`
   - _Requirements: 2.7, 3.3, 11.3_
-- [ ]* 2.7 DOM-тесты экрана (рендер блоков, read-only по роли, дропдауны)
+- [x]* 2.7 DOM-тесты экрана (рендер блоков, read-only по роли, дропдауны)
   - _Requirements: 1.2, 2.2, 11.2, 11.3_
 
 ## PR 3 — Workflow «Отправить на подписание» + сверка + handoff

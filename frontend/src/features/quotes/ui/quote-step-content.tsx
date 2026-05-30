@@ -129,6 +129,7 @@ export function QuoteStepContent({
           quote={quote}
           items={items}
           userRoles={userRoles}
+          userId={userId}
         />
       );
     case "documents":
