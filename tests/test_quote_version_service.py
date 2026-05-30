@@ -836,5 +836,94 @@ class TestSnapshotSourcesComposedItems:
         assert products[0]["weight_in_kg"] == 5.0
 
 
+# =============================================================================
+# SUPPLIER-QUANTITY OVERRIDE (Stage 8) — version snapshot records effective qty
+# =============================================================================
+#
+# The immutable quote-version snapshot is "the single source of truth for what
+# the quote was" at version time. The calc engine, at that time, used the
+# EFFECTIVE quantity (invoice_items.minimum_order_quantity, UI «Кол-во
+# поставщика», OVERRIDES the ordered qty in both directions when >0). The
+# snapshot previously stored only the raw ordered `quantity` and DROPPED
+# minimum_order_quantity, so it could not reproduce or even reveal the override.
+#
+# Faithful audit shape (mirrors export_data_mapper / ExportData, Stage 5c):
+#   - quantity            : the ordered base (invoice_item.quantity)
+#   - minimum_order_quantity : the supplier override as entered (audit)
+#   - effective_quantity  : the value the engine actually computed with
+# =============================================================================
+
+
+class TestSnapshotRecordsEffectiveQuantity:
+    """Stage 8: the version products snapshot records the effective override qty."""
+
+    def _snap(self, *, quantity, minimum_order_quantity):
+        from services.quote_version_service import _build_products_snapshot
+
+        composed = [{
+            "product_name": "Bolt M8",
+            "supplier_sku": "SUP-BOLT-8",
+            "brand": "ACME",
+            "quantity": quantity,
+            "minimum_order_quantity": minimum_order_quantity,
+            "purchase_price_original": 2.5,
+            "purchase_currency": "EUR",
+            "base_price_vat": 3.0,
+            "weight_in_kg": 0.05,
+            "customs_code": "7318.15.20",
+            "supplier_country": "DE",
+            "quote_item_id": "qi-uuid",
+            "invoice_item_id": "ii-uuid",
+            "invoice_id": "inv-uuid",
+            "coverage_ratio": 1,
+        }]
+        return _build_products_snapshot(composed)[0]
+
+    def test_override_up_records_ordered_moq_and_effective(self):
+        """Ordered 10, supplier 123 -> effective 123; ordered + override preserved."""
+        snap = self._snap(quantity=10, minimum_order_quantity=123)
+        assert snap["quantity"] == 10               # ordered base preserved
+        assert snap["minimum_order_quantity"] == 123  # override preserved (audit)
+        assert snap["effective_quantity"] == 123      # value the engine used
+
+    def test_override_down_records_effective(self):
+        """Ordered 200, supplier 50 -> effective 50 (override down)."""
+        snap = self._snap(quantity=200, minimum_order_quantity=50)
+        assert snap["quantity"] == 200
+        assert snap["minimum_order_quantity"] == 50
+        assert snap["effective_quantity"] == 50
+
+    def test_no_override_effective_equals_ordered(self):
+        """minimum_order_quantity None -> effective falls back to ordered."""
+        snap = self._snap(quantity=80, minimum_order_quantity=None)
+        assert snap["quantity"] == 80
+        assert snap["minimum_order_quantity"] is None
+        assert snap["effective_quantity"] == 80
+
+    def test_zero_override_effective_equals_ordered(self):
+        """minimum_order_quantity 0 -> no override, effective = ordered."""
+        snap = self._snap(quantity=80, minimum_order_quantity=0)
+        assert snap["effective_quantity"] == 80
+
+    def test_string_quantity_from_postgrest_normalized_to_float(self):
+        """NUMERIC `quantity` arrives from PostgREST as a string ("10").
+        Both quantity and effective_quantity must normalize to float with NO
+        type flip between the passthrough (no override) and override branches —
+        the production path the int-based tests above don't exercise.
+        """
+        # Passthrough (no override): string "10" -> 10.0 for both fields.
+        no_ovr = self._snap(quantity="10", minimum_order_quantity=None)
+        assert no_ovr["quantity"] == 10.0
+        assert isinstance(no_ovr["quantity"], float)
+        assert no_ovr["effective_quantity"] == 10.0
+        assert isinstance(no_ovr["effective_quantity"], float)
+        # Override: string ordered "10" + supplier 123 -> effective 123.0 (float,
+        # not int — no flip vs the passthrough branch).
+        ovr = self._snap(quantity="10", minimum_order_quantity=123)
+        assert ovr["quantity"] == 10.0
+        assert ovr["effective_quantity"] == 123.0
+        assert isinstance(ovr["effective_quantity"], float)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
