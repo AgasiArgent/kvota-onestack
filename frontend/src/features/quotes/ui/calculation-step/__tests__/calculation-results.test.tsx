@@ -44,6 +44,7 @@ function makeItem(
     product_name: "Товар",
     brand: null,
     quantity: 10,
+    minimum_order_quantity: null,
     base_price_vat: 100,
     ...overrides,
   };
@@ -111,5 +112,76 @@ describe("CalculationResults — per-item rows read item.base_price_vat", () => 
     expect(html).toContain("X");
     // em-dash for null
     expect(html).toMatch(/—|&#x2014;/);
+  });
+});
+
+describe("CalculationResults — supplier-quantity override (Stage 2)", () => {
+  it("renders the effective quantity (override UP) and price × effective line total", () => {
+    const quote = makeQuote();
+    // ordered 5, supplier 10 → effective 10; price 100 → line total 1000
+    const items = [
+      makeItem({
+        id: "a",
+        product_name: "Болт",
+        base_price_vat: 100,
+        quantity: 5,
+        minimum_order_quantity: 10,
+      }),
+    ];
+
+    const html = renderToString(
+      <CalculationResults quote={quote} items={items} />
+    );
+
+    expect(html).toContain("Болт");
+    // effective qty 10 shown via the two-sided hint, not ordered 5
+    expect(html).toContain("кол-во поставщика: 10");
+    expect(html).toContain("заказано 5");
+    // line total = 100 × 10 = 1000 (ru-RU groups with U+00A0)
+    expect(html).toMatch(/1\s000,00/);
+  });
+
+  it("renders the effective quantity (override DOWN) and reduced line total", () => {
+    const quote = makeQuote();
+    // ordered 20, supplier 5 → effective 5; price 100 → line total 500
+    const items = [
+      makeItem({
+        id: "a",
+        product_name: "Гайка",
+        base_price_vat: 100,
+        quantity: 20,
+        minimum_order_quantity: 5,
+      }),
+    ];
+
+    const html = renderToString(
+      <CalculationResults quote={quote} items={items} />
+    );
+
+    expect(html).toContain("кол-во поставщика: 5");
+    expect(html).toContain("заказано 20");
+    // line total = 100 × 5 = 500
+    expect(html).toContain("500,00");
+  });
+
+  it("shows no hint and uses ordered qty when supplier qty is unset", () => {
+    const quote = makeQuote();
+    const items = [
+      makeItem({
+        id: "a",
+        product_name: "Шайба",
+        base_price_vat: 100,
+        quantity: 7,
+        minimum_order_quantity: null,
+      }),
+    ];
+
+    const html = renderToString(
+      <CalculationResults quote={quote} items={items} />
+    );
+
+    expect(html).not.toContain("кол-во поставщика");
+    // line total = 100 × 7 = 700
+    expect(html).toContain("700,00");
   });
 });

@@ -50,6 +50,7 @@ function makeItem(
     product_name: "Миксер пневматический PM-3/TJ3",
     brand: "Китайский бренд",
     quantity: 3,
+    minimum_order_quantity: null,
     base_price_vat: null,
     ...overrides,
   };
@@ -143,5 +144,30 @@ describe("CalculationResults — items table rendered even when no calc yet", ()
     expect(screen.getByText("Профит")).toBeTruthy();
     // Table still present.
     expect(screen.getByText("С ценой")).toBeTruthy();
+  });
+});
+
+describe("CalculationResults — effective quantity (supplier override)", () => {
+  it("renders effective qty + «кол-во поставщика» hint when supplier qty overrides", () => {
+    const quote = makeQuote({ total_quote_currency: 1000 });
+    const items = [
+      makeItem({
+        id: "a",
+        product_name: "С поставщиком",
+        base_price_vat: 100,
+        quantity: 5,
+        minimum_order_quantity: 10,
+      }),
+    ];
+
+    render(<CalculationResults quote={quote} items={items} />);
+
+    const row = screen.getByText("С поставщиком").closest("tr") as HTMLElement;
+    // Effective qty (10) is shown.
+    expect(within(row).getByText("10")).toBeTruthy();
+    // Two-sided hint visible, with the ordered qty in its tooltip.
+    const hint = within(row).getByText(/кол-во поставщика: 10/);
+    expect(hint).toBeTruthy();
+    expect(hint.getAttribute("title")).toContain("заказано 5");
   });
 });

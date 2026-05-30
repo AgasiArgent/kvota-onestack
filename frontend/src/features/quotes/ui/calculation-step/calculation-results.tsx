@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/table";
 import { Info } from "lucide-react";
 import type { QuoteDetailRow } from "@/entities/quote/queries";
+import { effectiveQuantity } from "../procurement-step/moq-warning";
 
 /**
  * Phase 5d Task 12 — narrow composed-item shape for the calc-results table.
@@ -32,6 +33,13 @@ export interface CalculationResultsItem {
   product_name: string;
   brand: string | null;
   quantity: number | null;
+  /**
+   * Supplier quantity («Кол-во поставщика», DB `minimum_order_quantity`).
+   * When set (> 0) it overrides `quantity` in both directions via the shared
+   * `effectiveQuantity` helper. Null/0 → use ordered `quantity`. Sourced by
+   * calculation-step.tsx from the selected invoice_item.
+   */
+  minimum_order_quantity?: number | null;
   base_price_vat: number | null;
   is_unavailable?: boolean | null;
   import_banned?: boolean | null;
@@ -155,7 +163,13 @@ export function CalculationResults({ quote, items }: CalculationResultsProps) {
                       : "Запрет ввоза на таможне"
                     : null;
                 const priceVat = excluded ? null : item.base_price_vat;
-                const qty = item.quantity ?? 0;
+                const ordered = item.quantity ?? 0;
+                const supplierQty = item.minimum_order_quantity ?? null;
+                const qty = effectiveQuantity(item.quantity, supplierQty);
+                // Override is "adjusted" only when a positive supplier qty
+                // actually changes the number — mirrors the picker's QuantityCell.
+                const adjusted =
+                  supplierQty != null && supplierQty > 0 && qty !== ordered;
                 const lineTotal =
                   priceVat != null ? priceVat * qty : null;
 
@@ -191,6 +205,14 @@ export function CalculationResults({ quote, items }: CalculationResultsProps) {
                     </TableCell>
                     <TableCell className="text-sm text-right tabular-nums">
                       {qty}
+                      {adjusted && (
+                        <div
+                          className="text-[11px] font-normal text-muted-foreground"
+                          title={`Кол-во поставщика переопределяет заказанное (заказано ${ordered})`}
+                        >
+                          {`кол-во поставщика: ${supplierQty}`}
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell className="text-sm text-right tabular-nums">
                       {excluded ? "—" : fmt(priceVat, currency)}
