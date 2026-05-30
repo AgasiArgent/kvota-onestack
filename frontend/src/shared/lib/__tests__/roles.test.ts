@@ -9,6 +9,10 @@ import {
   canEditQuoteCustomerFields,
   shouldShowFinancials,
   canReassignBrandGroup,
+  isQuoteController,
+  isSpecController,
+  canSeeControlBoard,
+  canEditSpecControl,
 } from "../roles";
 
 describe("isSalesOnly", () => {
@@ -551,5 +555,106 @@ describe("canReassignBrandGroup", () => {
 
   it("returns false for unknown role", () => {
     expect(canReassignBrandGroup(["unknown_role_xyz"])).toBe(false);
+  });
+});
+
+// ===========================================================================
+// control-spec-workspace — controller helpers (PR1, Req 11.1/11.3/11.5)
+// ===========================================================================
+
+describe("isQuoteController", () => {
+  it("returns true for quote_controller", () => {
+    expect(isQuoteController(["quote_controller"])).toBe(true);
+  });
+
+  it("returns true in a combo", () => {
+    expect(isQuoteController(["quote_controller", "sales"])).toBe(true);
+  });
+
+  it.each([["spec_controller"], ["admin"], ["top_manager"], ["sales"], []])(
+    "returns false for %s",
+    (...roles) => {
+      expect(isQuoteController(roles as string[])).toBe(false);
+    }
+  );
+});
+
+describe("isSpecController", () => {
+  it("returns true for spec_controller", () => {
+    expect(isSpecController(["spec_controller"])).toBe(true);
+  });
+
+  it("returns true in a combo", () => {
+    expect(isSpecController(["spec_controller", "sales"])).toBe(true);
+  });
+
+  it.each([["quote_controller"], ["admin"], ["top_manager"], ["sales"], []])(
+    "returns false for %s",
+    (...roles) => {
+      expect(isSpecController(roles as string[])).toBe(false);
+    }
+  );
+});
+
+describe("canSeeControlBoard", () => {
+  // quote_controller → calc only
+  it("quote_controller sees calc board only", () => {
+    expect(canSeeControlBoard(["quote_controller"])).toEqual({
+      calc: true,
+      spec: false,
+    });
+  });
+
+  // spec_controller → spec only
+  it("spec_controller sees spec board only", () => {
+    expect(canSeeControlBoard(["spec_controller"])).toEqual({
+      calc: false,
+      spec: true,
+    });
+  });
+
+  // admin / top_manager → both
+  it.each([["admin"], ["top_manager"]])("%s sees both boards", (role) => {
+    expect(canSeeControlBoard([role])).toEqual({ calc: true, spec: true });
+  });
+
+  it("both controllers combined see both boards", () => {
+    expect(canSeeControlBoard(["quote_controller", "spec_controller"])).toEqual({
+      calc: true,
+      spec: true,
+    });
+  });
+
+  // fail-closed: anyone else sees neither
+  it.each([["sales"], ["procurement"], ["finance"], ["unknown_role_xyz"], []])(
+    "fail-closed: %s sees neither board",
+    (...roles) => {
+      expect(canSeeControlBoard(roles as string[])).toEqual({
+        calc: false,
+        spec: false,
+      });
+    }
+  );
+});
+
+describe("canEditSpecControl", () => {
+  it.each([["spec_controller"], ["admin"]])("returns true for %s", (role) => {
+    expect(canEditSpecControl([role])).toBe(true);
+  });
+
+  it("returns true for spec_controller + sales combo", () => {
+    expect(canEditSpecControl(["spec_controller", "sales"])).toBe(true);
+  });
+
+  // quote_controller owns the calc gate, not spec editing; top_manager is read-only
+  it.each([
+    ["quote_controller"],
+    ["top_manager"],
+    ["sales"],
+    ["finance"],
+    ["unknown_role_xyz"],
+    [],
+  ])("returns false for %s", (...roles) => {
+    expect(canEditSpecControl(roles as string[])).toBe(false);
   });
 });

@@ -12,7 +12,7 @@
 ## PR 1 — Миграция + проводка типов + роли (foundation)
 
 - [ ] 1. Foundation: схема, типы, роли
-- [ ] 1.1 Подтвердить номер миграции на VPS и написать аддитивную миграцию
+- [x] 1.1 Подтвердить номер миграции на VPS и написать аддитивную миграцию
   - На VPS свериться с `kvota.schema_migrations` (CLAUDE.md=283 vs `migrations/`=318/319) — взять истинный следующий номер
   - `migrations/<NEXT>_control_spec_signing_fx_and_seller_fk.sql`: `BEGIN; ALTER TABLE kvota.specifications ADD signing_fx_mode VARCHAR(32) CHECK(...), ADD signing_fx_rate DECIMAL(15,6), ADD seller_company_id UUID REFERENCES kvota.seller_companies(id) ON DELETE SET NULL; COMMIT;`
   - Идемпотентность (`IF NOT EXISTS`), `information_schema` guard (если есть) фильтрует `table_schema='kvota'`
@@ -22,17 +22,17 @@
   - `cd frontend && npm run db:types`; `tsc` зелёный; `tools/check_select_columns.py`
   - Reset `/root/onestack` на main после применения с ветки
   - _Requirements: 8.3, 8.4_
-- [ ] 1.3 (P) Хелперы ролей контролёров в `shared/lib/roles.ts`
+- [x] 1.3 (P) Хелперы ролей контролёров в `shared/lib/roles.ts`
   - `isQuoteController`, `isSpecController`, `canSeeControlBoard` (admin/top_manager→оба), `canEditSpecControl` (spec_controller||admin); fail-closed на неизвестную роль
   - _Requirements: 11.1, 11.3, 11.5_
-- [ ] 1.4 (P) Read-only enforcement для top_manager/контролёров
+- [x] 1.4 (P) Read-only enforcement для top_manager/контролёров
   - Расширить `ROLE_EDITABLE_STEPS` (`entities/quote/types.ts`): `top_manager: []`, контролёрам — только их control-шаг; через существующую `isReadOnly`-машинерию
   - _Requirements: 11.2, 11.3_
-- [ ] 1.5 Расширить `SpecificationRow` + оба SELECT call-site + сериализацию
+- [x] 1.5 Расширить `SpecificationRow` + оба SELECT call-site + сериализацию
   - Widen SELECT в `specification-step.tsx` И `specification-step/queries.ts` + тип `SpecificationRow` (держать в синхроне); добавить новые + «мёртвые» колонки реквизитов
   - Проверить, что `services/specification_service.py` сериализует новые поля
   - _Requirements: 1.1, 2.1, 3.1, 12.1_
-- [ ]* 1.6 Unit-тесты хелперов ролей (чистые функции)
+- [x]* 1.6 Unit-тесты хелперов ролей (чистые функции)
   - _Requirements: 11.1, 11.3, 11.5_
 
 ## PR 2 — Экран контроля спецификации (4 блока)

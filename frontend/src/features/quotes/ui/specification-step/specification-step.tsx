@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/select";
 import { createClient } from "@/shared/lib/supabase/client";
 import { confirmSignatureAndCreateDeal } from "./mutations";
+import { SPECIFICATION_SELECT } from "./columns";
 import type { QuoteDetailRow, QuoteItemRow } from "@/entities/quote/queries";
 import type {
   SpecificationRow,
@@ -102,7 +103,7 @@ export function SpecificationStep({
     const [specRes, contractsRes, contactsRes] = await Promise.all([
       supabase
         .from("specifications")
-        .select("id, quote_id, quote_version_id, contract_id, specification_number, sign_date, status, readiness_period, signed_scan_url, created_at, updated_at")
+        .select(SPECIFICATION_SELECT)
         .eq("quote_id", quote.id)
         .is("deleted_at", null)
         .order("created_at", { ascending: false })
