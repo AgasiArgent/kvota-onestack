@@ -20,6 +20,7 @@ from docx.oxml import OxmlElement
 from services.contract_spec_export import (
     fetch_contract_spec_data,
     format_signatory_name,
+    _effective_qty,
     DELIVERY_CONDITIONS_TEMPLATE,
     CALC_FIELDS,
     VAT_RATE,
@@ -238,7 +239,7 @@ def generate_contract_spec_docx(spec_id: str, org_id: str) -> bytes:
 
         if total_with_vat:
             totals = {
-                "total_qty": sum(item.get("quantity", 1) for item in items),
+                "total_qty": sum(_effective_qty(item) for item in items),
                 "total_no_vat": float(total_no_vat) if total_no_vat else 0,
                 "total_with_vat": float(total_with_vat) if total_with_vat else 0,
                 "vat_amount": (float(total_with_vat) if total_with_vat else 0) - (float(total_no_vat) if total_no_vat else 0),
@@ -259,7 +260,7 @@ def generate_contract_spec_docx(spec_id: str, org_id: str) -> bytes:
         }
         for item in items:
             calc = item.get("calc", {})
-            qty = max(item.get("quantity") or 1, 1)
+            qty = _effective_qty(item)
             totals["total_qty"] += qty
             totals["total_no_vat"] += Decimal(str(calc.get(CALC_FIELDS["TOTAL_NO_VAT"], 0)))
             totals["total_with_vat"] += Decimal(str(calc.get(CALC_FIELDS["TOTAL_WITH_VAT"], 0)))
@@ -354,7 +355,7 @@ def generate_contract_spec_docx(spec_id: str, org_id: str) -> bytes:
     # Data rows
     for idx, item in enumerate(items, 1):
         calc = item.get("calc", {})
-        qty = max(item.get("quantity") or 1, 1)
+        qty = _effective_qty(item)
 
         item_total_vat = float(calc.get(CALC_FIELDS["TOTAL_WITH_VAT"], 0))
         price_per_unit_vat = item_total_vat / qty if qty > 0 else 0
