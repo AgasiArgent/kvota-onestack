@@ -13,6 +13,7 @@ from datetime import datetime
 from dataclasses import dataclass
 
 from services.export_data_mapper import ExportData, enrich_with_legal_names, format_date_russian, amount_in_words_russian
+from services.composition_service import get_effective_quantities
 
 
 @dataclass
@@ -344,6 +345,15 @@ def fetch_specification_data(spec_id: str, org_id: str) -> SpecificationData:
         else:
             item["calc"] = {}
 
+    # Supplier-quantity override: the «Кол-во» shown to the customer is the
+    # effective qty the calc engine used (supplier minimum / short stock),
+    # not the ordered qty. Falls back to ordered when no supplier is chosen.
+    effective_qtys = get_effective_quantities(quote_id, supabase)
+    for item in items:
+        item["effective_quantity"] = effective_qtys.get(
+            item["id"], item.get("quantity")
+        )
+
     # 7. Fetch calculation summary
     summary_result = supabase.table("quote_calculation_summaries") \
         .select("*") \
@@ -459,7 +469,8 @@ def generate_spec_pdf_html(data: SpecificationData) -> str:
     product_rows = ""
     for i, item in enumerate(items, 1):
         calc = item.get("calc", {})
-        qty = item.get("quantity", 1)
+        eq = item.get("effective_quantity")
+        qty = eq if eq is not None else item.get("quantity", 1)
         unit = item.get("unit", "шт")
         price_per_unit = calc.get("AJ16", 0)  # Sales price per unit (no VAT)
         item_total = calc.get("AL16", 0)  # Total with VAT

@@ -62,6 +62,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
 
+from services.calculation_helpers import effective_calc_quantity
+
 logger = logging.getLogger(__name__)
 
 
@@ -337,6 +339,106 @@ def get_composed_items(quote_id: str, supabase) -> list[dict]:
             results.append(_build_calc_item(qi, ii, cov.get("ratio", 1)))
 
     return results
+
+
+# ============================================================================
+# Effective (supplier-override) quantity per quote_item — for exports
+# ============================================================================
+
+def compute_effective_quantities(
+    qi_rows: list[dict], coverage_rows: list[dict]
+) -> dict[str, int]:
+    """Map each quote_item_id → the effective (supplier-override) quantity.
+
+    Pure function (no I/O) so it is unit-testable. For each quote_item:
+      - No ``composition_selected_invoice_id`` (or uncovered) → the ordered
+        ``quote_item.quantity`` passes through — the same base the calc engine's
+        legacy shape uses for items with no chosen supplier.
+      - Otherwise, find the covering invoice_item(s) in the SELECTED invoice and
+        apply ``effective_calc_quantity(invoice_item.quantity,
+        invoice_item.minimum_order_quantity)`` — **the exact base the engine
+        uses** (``_build_calc_item`` feeds ``invoice_item.quantity`` into
+        ``build_calculation_inputs``). Basing the displayed qty on the same
+        invoice_item.quantity guarantees ``qty × per-unit = line total`` against
+        the engine totals on the customer document (it would NOT if we based it
+        on quote_item.quantity, which can differ when MOQ is unset).
+
+    Split (one quote_item covered by >1 invoice_item in the selected invoice)
+    uses the FIRST covering invoice_item — the same first-match convention the
+    composition picker, calc-results table and customs grid use — and logs a
+    warning so the rare case is visible. Merge (one invoice_item covering >1
+    quote_item) needs no special handling here: each quote_item independently
+    resolves its selected invoice_item's MOQ.
+
+    Args:
+        qi_rows: quote_items rows, each with ``id``, ``quantity``,
+            ``composition_selected_invoice_id``.
+        coverage_rows: ``_load_coverage_with_items`` output — coverage rows with
+            a nested ``invoice_items`` dict (carrying ``invoice_id`` and
+            ``minimum_order_quantity``).
+
+    Returns:
+        ``{quote_item_id: effective_quantity}`` for every quote_item in qi_rows.
+    """
+    by_qi: dict[str, list[dict]] = defaultdict(list)
+    for cov in coverage_rows:
+        by_qi[cov.get("quote_item_id")].append(cov)
+
+    result: dict[str, int] = {}
+    for qi in qi_rows:
+        qi_id = qi.get("id")
+        ordered = qi.get("quantity")
+        selected = qi.get("composition_selected_invoice_id")
+        if not selected:
+            result[qi_id] = ordered
+            continue
+        coverings = [
+            cov
+            for cov in by_qi.get(qi_id, [])
+            if (cov.get("invoice_items") or {}).get("invoice_id") == selected
+        ]
+        if not coverings:
+            result[qi_id] = ordered
+            continue
+        if len(coverings) > 1:
+            logger.warning(
+                "Effective qty: quote_item %s is split across %d invoice_items "
+                "in the selected invoice — using the first (export shows one "
+                "qty per line)",
+                qi_id,
+                len(coverings),
+            )
+        ii = coverings[0].get("invoice_items") or {}
+        # Base on invoice_item.quantity (the engine's base), NOT the ordered
+        # quote_item.quantity — keeps the displayed qty consistent with the
+        # engine-computed line totals on the customer document.
+        result[qi_id] = effective_calc_quantity(
+            ii.get("quantity"), ii.get("minimum_order_quantity")
+        )
+    return result
+
+
+def get_effective_quantities(quote_id: str, supabase) -> dict[str, int]:
+    """Fetch quote_items + coverage and return ``{quote_item_id: effective qty}``.
+
+    Thin I/O wrapper over :func:`compute_effective_quantities`. Two reads:
+    quote_items (id/quantity/selected invoice) + coverage with invoice_items.
+    Used by the customer document exports so the displayed «Кол-во» matches the
+    supplier-overridden quantity the calc engine used (and keeps
+    contract per-unit price = total / effective_qty correct).
+    """
+    qi_rows = (
+        supabase.table("quote_items")
+        .select("id, quantity, composition_selected_invoice_id")
+        .eq("quote_id", quote_id)
+        .execute()
+        .data
+        or []
+    )
+    coverage_rows = _load_coverage_with_items(
+        [qi["id"] for qi in qi_rows], supabase
+    )
+    return compute_effective_quantities(qi_rows, coverage_rows)
 
 
 # ============================================================================
