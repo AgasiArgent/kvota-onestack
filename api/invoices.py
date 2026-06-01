@@ -635,6 +635,9 @@ async def complete_invoice_procurement(request, id: str) -> JSONResponse:
         403 — Procurement role required
         404 — Invoice not found (or not in user's organization)
         409 — Procurement already completed for this invoice
+        422 — MISSING_SUPPLIER_FILE: «Файл КП поставщика» not uploaded yet
+              (invoice_file_url null/empty). Optional at create/edit but
+              mandatory to finish procurement.
     """
     user, err = _get_procurement_user(request)
     if err:
@@ -643,6 +646,35 @@ async def complete_invoice_procurement(request, id: str) -> JSONResponse:
     _, err = _verify_invoice_ownership(id, user["org_id"])
     if err:
         return err
+
+    # Mandatory supplier-offer file gate (КПП). The «Файл КП поставщика» is
+    # optional at create/edit but MUST be present to finish procurement: a КПП
+    # advances to logistics/customs only once procurement has the supplier's
+    # actual offer on file. Optional at create + edit, mandatory to complete —
+    # so the gate lives HERE (authoritative backend), not in the create/edit
+    # validation. `_verify_invoice_ownership` selects a slim column set, so we
+    # fetch the file column with its own targeted query.
+    sb = get_supabase()
+    file_result = (
+        sb.table("invoices")
+        .select("invoice_file_url")
+        .eq("id", id)
+        .limit(1)
+        .execute()
+    )
+    file_rows = _rows(file_result)
+    invoice_file_url = (file_rows[0].get("invoice_file_url") if file_rows else None)
+    if not (invoice_file_url or "").strip():
+        return JSONResponse(
+            {
+                "success": False,
+                "error": {
+                    "code": "MISSING_SUPPLIER_FILE",
+                    "message": "Загрузите файл КП поставщика перед завершением закупки",
+                },
+            },
+            status_code=422,
+        )
 
     # Body is optional. We accept an empty body or `{ "reason": "..." }`.
     # The reason field is reserved for future audit logging and is currently

@@ -231,6 +231,11 @@ class TestCompleteProcurementAuth:
                 "quote_id": quote_id,
                 "invoice_number": "INV-01",
                 "sent_at": None,
+                # Supplier-offer file present so the mandatory-to-complete gate
+                # (MISSING_SUPPLIER_FILE / 422) passes — these cases assert the
+                # downstream 200/409 behaviour, not the file gate itself (that
+                # is covered in test_complete_procurement_supplier_file_gate.py).
+                "invoice_file_url": "https://example.test/kp.pdf",
                 "quotes": {"organization_id": org_id},
             }])
             tables["invoices"] = inv_mock
@@ -302,6 +307,11 @@ class TestCompleteProcurementAuth:
                 "quote_id": quote_id,
                 "invoice_number": "INV-01",
                 "sent_at": None,
+                # Supplier-offer file present so the mandatory-to-complete gate
+                # (MISSING_SUPPLIER_FILE / 422) passes — these cases assert the
+                # downstream 200/409 behaviour, not the file gate itself (that
+                # is covered in test_complete_procurement_supplier_file_gate.py).
+                "invoice_file_url": "https://example.test/kp.pdf",
                 "quotes": {"organization_id": org_id},
             }])
             tables["invoices"] = inv_mock
@@ -361,6 +371,11 @@ class TestCompleteProcurementAuth:
                 "quote_id": quote_id,
                 "invoice_number": "INV-01",
                 "sent_at": None,
+                # Supplier-offer file present so the mandatory-to-complete gate
+                # (MISSING_SUPPLIER_FILE / 422) passes — these cases assert the
+                # downstream 200/409 behaviour, not the file gate itself (that
+                # is covered in test_complete_procurement_supplier_file_gate.py).
+                "invoice_file_url": "https://example.test/kp.pdf",
                 "quotes": {"organization_id": org_id},
             }])
             tables["invoices"] = inv_mock
