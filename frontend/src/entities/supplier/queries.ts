@@ -3,6 +3,7 @@ import { escapePostgrestFilter } from "@/shared/lib/supabase/escape-filter";
 import { isProcurementOnly } from "@/shared/lib/roles";
 import { getAssignedSupplierIds } from "@/shared/lib/access";
 import { fetchActiveAuthUserIds } from "@/entities/user";
+import { intersectSupplierIdConstraints } from "./lib/filter-supplier-ids";
 import {
   buildHistoricalRateMap,
   sumInvoiceLinesInUsd,
@@ -16,6 +17,7 @@ import type {
   BrandAssignment,
   SupplierAssignee,
   SupplierQuoteItem,
+  SupplierFilterOptions,
 } from "./types";
 
 const PAGE_SIZE = 50;
@@ -209,18 +211,75 @@ async function fetchInvoiceAggregatesForSuppliers(
   return result;
 }
 
+/**
+ * Resolve the supplier IDs that have a brand assignment for `brand`.
+ * Used by the /suppliers Бренд filter (Testing 2 row 92). Returns a
+ * (possibly empty) array — an empty array forces a zero-row query.
+ */
+async function fetchSupplierIdsByBrand(
+  orgId: string,
+  brand: string
+): Promise<string[]> {
+  const supabase = createAdminClient();
+  // brand_supplier_assignments carries its own organization_id (migration 105),
+  // so filter on it directly — no join through suppliers needed.
+  const { data } = await supabase
+    .from("brand_supplier_assignments")
+    .select("supplier_id")
+    .eq("organization_id", orgId)
+    .eq("brand", brand);
+
+  return [
+    ...new Set(
+      (data ?? [])
+        .map((r) => r.supplier_id)
+        .filter((id): id is string => id !== null)
+    ),
+  ];
+}
+
+/**
+ * Resolve the supplier IDs that have `userId` as an assignee (МОЗ).
+ * Used by the /suppliers МОЗ filter (Testing 2 row 92). Returns a
+ * (possibly empty) array — an empty array forces a zero-row query.
+ */
+async function fetchSupplierIdsByAssignee(userId: string): Promise<string[]> {
+  const untyped = getUntypedClient();
+  const { data } = await untyped
+    .from("supplier_assignees")
+    .select("supplier_id")
+    .eq("user_id", userId);
+
+  return [
+    ...new Set(
+      ((data ?? []) as Array<{ supplier_id: string }>)
+        .map((r) => r.supplier_id)
+        .filter((id): id is string => Boolean(id))
+    ),
+  ];
+}
+
 export async function fetchSuppliersList(
   orgId: string,
   params: {
     search?: string;
     country?: string;
     status?: string;
+    assignee?: string;
+    brand?: string;
     page?: number;
   },
   user?: { id: string; roles: string[] }
 ): Promise<{ data: SupplierListItem[]; total: number; activeCount: number; inactiveCount: number }> {
   const supabase = createAdminClient();
-  const { search = "", country = "", status = "", page = 1 } = params;
+  const {
+    search = "",
+    country = "",
+    status = "",
+    assignee = "",
+    brand = "",
+    page = 1,
+  } = params;
   const from = (page - 1) * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
 
@@ -231,6 +290,21 @@ export async function fetchSuppliersList(
     assignedIds = await getAssignedSupplierIds(supabaseAuth, user.id);
   }
 
+  // МОЗ + Бренд filters operate over junction tables, so resolve each to a set
+  // of supplier IDs and intersect them (AND) with the role-based visibility
+  // scope. Страна stays an inline column filter below.
+  const [brandIds, assigneeIds] = await Promise.all([
+    brand ? fetchSupplierIdsByBrand(orgId, brand) : Promise.resolve(null),
+    assignee ? fetchSupplierIdsByAssignee(assignee) : Promise.resolve(null),
+  ]);
+
+  // null = "no constraint"; [] = "matched nothing" → must yield zero rows.
+  const idConstraint = intersectSupplierIdConstraints([
+    assignedIds,
+    brandIds,
+    assigneeIds,
+  ]);
+
   let query = supabase
     .from("suppliers")
     .select("id, name, country, is_active", {
@@ -240,9 +314,12 @@ export async function fetchSuppliersList(
     .order("name")
     .range(from, to);
 
-  // Role-based filtering via supplier_assignees junction table.
-  if (assignedIds !== null) {
-    query = query.in("id", assignedIds.length > 0 ? assignedIds : [EMPTY_RESULT_UUID]);
+  // Combined role + Бренд + МОЗ id constraint (empty → sentinel zero-row UUID).
+  if (idConstraint !== null) {
+    query = query.in(
+      "id",
+      idConstraint.length > 0 ? idConstraint : [EMPTY_RESULT_UUID]
+    );
   }
 
   if (search) {
@@ -261,13 +338,27 @@ export async function fetchSuppliersList(
   const rows = data ?? [];
   const supplierIds = rows.map((s) => s.id);
 
-  // Active/inactive counts use same visibility filter as the main query.
+  // Active/inactive counts use the same visibility + Страна/МОЗ/Бренд scope as
+  // the main query (but ignore status — these counts ARE the status breakdown —
+  // and ignore search/pagination, since they describe the filtered universe).
   let countsQuery = supabase
     .from("suppliers")
     .select("is_active")
     .eq("organization_id", orgId);
-  if (assignedIds !== null) {
-    countsQuery = countsQuery.in("id", assignedIds.length > 0 ? assignedIds : [EMPTY_RESULT_UUID]);
+  if (idConstraint !== null) {
+    countsQuery = countsQuery.in(
+      "id",
+      idConstraint.length > 0 ? idConstraint : [EMPTY_RESULT_UUID]
+    );
+  }
+  if (search) {
+    const escaped = escapePostgrestFilter(search);
+    countsQuery = countsQuery.or(
+      `name.ilike.%${escaped}%,supplier_code.ilike.%${escaped}%`
+    );
+  }
+  if (country) {
+    countsQuery = countsQuery.eq("country", country);
   }
 
   const [assigneeMap, invoiceAggregates, allStatuses] = await Promise.all([
@@ -294,6 +385,100 @@ export async function fetchSuppliersList(
   });
 
   return { data: items, total: count ?? 0, activeCount, inactiveCount };
+}
+
+/**
+ * Filter-bar option lists for /suppliers (Testing 2 row 92): distinct Страна,
+ * МОЗ (assignees), and Бренд values within the user's visible supplier scope.
+ *
+ * All three are scoped to the same role-based visibility as the list itself,
+ * so a procurement-only user only sees countries/МОЗ/brands of suppliers they
+ * are assigned to. Options are derived from the full visible universe (NOT the
+ * current page), so picking a filter never hides the option that produced it.
+ */
+export async function fetchSupplierFilterOptions(
+  orgId: string,
+  user?: { id: string; roles: string[] }
+): Promise<SupplierFilterOptions> {
+  const supabase = createAdminClient();
+  const untyped = getUntypedClient();
+
+  // Role-based visibility scope (procurement-only users see only their own).
+  let visibleIds: string[] | null = null;
+  if (user && isProcurementOnly(user.roles)) {
+    const supabaseAuth = await createClient();
+    visibleIds = await getAssignedSupplierIds(supabaseAuth, user.id);
+    if (visibleIds.length === 0) {
+      return { countries: [], assignees: [], brands: [] };
+    }
+  }
+
+  let suppliersQuery = supabase
+    .from("suppliers")
+    .select("id, country")
+    .eq("organization_id", orgId);
+  if (visibleIds !== null) {
+    suppliersQuery = suppliersQuery.in("id", visibleIds);
+  }
+
+  const { data: supplierRows } = await suppliersQuery;
+  const rows = supplierRows ?? [];
+  const scopeIds = rows.map((r) => r.id);
+
+  // Страна — distinct non-empty countries, RU-collated.
+  const countries = [
+    ...new Set(
+      rows
+        .map((r) => (r.country ?? "").trim())
+        .filter((c) => c.length > 0)
+    ),
+  ].sort((a, b) => a.localeCompare(b, "ru"));
+
+  if (scopeIds.length === 0) {
+    return { countries, assignees: [], brands: [] };
+  }
+
+  // МОЗ + Бренд — both junction-table reads, scoped to the visible suppliers.
+  const [assigneeRowsRes, brandRowsRes] = await Promise.all([
+    untyped
+      .from("supplier_assignees")
+      .select("user_id")
+      .in("supplier_id", scopeIds),
+    supabase
+      .from("brand_supplier_assignments")
+      .select("brand")
+      .in("supplier_id", scopeIds),
+  ]);
+
+  const assigneeUserIds = [
+    ...new Set(
+      ((assigneeRowsRes.data ?? []) as Array<{ user_id: string }>)
+        .map((r) => r.user_id)
+        .filter((id): id is string => Boolean(id))
+    ),
+  ];
+
+  let assignees: { id: string; full_name: string }[] = [];
+  if (assigneeUserIds.length > 0) {
+    const { data: profiles } = await supabase
+      .from("user_profiles")
+      .select("user_id, full_name")
+      .in("user_id", assigneeUserIds);
+    assignees = (profiles ?? [])
+      .map((p) => ({ id: p.user_id, full_name: p.full_name ?? "" }))
+      .filter((p) => p.full_name.length > 0)
+      .sort((a, b) => a.full_name.localeCompare(b.full_name, "ru"));
+  }
+
+  const brands = [
+    ...new Set(
+      ((brandRowsRes.data ?? []) as Array<{ brand: string | null }>)
+        .map((r) => (r.brand ?? "").trim())
+        .filter((b) => b.length > 0)
+    ),
+  ].sort((a, b) => a.localeCompare(b, "ru"));
+
+  return { countries, assignees, brands };
 }
 
 /**

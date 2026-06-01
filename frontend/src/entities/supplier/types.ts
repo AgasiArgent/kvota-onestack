@@ -67,6 +67,19 @@ export interface SupplierAssignee {
   created_at: string;
 }
 
+/**
+ * Filter-bar option lists for /suppliers (Testing 2 row 92). Each list is
+ * scoped to the requesting user's visible supplier universe.
+ */
+export interface SupplierFilterOptions {
+  /** Distinct non-empty country names, RU-collated. */
+  countries: string[];
+  /** МОЗ (procurement assignees) present on visible suppliers. */
+  assignees: { id: string; full_name: string }[];
+  /** Distinct non-empty brand names, RU-collated. */
+  brands: string[];
+}
+
 export interface SupplierQuoteItem {
   id: string;
   product_name: string | null;

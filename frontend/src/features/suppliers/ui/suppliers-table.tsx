@@ -1,18 +1,12 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { Search, Plus } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CreateSupplierDialog } from "./create-supplier-dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from "@/components/ui/select";
+import { SuppliersFilterBar } from "./suppliers-filter-bar";
 import {
   Table,
   TableBody,
@@ -23,7 +17,10 @@ import {
 } from "@/components/ui/table";
 import { Pagination } from "@/shared/ui/pagination";
 import { useFilterNavigation } from "@/shared/lib/use-filter-navigation";
-import type { SupplierListItem } from "@/entities/supplier/types";
+import type {
+  SupplierListItem,
+  SupplierFilterOptions,
+} from "@/entities/supplier";
 
 interface Props {
   initialData: SupplierListItem[];
@@ -33,17 +30,14 @@ interface Props {
   initialSearch?: string;
   initialCountry?: string;
   initialStatus?: string;
+  initialAssignee?: string;
+  initialBrand?: string;
   initialPage?: number;
+  filterOptions: SupplierFilterOptions;
   orgId: string;
 }
 
 const PAGE_SIZE = 50;
-
-const STATUS_OPTIONS = [
-  { value: "all", label: "Все статусы" },
-  { value: "active", label: "Активные" },
-  { value: "inactive", label: "Неактивные" },
-] as const;
 
 export function SuppliersTable({
   initialData,
@@ -53,16 +47,14 @@ export function SuppliersTable({
   initialSearch = "",
   initialCountry = "",
   initialStatus = "",
+  initialAssignee = "",
+  initialBrand = "",
   initialPage = 1,
+  filterOptions,
   orgId,
 }: Props) {
-  const getLabel = (v: string) =>
-    STATUS_OPTIONS.find((o) => o.value === v)?.label ?? "Все статусы";
-  const [statusLabel, setStatusLabel] = useState(getLabel(initialStatus || "all"));
-  const [searchValue, setSearchValue] = useState(initialSearch);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const { navigate, searchParams } = useFilterNavigation();
+  const { searchParams } = useFilterNavigation();
   const totalPages = Math.ceil(initialTotal / PAGE_SIZE);
 
   function truncate(str: string, max: number) {
@@ -93,20 +85,6 @@ export function SuppliersTable({
     }).format(value)}`;
   }
 
-  function handleSearchChange(value: string) {
-    setSearchValue(value);
-    clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      navigate({ q: value || undefined });
-    }, 300);
-  }
-
-  function handleStatusChange(value: string | null) {
-    const v = value ?? "all";
-    setStatusLabel(getLabel(v));
-    navigate({ status: v });
-  }
-
   function buildPaginationHref(page: number): string {
     const params = new URLSearchParams(searchParams?.toString() ?? "");
     if (page > 1) {
@@ -119,35 +97,21 @@ export function SuppliersTable({
 
   return (
     <div className="space-y-4">
-      {/* Search + Filter bar */}
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-subtle" size={16} />
-          <Input
-            value={searchValue}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            placeholder="Поиск по названию..."
-            className="pl-9"
+      {/* Search + Страна/МОЗ/Бренд/Статус filters (Testing 2 row 92) */}
+      <div className="flex items-start gap-3">
+        <div className="flex-1">
+          <SuppliersFilterBar
+            search={initialSearch}
+            country={initialCountry}
+            assignee={initialAssignee}
+            brand={initialBrand}
+            status={initialStatus}
+            options={filterOptions}
           />
         </div>
-        <Select
-          defaultValue={initialStatus || "all"}
-          onValueChange={handleStatusChange}
-        >
-          <SelectTrigger className="w-[160px]">
-            <span className="flex flex-1 text-left">{statusLabel}</span>
-          </SelectTrigger>
-          <SelectContent>
-            {STATUS_OPTIONS.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value}>
-                {opt.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
         <Button
           size="sm"
-          className="ml-auto bg-accent text-white hover:bg-accent-hover"
+          className="shrink-0 bg-accent text-white hover:bg-accent-hover"
           onClick={() => setCreateDialogOpen(true)}
           type="button"
         >
