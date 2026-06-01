@@ -21,22 +21,18 @@ import {
   type CargoPlaceInput,
 } from "@/entities/quote/mutations";
 import type { QuoteItemRow } from "@/entities/quote/queries";
-import { CityAutocomplete, CountryCombobox, findCountryByCode, findCountryByName } from "@/shared/ui/geo";
-import { SearchableCombobox } from "@/shared/ui/searchable-combobox";
-import { INCOTERMS_2020 } from "@/shared/lib/incoterms";
-import { SUPPORTED_CURRENCIES } from "@/shared/lib/currencies";
+import { findCountryByCode } from "@/shared/ui/geo";
 import { extractErrorMessage } from "@/shared/lib/errors";
 import {
   fetchSupplierVatRate,
   type VatResolverReason,
 } from "@/entities/invoice/queries";
-// NOTE: `fetchSupplierContacts` (in `@/entities/supplier/queries`) uses the
-// server-side Supabase admin client which transitively imports `next/headers`.
-// That's banned in Client Components — Turbopack fails the production build.
-// We inline the same SELECT against the browser-side client below.
-// Type-only import is safe: TypeScript types are erased at build time.
-import type { SupplierContact } from "@/entities/supplier/types";
 import { Badge } from "@/components/ui/badge";
+import {
+  InvoiceFieldsForm,
+  type InvoiceFieldsSavePartial,
+  type InvoiceFieldsValue,
+} from "./invoice-fields-form";
 
 interface Supplier {
   id: string;
@@ -70,19 +66,26 @@ export function InvoiceCreateModal({
   buyerCompanies,
 }: InvoiceCreateModalProps) {
   const router = useRouter();
+  // КПП header fields — now rendered by the shared <InvoiceFieldsForm>. This
+  // modal stays the source of truth for the draft values + submit; the shared
+  // component just renders the fields and reports changes via onFieldSave so
+  // CREATE and the EDIT card can't drift (Testing 2 row 91 prep). The contact
+  // list + supplier-change reset side effect live inside the shared component.
   const [supplierId, setSupplierId] = useState("");
   const [buyerCompanyId, setBuyerCompanyId] = useState("");
   const [countryCode, setCountryCode] = useState<string | null>(null);
   const [city, setCity] = useState("");
   // Testing 2 row 21: free-text pickup address + supplier-contact picker.
-  // Both are mandatory before КПП creation — the supplier needs the literal
-  // pickup street address and a named contact responsible for the КПП on
-  // their side. The contact list is loaded reactively once a supplier is
-  // chosen (kvota.supplier_contacts is keyed on supplier_id).
+  // pickup_address is optional (Testing 2 row 25); supplier_contact stays
+  // mandatory before КПП creation.
   const [pickupAddress, setPickupAddress] = useState("");
   const [supplierContactId, setSupplierContactId] = useState("");
-  const [supplierContacts, setSupplierContacts] = useState<SupplierContact[]>([]);
-  const [supplierContactsLoading, setSupplierContactsLoading] = useState(false);
+  // Count of contacts the chosen supplier has — reported by the shared form's
+  // onContactsLoaded so we can keep the precise "У поставщика нет контактов"
+  // validation message (Testing 2 row 21). Null until a supplier is picked.
+  const [supplierContactsCount, setSupplierContactsCount] = useState<
+    number | null
+  >(null);
   const [incoterms, setIncoterms] = useState<string>("");
   const [currency, setCurrency] = useState<string>("USD");
   const [boxes, setBoxes] = useState<
@@ -98,58 +101,6 @@ export function InvoiceCreateModal({
   const [vatManuallyEdited, setVatManuallyEdited] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
-
-  // Load supplier contacts when supplier changes (Testing 2 row 21). Resets
-  // any previously picked contact so the user can't carry a stale selection
-  // from another supplier into the new КПП. Default-selects the primary
-  // contact (is_primary=true) when present — fetchSupplierContacts orders by
-  // is_primary DESC, so it's just `contacts[0]` when the supplier has any
-  // primary marked.
-  useEffect(() => {
-    if (!supplierId) {
-      setSupplierContacts([]);
-      setSupplierContactId("");
-      return;
-    }
-    let cancelled = false;
-    setSupplierContactsLoading(true);
-
-    // Inline browser-side query — the server-side `fetchSupplierContacts`
-    // pulls in `next/headers` via the admin client which is banned in
-    // Client Components. Same SQL: order by is_primary DESC, then name.
-    (async () => {
-      const { createClient } = await import("@/shared/lib/supabase/client");
-      const supabase = createClient();
-      const { data, error } = await supabase
-        .from("supplier_contacts")
-        .select("*")
-        .eq("supplier_id", supplierId)
-        .order("is_primary", { ascending: false })
-        .order("name");
-      if (cancelled) return;
-      if (error) {
-        console.error("[invoice-create-modal] fetchSupplierContacts:", error);
-        setSupplierContacts([]);
-        setSupplierContactsLoading(false);
-        return;
-      }
-      const contacts = (data ?? []) as SupplierContact[];
-      setSupplierContacts(contacts);
-      // Auto-pick the primary contact (is_primary=true → first in the
-      // ordered list) when nothing is selected yet. Don't clobber an
-      // explicit pick if the user already changed it.
-      setSupplierContactId((prev) => {
-        if (prev) return prev;
-        const primary = contacts.find((c) => c.is_primary) ?? contacts[0];
-        return primary?.id ?? "";
-      });
-      setSupplierContactsLoading(false);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [supplierId]);
 
   // Auto-fill VAT rate + reason when both supplier country AND buyer company
   // are selected. Empty-only: skips the network round-trip when the user has
@@ -197,7 +148,7 @@ export function InvoiceCreateModal({
     setCity("");
     setPickupAddress("");
     setSupplierContactId("");
-    setSupplierContacts([]);
+    setSupplierContactsCount(null);
     setIncoterms("");
     setCurrency("USD");
     setVatRate("");
@@ -206,6 +157,48 @@ export function InvoiceCreateModal({
     setBoxes([{ weight_kg: "", length_mm: "", width_mm: "", height_mm: "" }]);
     setErrors({});
   }
+
+  // Fold a partial change from <InvoiceFieldsForm> into the draft state. The
+  // partial keys mirror the `invoices` columns; we map them to the modal's
+  // local state. `undefined` means "field not part of this change" — only
+  // present keys are applied, so a supplier change that also derived a country
+  // updates both without clobbering city/contact.
+  function handleFieldSave(partial: InvoiceFieldsSavePartial) {
+    if ("supplier_id" in partial) setSupplierId(partial.supplier_id ?? "");
+    if ("buyer_company_id" in partial)
+      setBuyerCompanyId(partial.buyer_company_id ?? "");
+    if ("pickup_country_code" in partial)
+      setCountryCode(partial.pickup_country_code ?? null);
+    if ("pickup_city" in partial) setCity(partial.pickup_city ?? "");
+    if ("pickup_address" in partial)
+      setPickupAddress(partial.pickup_address ?? "");
+    if ("supplier_contact_id" in partial)
+      setSupplierContactId(partial.supplier_contact_id ?? "");
+    if ("supplier_incoterms" in partial)
+      setIncoterms(partial.supplier_incoterms ?? "");
+    if ("currency" in partial && partial.currency != null)
+      setCurrency(partial.currency);
+  }
+
+  function clearError(field: string) {
+    setErrors((prev) => {
+      if (!(field in prev)) return prev;
+      const rest = { ...prev };
+      delete rest[field];
+      return rest;
+    });
+  }
+
+  const fieldsValue: InvoiceFieldsValue = {
+    supplierId: supplierId || null,
+    buyerCompanyId: buyerCompanyId || null,
+    countryCode,
+    city,
+    pickupAddress,
+    supplierContactId: supplierContactId || null,
+    incoterms,
+    currency,
+  };
 
   function updateBox(index: number, field: string, value: string) {
     setBoxes((prev) =>
@@ -248,11 +241,10 @@ export function InvoiceCreateModal({
     // supplier side responsible for this КПП — still mandatory.
     // Testing 2 row 25 (FB 2026-05-14): pickup_address dropped to optional
     // per tester request — the driver address is often filled later by
-    // procurement once the supplier confirms staging warehouse. The input
-    // stays in the modal but no longer blocks submit when empty.
+    // procurement once the supplier confirms staging warehouse.
     if (!supplierContactId) {
       e.supplier_contact = supplierId
-        ? supplierContacts.length === 0
+        ? supplierContactsCount === 0
           ? "У поставщика нет контактов — добавьте контакт в карточке поставщика"
           : "Выберите контакт поставщика"
         : "Сначала выберите поставщика";
@@ -348,194 +340,16 @@ export function InvoiceCreateModal({
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="space-y-1.5">
-            <Label>
-              Поставщик <span className="text-destructive">*</span>
-            </Label>
-            <SearchableCombobox<Supplier>
-              value={supplierId || null}
-              onChange={(newSupplierId) => {
-                setSupplierId(newSupplierId ?? "");
-                setErrors((prev) => {
-                  const { supplier: _supplier, ...rest } = prev;
-                  return rest;
-                });
-                // Auto-fill country from supplier; useEffect on countryCode
-                // then re-resolves VAT (strategy B always overwrites). Try RU
-                // locale first, fall back to EN so suppliers stored with
-                // English country names ("Germany", "Turkey") also resolve.
-                if (newSupplierId) {
-                  const supplier = suppliers.find((s) => s.id === newSupplierId);
-                  if (supplier?.country) {
-                    const match =
-                      findCountryByName(supplier.country, "ru") ??
-                      findCountryByName(supplier.country, "en");
-                    if (match) setCountryCode(match.code);
-                  }
-                }
-              }}
-              items={suppliers}
-              getLabel={(s) => s.name}
-              getSearchableExtras={(s) => (s.country ? [s.country] : [])}
-              placeholder="Выберите поставщика"
-              searchPlaceholder="Поиск поставщика..."
-              emptyMessage="Список поставщиков пуст"
-              ariaLabel="Поставщик"
-              invalid={Boolean(errors.supplier)}
-            />
-            {errors.supplier && <p className="text-xs text-destructive">{errors.supplier}</p>}
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>
-              Компания-покупатель <span className="text-destructive">*</span>
-            </Label>
-            <SearchableCombobox<BuyerCompany>
-              value={buyerCompanyId || null}
-              onChange={(newBuyerId) => {
-                setBuyerCompanyId(newBuyerId ?? "");
-                setErrors((prev) => {
-                  const { buyer: _buyer, ...rest } = prev;
-                  return rest;
-                });
-              }}
-              items={buyerCompanies}
-              getLabel={(b) => b.name}
-              getSecondary={(b) => b.company_code}
-              getSearchableExtras={(b) => [b.company_code]}
-              placeholder="Выберите компанию"
-              searchPlaceholder="Поиск компании..."
-              emptyMessage="Список компаний пуст"
-              ariaLabel="Компания-покупатель"
-              invalid={Boolean(errors.buyer)}
-            />
-            {errors.buyer && <p className="text-xs text-destructive">{errors.buyer}</p>}
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Страна отгрузки</Label>
-            <CountryCombobox
-              value={countryCode}
-              onChange={setCountryCode}
-              placeholder="Выберите страну…"
-              ariaLabel="Страна отгрузки"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Город</Label>
-            <CityAutocomplete
-              value={city}
-              onChange={setCity}
-              countryCode={countryCode}
-              placeholder="Начните вводить город…"
-              ariaLabel="Город отгрузки"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="invoice-pickup-address">Адрес забора груза</Label>
-            <Input
-              id="invoice-pickup-address"
-              type="text"
-              value={pickupAddress}
-              onChange={(e) => {
-                setPickupAddress(e.target.value);
-                if (e.target.value.trim()) {
-                  setErrors((prev) => {
-                    const { pickup_address: _pa, ...rest } = prev;
-                    return rest;
-                  });
-                }
-              }}
-              placeholder="Например, ул. Промышленная, 12, склад 4"
-              aria-invalid={Boolean(errors.pickup_address)}
-              aria-describedby={
-                errors.pickup_address ? "invoice-pickup-address-error" : undefined
-              }
-              className={`h-8 text-sm ${errors.pickup_address ? "border-destructive" : ""}`}
-            />
-            {errors.pickup_address && (
-              <p id="invoice-pickup-address-error" className="text-xs text-destructive">
-                {errors.pickup_address}
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>
-              Контакт поставщика <span className="text-destructive">*</span>
-            </Label>
-            <SearchableCombobox<SupplierContact>
-              value={supplierContactId || null}
-              onChange={(newContactId) => {
-                setSupplierContactId(newContactId ?? "");
-                setErrors((prev) => {
-                  const { supplier_contact: _sc, ...rest } = prev;
-                  return rest;
-                });
-              }}
-              items={supplierContacts}
-              getLabel={(c) => c.name}
-              getSecondary={(c) => {
-                const parts = [c.position, c.phone, c.email].filter(Boolean);
-                return parts.length > 0 ? parts.join(" · ") : null;
-              }}
-              getSearchableExtras={(c) =>
-                [c.position, c.phone, c.email].filter(
-                  (v): v is string => Boolean(v)
-                )
-              }
-              placeholder={
-                !supplierId
-                  ? "Сначала выберите поставщика"
-                  : supplierContactsLoading
-                    ? "Загрузка контактов…"
-                    : supplierContacts.length === 0
-                      ? "У поставщика нет контактов"
-                      : "Выберите контакт"
-              }
-              searchPlaceholder="Поиск контакта…"
-              emptyMessage="Контакты не найдены"
-              ariaLabel="Контакт поставщика"
-              disabled={!supplierId || supplierContactsLoading}
-              invalid={Boolean(errors.supplier_contact)}
-            />
-            {errors.supplier_contact && (
-              <p className="text-xs text-destructive">{errors.supplier_contact}</p>
-            )}
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Условия поставки</Label>
-            <select
-              value={incoterms}
-              onChange={(e) => setIncoterms(e.target.value)}
-              className="w-full h-8 px-2.5 text-sm border border-input rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-ring"
-            >
-              <option value="">— не указано —</option>
-              {INCOTERMS_2020.map((term) => (
-                <option key={term.code} value={term.code}>
-                  {term.code} — {term.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Валюта</Label>
-            <select
-              value={currency}
-              onChange={(e) => setCurrency(e.target.value)}
-              className="w-full h-8 px-2.5 text-sm border border-input rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-ring"
-            >
-              {SUPPORTED_CURRENCIES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </div>
+          <InvoiceFieldsForm
+            mode="create"
+            value={fieldsValue}
+            onFieldSave={handleFieldSave}
+            onContactsLoaded={setSupplierContactsCount}
+            suppliers={suppliers}
+            buyerCompanies={buyerCompanies}
+            errors={errors}
+            onClearError={clearError}
+          />
 
           <div className="space-y-1.5">
             <Label>Ставка НДС, %</Label>
@@ -666,10 +480,10 @@ export function InvoiceCreateModal({
                     className="text-xs flex items-center gap-2 min-w-0"
                   >
                     <span className="font-medium truncate max-w-20 shrink-0">
-                      {item.brand ?? "\u2014"}
+                      {item.brand ?? "—"}
                     </span>
                     <span className="font-mono text-muted-foreground truncate max-w-24 shrink-0">
-                      {item.product_code ?? "\u2014"}
+                      {item.product_code ?? "—"}
                     </span>
                     <span className="truncate flex-1 min-w-0">
                       {item.product_name}
