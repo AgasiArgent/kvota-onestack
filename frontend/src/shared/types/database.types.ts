@@ -1389,6 +1389,7 @@ export type Database = {
           base_price_vat: number | null
           price_includes_vat: boolean
           vat_rate: number | null
+          discount_pct: number | null
           weight_in_kg: number | null
           customs_code: string | null
           supplier_country: string | null
@@ -1422,6 +1423,7 @@ export type Database = {
           base_price_vat?: number | null
           price_includes_vat?: boolean
           vat_rate?: number | null
+          discount_pct?: number | null
           weight_in_kg?: number | null
           customs_code?: string | null
           supplier_country?: string | null
@@ -1455,6 +1457,7 @@ export type Database = {
           base_price_vat?: number | null
           price_includes_vat?: boolean
           vat_rate?: number | null
+          discount_pct?: number | null
           weight_in_kg?: number | null
           customs_code?: string | null
           supplier_country?: string | null

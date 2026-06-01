@@ -509,6 +509,32 @@ def effective_calc_quantity(ordered, supplier_qty):
     return ordered
 
 
+def effective_purchase_price(item: Dict) -> Decimal:
+    """Resolve the per-line effective purchase price after the КПП discount.
+
+    Testing 2 row 91: procurement (МОЗ) may grant a per-line discount on a
+    supplier's КП. ``invoice_items.discount_pct`` is a percentage off the
+    line's unit purchase price. The base price is read exactly as the engine
+    has always read it (``purchase_price_original`` with a ``base_price_vat``
+    fallback). The discount is applied here, in the INPUT mapping, so the
+    locked calculation engine is never touched.
+
+        effective = purchase_price_original * (1 - discount_pct / 100)
+
+    A NULL / 0 / negative discount returns the base price UNCHANGED — the
+    exact same ``Decimal`` ``safe_decimal`` would have produced before this
+    column existed — so the calc-engine golden-master output stays
+    byte-identical for all existing (discount-less) data. Single in-app
+    definition of the discount rule (the TS line-total mirror in the
+    procurement editor uses the same ``(1 - pct/100)`` formula).
+    """
+    base = safe_decimal(item.get('purchase_price_original') or item.get('base_price_vat'))
+    discount = safe_decimal(item.get('discount_pct'))
+    if discount > 0:
+        return base * (Decimal("1") - discount / Decimal("100"))
+    return base
+
+
 def build_calculation_inputs(items: List[Dict], variables: Dict[str, Any]) -> List[QuoteCalculationInput]:
     """Build calculation inputs for all quote items.
 
@@ -636,7 +662,10 @@ def build_calculation_inputs(items: List[Dict], variables: Dict[str, Any]) -> Li
 
         # Product fields (adapt new schema to calculation engine expectations)
         product = {
-            'base_price_vat': safe_decimal(item.get('purchase_price_original') or item.get('base_price_vat')),
+            # Testing 2 row 91: per-line КПП discount applied to the effective
+            # purchase price HERE (input mapping) — never in the locked engine.
+            # NULL / 0 discount → base price unchanged → golden-master identical.
+            'base_price_vat': effective_purchase_price(item),
             # Supplier-quantity override (2026-05-29): the supplier qty, when set
             # (>0), replaces the ordered qty in both directions; otherwise the
             # ordered qty passes through unchanged. The helper guards >0, so 0 /

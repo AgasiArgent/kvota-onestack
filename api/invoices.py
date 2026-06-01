@@ -538,8 +538,9 @@ async def request_procurement_unlock(request, id: str) -> JSONResponse:
     Returns:
         List of created approval objects.
     Side Effects:
-        - Creates approval requests for head_of_procurement and admin users
-          with approval_type='edit_completed_procurement'.
+        - Creates approval requests for head_of_procurement and
+          procurement_senior users with approval_type='edit_completed_procurement'.
+          Either role may approve (any one is sufficient).
     Roles: procurement, admin, head_of_procurement
     """
     user, err = _get_procurement_user(request)
@@ -575,14 +576,17 @@ async def request_procurement_unlock(request, id: str) -> JSONResponse:
         reason = f"{reason}: {user_reason}"
 
     # Use the universal request_approvals wrapper so INSERT + Telegram fire together.
-    # Track F: only head_of_procurement is approver — admins+finance+currency_controller
-    # were too broad and produced spam for procurement edits.
+    # Track F: only head_of_procurement was the approver — admins+finance+
+    # currency_controller were too broad and produced spam for procurement edits.
+    # Testing 2 row 91: ADD procurement_senior so either СтМОЗ or РОЗ can approve
+    # an edit (incl. a per-line discount) on a procurement-completed КПП. Any one
+    # of the two roles is sufficient — request_approvals fans out to both.
     result = await request_approvals(
         quote_id=quote_id,
         requested_by=user["id"],
         reason=reason,
         organization_id=user["org_id"],
-        role_codes=["head_of_procurement"],
+        role_codes=["head_of_procurement", "procurement_senior"],
         approval_type="edit_completed_procurement",
     )
 
