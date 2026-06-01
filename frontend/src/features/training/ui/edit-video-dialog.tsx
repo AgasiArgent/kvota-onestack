@@ -18,12 +18,17 @@ import { Button } from "@/components/ui/button";
 import type { TrainingVideo } from "@/entities/training-video/types";
 import { parseVideoUrl } from "@/entities/training-video/types";
 import { updateTrainingVideo } from "@/entities/training-video/mutations";
+import {
+  VisibilitySelector,
+  type VisibilityRoleOption,
+} from "./visibility-selector";
 
 interface EditVideoDialogProps {
   video: TrainingVideo | null;
   onClose: () => void;
   existingCategories: string[];
   orgId: string;
+  roleOptions: VisibilityRoleOption[];
 }
 
 /**
@@ -46,6 +51,7 @@ export function EditVideoDialog({
   onClose,
   existingCategories,
   orgId,
+  roleOptions,
 }: EditVideoDialogProps) {
   const router = useRouter();
   const isOpen = video !== null;
@@ -54,6 +60,8 @@ export function EditVideoDialog({
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
+  const [visibleDepartments, setVisibleDepartments] = useState<string[]>([]);
+  const [visibleRoles, setVisibleRoles] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [platformHint, setPlatformHint] = useState("");
 
@@ -64,6 +72,8 @@ export function EditVideoDialog({
       setTitle(video.title);
       setCategory(video.category);
       setDescription(video.description ?? "");
+      setVisibleDepartments(video.visible_departments ?? []);
+      setVisibleRoles(video.visible_role_slugs ?? []);
       setPlatformHint(video.platform === "rutube" ? "RuTube" : "YouTube");
     }
   }, [video]);
@@ -105,6 +115,8 @@ export function EditVideoDialog({
         url,
         category: category || "Общее",
         description,
+        visibleDepartments,
+        visibleRoleSlugs: visibleRoles,
       });
       toast.success("Видео обновлено");
       onClose();
@@ -187,6 +199,15 @@ export function EditVideoDialog({
               rows={3}
             />
           </div>
+
+          {/* Visibility: department + role */}
+          <VisibilitySelector
+            roleOptions={roleOptions}
+            selectedDepartments={visibleDepartments}
+            selectedRoles={visibleRoles}
+            onDepartmentsChange={setVisibleDepartments}
+            onRolesChange={setVisibleRoles}
+          />
 
           <DialogFooter>
             <Button

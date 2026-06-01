@@ -428,3 +428,102 @@ export function canSeeControlBoard(roles: string[]): {
 export function canEditSpecControl(roles: string[]): boolean {
   return roles.includes("admin") || isSpecController(roles);
 }
+
+// ===========================================================================
+// Departments — canonical role→department mapping (single source of truth)
+// ===========================================================================
+// The app groups its functional roles into a small set of stable department
+// slugs used for per-material training visibility (Testing 2 row 54) and any
+// future department-scoped feature. These slugs mirror the seeded
+// kvota.departments names (migration 112: Продажи / Закупки / Логистика /
+// Таможня / Финансы) plus a `management` bucket for org-wide roles, but use
+// stable slugs rather than the free-text department names so the mapping
+// survives admin renames of the departments table.
+
+/** Stable department slugs. */
+export const DEPARTMENT_SLUGS = [
+  "sales",
+  "procurement",
+  "logistics",
+  "customs",
+  "finance",
+  "management",
+] as const;
+
+export type DepartmentSlug = (typeof DEPARTMENT_SLUGS)[number];
+
+/** Russian labels for department slugs (UI display). */
+export const DEPARTMENT_LABELS_RU: Record<DepartmentSlug, string> = {
+  sales: "Продажи",
+  procurement: "Закупки",
+  logistics: "Логистика",
+  customs: "Таможня",
+  finance: "Финансы",
+  management: "Руководство",
+};
+
+/**
+ * Which role slugs belong to each department. A role may appear in exactly
+ * one department. Roles not listed here (e.g. quote_controller,
+ * spec_controller, newbie) intentionally have no department — they are
+ * cross-cutting and rely on explicit role-slug allow-lists for visibility.
+ */
+const DEPARTMENT_ROLE_MAP: Record<DepartmentSlug, readonly string[]> = {
+  sales: ["sales", "head_of_sales"],
+  procurement: ["procurement", "procurement_senior", "head_of_procurement"],
+  logistics: ["logistics", "head_of_logistics"],
+  customs: ["customs", "head_of_customs"],
+  finance: ["finance", "currency_controller"],
+  management: ["admin", "top_manager", "training_manager"],
+};
+
+/**
+ * Derive the set of department slugs a user belongs to from their role slugs.
+ * A user can belong to multiple departments (e.g. someone who is both
+ * `sales` and `logistics`). Returns a de-duplicated array; order follows
+ * DEPARTMENT_SLUGS for determinism.
+ */
+export function deriveUserDepartments(roles: readonly string[]): DepartmentSlug[] {
+  const roleSet = new Set(roles);
+  return DEPARTMENT_SLUGS.filter((dept) =>
+    DEPARTMENT_ROLE_MAP[dept].some((slug) => roleSet.has(slug)),
+  );
+}
+
+/**
+ * Returns true if a training material is visible to a user, given the
+ * material's visibility allow-lists and the user's roles.
+ *
+ * Rules (Testing 2 row 54):
+ *   - No restrictions (both lists empty) → visible to everyone.
+ *   - Otherwise visible if the user's department is in `visibleDepartments`
+ *     OR one of the user's role slugs is in `visibleRoleSlugs` (union).
+ *
+ * Pure — used by the viewer query filter and unit-tested directly.
+ */
+export function isTrainingMaterialVisible(
+  visibleDepartments: readonly string[],
+  visibleRoleSlugs: readonly string[],
+  userRoles: readonly string[],
+): boolean {
+  const hasDeptRestriction = visibleDepartments.length > 0;
+  const hasRoleRestriction = visibleRoleSlugs.length > 0;
+
+  // Unrestricted material — everyone sees it.
+  if (!hasDeptRestriction && !hasRoleRestriction) return true;
+
+  const roleSet = new Set(userRoles);
+
+  // Role allow-list match.
+  if (hasRoleRestriction && visibleRoleSlugs.some((slug) => roleSet.has(slug))) {
+    return true;
+  }
+
+  // Department allow-list match.
+  if (hasDeptRestriction) {
+    const userDepts = new Set<string>(deriveUserDepartments(userRoles));
+    if (visibleDepartments.some((dept) => userDepts.has(dept))) return true;
+  }
+
+  return false;
+}

@@ -9,6 +9,17 @@ export interface TrainingVideo {
   thumbnail_url: string | null;
   sort_order: number;
   is_active: boolean;
+  /**
+   * Department slugs allowed to see this material (see DEPARTMENT_SLUGS in
+   * shared/lib/roles.ts). Empty = no department restriction.
+   */
+  visible_departments: string[];
+  /**
+   * Role slugs (kvota.roles.slug) allowed to see this material.
+   * Empty = no role restriction. A material with both lists empty is
+   * visible to everyone.
+   */
+  visible_role_slugs: string[];
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -20,6 +31,8 @@ export interface TrainingVideoFormData {
   url: string;
   category: string;
   description: string;
+  visibleDepartments: string[];
+  visibleRoleSlugs: string[];
 }
 
 export type VideoPlatform = "rutube" | "youtube" | "loom";
