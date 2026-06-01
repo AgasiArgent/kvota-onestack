@@ -10,14 +10,22 @@ import {
 } from "@/shared/lib/workflow-substates";
 
 describe("workflow-substates", () => {
-  it("exposes exactly 5 substatuses matching the backend check constraint", () => {
+  it("exposes exactly 6 substatuses matching the backend check constraint", () => {
+    // Testing 2 row 95a — «Заявка» (request) sits between distributing and
+    // searching_supplier; paused stays the parking-lot tail.
     expect(PROCUREMENT_SUBSTATUSES).toEqual([
       "distributing",
+      "request",
       "searching_supplier",
       "waiting_prices",
       "prices_ready",
       "paused",
     ]);
+  });
+
+  it("places «Заявка» (request) right after «Распределение»", () => {
+    expect(PROCUREMENT_SUBSTATUSES[1]).toBe("request");
+    expect(SUBSTATUS_LABELS_RU.request).toBe("Заявка");
   });
 
   it("places 'paused' at the end so the linear active flow is unchanged", () => {
@@ -54,6 +62,23 @@ describe("workflow-substates", () => {
     }
   });
 
+  it("threads «Заявка» (request) into the linear forward flow", () => {
+    // Testing 2 row 95a — distributing → request → searching_supplier.
+    expect(isValidTransition("distributing", "request")).toBe(true);
+    expect(isBackwardTransition("distributing", "request")).toBe(false);
+    expect(isValidTransition("request", "searching_supplier")).toBe(true);
+    expect(isBackwardTransition("request", "searching_supplier")).toBe(false);
+    // The old direct hop is gone.
+    expect(isValidTransition("distributing", "searching_supplier")).toBe(false);
+  });
+
+  it("allows reasoned backward moves into «Заявка» (request)", () => {
+    expect(isValidTransition("searching_supplier", "request")).toBe(true);
+    expect(isBackwardTransition("searching_supplier", "request")).toBe(true);
+    expect(isValidTransition("request", "distributing")).toBe(true);
+    expect(isBackwardTransition("request", "distributing")).toBe(true);
+  });
+
   it("rejects skipping steps within the active flow", () => {
     // Pause-aside, you still can't skip from distributing straight to
     // waiting_prices or prices_ready in the linear active path.
@@ -65,6 +90,7 @@ describe("workflow-substates", () => {
   it("allows pausing from any active column (forward, no reason)", () => {
     const activeStatuses = [
       "distributing",
+      "request",
       "searching_supplier",
       "waiting_prices",
       "prices_ready",
@@ -78,6 +104,7 @@ describe("workflow-substates", () => {
   it("allows resuming from paused to any active column (forward, no reason)", () => {
     const activeStatuses = [
       "distributing",
+      "request",
       "searching_supplier",
       "waiting_prices",
       "prices_ready",

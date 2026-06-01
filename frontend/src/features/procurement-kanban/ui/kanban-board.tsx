@@ -399,8 +399,8 @@ export function KanbanBoard({
         <div
           className={
             canDistribute
-              ? "grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5"
-              : "grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4"
+              ? "grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6"
+              : "grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5"
           }
         >
           {visibleSubstatuses.map((sub) => (

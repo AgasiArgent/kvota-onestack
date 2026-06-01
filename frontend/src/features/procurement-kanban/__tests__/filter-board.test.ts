@@ -155,6 +155,7 @@ describe("filterProcurementColumns", () => {
       makeCard({ quote_id: "a", brand: "Nike" }),
       makeCard({ quote_id: "b", brand: "Adidas" }),
     ],
+    request: [],
     searching_supplier: [
       makeCard({ quote_id: "c", brand: "Nike", days_in_state: 10 }),
     ],

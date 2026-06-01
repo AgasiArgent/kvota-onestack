@@ -173,6 +173,14 @@ export function KanbanCard({
   const isPaused = card.procurement_substatus === "paused";
   const pauseLog = isPaused ? card.pause_log : null;
   const pauseInline = pauseLog ? formatPauseInline(pauseLog) : null;
+  // Testing 2 row 95b — surface the КПП procurement-stage deadline on «Цены
+  // готовы» cards so the МОЗ sees it inline without opening the deal. Only on
+  // this column to keep the other columns uncluttered.
+  const isPricesReady = card.procurement_substatus === "prices_ready";
+  const procurementDeadline =
+    isPricesReady && card.procurement_deadline_at
+      ? formatDistributionTimestamp(card.procurement_deadline_at)
+      : null;
   // Testing 2 row 83 — quotes whose workflow has moved past procurement still
   // surface on this board (so procurement can audit and МОЗ can see their
   // completed work). Mark the card with a «Готово» badge so the user knows
@@ -285,6 +293,12 @@ export function KanbanCard({
             <span className="font-medium">Этап с:</span> {distributionTimestamp}
           </p>
         )}
+        {isPricesReady && (
+          <p className="truncate" data-testid="kanban-card-procurement-deadline">
+            <span className="font-medium">Дедлайн КПП:</span>{" "}
+            {procurementDeadline ?? EM_DASH}
+          </p>
+        )}
         {pauseInline ? (
           <button
             type="button"
@@ -296,7 +310,10 @@ export function KanbanCard({
               e.stopPropagation();
               onPauseHistoryClick?.(card);
             }}
-            className="line-clamp-2 truncate text-left italic text-muted-foreground hover:text-foreground hover:underline"
+            // Testing 2 row 95c — pause reason rendered in the danger color so
+            // МОЗ spots a paused card at a glance. Uses the design-system
+            // `--destructive` token (text-destructive), not a hardcoded hex.
+            className="line-clamp-2 truncate text-left font-medium italic text-destructive hover:text-destructive/80 hover:underline"
             title={pauseLog?.reason || pauseInline}
           >
             {pauseInline}

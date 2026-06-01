@@ -11,6 +11,7 @@
 
 export const PROCUREMENT_SUBSTATUSES = [
   "distributing",
+  "request",
   "searching_supplier",
   "waiting_prices",
   "prices_ready",
@@ -21,6 +22,7 @@ export type ProcurementSubstatus = (typeof PROCUREMENT_SUBSTATUSES)[number];
 
 export const SUBSTATUS_LABELS_RU: Record<ProcurementSubstatus, string> = {
   distributing: "Распределение",
+  request: "Заявка",
   searching_supplier: "Поиск поставщика",
   waiting_prices: "Ожидание цен",
   prices_ready: "Цены готовы",
@@ -30,6 +32,7 @@ export const SUBSTATUS_LABELS_RU: Record<ProcurementSubstatus, string> = {
 /** Active (non-paused) columns — used to enumerate pause↔resume transitions. */
 const ACTIVE_SUBSTATUSES = [
   "distributing",
+  "request",
   "searching_supplier",
   "waiting_prices",
   "prices_ready",
@@ -39,7 +42,10 @@ const ACTIVE_SUBSTATUSES = [
 export const FORWARD_TRANSITIONS: ReadonlyArray<
   readonly [ProcurementSubstatus, ProcurementSubstatus]
 > = [
-  ["distributing", "searching_supplier"],
+  // «Заявка» (Testing 2 row 95a) is the new first stop after distribution.
+  // The МОЗ pulls request → searching_supplier manually.
+  ["distributing", "request"],
+  ["request", "searching_supplier"],
   ["searching_supplier", "waiting_prices"],
   ["waiting_prices", "prices_ready"],
   // Pause from any active column — treated as a forward (no reason) move.
@@ -58,7 +64,8 @@ export const FORWARD_TRANSITIONS: ReadonlyArray<
 export const BACKWARD_TRANSITIONS: ReadonlyArray<
   readonly [ProcurementSubstatus, ProcurementSubstatus]
 > = [
-  ["searching_supplier", "distributing"],
+  ["request", "distributing"],
+  ["searching_supplier", "request"],
   ["waiting_prices", "searching_supplier"],
   ["prices_ready", "waiting_prices"],
 ] as const;

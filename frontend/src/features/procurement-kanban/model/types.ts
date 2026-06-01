@@ -87,6 +87,14 @@ export interface KanbanBrandCard {
    * legacy quotes.
    */
   distribution_comment?: string | null;
+  /**
+   * ISO-8601 procurement-stage deadline (Testing 2 row 95b). Derived
+   * server-side from the parent quote's stage timer + per-quote override /
+   * org default. Surfaced on «Цены готовы» cards so the МОЗ sees the КПП
+   * deadline (ДД.ММ.ГГ) inline without opening the deal. Null when the quote
+   * isn't in `pending_procurement` or has no configured deadline.
+   */
+  procurement_deadline_at?: string | null;
 }
 
 /**
