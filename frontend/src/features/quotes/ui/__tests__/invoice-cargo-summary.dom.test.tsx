@@ -302,6 +302,84 @@ describe("InvoiceCargoSummary (РОЛ Тест 07 #3.3)", () => {
     expect(ul!.textContent ?? "").not.toMatch(/\+\d/);
   });
 
+  it("renders each position's BRAND next to its name (Testing 2 row 93)", () => {
+    // Testers asked to surface the position brand in the «Груз» digest so
+    // the logistician/customs reviewer recognises «что именно везём».
+    // Rendered as «<Бренд> — <Наименование>».
+    const items: QuoteItemRow[] = [
+      makeItem({
+        id: "i1",
+        composition_selected_invoice_id: "inv-1",
+        brand: "Bosch",
+        product_name: "Форсунка дизельная",
+      }),
+      makeItem({
+        id: "i2",
+        composition_selected_invoice_id: "inv-1",
+        brand: "SKF",
+        product_name: "Подшипник 6204",
+      }),
+    ];
+    const { container } = render(
+      <InvoiceCargoSummary
+        invoice={makeInvoice({ pickup_country: "Германия" })}
+        items={items}
+      />,
+    );
+    const ul = container.querySelector("ul");
+    expect(ul).not.toBeNull();
+    const liTexts = Array.from(ul!.querySelectorAll("li")).map(
+      (li) => li.textContent ?? "",
+    );
+    expect(liTexts).toEqual([
+      "Bosch — Форсунка дизельная",
+      "SKF — Подшипник 6204",
+    ]);
+  });
+
+  it("falls back to just the name when an item has no brand (Testing 2 row 93)", () => {
+    // brand-less item must NOT render a dangling «— » dash.
+    const items: QuoteItemRow[] = [
+      makeItem({
+        id: "i1",
+        composition_selected_invoice_id: "inv-1",
+        brand: "Festo",
+        product_name: "Пневмоцилиндр",
+      }),
+      makeItem({
+        id: "i2",
+        composition_selected_invoice_id: "inv-1",
+        brand: null,
+        product_name: "Шланг гидравлический",
+      }),
+      // Empty-string brand must also fall back to name-only.
+      makeItem({
+        id: "i3",
+        composition_selected_invoice_id: "inv-1",
+        brand: "   ",
+        product_name: "Хомут червячный",
+      }),
+    ];
+    const { container } = render(
+      <InvoiceCargoSummary
+        invoice={makeInvoice({ pickup_country: "Германия" })}
+        items={items}
+      />,
+    );
+    const ul = container.querySelector("ul");
+    expect(ul).not.toBeNull();
+    const liTexts = Array.from(ul!.querySelectorAll("li")).map(
+      (li) => li.textContent ?? "",
+    );
+    expect(liTexts).toEqual([
+      "Festo — Пневмоцилиндр",
+      "Шланг гидравлический",
+      "Хомут червячный",
+    ]);
+    // No dangling em-dash for brand-less positions.
+    expect(liTexts.some((t) => /—\s*$|^\s*—/.test(t))).toBe(false);
+  });
+
   it("shows every product name as <li> when the invoice has 5+ items", () => {
     const names = [
       "Кабель силовой 10м",
