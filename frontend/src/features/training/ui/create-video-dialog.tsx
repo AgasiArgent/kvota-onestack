@@ -17,6 +17,10 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { parseVideoUrl } from "@/entities/training-video/types";
 import { createTrainingVideo } from "@/entities/training-video/mutations";
+import {
+  VisibilitySelector,
+  type VisibilityRoleOption,
+} from "./visibility-selector";
 
 interface CreateVideoDialogProps {
   open: boolean;
@@ -24,6 +28,7 @@ interface CreateVideoDialogProps {
   orgId: string;
   userId: string;
   existingCategories: string[];
+  roleOptions: VisibilityRoleOption[];
 }
 
 export function CreateVideoDialog({
@@ -32,12 +37,15 @@ export function CreateVideoDialog({
   orgId,
   userId,
   existingCategories,
+  roleOptions,
 }: CreateVideoDialogProps) {
   const router = useRouter();
   const [url, setUrl] = useState("");
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
+  const [visibleDepartments, setVisibleDepartments] = useState<string[]>([]);
+  const [visibleRoles, setVisibleRoles] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [platformHint, setPlatformHint] = useState("");
 
@@ -48,6 +56,8 @@ export function CreateVideoDialog({
       setTitle("");
       setCategory("");
       setDescription("");
+      setVisibleDepartments([]);
+      setVisibleRoles([]);
       setPlatformHint("");
     }
   }, [open]);
@@ -90,6 +100,8 @@ export function CreateVideoDialog({
         url,
         category: category || "Общее",
         description,
+        visibleDepartments,
+        visibleRoleSlugs: visibleRoles,
       });
       toast.success("Видео добавлено");
       onOpenChange(false);
@@ -173,6 +185,15 @@ export function CreateVideoDialog({
               rows={3}
             />
           </div>
+
+          {/* Visibility: department + role */}
+          <VisibilitySelector
+            roleOptions={roleOptions}
+            selectedDepartments={visibleDepartments}
+            selectedRoles={visibleRoles}
+            onDepartmentsChange={setVisibleDepartments}
+            onRolesChange={setVisibleRoles}
+          />
 
           <DialogFooter>
             <Button

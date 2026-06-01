@@ -12,6 +12,7 @@ import { CreateVideoDialog } from "./create-video-dialog";
 import { EditVideoDialog } from "./edit-video-dialog";
 import { DeleteVideoDialog } from "./delete-video-dialog";
 import { VideoCard } from "./video-card";
+import type { VisibilityRoleOption } from "./visibility-selector";
 
 interface TrainingPageProps {
   videos: TrainingVideo[];
@@ -20,6 +21,8 @@ interface TrainingPageProps {
   isAdmin: boolean;
   orgId: string;
   userId: string;
+  /** Role options for the visibility editor (admin only). */
+  roleOptions: VisibilityRoleOption[];
 }
 
 export function TrainingPage({
@@ -29,6 +32,7 @@ export function TrainingPage({
   isAdmin,
   orgId,
   userId,
+  roleOptions,
 }: TrainingPageProps) {
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
@@ -128,12 +132,14 @@ export function TrainingPage({
             orgId={orgId}
             userId={userId}
             existingCategories={categories}
+            roleOptions={roleOptions}
           />
           <EditVideoDialog
             video={editVideo}
             onClose={() => setEditVideo(null)}
             existingCategories={categories}
             orgId={orgId}
+            roleOptions={roleOptions}
           />
           <DeleteVideoDialog
             video={deleteVideo}

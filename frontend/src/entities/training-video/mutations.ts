@@ -8,6 +8,10 @@ interface CreateVideoInput {
   url: string;
   category: string;
   description: string;
+  /** Department slugs allowed to see the material. Empty = visible to all. */
+  visibleDepartments: string[];
+  /** Role slugs allowed to see the material. Empty = visible to all. */
+  visibleRoleSlugs: string[];
 }
 
 export async function createTrainingVideo(
@@ -29,6 +33,8 @@ export async function createTrainingVideo(
       youtube_id: parsed.videoId,
       category: input.category.trim() || "Общее",
       platform: parsed.platform,
+      visible_departments: input.visibleDepartments,
+      visible_role_slugs: input.visibleRoleSlugs,
       created_by: input.userId,
     })
     .select("id")
@@ -43,6 +49,8 @@ interface UpdateVideoInput {
   url: string;
   category: string;
   description: string;
+  visibleDepartments: string[];
+  visibleRoleSlugs: string[];
 }
 
 export async function updateTrainingVideo(
@@ -65,6 +73,8 @@ export async function updateTrainingVideo(
       youtube_id: parsed.videoId,
       category: input.category.trim() || "Общее",
       platform: parsed.platform,
+      visible_departments: input.visibleDepartments,
+      visible_role_slugs: input.visibleRoleSlugs,
     })
     .eq("id", id)
     .eq("organization_id", orgId);

@@ -6162,6 +6162,10 @@ export type Database = {
           updated_at: string
           platform: string
           thumbnail_url: string | null
+          // Added manually for migration 337 (not yet applied to prod via
+          // db:types). Per-material visibility allow-lists (Testing 2 row 54).
+          visible_departments: string[]
+          visible_role_slugs: string[]
         }
         Insert: {
           id?: string
@@ -6177,6 +6181,8 @@ export type Database = {
           updated_at?: string
           platform?: string
           thumbnail_url?: string | null
+          visible_departments?: string[]
+          visible_role_slugs?: string[]
         }
         Update: {
           id?: string
@@ -6192,6 +6198,8 @@ export type Database = {
           updated_at?: string
           platform?: string
           thumbnail_url?: string | null
+          visible_departments?: string[]
+          visible_role_slugs?: string[]
         }
         Relationships: []
       }

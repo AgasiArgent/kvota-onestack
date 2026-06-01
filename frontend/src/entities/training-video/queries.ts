@@ -1,20 +1,30 @@
 import { createClient } from "@/shared/lib/supabase/server";
+import { isTrainingMaterialVisible } from "@/shared/lib/roles";
 import type { TrainingVideo } from "./types";
 
 /**
- * Fetch active training videos for an organization.
+ * Fetch active training videos for an organization, filtered by the viewer's
+ * department + role visibility (Testing 2 row 54).
+ *
+ * A material is returned when its visibility allow-lists are empty (visible to
+ * everyone) OR the viewer's department / role matches. When `userRoles` is
+ * omitted (e.g. admin editor preview), no visibility filter is applied — all
+ * active materials are returned. Filtering happens on the data path here, not
+ * just hidden in the UI.
+ *
  * Optionally filter by category. Ordered by sort_order asc, created_at desc.
  */
 export async function fetchTrainingVideos(
   orgId: string,
-  category?: string
+  category?: string,
+  userRoles?: readonly string[]
 ): Promise<TrainingVideo[]> {
   const supabase = await createClient();
 
   let query = supabase
     .from("training_videos")
     .select(
-      "id, organization_id, title, description, youtube_id, category, platform, thumbnail_url, sort_order, is_active, created_by, created_at, updated_at"
+      "id, organization_id, title, description, youtube_id, category, platform, thumbnail_url, sort_order, is_active, visible_departments, visible_role_slugs, created_by, created_at, updated_at"
     )
     .eq("organization_id", orgId)
     .eq("is_active", true)
@@ -28,7 +38,20 @@ export async function fetchTrainingVideos(
   const { data, error } = await query;
   if (error) throw error;
 
-  const rows = data ?? [];
+  const allRows = data ?? [];
+
+  // Department + role visibility filter. Skipped when userRoles is undefined
+  // (admin editor / unrestricted contexts pass no roles).
+  const rows =
+    userRoles === undefined
+      ? allRows
+      : allRows.filter((row) =>
+          isTrainingMaterialVisible(
+            row.visible_departments ?? [],
+            row.visible_role_slugs ?? [],
+            userRoles
+          )
+        );
 
   // Batch-resolve creator names
   const creatorIds = Array.from(
@@ -62,6 +85,8 @@ export async function fetchTrainingVideos(
     thumbnail_url: row.thumbnail_url,
     sort_order: row.sort_order,
     is_active: row.is_active,
+    visible_departments: row.visible_departments ?? [],
+    visible_role_slugs: row.visible_role_slugs ?? [],
     created_by: row.created_by,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -71,20 +96,39 @@ export async function fetchTrainingVideos(
 
 /**
  * Fetch distinct categories from active training videos.
+ *
+ * When `userRoles` is provided, only categories the viewer can actually see
+ * (per department + role visibility) are returned — so a viewer never gets a
+ * category tab whose only materials are hidden from them. When omitted, all
+ * active categories are returned (admin editor context).
  */
-export async function fetchCategories(orgId: string): Promise<string[]> {
+export async function fetchCategories(
+  orgId: string,
+  userRoles?: readonly string[]
+): Promise<string[]> {
   const supabase = await createClient();
 
   const { data, error } = await supabase
     .from("training_videos")
-    .select("category")
+    .select("category, visible_departments, visible_role_slugs")
     .eq("organization_id", orgId)
     .eq("is_active", true);
 
   if (error) throw error;
 
+  const visibleRows =
+    userRoles === undefined
+      ? (data ?? [])
+      : (data ?? []).filter((row) =>
+          isTrainingMaterialVisible(
+            row.visible_departments ?? [],
+            row.visible_role_slugs ?? [],
+            userRoles
+          )
+        );
+
   const categories = Array.from(
-    new Set((data ?? []).map((row) => row.category))
+    new Set(visibleRows.map((row) => row.category))
   );
 
   return categories.sort((a, b) => a.localeCompare(b, "ru"));
