@@ -362,6 +362,8 @@ export function ProcurementStep({
             userRoles={userRoles}
             externalRefreshKey={invoiceItemsRefreshKey}
             procurementDeadlineAt={procurementDeadlineAt}
+            suppliers={suppliers}
+            buyerCompanies={buyerCompanies}
           />
         ))}
 

@@ -49,8 +49,6 @@ import {
   notifyInvoiceSentForKanban,
 } from "@/entities/quote/server-actions";
 import { SUBSTATUS_LABELS_RU } from "@/shared/lib/workflow-substates";
-import { INCOTERMS_2020 } from "@/shared/lib/incoterms";
-import { SUPPORTED_CURRENCIES } from "@/shared/lib/currencies";
 import {
   downloadInvoiceXls,
   markInvoiceSent,
@@ -58,13 +56,14 @@ import {
 } from "@/entities/invoice/mutations";
 import { createClient } from "@/shared/lib/supabase/client";
 import { extractErrorMessage } from "@/shared/lib/errors";
-import { CityAutocomplete, CountryCombobox, findCountryByCode } from "@/shared/ui/geo";
-import { SearchableCombobox } from "@/shared/ui/searchable-combobox";
-// Type-only import: kept off the runtime path so we don't transitively pull
-// `next/headers` into this Client Component (same constraint as
-// `invoice-create-modal.tsx`). The actual contact rows come from an inline
-// browser-side Supabase SELECT below.
-import type { SupplierContact } from "@/entities/supplier/types";
+import { findCountryByCode } from "@/shared/ui/geo";
+import {
+  InvoiceFieldsForm,
+  type InvoiceFieldsBuyerCompany,
+  type InvoiceFieldsSavePartial,
+  type InvoiceFieldsSupplier,
+  type InvoiceFieldsValue,
+} from "./invoice-fields-form";
 
 type InvoiceExtras = {
   invoice_file_url?: string | null;
@@ -158,6 +157,15 @@ interface InvoiceCardProps {
    * card renders an em-dash placeholder so МОЗ/РОЗ still sees the slot.
    */
   procurementDeadlineAt?: string | null;
+  /**
+   * Suppliers available to the user (already role-scoped by the parent).
+   * Forwarded to the shared <InvoiceFieldsForm> so Поставщик is editable in
+   * EDIT mode (Testing 2 row 91). Defaults to [] for tests/SSR that don't
+   * pass it — the field then renders an empty searchable list.
+   */
+  suppliers?: readonly InvoiceFieldsSupplier[];
+  /** Buyer companies for the org. Same purpose as `suppliers`. */
+  buyerCompanies?: readonly InvoiceFieldsBuyerCompany[];
 }
 
 const numberFmtInline = new Intl.NumberFormat("ru-RU", {
@@ -178,6 +186,8 @@ export function InvoiceCard({
   userRoles = [],
   externalRefreshKey = 0,
   procurementDeadlineAt = null,
+  suppliers = [],
+  buyerCompanies = [],
 }: InvoiceCardProps) {
   const router = useRouter();
   const [expanded, setExpanded] = useState(defaultExpanded);
@@ -200,9 +210,32 @@ export function InvoiceCard({
     Awaited<ReturnType<typeof fetchCargoPlaces>>
   >([]);
   // Invoice-level deferred-fill fields. Initial values from the `invoice`
-  // prop; saves go through `updateInvoice` on blur (text/number) or
-  // change (selects). Local state survives in-flight saves so failures
-  // don't blank the user's input.
+  // prop; saves go through `handleSaveInvoiceField` (Supabase update). Local
+  // state survives in-flight saves so failures don't blank the user's input
+  // and the controlled inputs reflect edits before router.refresh() re-renders
+  // with the persisted invoice prop.
+  //
+  // Testing 2 row 91: supplier_id, buyer_company_id, and supplier_contact_id
+  // are now editable (previously display-only on the card). They get the same
+  // local-mirror treatment as the other deferred-fill fields. All of these
+  // fields are rendered by the shared <InvoiceFieldsForm> below. The contact
+  // list + supplier-change reset side effect live inside that component (it
+  // re-issues the same browser-side SELECT the card used before — the
+  // server-side `fetchSupplierContacts` pulls in `next/headers` via the admin
+  // client, banned in Client Components).
+  const invoiceSupplierId =
+    (invoice as { supplier_id?: string | null }).supplier_id ?? null;
+  const invoiceBuyerCompanyId =
+    (invoice as { buyer_company_id?: string | null }).buyer_company_id ?? null;
+  const [supplierIdLocal, setSupplierIdLocal] = useState<string | null>(
+    invoiceSupplierId,
+  );
+  const [buyerCompanyIdLocal, setBuyerCompanyIdLocal] = useState<string | null>(
+    invoiceBuyerCompanyId,
+  );
+  const [supplierContactIdLocal, setSupplierContactIdLocal] = useState<
+    string | null
+  >(invoice.supplier_contact_id ?? null);
   const [pickupCityLocal, setPickupCityLocal] = useState(invoice.pickup_city ?? "");
   const [pickupCountryCodeLocal, setPickupCountryCodeLocal] = useState<string | null>(
     invoice.pickup_country_code ?? null
@@ -271,45 +304,6 @@ export function InvoiceCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pickupCountryCodeLocal]);
 
-  // Testing 2 row 25: supplier-contact picker on the КПП card. The contact
-  // list is reactive to the invoice's supplier (kvota.supplier_contacts is
-  // keyed on supplier_id). Mirrors the inline browser-side SELECT used in
-  // `invoice-create-modal.tsx` — the server-side `fetchSupplierContacts`
-  // pulls in `next/headers` via the admin client which is banned in Client
-  // Components, so we re-issue the same SQL against the browser client.
-  const invoiceSupplierId =
-    (invoice as { supplier_id?: string | null }).supplier_id ?? null;
-  const [supplierContacts, setSupplierContacts] = useState<SupplierContact[]>([]);
-  const [supplierContactsLoading, setSupplierContactsLoading] = useState(false);
-  useEffect(() => {
-    if (!invoiceSupplierId) {
-      setSupplierContacts([]);
-      return;
-    }
-    let cancelled = false;
-    setSupplierContactsLoading(true);
-    (async () => {
-      const supabase = createClient();
-      const { data, error } = await supabase
-        .from("supplier_contacts")
-        .select("*")
-        .eq("supplier_id", invoiceSupplierId)
-        .order("is_primary", { ascending: false })
-        .order("name");
-      if (cancelled) return;
-      if (error) {
-        console.error("[invoice-card] fetch supplier_contacts:", error);
-        setSupplierContacts([]);
-        setSupplierContactsLoading(false);
-        return;
-      }
-      setSupplierContacts((data ?? []) as SupplierContact[]);
-      setSupplierContactsLoading(false);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [invoiceSupplierId]);
   const [fetchedInvoiceItems, setFetchedInvoiceItems] = useState<
     InvoiceItemRow[]
   >([]);
@@ -802,6 +796,48 @@ export function InvoiceCard({
     }
   }
 
+  // Current header-field snapshot for the shared <InvoiceFieldsForm>. Reads
+  // from the local mirrors so edits reflect immediately; the mirrors are
+  // seeded from the invoice prop and updated on each save.
+  const fieldsValue: InvoiceFieldsValue = {
+    supplierId: supplierIdLocal,
+    buyerCompanyId: buyerCompanyIdLocal,
+    countryCode: pickupCountryCodeLocal,
+    city: pickupCityLocal,
+    pickupAddress: pickupAddressLocal,
+    supplierContactId: supplierContactIdLocal,
+    incoterms: incotermsLocal,
+    currency: currencyLocal,
+  };
+
+  // EDIT-mode persistence for the shared form. Each partial carries `invoices`
+  // column names, so it forwards straight to handleSaveInvoiceField (the same
+  // Supabase PATCH the inline fields used before this refactor). We also mirror
+  // the change into local state so the controlled inputs update before
+  // router.refresh() lands the persisted invoice prop. No-op guards live in
+  // each setter path / handleSaveInvoiceField is idempotent on identical values.
+  function handleFieldSave(partial: InvoiceFieldsSavePartial) {
+    if ("supplier_id" in partial) setSupplierIdLocal(partial.supplier_id ?? null);
+    if ("buyer_company_id" in partial)
+      setBuyerCompanyIdLocal(partial.buyer_company_id ?? null);
+    if ("supplier_contact_id" in partial)
+      setSupplierContactIdLocal(partial.supplier_contact_id ?? null);
+    if ("pickup_country_code" in partial)
+      setPickupCountryCodeLocal(partial.pickup_country_code ?? null);
+    if ("pickup_city" in partial) setPickupCityLocal(partial.pickup_city ?? "");
+    if ("pickup_address" in partial)
+      setPickupAddressLocal(partial.pickup_address ?? "");
+    if ("supplier_incoterms" in partial)
+      setIncotermsLocal(partial.supplier_incoterms ?? "");
+    if ("currency" in partial && partial.currency != null)
+      setCurrencyLocal(partial.currency);
+
+    // A supplier change resets the contact (partial carries supplier_id +
+    // supplier_contact_id:null together). Persisting both columns in one PATCH
+    // keeps the КПП consistent — no stale contact under the new supplier.
+    void handleSaveInvoiceField(partial as InvoicesUpdate);
+  }
+
   async function handleDownloadXls() {
     setDownloadingXls(true);
     try {
@@ -1232,171 +1268,45 @@ export function InvoiceCard({
                 </span>
               </div>
 
-              {/* Row: Country + City + Incoterms */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <div className="space-y-1">
-                  <span className="text-xs text-muted-foreground">Страна отгрузки</span>
-                  <CountryCombobox
-                    value={pickupCountryCodeLocal}
-                    onChange={(code) => {
-                      if (code === pickupCountryCodeLocal) return;
-                      setPickupCountryCodeLocal(code);
-                      const ruName = code ? findCountryByCode(code)?.nameRu ?? null : null;
-                      void handleSaveInvoiceField({
-                        pickup_country_code: code,
-                        pickup_country: ruName,
-                      });
-                    }}
-                    placeholder="Выберите страну…"
-                    ariaLabel="Страна отгрузки"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <span className="text-xs text-muted-foreground">Город</span>
-                  {/* Country-aware autocomplete with HERE-Geocode-backed
-                      catalog (per shared/ui/geo). Without a country code
-                      the input self-disables and asks the user to pick a
-                      country first — which is the correct UX for shipping
-                      origin. */}
-                  <CityAutocomplete
-                    value={pickupCityLocal}
-                    countryCode={pickupCountryCodeLocal}
-                    onChange={(next) => {
-                      setPickupCityLocal(next);
-                      const value = next.trim() === "" ? null : next;
-                      if (value === (invoice.pickup_city ?? null)) return;
-                      void handleSaveInvoiceField({ pickup_city: value });
-                    }}
-                    placeholder="Начните вводить город…"
-                    ariaLabel="Город отгрузки"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <span className="text-xs text-muted-foreground">Условия поставки</span>
-                  <select
-                    value={incotermsLocal}
-                    onChange={(e) => {
-                      const next = e.target.value;
-                      setIncotermsLocal(next);
-                      const value = next || null;
-                      if (value === (invoice.supplier_incoterms ?? null)) return;
-                      void handleSaveInvoiceField({ supplier_incoterms: value });
-                    }}
-                    className="w-full h-7 px-2 text-xs border border-input rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-ring"
-                  >
-                    <option value="">— не указано —</option>
-                    {INCOTERMS_2020.map((term) => (
-                      <option key={term.code} value={term.code}>
-                        {term.code} — {term.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+              {/* Shared КПП header fields — single source of truth across the
+                  CREATE modal and this EDIT card (Testing 2 row 91 prep).
+                  Renders Поставщик, Компания-покупатель, Страна, Город, Адрес,
+                  Контакт, Условия поставки, Валюта. Supplier + buyer are now
+                  editable here (were display-only on the card before). VAT,
+                  % аванса, Условия оплаты, cargo places, the items grid and the
+                  rest of the card's machinery stay on the card. */}
+              <InvoiceFieldsForm
+                mode="edit"
+                locked={isLocked}
+                value={fieldsValue}
+                onFieldSave={handleFieldSave}
+                suppliers={suppliers}
+                buyerCompanies={buyerCompanies}
+              />
 
-              {/* Testing 2 row 21: Pickup address (free-text street level) +
-                  supplier contact display. Pickup address is editable inline
-                  here so the procurement user can correct what was entered at
-                  КПП creation. Supplier contact is read-only — to swap it the
-                  user opens the supplier contacts page; we keep this card
-                  focused on shipment parameters. */}
-              <div className="space-y-1">
-                <span className="text-xs text-muted-foreground">Адрес забора груза</span>
-                <Input
-                  type="text"
-                  placeholder="Адрес отгрузки (улица, дом, склад)"
-                  value={pickupAddressLocal}
-                  onChange={(e) => setPickupAddressLocal(e.target.value)}
-                  onBlur={() => {
-                    const next = pickupAddressLocal.trim();
-                    const value = next === "" ? null : next;
-                    if (value === (invoice.pickup_address ?? null)) return;
-                    void handleSaveInvoiceField({ pickup_address: value });
-                  }}
-                  className="h-7 text-xs"
-                  data-testid="invoice-card-pickup-address"
-                />
-              </div>
-
-              {/* Testing 2 row 25: supplier-contact picker on the КПП card.
-                  Inline-editable: the procurement user can swap the named
-                  contact without leaving the card. Mirrors the picker in
-                  invoice-create-modal.tsx (same SearchableCombobox, same
-                  contact-row label shape). PATCH-on-change writes
-                  `supplier_contact_id` via the shared handleSaveInvoiceField
-                  helper used by every other deferred-fill field on this card. */}
-              <div className="space-y-1" data-testid="invoice-card-supplier-contact">
-                <span className="text-xs text-muted-foreground">Контакт поставщика</span>
-                <SearchableCombobox<SupplierContact>
-                  value={invoice.supplier_contact_id ?? null}
-                  onChange={(nextId) => {
-                    const value = nextId ?? null;
-                    if (value === (invoice.supplier_contact_id ?? null)) return;
-                    void handleSaveInvoiceField({ supplier_contact_id: value });
-                  }}
-                  items={supplierContacts}
-                  getLabel={(c) => c.name}
-                  getSecondary={(c) => {
-                    const parts = [c.position, c.phone, c.email].filter(Boolean);
-                    return parts.length > 0 ? parts.join(" · ") : null;
-                  }}
-                  getSearchableExtras={(c) =>
-                    [c.position, c.phone, c.email].filter(
-                      (v): v is string => Boolean(v),
-                    )
-                  }
-                  placeholder={
-                    !invoiceSupplierId
-                      ? "Сначала выберите поставщика"
-                      : supplierContactsLoading
-                        ? "Загрузка контактов…"
-                        : supplierContacts.length === 0
-                          ? "У поставщика нет контактов"
-                          : "Выберите контакт"
-                  }
-                  searchPlaceholder="Поиск контакта…"
-                  emptyMessage="Контакты не найдены"
-                  ariaLabel="Контакт поставщика"
-                  disabled={!invoiceSupplierId || supplierContactsLoading}
-                />
-                {/* Read-only summary line below the picker, kept so the full
-                    реквизиты (position + phone + email) of the currently
-                    selected contact are visible at a glance — the picker
-                    trigger only shows the name. */}
-                {invoice.supplier_contact && (
-                  <div className="text-xs text-muted-foreground">
-                    {[
-                      invoice.supplier_contact.position,
-                      invoice.supplier_contact.phone,
-                      invoice.supplier_contact.email,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </div>
-                )}
-              </div>
-
-              {/* Row: Currency + VAT + payment fields (m328, Testing 2 row 69) */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                <div className="space-y-1">
-                  <span className="text-xs text-muted-foreground">Валюта</span>
-                  <select
-                    value={currencyLocal}
-                    onChange={(e) => {
-                      const next = e.target.value;
-                      setCurrencyLocal(next);
-                      if (next === (invoice.currency ?? "USD")) return;
-                      void handleSaveInvoiceField({ currency: next });
-                    }}
-                    className="w-full h-7 px-2 text-xs border border-input rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-ring"
-                  >
-                    {SUPPORTED_CURRENCIES.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
+              {/* Read-only реквизиты summary for the currently-selected contact
+                  (position + phone + email). The picker trigger only shows the
+                  name, so this keeps the full contact card visible at a glance.
+                  Carries the testid the supplier-contact regression test
+                  inspects. */}
+              {invoice.supplier_contact && (
+                <div
+                  className="text-xs text-muted-foreground"
+                  data-testid="invoice-card-supplier-contact"
+                >
+                  {[
+                    invoice.supplier_contact.position,
+                    invoice.supplier_contact.phone,
+                    invoice.supplier_contact.email,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
                 </div>
+              )}
+
+              {/* Row: VAT + payment fields (m328, Testing 2 row 69). Currency
+                  moved into the shared <InvoiceFieldsForm> above. */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 <div className="space-y-1">
                   <span className="text-xs text-muted-foreground">НДС, %</span>
                   <Input
