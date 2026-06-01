@@ -254,3 +254,109 @@ export async function requestProcurementUnlock(invoiceId: string): Promise<void>
     throw new Error(json.error?.message ?? "Failed to request procurement-unlock approval");
   }
 }
+
+// ---------------------------------------------------------------------------
+// Supplier-offer file («Файл КП поставщика»)
+//
+// Optional at create AND edit, but MANDATORY to finish procurement (the
+// backend complete-procurement gate enforces that — see api/invoices.py,
+// MISSING_SUPPLIER_FILE / 422). Storage write is a simple single-table
+// effect, so per `.claude/rules/api-first.md` it stays Supabase-direct,
+// mirroring the customer-document upload pattern
+// (entities/customer/mutations.ts).
+//
+// The file lands in the shared `kvota-documents` bucket at
+// `invoices/{invoiceId}/{uuid}.{ext}`, and the public URL is persisted on
+// `invoices.invoice_file_url` (existing column — no migration). On the CREATE
+// flow the invoice id only exists after `createInvoice`, so the modal stages
+// the picked File and calls this AFTER creation; on EDIT the card calls it
+// immediately on pick.
+// ---------------------------------------------------------------------------
+
+const SUPPLIER_FILE_BUCKET = "kvota-documents";
+
+function supplierFileStoragePath(invoiceId: string, file: File): string {
+  const ext = file.name.split(".").pop()?.toLowerCase() || "bin";
+  return `invoices/${invoiceId}/${crypto.randomUUID()}.${ext}`;
+}
+
+/**
+ * Uploads the supplier-offer file for an invoice and stores its public URL on
+ * `invoices.invoice_file_url`. Returns the persisted URL. Cleans up the
+ * orphaned storage object if the metadata update fails.
+ */
+export async function uploadSupplierOfferFile(
+  invoiceId: string,
+  file: File
+): Promise<string> {
+  const supabase = createClient();
+  const storagePath = supplierFileStoragePath(invoiceId, file);
+
+  const { error: uploadError } = await supabase.storage
+    .from(SUPPLIER_FILE_BUCKET)
+    .upload(storagePath, file, { upsert: false });
+  if (uploadError) {
+    if (
+      uploadError.message?.includes("size") ||
+      uploadError.message?.includes("limit")
+    ) {
+      const sizeMb = Math.round(file.size / 1024 / 1024);
+      throw new Error(`Файл слишком большой (${sizeMb} МБ). Максимум: 50 МБ`);
+    }
+    throw new Error(`Ошибка загрузки: ${uploadError.message}`);
+  }
+
+  const {
+    data: { publicUrl },
+  } = supabase.storage.from(SUPPLIER_FILE_BUCKET).getPublicUrl(storagePath);
+
+  const { error: updateError } = await supabase
+    .from("invoices")
+    .update({ invoice_file_url: publicUrl })
+    .eq("id", invoiceId);
+  if (updateError) {
+    // Roll back the orphaned object so a failed PATCH does not leak files.
+    await supabase.storage.from(SUPPLIER_FILE_BUCKET).remove([storagePath]);
+    throw updateError;
+  }
+
+  return publicUrl;
+}
+
+/**
+ * Clears the supplier-offer file from an invoice. Removes the storage object
+ * (best-effort — a missing object must not block clearing the column) then
+ * nulls `invoices.invoice_file_url`.
+ */
+export async function removeSupplierOfferFile(
+  invoiceId: string,
+  fileUrl: string
+): Promise<void> {
+  const supabase = createClient();
+
+  // Derive the storage path from the public URL. getPublicUrl produces
+  // `.../object/public/{bucket}/{path}`; we slice off everything up to and
+  // including the bucket segment to recover `{path}`.
+  const marker = `/${SUPPLIER_FILE_BUCKET}/`;
+  const markerAt = fileUrl.indexOf(marker);
+  if (markerAt !== -1) {
+    const storagePath = decodeURIComponent(
+      fileUrl.slice(markerAt + marker.length)
+    );
+    const { error: storageError } = await supabase.storage
+      .from(SUPPLIER_FILE_BUCKET)
+      .remove([storagePath]);
+    if (storageError) {
+      console.warn(
+        "[removeSupplierOfferFile] storage remove failed:",
+        storageError.message
+      );
+    }
+  }
+
+  const { error } = await supabase
+    .from("invoices")
+    .update({ invoice_file_url: null })
+    .eq("id", invoiceId);
+  if (error) throw error;
+}

@@ -27,6 +27,7 @@ import {
   fetchSupplierVatRate,
   type VatResolverReason,
 } from "@/entities/invoice/queries";
+import { uploadSupplierOfferFile } from "@/entities/invoice/mutations";
 import { Badge } from "@/components/ui/badge";
 import {
   InvoiceFieldsForm,
@@ -88,6 +89,11 @@ export function InvoiceCreateModal({
   >(null);
   const [incoterms, setIncoterms] = useState<string>("");
   const [currency, setCurrency] = useState<string>("USD");
+  // Supplier-offer file is optional at create. The invoice id only exists
+  // after createInvoice, so we STAGE the picked File here and upload it once
+  // the КПП row is created (see handleSubmit). Mandatory-to-complete is
+  // enforced later by the backend complete-procurement gate.
+  const [supplierFile, setSupplierFile] = useState<File | null>(null);
   const [boxes, setBoxes] = useState<
     Array<{ weight_kg: string; length_mm: string; width_mm: string; height_mm: string }>
   >([{ weight_kg: "", length_mm: "", width_mm: "", height_mm: "" }]);
@@ -155,6 +161,7 @@ export function InvoiceCreateModal({
     setVatReason(null);
     setVatManuallyEdited(false);
     setBoxes([{ weight_kg: "", length_mm: "", width_mm: "", height_mm: "" }]);
+    setSupplierFile(null);
     setErrors({});
   }
 
@@ -294,6 +301,26 @@ export function InvoiceCreateModal({
         boxes: parsedBoxes,
       });
 
+      // Upload the staged supplier-offer file now that the invoice id exists.
+      // Optional at create — only uploads when the user picked a file. A
+      // failed upload must not orphan the just-created КПП, so it surfaces a
+      // toast but does not roll back creation (the user can add/replace the
+      // file later on the card; it's mandatory only at completion).
+      if (supplierFile) {
+        try {
+          await uploadSupplierOfferFile(invoice.id, supplierFile);
+        } catch (uploadErr) {
+          console.error(
+            "[invoice-create-modal] supplier file upload failed:",
+            uploadErr
+          );
+          toast.error(
+            extractErrorMessage(uploadErr) ??
+              "КП создано, но файл не загрузился — добавьте его в карточке"
+          );
+        }
+      }
+
       if (selectedItems.length > 0) {
         await assignItemsToInvoice(
           selectedItems.map((i) => i.id),
@@ -349,6 +376,10 @@ export function InvoiceCreateModal({
             buyerCompanies={buyerCompanies}
             errors={errors}
             onClearError={clearError}
+            file={{
+              stagedFileName: supplierFile?.name ?? null,
+              onStagedFileChange: setSupplierFile,
+            }}
           />
 
           <div className="space-y-1.5">
@@ -463,10 +494,9 @@ export function InvoiceCreateModal({
             </Button>
           </div>
 
-          <div className="space-y-1.5">
-            <Label>Файл КП поставщика</Label>
-            <Input type="file" />
-          </div>
+          {/* «Файл КП поставщика» now lives inside <InvoiceFieldsForm> as a
+              functional, staged-then-uploaded picker (was a dead
+              <Input type="file" /> with no handler). */}
 
           {selectedItems.length > 0 && (
             <div className="space-y-1.5">

@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Loader2, Paperclip, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CityAutocomplete, CountryCombobox, findCountryByCode, findCountryByName } from "@/shared/ui/geo";
@@ -74,6 +76,41 @@ export interface InvoiceFieldsValue {
 }
 
 /**
+ * Supplier-offer file («Файл КП поставщика») slot. Optional everywhere, but
+ * mandatory to FINISH procurement (the backend complete-procurement gate
+ * enforces it — MISSING_SUPPLIER_FILE / 422). The form renders the picker +
+ * current-file affordance; it never persists anything itself. Persistence is
+ * mode-driven and lives in the consumer:
+ *
+ *  - "edit": `uploadedUrl` is the saved invoice_file_url; picking a file calls
+ *    `onUploadFile(file)` (the card uploads to storage + PATCHes the column
+ *    immediately), removing calls `onRemoveFile()`.
+ *  - "create": the invoice id only exists after createInvoice, so there is no
+ *    URL yet; the form reports the picked File via `onStagedFileChange(file)`
+ *    and the create modal uploads it AFTER creation. `stagedFileName` echoes
+ *    the staged file's name back for display.
+ */
+export interface InvoiceFieldsFileSlot {
+  /** EDIT: the persisted invoice_file_url (null when none). */
+  uploadedUrl?: string | null;
+  /** CREATE: name of the staged-but-not-yet-uploaded file (null when none). */
+  stagedFileName?: string | null;
+  /** True while an edit-mode upload/remove is in flight (disables the input). */
+  busy?: boolean;
+  /** EDIT: upload the picked file now. */
+  onUploadFile?: (file: File) => void;
+  /** EDIT: clear the saved file. */
+  onRemoveFile?: () => void;
+  /** CREATE: stage the picked file (or clear with null) for post-create upload. */
+  onStagedFileChange?: (file: File | null) => void;
+  /**
+   * Highlight + message when the missing file blocked an action (the
+   * complete-procurement 422). Cleared by the consumer once a file is added.
+   */
+  error?: string;
+}
+
+/**
  * Partial save payload. Keys mirror the column names persisted on
  * `kvota.invoices` so the edit card can forward them straight to
  * `handleSaveInvoiceField`, and the create modal can map them into its
@@ -124,6 +161,11 @@ export interface InvoiceFieldsFormProps {
   errors?: Record<string, string>;
   /** Clears one field's error after the user edits it (create mode only). */
   onClearError?: (field: string) => void;
+  /**
+   * Supplier-offer file slot. Optional at create + edit, mandatory to finish
+   * procurement (gate is backend-side). Omit to hide the picker.
+   */
+  file?: InvoiceFieldsFileSlot;
 }
 
 /**
@@ -191,6 +233,7 @@ export function InvoiceFieldsForm({
   buyerCompanies,
   errors = {},
   onClearError,
+  file,
 }: InvoiceFieldsFormProps) {
   const { contacts, loading: contactsLoading } = useSupplierContacts(
     value.supplierId,
@@ -482,6 +525,125 @@ export function InvoiceFieldsForm({
           ))}
         </select>
       </div>
+
+      {file && (
+        <SupplierOfferFileField mode={mode} locked={locked} slot={file} />
+      )}
     </>
+  );
+}
+
+/**
+ * «Файл КП поставщика» picker. Optional at create + edit; the mandatory-to-
+ * complete gate is enforced backend-side. EDIT mode uploads on pick (the card
+ * persists invoice_file_url); CREATE mode stages the File for post-create
+ * upload. Shows the current file name + a remove/replace affordance when set,
+ * and highlights itself (red border + message) when `slot.error` is present —
+ * the no-silent-validation rule: name the missing field AND highlight it.
+ */
+function SupplierOfferFileField({
+  mode,
+  locked,
+  slot,
+}: {
+  mode: "create" | "edit";
+  locked: boolean;
+  slot: InvoiceFieldsFileSlot;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const hasFile =
+    mode === "edit"
+      ? Boolean(slot.uploadedUrl)
+      : Boolean(slot.stagedFileName);
+  const fileName =
+    mode === "edit"
+      ? slot.uploadedUrl
+        ? decodeURIComponent(slot.uploadedUrl.split("/").pop() ?? "Файл")
+        : null
+      : slot.stagedFileName ?? null;
+  const invalid = Boolean(slot.error);
+
+  function handlePick(e: React.ChangeEvent<HTMLInputElement>) {
+    const picked = e.target.files?.[0] ?? null;
+    if (!picked) return;
+    if (mode === "edit") {
+      slot.onUploadFile?.(picked);
+    } else {
+      slot.onStagedFileChange?.(picked);
+    }
+    // Reset the native input so picking the same filename twice still fires
+    // onChange (replace flow).
+    if (inputRef.current) inputRef.current.value = "";
+  }
+
+  function handleRemove() {
+    if (mode === "edit") {
+      slot.onRemoveFile?.();
+    } else {
+      slot.onStagedFileChange?.(null);
+    }
+  }
+
+  return (
+    <div className="space-y-1.5" data-testid="invoice-supplier-file">
+      <Label htmlFor="invoice-supplier-file-input">Файл КП поставщика</Label>
+      {hasFile ? (
+        <div
+          className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-sm ${invalid ? "border-destructive" : "border-input"}`}
+        >
+          {slot.busy ? (
+            <Loader2 size={14} className="shrink-0 animate-spin text-muted-foreground" />
+          ) : (
+            <Paperclip size={14} className="shrink-0 text-muted-foreground" />
+          )}
+          <span className="min-w-0 flex-1 truncate" title={fileName ?? undefined}>
+            {fileName}
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={() => inputRef.current?.click()}
+            disabled={locked || slot.busy}
+          >
+            Заменить
+          </Button>
+          <button
+            type="button"
+            onClick={handleRemove}
+            disabled={locked || slot.busy}
+            className="text-muted-foreground hover:text-destructive disabled:pointer-events-none disabled:opacity-50"
+            aria-label="Удалить файл КП поставщика"
+            title="Удалить файл"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      ) : (
+        <Input
+          id="invoice-supplier-file-input"
+          ref={inputRef}
+          type="file"
+          onChange={handlePick}
+          disabled={locked || slot.busy}
+          aria-invalid={invalid}
+          className={`h-8 text-sm ${invalid ? "border-destructive" : ""}`}
+          data-testid="invoice-supplier-file-input"
+        />
+      )}
+      {/* Hidden replace-input reused when a file already shows (the visible
+          control above is a label-less affordance). */}
+      {hasFile && (
+        <input
+          ref={inputRef}
+          type="file"
+          className="hidden"
+          onChange={handlePick}
+          disabled={locked || slot.busy}
+        />
+      )}
+      {invalid && <p className="text-xs text-destructive">{slot.error}</p>}
+    </div>
   );
 }

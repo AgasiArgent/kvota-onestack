@@ -52,7 +52,9 @@ import { SUBSTATUS_LABELS_RU } from "@/shared/lib/workflow-substates";
 import {
   downloadInvoiceXls,
   markInvoiceSent,
+  removeSupplierOfferFile,
   uploadInvoiceXls,
+  uploadSupplierOfferFile,
 } from "@/entities/invoice/mutations";
 import { createClient } from "@/shared/lib/supabase/client";
 import { extractErrorMessage } from "@/shared/lib/errors";
@@ -430,6 +432,12 @@ export function InvoiceCard({
   // mutation is in flight.
   const [completeConfirmOpen, setCompleteConfirmOpen] = useState(false);
   const [completing, setCompleting] = useState(false);
+  // Supplier-offer file («Файл КП поставщика»): `fileBusy` disables the picker
+  // while an upload/remove is in flight; `fileError` highlights the field +
+  // shows a message when completion was blocked by the missing file (the
+  // backend MISSING_SUPPLIER_FILE / 422 gate — no-silent-validation rule).
+  const [fileBusy, setFileBusy] = useState(false);
+  const [fileError, setFileError] = useState<string>("");
 
   // Procurement completion now lives PER invoice (migration 298). Reading
   // off `quote.procurement_completed_at` was the legacy behaviour — kept
@@ -935,10 +943,45 @@ export function InvoiceCard({
     }
   }
 
+  // Supplier-offer file upload (EDIT mode). Uploads to storage + PATCHes
+  // invoice_file_url, then refreshes so the prop-derived `hasFile` flips. A
+  // successful upload clears any standing MISSING_SUPPLIER_FILE highlight.
+  async function handleUploadSupplierFile(file: File) {
+    setFileBusy(true);
+    try {
+      await uploadSupplierOfferFile(invoice.id, file);
+      setFileError("");
+      toast.success("Файл КП поставщика загружен");
+      router.refresh();
+    } catch (err) {
+      console.error("[invoice-card] supplier file upload failed:", err);
+      toast.error(extractErrorMessage(err) ?? "Не удалось загрузить файл");
+    } finally {
+      setFileBusy(false);
+    }
+  }
+
+  async function handleRemoveSupplierFile() {
+    const currentUrl = ext<InvoiceExtras>(invoice).invoice_file_url;
+    if (!currentUrl) return;
+    setFileBusy(true);
+    try {
+      await removeSupplierOfferFile(invoice.id, currentUrl);
+      toast.success("Файл КП поставщика удалён");
+      router.refresh();
+    } catch (err) {
+      console.error("[invoice-card] supplier file remove failed:", err);
+      toast.error(extractErrorMessage(err) ?? "Не удалось удалить файл");
+    } finally {
+      setFileBusy(false);
+    }
+  }
+
   async function handleCompleteProcurement() {
     setCompleting(true);
     try {
       await completeInvoiceProcurement(invoice.id);
+      setFileError("");
       toast.success("Закупка по КП завершена");
       // Best-effort kanban advance for any brand-slice that's
       // now fully covered by completed invoices.
@@ -964,9 +1007,18 @@ export function InvoiceCard({
         "[invoice-card] complete procurement failed:",
         err
       );
-      toast.error(
-        extractErrorMessage(err) ?? "Не удалось завершить закупку"
-      );
+      const code = (err as { code?: string } | null)?.code;
+      const message = extractErrorMessage(err) ?? "Не удалось завершить закупку";
+      // The missing supplier file is a named, fixable validation failure: per
+      // the no-silent-validation rule we both toast the message AND highlight
+      // the file field. Close the confirm dialog and expand the card so the
+      // highlighted picker is visible.
+      if (code === "MISSING_SUPPLIER_FILE") {
+        setFileError(message);
+        setCompleteConfirmOpen(false);
+        setExpanded(true);
+      }
+      toast.error(message);
     } finally {
       setCompleting(false);
     }
@@ -1282,6 +1334,13 @@ export function InvoiceCard({
                 onFieldSave={handleFieldSave}
                 suppliers={suppliers}
                 buyerCompanies={buyerCompanies}
+                file={{
+                  uploadedUrl: ext<InvoiceExtras>(invoice).invoice_file_url,
+                  busy: fileBusy,
+                  error: fileError,
+                  onUploadFile: handleUploadSupplierFile,
+                  onRemoveFile: handleRemoveSupplierFile,
+                }}
               />
 
               {/* Read-only реквизиты summary for the currently-selected contact

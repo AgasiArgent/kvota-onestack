@@ -1439,9 +1439,15 @@ export async function completeInvoiceProcurement(invoiceId: string): Promise<voi
 
   if (!res.ok) {
     const json = await res.json().catch(() => null);
-    throw new Error(
-      json?.error?.message ?? `Failed to complete procurement (HTTP ${res.status})`
-    );
+    const message =
+      json?.error?.message ??
+      `Failed to complete procurement (HTTP ${res.status})`;
+    // Surface the structured error code so callers can react to specific
+    // failures — e.g. MISSING_SUPPLIER_FILE (422) highlights the file field
+    // on the КПП card instead of only toasting (no-silent-validation rule).
+    const err = new Error(message) as Error & { code?: string };
+    if (typeof json?.error?.code === "string") err.code = json.error.code;
+    throw err;
   }
 }
 
