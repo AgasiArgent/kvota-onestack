@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef } from "react";
 import { Bug, Send, X, Camera, Paperclip } from "lucide-react";
+import { SearchableCombobox } from "@/shared/ui";
 import { submitFeedback, type FeedbackType } from "../api/submitFeedback";
 import { collectDebugContext } from "../lib/debugContext";
 
@@ -14,12 +15,22 @@ interface FeedbackModalProps {
   onSetScreenshot: (dataUrl: string) => void;
 }
 
-const FEEDBACK_TYPES: { value: FeedbackType; label: string }[] = [
-  { value: "bug", label: "Ошибка" },
-  { value: "ux_ui", label: "UX / UI" },
-  { value: "suggestion", label: "Предложение" },
-  { value: "question", label: "Вопрос" },
+interface FeedbackTypeOption {
+  id: FeedbackType;
+  label: string;
+}
+
+const FEEDBACK_TYPES: FeedbackTypeOption[] = [
+  { id: "bug", label: "Ошибка" },
+  { id: "ux_ui", label: "UX / UI" },
+  { id: "suggestion", label: "Предложение" },
+  { id: "question", label: "Вопрос" },
 ];
+
+const TEXTAREA_CLASS =
+  "w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent resize-y min-h-[72px] max-h-[240px]";
+
+type FieldKey = "stepsTaken" | "actualResult";
 
 export function FeedbackModal({
   open,
@@ -30,7 +41,10 @@ export function FeedbackModal({
   onSetScreenshot,
 }: FeedbackModalProps) {
   const [feedbackType, setFeedbackType] = useState<FeedbackType>("bug");
-  const [description, setDescription] = useState("");
+  const [stepsTaken, setStepsTaken] = useState("");
+  const [expectedResult, setExpectedResult] = useState("");
+  const [actualResult, setActualResult] = useState("");
+  const [missing, setMissing] = useState<Set<FieldKey>>(new Set());
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{
     success: boolean;
@@ -41,7 +55,10 @@ export function FeedbackModal({
 
   const resetAndClose = useCallback(() => {
     setFeedbackType("bug");
-    setDescription("");
+    setStepsTaken("");
+    setExpectedResult("");
+    setActualResult("");
+    setMissing(new Set());
     setResult(null);
     onClearScreenshot();
     onClose();
@@ -65,14 +82,23 @@ export function FeedbackModal({
   );
 
   const handleSubmit = useCallback(async () => {
-    if (!description.trim()) return;
+    // Validate required fields: «Что делал» + «Что получил». Name + highlight
+    // every missing field (no silent failures — project rule).
+    const nextMissing = new Set<FieldKey>();
+    if (!stepsTaken.trim()) nextMissing.add("stepsTaken");
+    if (!actualResult.trim()) nextMissing.add("actualResult");
+    setMissing(nextMissing);
+    if (nextMissing.size > 0) return;
+
     setSubmitting(true);
     setResult(null);
 
     const debugContext = collectDebugContext();
     const res = await submitFeedback({
       feedbackType,
-      description: description.trim(),
+      stepsTaken: stepsTaken.trim(),
+      expectedResult: expectedResult.trim(),
+      actualResult: actualResult.trim(),
       pageUrl: debugContext.url,
       pageTitle: debugContext.title,
       debugContext,
@@ -87,9 +113,31 @@ export function FeedbackModal({
     } else {
       setResult(res);
     }
-  }, [feedbackType, description, screenshotDataUrl, resetAndClose]);
+  }, [
+    feedbackType,
+    stepsTaken,
+    expectedResult,
+    actualResult,
+    screenshotDataUrl,
+    resetAndClose,
+  ]);
+
+  const clearMissing = useCallback((field: FieldKey) => {
+    setMissing((prev) => {
+      if (!prev.has(field)) return prev;
+      const next = new Set(prev);
+      next.delete(field);
+      return next;
+    });
+  }, []);
 
   if (!open) return null;
+
+  const missingLabels: string[] = [];
+  if (missing.has("stepsTaken")) missingLabels.push("Что делал");
+  if (missing.has("actualResult")) missingLabels.push("Что получил");
+
+  const canSubmit = stepsTaken.trim().length > 0 && actualResult.trim().length > 0;
 
   return (
     <>
@@ -161,37 +209,93 @@ export function FeedbackModal({
               <label className="text-xs font-medium text-text-muted mb-1 block">
                 Тип
               </label>
-              <div className="flex gap-2 flex-wrap">
-                {FEEDBACK_TYPES.map((t) => (
-                  <button
-                    key={t.value}
-                    type="button"
-                    onClick={() => setFeedbackType(t.value)}
-                    className={`px-3 py-1.5 text-sm rounded-md border transition-colors ${
-                      feedbackType === t.value
-                        ? "bg-accent-subtle border-accent/50 text-accent"
-                        : "border-border text-text-muted hover:bg-sidebar"
-                    }`}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
+              <SearchableCombobox<FeedbackTypeOption>
+                value={feedbackType}
+                onChange={(id) => {
+                  if (id) setFeedbackType(id as FeedbackType);
+                }}
+                items={FEEDBACK_TYPES}
+                getLabel={(t) => t.label}
+                clearable={false}
+                ariaLabel="Тип обращения"
+                searchPlaceholder="Поиск типа…"
+                popoverWidthClass="w-72"
+                className="w-72 max-w-full"
+              />
             </div>
 
             <div className="mb-3">
-              <label className="text-xs font-medium text-text-muted mb-1 block">
-                Описание *
+              <label
+                htmlFor="feedback-steps-taken"
+                className="text-xs font-medium text-text-muted mb-1 block"
+              >
+                Что делал *
               </label>
               <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Опишите проблему или предложение..."
-                rows={4}
-                className="w-full px-3 py-2 text-sm border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent resize-y min-h-[100px] max-h-[300px]"
-                required
+                id="feedback-steps-taken"
+                value={stepsTaken}
+                onChange={(e) => {
+                  setStepsTaken(e.target.value);
+                  clearMissing("stepsTaken");
+                }}
+                placeholder="Опишите ваши действия…"
+                rows={3}
+                aria-invalid={missing.has("stepsTaken")}
+                className={`${TEXTAREA_CLASS} ${
+                  missing.has("stepsTaken")
+                    ? "border-error focus:border-error focus:ring-error/20"
+                    : "border-border"
+                }`}
               />
             </div>
+
+            <div className="mb-3">
+              <label
+                htmlFor="feedback-expected-result"
+                className="text-xs font-medium text-text-muted mb-1 block"
+              >
+                Что ожидал получить
+              </label>
+              <textarea
+                id="feedback-expected-result"
+                value={expectedResult}
+                onChange={(e) => setExpectedResult(e.target.value)}
+                placeholder="Какого результата вы ожидали…"
+                rows={3}
+                className={`${TEXTAREA_CLASS} border-border`}
+              />
+            </div>
+
+            <div className="mb-4">
+              <label
+                htmlFor="feedback-actual-result"
+                className="text-xs font-medium text-text-muted mb-1 block"
+              >
+                Что получил *
+              </label>
+              <textarea
+                id="feedback-actual-result"
+                value={actualResult}
+                onChange={(e) => {
+                  setActualResult(e.target.value);
+                  clearMissing("actualResult");
+                }}
+                placeholder="Что произошло на самом деле…"
+                rows={3}
+                aria-invalid={missing.has("actualResult")}
+                className={`${TEXTAREA_CLASS} ${
+                  missing.has("actualResult")
+                    ? "border-error focus:border-error focus:ring-error/20"
+                    : "border-border"
+                }`}
+              />
+            </div>
+
+            {missingLabels.length > 0 && (
+              <p role="alert" className="mb-3 text-sm text-error">
+                Заполните обязательные поля: {missingLabels.join(", ")}.
+              </p>
+            )}
 
             <div className="mb-4">
               <label className="text-xs font-medium text-text-muted mb-1 block">
@@ -243,7 +347,7 @@ export function FeedbackModal({
 
             <button
               type="submit"
-              disabled={submitting || !description.trim()}
+              disabled={submitting || !canSubmit}
               className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-accent text-white rounded-md font-medium text-sm hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {submitting ? (

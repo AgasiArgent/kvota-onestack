@@ -6209,6 +6209,9 @@ export type Database = {
           user_agent: string | null
           feedback_type: string
           description: string
+          steps_taken: string | null
+          expected_result: string | null
+          actual_result: string | null
           debug_context: Json | null
           status: string | null
           created_at: string | null
@@ -6231,6 +6234,9 @@ export type Database = {
           user_agent?: string | null
           feedback_type: string
           description: string
+          steps_taken?: string | null
+          expected_result?: string | null
+          actual_result?: string | null
           debug_context?: Json | null
           status?: string | null
           created_at?: string | null
@@ -6253,6 +6259,9 @@ export type Database = {
           user_agent?: string | null
           feedback_type?: string
           description?: string
+          steps_taken?: string | null
+          expected_result?: string | null
+          actual_result?: string | null
           debug_context?: Json | null
           status?: string | null
           created_at?: string | null
