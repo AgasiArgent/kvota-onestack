@@ -19,6 +19,42 @@ type QuoteAccessUser = {
   salesGroupId?: string | null;
 };
 
+/**
+ * Resolve the КП-table display for a role column (МОЛ / МВЭД) of one quote.
+ *
+ * Testing 2 row 94: logistics + customs are assigned PER-INVOICE on the manual
+ * kanban (PRs #182/#183), so a quote's own `assigned_logistics_user` /
+ * `assigned_customs_user` is often null even though its КПП carry an assignee —
+ * which rendered the column blank. Resolution rule:
+ *   1. quote-level id set        → that user (existing-correct rows unchanged)
+ *   2. quote-level null, 1 inv id → that invoice-level user
+ *   3. quote-level null, N inv ids→ all distinct users, names joined with ", "
+ *      (id is the first distinct invoice user, for a stable React key)
+ *   4. nothing set               → null (column stays empty)
+ *
+ * Unknown ids (no name resolved) contribute an empty name so a missing profile
+ * never crashes the row; an all-empty join collapses to null.
+ */
+export function resolveQuoteUserDisplay(
+  quoteLevelUserId: string | null | undefined,
+  invoiceLevelUserIds: ReadonlySet<string> | undefined,
+  userMap: ReadonlyMap<string, { id: string; full_name: string }>
+): { id: string; full_name: string } | null {
+  if (quoteLevelUserId) {
+    return userMap.get(quoteLevelUserId) ?? null;
+  }
+
+  const ids = invoiceLevelUserIds ? Array.from(invoiceLevelUserIds) : [];
+  if (ids.length === 0) return null;
+
+  const names = ids
+    .map((uid) => userMap.get(uid)?.full_name ?? "")
+    .filter((name) => name.length > 0);
+  if (names.length === 0) return null;
+
+  return { id: ids[0], full_name: names.join(", ") };
+}
+
 export async function fetchQuotesList(
   params: QuotesFilterParams,
   user: QuoteAccessUser
@@ -269,34 +305,56 @@ export async function fetchQuotesList(
   );
   const quoteIds = rows.map((r) => r.id);
 
-  const [customersResult, managersResult, itemsResult] = await Promise.all([
-    customerIds.length > 0
-      ? supabase.from("customers").select("id, name").in("id", customerIds)
-      : Promise.resolve({ data: [] as { id: string; name: string }[], error: null }),
-    managerIds.length > 0
-      ? supabase
-          .from("user_profiles")
-          .select("user_id, full_name")
-          .in("user_id", managerIds)
-      : Promise.resolve({
-          data: [] as { user_id: string; full_name: string | null }[],
-          error: null,
-        }),
-    quoteIds.length > 0
-      ? supabase
-          .from("quote_items")
-          .select("quote_id, brand, assigned_procurement_user")
-          .in("quote_id", quoteIds)
-      : Promise.resolve({
-          data: [] as { quote_id: string; brand: string | null; assigned_procurement_user: string | null }[],
-          error: null,
-        }),
-  ]);
+  const [customersResult, managersResult, itemsResult, invoicesResult] =
+    await Promise.all([
+      customerIds.length > 0
+        ? supabase.from("customers").select("id, name").in("id", customerIds)
+        : Promise.resolve({ data: [] as { id: string; name: string }[], error: null }),
+      managerIds.length > 0
+        ? supabase
+            .from("user_profiles")
+            .select("user_id, full_name")
+            .in("user_id", managerIds)
+        : Promise.resolve({
+            data: [] as { user_id: string; full_name: string | null }[],
+            error: null,
+          }),
+      quoteIds.length > 0
+        ? supabase
+            .from("quote_items")
+            .select("quote_id, brand, assigned_procurement_user")
+            .in("quote_id", quoteIds)
+        : Promise.resolve({
+            data: [] as { quote_id: string; brand: string | null; assigned_procurement_user: string | null }[],
+            error: null,
+          }),
+      // Testing 2 row 94: logistics + customs are now assigned PER-INVOICE
+      // (manual kanban — PRs #182/#183). When a quote's own
+      // `assigned_logistics_user` / `assigned_customs_user` is null, the КП
+      // table МОЛ/МВЭД columns must fall back to the distinct invoice-level
+      // assignees. Batch-fetch all invoices for the listed quotes in ONE
+      // round-trip (no N+1) and resolve names in the existing batched lookup.
+      quoteIds.length > 0
+        ? supabase
+            .from("invoices")
+            .select("quote_id, assigned_logistics_user, assigned_customs_user")
+            .in("quote_id", quoteIds)
+        : Promise.resolve({
+            data: [] as {
+              quote_id: string;
+              assigned_logistics_user: string | null;
+              assigned_customs_user: string | null;
+            }[],
+            error: null,
+          }),
+    ]);
 
   if (customersResult.error)
     console.error("Failed to fetch customers:", customersResult.error);
   if (managersResult.error)
     console.error("Failed to fetch managers:", managersResult.error);
+  if (invoicesResult.error)
+    console.error("Failed to fetch invoices:", invoicesResult.error);
 
   // Build brands + procurement user aggregation maps
   const brandsByQuote = new Map<string, Set<string>>();
@@ -327,6 +385,27 @@ export async function fetchQuotesList(
   }>) {
     if (row.assigned_logistics_user) logisticsUserIds.add(row.assigned_logistics_user);
     if (row.assigned_customs_user) customsUserIds.add(row.assigned_customs_user);
+  }
+
+  // Testing 2 row 94: build per-quote DISTINCT invoice-level МОЛ/МВЭД sets so
+  // a quote whose quote-level assignee is null can fall back to the people
+  // actually assigned on its КПП. Insertion order is preserved (Set), which is
+  // the order distinct assignees first appear across the quote's invoices.
+  const invLogisticsByQuote = new Map<string, Set<string>>();
+  const invCustomsByQuote = new Map<string, Set<string>>();
+  for (const inv of invoicesResult.data ?? []) {
+    if (inv.assigned_logistics_user) {
+      if (!invLogisticsByQuote.has(inv.quote_id))
+        invLogisticsByQuote.set(inv.quote_id, new Set());
+      invLogisticsByQuote.get(inv.quote_id)!.add(inv.assigned_logistics_user);
+      logisticsUserIds.add(inv.assigned_logistics_user);
+    }
+    if (inv.assigned_customs_user) {
+      if (!invCustomsByQuote.has(inv.quote_id))
+        invCustomsByQuote.set(inv.quote_id, new Set());
+      invCustomsByQuote.get(inv.quote_id)!.add(inv.assigned_customs_user);
+      customsUserIds.add(inv.assigned_customs_user);
+    }
   }
 
   // Second round: resolve procurement + logistics + customs user names together
@@ -386,12 +465,18 @@ export async function fetchQuotesList(
       procurement_managers: procIds
         .map((uid) => extraUserMap.get(uid))
         .filter((m): m is { id: string; full_name: string } => m != null),
-      logistics_user: rawRow.assigned_logistics_user
-        ? extraUserMap.get(rawRow.assigned_logistics_user) ?? null
-        : null,
-      customs_user: rawRow.assigned_customs_user
-        ? extraUserMap.get(rawRow.assigned_customs_user) ?? null
-        : null,
+      // Testing 2 row 94: prefer the quote-level assignee; when unset, fall
+      // back to the distinct per-invoice МОЛ/МВЭД (joined with ", " if many).
+      logistics_user: resolveQuoteUserDisplay(
+        rawRow.assigned_logistics_user,
+        invLogisticsByQuote.get(row.id),
+        extraUserMap
+      ),
+      customs_user: resolveQuoteUserDisplay(
+        rawRow.assigned_customs_user,
+        invCustomsByQuote.get(row.id),
+        extraUserMap
+      ),
     };
   });
 
