@@ -34,6 +34,16 @@ export interface ProcurementEditorItem {
   brand: string | null;
   quantity: number;
   purchase_price_original: number | null;
+  /**
+   * Testing 2 row 91 — per-line КПП discount, percent off the unit purchase
+   * price. NULL / 0 = no discount. build_calculation_inputs() applies the
+   * same `(1 - pct/100)` factor before the calc engine; the editor mirrors it
+   * in the read-only «Сумма со скидкой» column.
+   *
+   * Optional: pre-migration (m336) rows and older fixtures lack the column —
+   * the editor treats a missing value exactly as null (no discount).
+   */
+  discount_pct?: number | null;
   purchase_currency: string;
   minimum_order_quantity: number | null;
   production_time_days: number | null;
@@ -65,6 +75,10 @@ export const PROCUREMENT_COLUMN_KEYS = [
   "quantity",
   "minimum_order_quantity",
   "purchase_price_original",
+  // Testing 2 row 91 — per-line discount (% off unit purchase price). A save
+  // target on invoice_items.discount_pct; the «Сумма со скидкой» column that
+  // follows is computed/read-only and is NOT a save key.
+  "discount_pct",
   "production_time_days",
   "weight_in_kg",
   "dimensions",
@@ -88,6 +102,14 @@ interface RowData {
   quantity: number | null;
   minimum_order_quantity: number | null;
   purchase_price_original: number | null;
+  /** Testing 2 row 91 — editable per-line discount, % off the unit price. */
+  discount_pct: number | null;
+  /**
+   * Testing 2 row 91 — read-only computed line total AFTER the discount:
+   * qty × unit × (1 - discount_pct/100). Mirrors the calc-input formula in
+   * build_calculation_inputs(). Recomputed in itemToRow + after each edit.
+   */
+  discounted_total: number | null;
   purchase_currency: string;
   production_time_days: number | null;
   weight_in_kg: number | null;
@@ -101,6 +123,29 @@ function formatDimensions(
 ): string {
   if (height == null && width == null && length == null) return "";
   return `${height ?? 0}\u00D7${width ?? 0}\u00D7${length ?? 0}`;
+}
+
+/**
+ * Testing 2 row 91 — discounted line total: qty × unit × (1 - discount_pct/100).
+ *
+ * Mirrors the `(1 - pct/100)` factor `effective_purchase_price` applies in
+ * `services/calculation_helpers.py` so the КПП card preview matches what the
+ * calc engine will consume. A NULL / 0 / negative discount leaves the gross
+ * line total unchanged. Returns null when there is no unit price to total.
+ */
+function discountedLineTotal(
+  unitPrice: number | null,
+  quantity: number | null,
+  discountPct: number | null
+): number | null {
+  if (unitPrice == null || Number.isNaN(unitPrice)) return null;
+  const qty = quantity == null || Number.isNaN(quantity) ? 0 : quantity;
+  const pct =
+    discountPct == null || Number.isNaN(discountPct) || discountPct <= 0
+      ? 0
+      : discountPct;
+  const factor = 1 - pct / 100;
+  return unitPrice * qty * factor;
 }
 
 function parseDimensions(
@@ -171,6 +216,12 @@ function itemToRow(
     quantity: item.quantity,
     minimum_order_quantity: item.minimum_order_quantity ?? null,
     purchase_price_original: item.purchase_price_original ?? null,
+    discount_pct: item.discount_pct ?? null,
+    discounted_total: discountedLineTotal(
+      item.purchase_price_original ?? null,
+      item.quantity ?? null,
+      item.discount_pct ?? null
+    ),
     purchase_currency: item.purchase_currency ?? "",
     production_time_days: item.production_time_days ?? null,
     weight_in_kg: item.weight_in_kg ?? null,
@@ -741,7 +792,9 @@ export function ProcurementHandsontable({
         if (
           field === "sales_product_code" ||
           field === "sales_product_name" ||
-          field === "sales_unit"
+          field === "sales_unit" ||
+          // Testing 2 row 91 — computed/read-only column; never persisted.
+          field === "discounted_total"
         ) {
           continue;
         }
@@ -764,6 +817,7 @@ export function ProcurementHandsontable({
             updates.dimension_length_mm = dims.length;
           } else if (
             field === "purchase_price_original" ||
+            field === "discount_pct" ||
             field === "weight_in_kg" ||
             field === "production_time_days" ||
             field === "minimum_order_quantity"
@@ -779,6 +833,36 @@ export function ProcurementHandsontable({
         }
 
         if (Object.keys(updates).length === 0) continue;
+
+        // Testing 2 row 91 — when price / discount / qty change, recompute the
+        // read-only «Сумма со скидкой» cell in place so the preview updates
+        // immediately (before the save round-trip + refetch). The "external"
+        // source tag keeps this synthetic patch out of handleAfterChange.
+        if (
+          "purchase_price_original" in updates ||
+          "discount_pct" in updates
+        ) {
+          const readNum = (key: string): number | null => {
+            if (key in updates) {
+              const u = updates[key];
+              return typeof u === "number" ? u : null;
+            }
+            const cur = hot.getDataAtRowProp(rowIndex, key);
+            const parsed =
+              cur == null || cur === "" ? null : parseFloat(String(cur));
+            return parsed == null || Number.isNaN(parsed) ? null : parsed;
+          };
+          hot.setDataAtRowProp(
+            rowIndex,
+            "discounted_total",
+            discountedLineTotal(
+              readNum("purchase_price_original"),
+              readNum("quantity"),
+              readNum("discount_pct")
+            ),
+            "external"
+          );
+        }
 
         const lockKey = `update-ii-${rowId}`;
         if (pendingOps.current.has(lockKey)) continue;
@@ -817,6 +901,9 @@ export function ProcurementHandsontable({
     "sales_unit",
     "minimum_order_quantity",
     "purchase_price_original",
+    // Testing 2 row 91 — editable discount + its read-only discounted total.
+    "discount_pct",
+    "discounted_total",
     "production_time_days",
     "weight_in_kg",
     "dimensions",
@@ -828,6 +915,9 @@ export function ProcurementHandsontable({
     return [
       VISIBLE_KEYS.indexOf("supplier_sku"),
       VISIBLE_KEYS.indexOf("purchase_price_original"),
+      // Testing 2 row 91 — a discount is a price edit: lock it on a completed
+      // КПП so changing it routes through the unlock/approval flow like price.
+      VISIBLE_KEYS.indexOf("discount_pct"),
       VISIBLE_KEYS.indexOf("production_time_days"),
     ];
     // VISIBLE_KEYS is module-stable; no need to depend on it.
@@ -921,6 +1011,11 @@ export function ProcurementHandsontable({
           // explainer (Handsontable renders colHeaders as HTML).
           '<span title="Если задано, переопределяет заказанное кол-во в расчёте — укажите, сколько поставщик реально отгрузит.">Кол-во поставщика</span>',
           "Цена",
+          // Testing 2 row 91 — per-line discount (% off unit price). Feeds the
+          // calc via build_calculation_inputs(); native-title explainer.
+          '<span title="Скидка на позицию, % от цены за единицу. Применяется в расчёте: цена × (1 − скидка/100).">Скидка, %</span>',
+          // Read-only computed line total AFTER the discount (qty × цена × (1 − скидка/100)).
+          '<span title="Сумма по позиции с учётом скидки: кол-во × цена × (1 − скидка/100).">Сумма со скидкой</span>',
           "Срок, к.дн",
           "Вес, кг",
           "В×Ш×Д, мм",
@@ -953,6 +1048,23 @@ export function ProcurementHandsontable({
             width: 64,
           },
           { data: "purchase_price_original", type: "numeric", width: 55, readOnly: procurementCompleted },
+          // Testing 2 row 91 — editable per-line discount %. Locked on a
+          // completed КПП (mirrors price) so edits route through the unlock flow.
+          {
+            data: "discount_pct",
+            type: "numeric",
+            width: 55,
+            readOnly: procurementCompleted,
+          },
+          // Read-only computed «Сумма со скидкой». numericFormat keeps it a
+          // currency-style total; always read-only regardless of lock state.
+          {
+            data: "discounted_total",
+            type: "numeric",
+            width: 80,
+            readOnly: true,
+            numericFormat: { pattern: "0,0.00" },
+          },
           { data: "production_time_days", type: "numeric", width: 45, readOnly: procurementCompleted },
           { data: "weight_in_kg", type: "numeric", width: 45 },
           { data: "dimensions", type: "text", width: 60 },

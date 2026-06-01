@@ -478,7 +478,7 @@ export function InvoiceCard({
         const { data: ii } = await supabase
           .from("invoice_items")
           .select(
-            "id, invoice_id, position, product_name, supplier_sku, brand, quantity, purchase_price_original, purchase_currency, minimum_order_quantity, production_time_days, weight_in_kg, dimension_height_mm, dimension_width_mm, dimension_length_mm"
+            "id, invoice_id, position, product_name, supplier_sku, brand, quantity, purchase_price_original, discount_pct, purchase_currency, minimum_order_quantity, production_time_days, weight_in_kg, dimension_height_mm, dimension_width_mm, dimension_length_mm"
           )
           .eq("invoice_id", invoice.id)
           .order("position", { ascending: true });
@@ -763,9 +763,16 @@ export function InvoiceCard({
   // Phase 5c: totals come from invoice_items (supplier's own positions),
   // not quote_items. Merged invoice_items are counted once (that's the
   // point — a single row in the supplier КП).
+  // Testing 2 row 91: the per-line discount (% off the unit price) is applied
+  // here too — same `(1 - pct/100)` factor build_calculation_inputs() uses —
+  // so the КП header total matches the discounted line totals and the calc.
   const totalAmount = invoiceItems.reduce((sum, item) => {
     const price = item.purchase_price_original ?? 0;
-    return sum + price * item.quantity;
+    const pct =
+      item.discount_pct != null && item.discount_pct > 0
+        ? item.discount_pct
+        : 0;
+    return sum + price * item.quantity * (1 - pct / 100);
   }, 0);
   const currency = invoice.currency ?? "USD";
   const hasFile = ext<InvoiceExtras>(invoice).invoice_file_url != null;

@@ -141,6 +141,9 @@ def _legacy_shape(qi: dict) -> dict:
         "purchase_currency": None,
         "base_price_vat": None,
         "price_includes_vat": False,
+        # Testing 2 row 91: per-line discount lives on the supplier invoice_item.
+        # Legacy/uncomposed rows have no supplier invoice → no discount (None).
+        "discount_pct": None,
 
         # Supplier-specific attrs — None for uncomposed items
         "weight_in_kg": None,
@@ -186,6 +189,10 @@ def _build_calc_item(qi: dict, ii: dict, ratio) -> dict:
         "purchase_currency": ii.get("purchase_currency"),
         "base_price_vat": ii.get("base_price_vat"),
         "price_includes_vat": ii.get("price_includes_vat", False),
+        # Testing 2 row 91: per-line discount (% off the unit purchase price),
+        # set by procurement on the supplier КП. build_calculation_inputs()
+        # applies it to the effective price; NULL / 0 leaves it unchanged.
+        "discount_pct": ii.get("discount_pct"),
 
         # Supplier-specific attrs — from invoice_item
         "weight_in_kg": ii.get("weight_in_kg"),
