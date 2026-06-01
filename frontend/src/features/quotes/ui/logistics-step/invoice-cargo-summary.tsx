@@ -144,23 +144,38 @@ function formatDimensions(invoice: QuoteInvoiceRow): string | null {
   return `${fmt(length_m)} × ${fmt(width_m)} × ${fmt(height_m)} м`;
 }
 
+/**
+ * Build the per-position label for the cargo digest. Testing 2 row 93:
+ * testers asked to surface each position's BRAND alongside its name, so
+ * a logistician/customs reviewer recognises «что именно везём» without
+ * opening the procurement tab. Rendered as «<Бренд> — <Наименование>»;
+ * when brand is empty/null we fall back to just the name (no dangling
+ * dash).
+ */
+function formatCargoItemLabel(item: QuoteItemRow): string | null {
+  const name = item.product_name?.trim();
+  if (!name) return null;
+  const brand = item.brand?.trim();
+  return brand ? `${brand} — ${name}` : name;
+}
+
 function renderCargoDigest(items: readonly QuoteItemRow[]): React.ReactNode {
   if (items.length === 0) return null;
-  const names = items
-    .map((i) => i.product_name?.trim())
+  const labels = items
+    .map(formatCargoItemLabel)
     .filter((s): s is string => !!s);
   const countLabel = `${items.length} ${pluralPositions(items.length)}`;
   // Testing 2 row 14 v3: testers (РОЛ/МОЛ/МВЭД) asked for items as a vertical
   // bullet list — comma-separated wrapping was hard to read once the cargo
   // grew past 3-4 items. Single-text count stays when product names are
   // missing.
-  if (names.length === 0) return countLabel;
+  if (labels.length === 0) return countLabel;
   return (
     <div className="flex flex-col gap-0.5">
       <span>{countLabel}:</span>
       <ul className="list-disc pl-5 text-text">
-        {names.map((n, idx) => (
-          <li key={`${idx}-${n}`}>{n}</li>
+        {labels.map((label, idx) => (
+          <li key={`${idx}-${label}`}>{label}</li>
         ))}
       </ul>
     </div>
