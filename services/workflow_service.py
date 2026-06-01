@@ -3736,13 +3736,14 @@ class SubStateTransition:
 
 
 # Allowed procurement sub-status transitions
-# Forward flow: distributing → searching_supplier → waiting_prices → prices_ready
+# Forward flow: distributing → request → searching_supplier → waiting_prices → prices_ready
 # Backward moves require a reason (to prevent sloppy rollbacks).
 # Paused is a parking lot — any active column can pause and any paused card
 # can resume to any active column (Testing 2 row 74).
 _PROCUREMENT_ROLES_LIST: List[str] = ["procurement", "admin", "head_of_procurement"]
 _ACTIVE_PROCUREMENT_SUBSTATUSES: List[str] = [
     "distributing",
+    "request",
     "searching_supplier",
     "waiting_prices",
     "prices_ready",
@@ -3750,8 +3751,16 @@ _ACTIVE_PROCUREMENT_SUBSTATUSES: List[str] = [
 
 PROCUREMENT_SUBSTATUS_TRANSITIONS: List[SubStateTransition] = [
     # Forward
+    # distributing → request: «Заявка» (Testing 2 row 95a) is the new first
+    # stop after distribution. The auto-advance (once all items are routed)
+    # lands here; the МОЗ then manually pulls request → searching_supplier.
     SubStateTransition(
-        "pending_procurement", "distributing", "searching_supplier",
+        "pending_procurement", "distributing", "request",
+        _PROCUREMENT_ROLES_LIST,
+        requires_reason=False,
+    ),
+    SubStateTransition(
+        "pending_procurement", "request", "searching_supplier",
         _PROCUREMENT_ROLES_LIST,
         requires_reason=False,
     ),
@@ -3767,7 +3776,12 @@ PROCUREMENT_SUBSTATUS_TRANSITIONS: List[SubStateTransition] = [
     ),
     # Backward (require reason)
     SubStateTransition(
-        "pending_procurement", "searching_supplier", "distributing",
+        "pending_procurement", "request", "distributing",
+        _PROCUREMENT_ROLES_LIST,
+        requires_reason=True,
+    ),
+    SubStateTransition(
+        "pending_procurement", "searching_supplier", "request",
         _PROCUREMENT_ROLES_LIST,
         requires_reason=True,
     ),
@@ -4061,9 +4075,13 @@ def maybe_advance_after_distribution(
     brand: str,
     user_id: str,
 ) -> Optional[dict]:
-    """Auto-advance a (quote, brand) from 'distributing' to 'searching_supplier'
+    """Auto-advance a (quote, brand) from 'distributing' to 'request'
     when every item belonging to that brand has either an assigned МОЗ or is
     marked unavailable.
+
+    The «Заявка» (request) stage (Testing 2 row 95a) sits between distribution
+    and supplier search: once all items are routed the card lands in «Заявка»,
+    and the МОЗ manually pulls it forward to «Поиск поставщика».
 
     Idempotent: if the row is missing or already past 'distributing', returns
     None without raising.
@@ -4106,14 +4124,14 @@ def maybe_advance_after_distribution(
         if not assigned and not unavailable:
             return None  # at least one item still unrouted
 
-    # All items routed — advance to searching_supplier.
+    # All items routed — advance to request («Заявка»).
     sb.table("status_history").insert({
         "quote_id": quote_id,
         "brand": brand,
         "from_status": "pending_procurement",
         "from_substatus": "distributing",
         "to_status": "pending_procurement",
-        "to_substatus": "searching_supplier",
+        "to_substatus": "request",
         "transitioned_by": user_id,
         "reason": "",
     }).execute()
@@ -4121,7 +4139,7 @@ def maybe_advance_after_distribution(
     update_result = (
         sb.table("quote_brand_substates")
         .update({
-            "substatus": "searching_supplier",
+            "substatus": "request",
             "updated_at": datetime.now(timezone.utc).isoformat(),
             "updated_by": user_id,
         })
@@ -4131,4 +4149,4 @@ def maybe_advance_after_distribution(
     )
     if update_result.data:
         return update_result.data[0]
-    return {"quote_id": quote_id, "brand": brand, "substatus": "searching_supplier"}
+    return {"quote_id": quote_id, "brand": brand, "substatus": "request"}

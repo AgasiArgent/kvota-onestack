@@ -70,13 +70,49 @@ def _qbs_row(substatus, quote_id="q-001", brand="ABB"):
 
 
 class TestCanTransitionSubstatus:
-    def test_forward_distributing_to_searching_supplier_allowed(self):
+    def test_forward_distributing_to_request_allowed(self):
+        # Testing 2 row 95a — «Заявка» (request) is the new first stop after
+        # distribution; distributing no longer jumps straight to searching.
         allowed, transition = can_transition_substatus(
-            "pending_procurement", "distributing", "searching_supplier", ["procurement"]
+            "pending_procurement", "distributing", "request", ["procurement"]
         )
         assert allowed is True
         assert transition is not None
         assert transition.requires_reason is False
+
+    def test_forward_request_to_searching_supplier_allowed(self):
+        # Testing 2 row 95a — МОЗ manually pulls request → searching_supplier.
+        allowed, transition = can_transition_substatus(
+            "pending_procurement", "request", "searching_supplier", ["procurement"]
+        )
+        assert allowed is True
+        assert transition is not None
+        assert transition.requires_reason is False
+
+    def test_distributing_to_searching_supplier_no_longer_direct(self):
+        # Testing 2 row 95a — the direct distributing → searching_supplier hop
+        # was removed; the request stage now sits between them.
+        allowed, _ = can_transition_substatus(
+            "pending_procurement", "distributing", "searching_supplier", ["procurement"]
+        )
+        assert allowed is False
+
+    def test_backward_searching_supplier_to_request_requires_reason(self):
+        # Testing 2 row 95a — rolling back from searching to «Заявка».
+        allowed, transition = can_transition_substatus(
+            "pending_procurement", "searching_supplier", "request", ["procurement"]
+        )
+        assert allowed is True
+        assert transition is not None
+        assert transition.requires_reason is True
+
+    def test_backward_request_to_distributing_requires_reason(self):
+        allowed, transition = can_transition_substatus(
+            "pending_procurement", "request", "distributing", ["procurement"]
+        )
+        assert allowed is True
+        assert transition is not None
+        assert transition.requires_reason is True
 
     def test_forward_searching_to_waiting_prices_allowed(self):
         allowed, _ = can_transition_substatus(
@@ -92,13 +128,13 @@ class TestCanTransitionSubstatus:
 
     def test_wrong_role_denied(self):
         allowed, _ = can_transition_substatus(
-            "pending_procurement", "distributing", "searching_supplier", ["sales"]
+            "pending_procurement", "distributing", "request", ["sales"]
         )
         assert allowed is False
 
     def test_backward_transition_allowed_for_procurement(self):
         allowed, transition = can_transition_substatus(
-            "pending_procurement", "searching_supplier", "distributing", ["procurement"]
+            "pending_procurement", "waiting_prices", "searching_supplier", ["procurement"]
         )
         assert allowed is True
         assert transition is not None
@@ -138,7 +174,7 @@ class TestCanTransitionSubstatus:
 
     def test_admin_role_allowed(self):
         allowed, _ = can_transition_substatus(
-            "pending_procurement", "distributing", "searching_supplier", ["admin"]
+            "pending_procurement", "distributing", "request", ["admin"]
         )
         assert allowed is True
 
@@ -150,7 +186,7 @@ class TestCanTransitionSubstatus:
 
     def test_multiple_roles_any_match_allowed(self):
         allowed, _ = can_transition_substatus(
-            "pending_procurement", "distributing", "searching_supplier", ["sales", "procurement"]
+            "pending_procurement", "distributing", "request", ["sales", "procurement"]
         )
         assert allowed is True
 
@@ -180,7 +216,9 @@ class TestTransitionSubstatus:
         def _table(name):
             tbl = MagicMock()
             if name == "quote_brand_substates":
-                _setup_qbs_fetch(tbl, _qbs_row("distributing"))
+                # Testing 2 row 95a — request → searching_supplier is the new
+                # first manual forward hop the МОЗ performs.
+                _setup_qbs_fetch(tbl, _qbs_row("request"))
                 _setup_qbs_update(tbl, _qbs_row("searching_supplier"))
             return tbl
 
@@ -358,7 +396,7 @@ class TestTransitionSubstatus:
         def _table(name):
             if name == "quote_brand_substates":
                 tbl = MagicMock()
-                _setup_qbs_fetch(tbl, _qbs_row("distributing"))
+                _setup_qbs_fetch(tbl, _qbs_row("request"))
                 _setup_qbs_update(tbl, _qbs_row("searching_supplier"))
                 return tbl
             if name == "status_history":
@@ -438,14 +476,19 @@ class TestMaybeAdvanceAfterDistribution:
 
     @patch("services.workflow_service.get_supabase")
     def test_all_assigned_advances(self, mock_get_sb):
+        # Testing 2 row 95a — auto-advance now lands in «Заявка» (request),
+        # not searching_supplier; the МОЗ pulls it forward manually after.
         sb = MagicMock()
         qbs_tbl = MagicMock()
         _patch_qbs_fetch(qbs_tbl, _qbs_row("distributing"))
-        _setup_qbs_update(qbs_tbl, _qbs_row("searching_supplier"))
+        _setup_qbs_update(qbs_tbl, _qbs_row("request"))
+        history_tbl = MagicMock()
 
         def _table(name):
             if name == "quote_brand_substates":
                 return qbs_tbl
+            if name == "status_history":
+                return history_tbl
             if name == "quote_items":
                 tbl = MagicMock()
                 _setup_items_fetch(tbl, [
@@ -460,14 +503,20 @@ class TestMaybeAdvanceAfterDistribution:
 
         result = maybe_advance_after_distribution("q-001", "ABB", "u-1")
         assert result is not None
-        assert result["substatus"] == "searching_supplier"
+        assert result["substatus"] == "request"
+        # The audit row and the qbs update both target 'request'.
+        history_payload = history_tbl.insert.call_args_list[0][0][0]
+        assert history_payload["from_substatus"] == "distributing"
+        assert history_payload["to_substatus"] == "request"
+        update_payload = qbs_tbl.update.call_args_list[0][0][0]
+        assert update_payload["substatus"] == "request"
 
     @patch("services.workflow_service.get_supabase")
     def test_mix_of_assigned_and_unavailable_advances(self, mock_get_sb):
         sb = MagicMock()
         qbs_tbl = MagicMock()
         _patch_qbs_fetch(qbs_tbl, _qbs_row("distributing"))
-        _setup_qbs_update(qbs_tbl, _qbs_row("searching_supplier"))
+        _setup_qbs_update(qbs_tbl, _qbs_row("request"))
 
         def _table(name):
             if name == "quote_brand_substates":
@@ -486,7 +535,7 @@ class TestMaybeAdvanceAfterDistribution:
 
         result = maybe_advance_after_distribution("q-001", "ABB", "u-1")
         assert result is not None
-        assert result["substatus"] == "searching_supplier"
+        assert result["substatus"] == "request"
 
     @patch("services.workflow_service.get_supabase")
     def test_other_brand_items_do_not_block(self, mock_get_sb):
@@ -494,7 +543,7 @@ class TestMaybeAdvanceAfterDistribution:
         sb = MagicMock()
         qbs_tbl = MagicMock()
         _patch_qbs_fetch(qbs_tbl, _qbs_row("distributing", brand="ABB"))
-        _setup_qbs_update(qbs_tbl, _qbs_row("searching_supplier", brand="ABB"))
+        _setup_qbs_update(qbs_tbl, _qbs_row("request", brand="ABB"))
 
         def _table(name):
             if name == "quote_brand_substates":
@@ -513,7 +562,7 @@ class TestMaybeAdvanceAfterDistribution:
 
         result = maybe_advance_after_distribution("q-001", "ABB", "u-1")
         assert result is not None
-        assert result["substatus"] == "searching_supplier"
+        assert result["substatus"] == "request"
 
     @patch("services.workflow_service.get_supabase")
     def test_no_items_for_brand_is_noop(self, mock_get_sb):
@@ -546,8 +595,12 @@ class TestTransitionsCatalog:
         assert all(isinstance(t, SubStateTransition) for t in PROCUREMENT_SUBSTATUS_TRANSITIONS)
 
     def test_backward_transitions_require_reason(self):
+        # Testing 2 row 95a — «Заявка» (request) added between distributing
+        # and searching_supplier; its reverse (searching → request,
+        # request → distributing) must require a reason like the others.
         forward_pairs = {
-            ("distributing", "searching_supplier"),
+            ("distributing", "request"),
+            ("request", "searching_supplier"),
             ("searching_supplier", "waiting_prices"),
             ("waiting_prices", "prices_ready"),
         }

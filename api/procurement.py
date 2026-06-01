@@ -16,7 +16,7 @@ Roles: procurement, admin, head_of_procurement (sales can read status-history).
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from starlette.responses import JSONResponse
@@ -40,9 +40,12 @@ _READ_HISTORY_ROLES = {"procurement", "procurement_senior", "admin", "head_of_pr
 # regular МОЗ has no business with the «Распределение» column.
 _BROADER_SCOPE_ROLES = {"admin", "head_of_procurement", "procurement_senior"}
 
-# Fixed set of procurement sub-statuses — matches migrations 274 + 326 check constraint
+# Fixed set of procurement sub-statuses — matches migrations 274 + 326 + 335
+# check constraint. «request» (Заявка, Testing 2 row 95a) sits between
+# distributing and searching_supplier.
 _PROCUREMENT_SUBSTATUSES = (
     "distributing",
+    "request",
     "searching_supplier",
     "waiting_prices",
     "prices_ready",
@@ -125,6 +128,38 @@ def _days_since(iso_timestamp: str | None) -> int:
         return 0
 
 
+def _procurement_deadline_at(
+    workflow_status: str | None,
+    stage_entered_at: str | None,
+    override_hours: float | int | None,
+    org_default_hours: float | int | None,
+) -> str | None:
+    """Compute the absolute procurement-stage deadline for a quote.
+
+    Testing 2 row 95b — mirrors the frontend derivation in procurement-step.tsx
+    (row 89): deadline = stage_entered_at + hours, where hours is the
+    per-quote override (`quotes.stage_deadline_override_hours`) when set,
+    otherwise the org default (`stage_deadlines.deadline_hours` for the
+    `pending_procurement` stage).
+
+    Returns an ISO-8601 UTC string, or None when the quote is not currently in
+    `pending_procurement`, the stage timer hasn't started, or no deadline is
+    configured (caller renders an em-dash placeholder).
+    """
+    if workflow_status != "pending_procurement" or not stage_entered_at:
+        return None
+    hours = override_hours if override_hours is not None else org_default_hours
+    if hours is None:
+        return None
+    try:
+        dt = datetime.fromisoformat(stage_entered_at.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return (dt + timedelta(hours=float(hours))).isoformat()
+    except Exception:
+        return None
+
+
 # ============================================================================
 # GET /api/quotes/kanban
 # ============================================================================
@@ -162,6 +197,10 @@ async def get_kanban(request) -> JSONResponse:
               `quotes.sales_checklist.distribution_comment` (Testing 2 row 67
               follow-up). Trimmed; null when empty / absent. Procurement card
               renders it inline so МОЗ doesn't have to open the quote.
+          - procurement_deadline_at (str | None) — ISO-8601 procurement-stage
+              deadline (Testing 2 row 95b). Derived from the parent quote's
+              stage timer + per-quote override / org default. Surfaced on
+              «Цены готовы» cards so the МОЗ sees the КПП deadline inline.
     Side Effects: none (read-only)
     Roles: procurement, admin, head_of_procurement
     """
@@ -208,6 +247,7 @@ async def get_kanban(request) -> JSONResponse:
             "quote_id, brand, substatus, updated_at, "
             "quotes!inner(id, idn_quote, workflow_status, organization_id, created_by, tender_type, "
             "procurement_completed_at, sales_checklist, "
+            "stage_entered_at, stage_deadline_override_hours, "
             "customers!customer_id(id, name))"
         )
         .or_(
@@ -418,6 +458,23 @@ async def get_kanban(request) -> JSONResponse:
                 uid = str(p.get("user_id"))
                 name_by_user[uid] = p.get("full_name") or ""
 
+    # Org-default procurement-stage deadline hours (Testing 2 row 95b). The
+    # kanban is scoped to a single org (user["org_id"]) so one lookup powers
+    # every card; per-quote overrides win over this default in
+    # `_procurement_deadline_at`.
+    org_procurement_deadline_hours: float | int | None = None
+    stage_deadline_result = (
+        sb.table("stage_deadlines")
+        .select("deadline_hours")
+        .eq("organization_id", user["org_id"])
+        .eq("stage", "pending_procurement")
+        .limit(1)
+        .execute()
+    )
+    stage_deadline_rows = _rows(stage_deadline_result)
+    if stage_deadline_rows:
+        org_procurement_deadline_hours = stage_deadline_rows[0].get("deadline_hours")
+
     columns: dict[str, list[dict]] = {s: [] for s in _PROCUREMENT_SUBSTATUSES}
 
     for r in qbs_rows:
@@ -521,6 +578,18 @@ async def get_kanban(request) -> JSONResponse:
                     "reason": plog.get("reason") or "",
                 }
 
+        # Procurement-stage deadline (Testing 2 row 95b): surfaced on
+        # «Цены готовы» cards so the МОЗ sees the КПП deadline without opening
+        # the deal. Computed from the parent quote's stage timer + the
+        # per-quote override or org default. Null when not in
+        # pending_procurement or no deadline is configured.
+        procurement_deadline_at = _procurement_deadline_at(
+            parent.get("workflow_status"),
+            parent.get("stage_entered_at"),
+            parent.get("stage_deadline_override_hours"),
+            org_procurement_deadline_hours,
+        )
+
         columns[substatus].append({
             "quote_id": qid,
             "brand": brand,
@@ -548,6 +617,11 @@ async def get_kanban(request) -> JSONResponse:
             # or absent. UI surfaces it inline on the card so МОЗ reads the
             # hint without opening the quote.
             "distribution_comment": distribution_comment,
+            # Testing 2 row 95b: КПП procurement-stage deadline, surfaced on
+            # «Цены готовы» cards (ISO-8601; UI formats ДД.ММ.ГГ). Null when
+            # the quote isn't in pending_procurement or has no configured
+            # deadline.
+            "procurement_deadline_at": procurement_deadline_at,
         })
 
     return JSONResponse(

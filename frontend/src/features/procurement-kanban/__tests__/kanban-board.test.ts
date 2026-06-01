@@ -11,21 +11,24 @@ import {
 } from "../model/types";
 
 /**
- * Board-layout invariants. We verify that the 5 column keys and their Russian
+ * Board-layout invariants. We verify that the 6 column keys and their Russian
  * labels are present and stable — the KanbanBoard renders one column per key.
  * Full drag interaction is verified on localhost per
  * reference_localhost_browser_test.md (dnd-kit requires a real DOM).
  */
 describe("KanbanBoard — column configuration", () => {
-  it("produces exactly 5 columns in fixed order", () => {
-    expect(PROCUREMENT_SUBSTATUSES).toHaveLength(5);
+  it("produces exactly 6 columns in fixed order", () => {
+    // Testing 2 row 95a — «Заявка» (request) inserted at index 1.
+    expect(PROCUREMENT_SUBSTATUSES).toHaveLength(6);
     expect(PROCUREMENT_SUBSTATUSES[0]).toBe("distributing");
-    expect(PROCUREMENT_SUBSTATUSES[3]).toBe("prices_ready");
-    expect(PROCUREMENT_SUBSTATUSES[4]).toBe("paused");
+    expect(PROCUREMENT_SUBSTATUSES[1]).toBe("request");
+    expect(PROCUREMENT_SUBSTATUSES[4]).toBe("prices_ready");
+    expect(PROCUREMENT_SUBSTATUSES[5]).toBe("paused");
   });
 
   it("uses the Russian labels required by the UI spec", () => {
     expect(SUBSTATUS_LABELS_RU.distributing).toBe("Распределение");
+    expect(SUBSTATUS_LABELS_RU.request).toBe("Заявка");
     expect(SUBSTATUS_LABELS_RU.searching_supplier).toBe("Поиск поставщика");
     expect(SUBSTATUS_LABELS_RU.waiting_prices).toBe("Ожидание цен");
     expect(SUBSTATUS_LABELS_RU.prices_ready).toBe("Цены готовы");
@@ -35,6 +38,7 @@ describe("KanbanBoard — column configuration", () => {
   it("KanbanColumns type accepts empty arrays per substatus", () => {
     const empty: KanbanColumns = {
       distributing: [],
+      request: [],
       searching_supplier: [],
       waiting_prices: [],
       prices_ready: [],
@@ -48,13 +52,14 @@ describe("KanbanBoard — column configuration", () => {
   it("card counts can be derived per column from KanbanColumns shape", () => {
     const state: KanbanColumns = {
       distributing: [makeCard({ quote_id: "q1", brand: "ABB" })],
+      request: [],
       searching_supplier: [],
       waiting_prices: [],
       prices_ready: [],
       paused: [],
     };
     const counts = PROCUREMENT_SUBSTATUSES.map((s) => state[s].length);
-    expect(counts).toEqual([1, 0, 0, 0, 0]);
+    expect(counts).toEqual([1, 0, 0, 0, 0, 0]);
     expect(counts.reduce((a, b) => a + b, 0)).toBe(1);
   });
 
@@ -71,6 +76,7 @@ describe("KanbanBoard — column configuration", () => {
     });
     const state: KanbanColumns = {
       distributing: [],
+      request: [],
       searching_supplier: [],
       waiting_prices: [],
       prices_ready: [],
@@ -118,6 +124,7 @@ describe("KanbanBoard — per-(quote, brand) slicing", () => {
     const q1Siemens = makeCard({ quote_id: "q1", brand: "Siemens" });
     const state: KanbanColumns = {
       distributing: [q1Abb, q1Siemens],
+      request: [],
       searching_supplier: [],
       waiting_prices: [],
       prices_ready: [],
@@ -142,6 +149,7 @@ describe("KanbanBoard — per-(quote, brand) slicing", () => {
     });
     const state: KanbanColumns = {
       distributing: [q1Abb],
+      request: [],
       searching_supplier: [],
       waiting_prices: [q1Siemens],
       prices_ready: [],

@@ -294,6 +294,7 @@ class TestGetKanban:
         cols = payload["data"]["columns"]
         assert set(cols.keys()) == {
             "distributing",
+            "request",
             "searching_supplier",
             "waiting_prices",
             "prices_ready",
@@ -302,6 +303,8 @@ class TestGetKanban:
 
         # МОЗ never sees the «Распределение» column.
         assert cols["distributing"] == []
+        # Testing 2 row 95a — «Заявка» column present, empty for this fixture.
+        assert cols["request"] == []
 
         # Only q1/Siemens passes the scope filter.
         searching = cols["searching_supplier"]
