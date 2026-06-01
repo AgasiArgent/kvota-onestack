@@ -3,9 +3,11 @@ export type {
   SupplierDetail,
   SupplierContact,
   BrandAssignment,
+  SupplierFilterOptions,
 } from "./types";
 export {
   fetchSuppliersList,
+  fetchSupplierFilterOptions,
   fetchSupplierDetail,
   fetchSupplierContacts,
   fetchBrandAssignments,

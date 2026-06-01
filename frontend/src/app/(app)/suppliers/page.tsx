@@ -1,11 +1,21 @@
 import { redirect } from "next/navigation";
-import { fetchSuppliersList } from "@/entities/supplier/queries";
+import {
+  fetchSuppliersList,
+  fetchSupplierFilterOptions,
+} from "@/entities/supplier";
 import { getSessionUser } from "@/entities/user";
 import { hasProcurementAccess } from "@/shared/lib/roles";
 import { SuppliersTable } from "@/features/suppliers";
 
 interface Props {
-  searchParams: Promise<{ q?: string; country?: string; status?: string; page?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    country?: string;
+    status?: string;
+    assignee?: string;
+    brand?: string;
+    page?: string;
+  }>;
 }
 
 export default async function SuppliersPage({ searchParams }: Props) {
@@ -18,13 +28,22 @@ export default async function SuppliersPage({ searchParams }: Props) {
   const search = params.q ?? "";
   const country = params.country ?? "";
   const status = params.status ?? "";
+  const assignee = params.assignee ?? "";
+  const brand = params.brand ?? "";
   const page = parseInt(params.page ?? "1", 10);
 
-  const { data, total, activeCount, inactiveCount } = await fetchSuppliersList(
-    user.orgId,
-    { search, country, status, page },
-    { id: user.id, roles: user.roles }
-  );
+  const accessUser = { id: user.id, roles: user.roles };
+
+  // List + filter options are independent — fetch in parallel (no waterfall).
+  const [{ data, total, activeCount, inactiveCount }, filterOptions] =
+    await Promise.all([
+      fetchSuppliersList(
+        user.orgId,
+        { search, country, status, assignee, brand, page },
+        accessUser
+      ),
+      fetchSupplierFilterOptions(user.orgId, accessUser),
+    ]);
 
   return (
     <div>
@@ -37,7 +56,10 @@ export default async function SuppliersPage({ searchParams }: Props) {
         initialSearch={search}
         initialCountry={country}
         initialStatus={status}
+        initialAssignee={assignee}
+        initialBrand={brand}
         initialPage={page}
+        filterOptions={filterOptions}
         orgId={user.orgId}
       />
     </div>
