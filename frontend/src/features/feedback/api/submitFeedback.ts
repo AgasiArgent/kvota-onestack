@@ -7,7 +7,12 @@ export type FeedbackType = "bug" | "ux_ui" | "suggestion" | "question";
 
 interface SubmitFeedbackParams {
   feedbackType: FeedbackType;
-  description: string;
+  /** «Что делал» — required. */
+  stepsTaken: string;
+  /** «Что ожидал получить» — optional. */
+  expectedResult: string;
+  /** «Что получил» — required. */
+  actualResult: string;
   pageUrl: string;
   pageTitle: string;
   debugContext: DebugContext;
@@ -61,7 +66,9 @@ export async function submitFeedback(
       method: "POST",
       body: JSON.stringify({
         feedback_type: params.feedbackType,
-        description: params.description,
+        steps_taken: params.stepsTaken,
+        expected_result: params.expectedResult,
+        actual_result: params.actualResult,
         page_url: params.pageUrl,
         page_title: params.pageTitle,
         debug_context: params.debugContext,

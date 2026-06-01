@@ -44,6 +44,26 @@ def _generate_short_id() -> str:
     return f"FB-{now.strftime('%y%m%d')}-{now.strftime('%H%M%S')}-{suffix}"
 
 
+def _compose_description(
+    steps_taken: str, expected_result: str, actual_result: str
+) -> str:
+    """Build a labeled human-readable summary from the structured fields.
+
+    Stored in the legacy ``description`` column so existing read surfaces
+    (admin feedback list/detail, ClickUp task body, Telegram notification)
+    keep working without per-surface changes. Empty optional sections are
+    omitted.
+    """
+    sections = [
+        ("Что делал", steps_taken),
+        ("Что ожидал получить", expected_result),
+        ("Что получил", actual_result),
+    ]
+    return "\n\n".join(
+        f"{label}:\n{value}" for label, value in sections if value
+    )
+
+
 async def submit_feedback(request: Request) -> JSONResponse:
     """Accept user feedback and fan out to ClickUp + Telegram admins.
 
@@ -53,7 +73,13 @@ async def submit_feedback(request: Request) -> JSONResponse:
         scope; no such caller exists today.
     Body: JSON with fields:
         feedback_type: str (default "bug")
-        description: str (required, non-empty)
+        steps_taken: str — «Что делал» (required if no description)
+        expected_result: str — «Что ожидал получить» (optional)
+        actual_result: str — «Что получил» (required if no description)
+        description: str — legacy single-field body. Accepted for backward
+            compatibility (AI agents / old clients). When the structured
+            fields are present they are composed into description; otherwise
+            a bare description is stored and split out into actual_result.
         page_url, page_title: str — originating page
         debug_context: JSON string or dict — runtime context snapshot
         screenshot: str — base64 data URI (prefix stripped before storage)
@@ -116,7 +142,25 @@ async def submit_feedback(request: Request) -> JSONResponse:
     body = await request.json()
 
     feedback_type = body.get("feedback_type", "bug")
-    description = body.get("description", "").strip()
+
+    # Structured fields (Testing 2 row 49). Fall back to the legacy single
+    # `description` field for older clients / AI agents that don't send them.
+    steps_taken = (body.get("steps_taken") or "").strip()
+    expected_result = (body.get("expected_result") or "").strip()
+    actual_result = (body.get("actual_result") or "").strip()
+    legacy_description = (body.get("description") or "").strip()
+
+    has_structured = bool(steps_taken or expected_result or actual_result)
+    if has_structured:
+        description = _compose_description(
+            steps_taken, expected_result, actual_result
+        )
+    else:
+        # Legacy body: keep the bare text and treat it as «Что получил» so
+        # the structured columns are still populated.
+        description = legacy_description
+        actual_result = legacy_description
+
     page_url = body.get("page_url", "")
     page_title = body.get("page_title", "")
     debug_context_str = body.get("debug_context", "{}")
@@ -138,13 +182,25 @@ async def submit_feedback(request: Request) -> JSONResponse:
     ):
         screenshot_url = screenshot_url_raw
 
-    if not description:
+    # Required: «Что делал» + «Что получил». For legacy bodies the bare
+    # description is mapped onto actual_result above, so this check also
+    # covers them.
+    missing_fields = []
+    if not steps_taken and not legacy_description:
+        missing_fields.append("Что делал")
+    if not actual_result:
+        missing_fields.append("Что получил")
+
+    if missing_fields:
         return JSONResponse(
             {
                 "success": False,
                 "error": {
                     "code": "VALIDATION_ERROR",
-                    "message": "Description required",
+                    "message": (
+                        "Заполните обязательные поля: "
+                        + ", ".join(missing_fields)
+                    ),
                 },
             },
             status_code=400,
@@ -197,6 +253,9 @@ async def submit_feedback(request: Request) -> JSONResponse:
             "user_agent": request.headers.get("user-agent", ""),
             "feedback_type": feedback_type,
             "description": description,
+            "steps_taken": steps_taken or None,
+            "expected_result": expected_result or None,
+            "actual_result": actual_result or None,
             "debug_context": debug_context,
         }
         if screenshot_b64:
