@@ -15,22 +15,13 @@ import {
 } from "@/components/ui/table";
 import type { StageDeadline } from "@/entities/settings";
 import { upsertStageDeadlines } from "@/entities/settings";
+import { getDeadlineTrackedStageOptions } from "@/shared/lib/workflow-statuses";
 
-const STAGE_LABELS: Record<string, string> = {
-  pending_procurement: "Оценка закупок",
-  pending_logistics: "Логистика",
-  pending_customs: "Таможня",
-  pending_logistics_and_customs: "Логистика и таможня",
-  pending_sales_review: "Доработка менеджера",
-  pending_quote_control: "Проверка КП",
-  pending_approval: "Согласование",
-  sent_to_client: "Отправлено клиенту",
-  client_negotiation: "Торги",
-  pending_spec_control: "Контроль спецификации",
-  pending_signature: "Подписание",
-};
-
-const STAGE_ORDER = Object.keys(STAGE_LABELS);
+// The set of stages and their labels are derived from the canonical workflow
+// vocabulary (mirrors Python IN_PROGRESS_STATUSES) so the settings list can't
+// drift from the stages the deadline timer actually tracks.
+const STAGE_OPTIONS = getDeadlineTrackedStageOptions();
+const STAGE_ORDER = STAGE_OPTIONS.map((o) => o.stage);
 
 interface StageDeadlinesFormProps {
   deadlines: StageDeadline[];
@@ -86,11 +77,9 @@ export function StageDeadlinesForm({ deadlines, orgId }: StageDeadlinesFormProps
             </TableRow>
           </TableHeader>
           <TableBody>
-            {STAGE_ORDER.map((stage) => (
+            {STAGE_OPTIONS.map(({ stage, label }) => (
               <TableRow key={stage}>
-                <TableCell className="font-medium">
-                  {STAGE_LABELS[stage]}
-                </TableCell>
+                <TableCell className="font-medium">{label}</TableCell>
                 <TableCell>
                   <Input
                     type="number"

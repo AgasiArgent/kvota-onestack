@@ -78,6 +78,51 @@ export function getWorkflowStatusFilterOptions(): {
 }
 
 /**
+ * Stages whose duration is tracked by the deadline timer — the only stages
+ * that can carry a configurable per-org deadline (Настройки › «Дедлайны
+ * стадий»).
+ *
+ * Mirrors the Python `IN_PROGRESS_STATUSES` set in
+ * `services/workflow_service.py`: every non-terminal, non-draft workflow
+ * status. The stage timer (`services/stage_timer_service.py`) keys deadlines
+ * by `quotes.workflow_status` and skips only `TERMINAL_STATUSES`
+ * (draft, deal, rejected, cancelled), so this list MUST stay in sync with that
+ * set or a quote can sit in a stage the settings screen can't configure
+ * (e.g. `approved` was missing — it silently fell through to no_deadline).
+ *
+ * Order is meaningful — it's the row order in the settings table.
+ */
+export const DEADLINE_TRACKED_STAGES: readonly string[] = [
+  "pending_procurement",
+  "pending_logistics",
+  "pending_customs",
+  "pending_logistics_and_customs",
+  "pending_sales_review",
+  "pending_quote_control",
+  "pending_approval",
+  "approved",
+  "sent_to_client",
+  "client_negotiation",
+  "pending_spec_control",
+  "pending_signature",
+];
+
+/**
+ * Build the {stage, label} options for the stage-deadline settings table,
+ * deriving labels from {@link WORKFLOW_STATUS_LABELS_RU} so the settings list
+ * never drifts from the canonical workflow vocabulary.
+ */
+export function getDeadlineTrackedStageOptions(): {
+  stage: string;
+  label: string;
+}[] {
+  return DEADLINE_TRACKED_STAGES.map((stage) => ({
+    stage,
+    label: WORKFLOW_STATUS_LABELS_RU[stage] ?? stage,
+  }));
+}
+
+/**
  * Return the Russian label for `workflow_status`, falling back to the raw
  * value only when truly unknown — a missing label is a bug, not graceful
  * degradation. Callers should still pass the fallback through so users see
